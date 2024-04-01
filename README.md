@@ -25,7 +25,7 @@ Registry contract keeps note of all the eSIM wallets deployed along with their u
 
   
 
-Smart Contract Suite User Flow:
+## Smart Contract Suite User Flow:
 
 1.  User installs LPA
     
@@ -38,7 +38,7 @@ Smart Contract Suite User Flow:
 
   
 
-Asset recovery procedure:
+## Asset recovery procedure:
 
 The LPA upon installation will create a keystore (referred as primary keystore) which will be located on the user's mobile device.
 
@@ -48,7 +48,7 @@ In case the user loses his mobile device or the primary keystore, they will be a
 
   
 
-Future prospects:
+## Future prospects:
 
 A mobile device can have multiple eSIMs and eSIMs can easily be destructed, hence to avoid multiple smart contract deployments and transactions, the smart contract suite will only deploy smart contracts for the primary eSIMs as chosen by the user.
 
