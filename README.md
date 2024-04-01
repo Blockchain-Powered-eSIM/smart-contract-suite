@@ -3,7 +3,7 @@
 
   
 
-![](https://lh7-us.googleusercontent.com/C05NREhSao1Vr83bslstYjslIpiypjPNQx2oxSu0_RXd65ODy_ToTCV2-fcCTa8Z7X92_yXCRdGCk5IiwCkPpLCcpCVoqS26juBSrW3pnbOLsnn479kwh25FnqZZRqsmVOcPniG8cyu8iiqNCkK73yE)
+![](./resources/eSIMSmartContract.png)
 
   
 
