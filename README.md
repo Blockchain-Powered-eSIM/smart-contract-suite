@@ -1,66 +1,59 @@
-## Foundry
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+# eSim Wallet Smart Contract Suite
 
-Foundry consists of:
+  
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+![](./resources/eSIMSmartContract.png)
 
-## Documentation
+  
 
-https://book.getfoundry.sh/
+The eSIM Wallet smart contract suite consists of a group of smart contracts which work together to deploy, record and maintain eSIM related data and functionalities.
 
-## Usage
+  
 
-### Build
+eSIM wallets are the smart contracts which uniquely identify the primary eSIM of a mobile device. A mobile device can have multiple eSIMs and it is up to the user to set one of them as the primary eSIM, which will be set to eSIM slot 0 by default.
 
-```shell
-$ forge build
-```
+eSIM wallet smart contracts will uniquely identify the eSIM and in future, will be capable of buying data bundles from the carrier providers for the eSIM.
 
-### Test
+  
 
-```shell
-$ forge test
-```
+The deployer contract is responsible for deploying eSIM wallets for all the primary eSIMs. The LPA instructs the deployer contract to deploy an eSIM wallet smart contract if it does not already exist.
 
-### Format
+  
 
-```shell
-$ forge fmt
-```
+Registry contract keeps note of all the eSIM wallets deployed along with their unique identifier. It also stores the ECDSA owner of the smart wallet.
 
-### Gas Snapshots
+  
 
-```shell
-$ forge snapshot
-```
+## Smart Contract Suite User Flow:
 
-### Anvil
+1.  User installs LPA
+    
+2.  LPA instructs the deployer contract to deploy an eSIM wallet
+    
+3.  Registry contract takes note of the newly deployed eSIM wallet
+    
+4.  LPA now directly interacts with the eSIM wallet to carry out operations
+    
 
-```shell
-$ anvil
-```
+  
 
-### Deploy
+## Asset recovery procedure:
 
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
+The LPA upon installation will create a keystore (referred as primary keystore) which will be located on the user's mobile device.
 
-### Cast
+When the eSIM wallet is deployed, the user is asked to register a secondary keystore (which can be created from the LPA, or provided by the user). This secondary keystore will be registered on the user's eSIM wallet and it will hold withdrawal rights.
 
-```shell
-$ cast <subcommand>
-```
+In case the user loses his mobile device or the primary keystore, they will be able to withdraw any asset stored in the eSIM wallet via the secondary keystore.
 
-### Help
+  
 
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
+## Future prospects:
+
+A mobile device can have multiple eSIMs and eSIMs can easily be destructed, hence to avoid multiple smart contract deployments and transactions, the smart contract suite will only deploy smart contracts for the primary eSIMs as chosen by the user.
+
+In future, a primary eSIM wallet will act as a parent smart contract which will have multiple child contracts (or secondary eSIM wallets) meaning that each eSIM will have its own eSIM wallet smart contract.
+
+The secondary smart wallets can be destroyed depending on the respective eSIM’s validity.
+
+After onboarding the carrier providers onto the blockchain space, it will be possible to create a marketplace for data bundles and the users will be able to buy data packs using the eSIM wallets.
