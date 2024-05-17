@@ -3,7 +3,7 @@
 
   
 
-![](./resources/eSIMSmartContract.png)
+![](./resources/eSIMWallet-SCS.png)
 
   
 
