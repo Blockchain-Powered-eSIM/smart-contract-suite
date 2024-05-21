@@ -5,8 +5,6 @@ pragma solidity ^0.8.18;
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { ESIMWallet } from "./ESIMWallet.sol";
 import { DeviceWalletFactory } from "../device-wallet/DeviceWalletFactory.sol";
-// TODO: Implement Beacon Proxy, as per need
-// import { BeaconProxy } from "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
 
 error OnlyDeviceWalletFactory();
 

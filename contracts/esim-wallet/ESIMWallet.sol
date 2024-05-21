@@ -6,14 +6,9 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { Initializable } from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { IOwnableESIMWallet } from "../interfaces/IOwnableESIMWallet.sol";
-// TODO: Add the below mentioned  imports as per need
-// import { BeaconProxy } from "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
-// import { UUPSUpgradeable } from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-// import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
 error OnlyDeviceWallet();
 
-// TODO: Add ReentrancyGuard
 contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
 
     using Address for address;
