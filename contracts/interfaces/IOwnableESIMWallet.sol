@@ -21,7 +21,8 @@ interface IOwnableESIMWallet is IOwnableESIMWalletEvents {
     function init(
         address eSIMWalletFactoryAddress,
         address deviceWalletAddress,
-        address owner
+        address owner,
+        string calldata eSIMUniqueIdentifier
     ) external;
 
     function setESIMUniqueIdentifier(

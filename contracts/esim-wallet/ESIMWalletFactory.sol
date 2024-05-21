@@ -41,12 +41,13 @@ contract ESIMWalletFactory {
     /// @param _owner Owner of the eSIM wallet
     /// @return Address of the newly deployed eSIM wallet
     function deployESIMWallet(
-        address _owner
+        address _owner,
+        string calldata _eSIMUniqueIdentifier
     ) public returns (address) {
         require(deviceWalletFactory.isDeviceWalletValid(msg.sender), "Only device wallet can call this");
 
         // TODO: Correctly deploy ESIMWallet as a clone
-        address eSIMWalletAddress = ESIMWallet.init(address(this), msg.sender, _owner);
+        address eSIMWalletAddress = ESIMWallet.init(address(this), msg.sender, _owner, _eSIMUniqueIdentifier);
         isESIMWalletDeployed[eSIMWalletAddress] = true;
 
         emit ESIMWalletDeployed(eSIMWalletAddress, msg.sender);

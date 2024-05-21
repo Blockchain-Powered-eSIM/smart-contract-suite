@@ -73,11 +73,16 @@ contract DeviceWallet is Ownable, Initializable {
 
         if(_eSIMUniqueIdentifiers.length != 0) {
             for(uint256 i=0; i<_eSIMUniqueIdentifiers.length; ++i) {
-                address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(_owner);
+                address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(_owner, _eSIMUniqueIdentifiers[i]);
                 isValidESIMWallet[eSIMWalletAddress] = true;
-
-                setESIMUniqueIdentifierForAnESIMWallet(eSIMWalletAddress, _eSIMUniqueIdentifiers[i]);
             }
+        }
+        else {
+            address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(
+                _owner, 
+                "" // uninitialised eSIM unique identifier
+            );
+            isValidESIMWallet[eSIMWalletAddress] = true;
         }
 
         _transferOwnership(_owner);
@@ -87,10 +92,12 @@ contract DeviceWallet is Ownable, Initializable {
 
     /// @notice Allow device wallet owner to deploy new eSIM wallet
     /// @return eSIM wallet address
-    function deployESIMWallet() onlyOwner external returns (address) {
+    function deployESIMWallet(
+        string calldata _eSIMUniqueIdentifier
+    ) onlyOwner external returns (address) {
         require(owner != address (0), "eSIM wallet owner cannot be zero address");
         
-        address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(owner);
+        address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(owner, _eSIMUniqueIdentifier);
         isValidESIMWallet[eSIMWalletAddress] = true;
 
         return eSIMWalletAddress;

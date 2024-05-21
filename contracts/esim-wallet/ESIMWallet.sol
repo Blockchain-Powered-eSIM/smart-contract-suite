@@ -40,10 +40,18 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() initializer {}
 
+    /// @notice ESIMWallet init function to initialise the contract
+    /// @dev If _eSIMUniqueIdentifier is empty, the eSIM wallet is being deployed before buying an eSIM
+    ///      If _eSIMUniqueIdentifier is non-empty, the eSIM wallet is being deployed after the eSIM has been bought by the user
+    /// @param _eSIMWalletFactoryAddress eSIM wallet factory contract address
+    /// @param _deviceWalletAddress Device wallet contract address (the contract that deploys this eSIM wallet)
+    /// @param _owner User's address
+    /// @param _eSIMUniqueIdentifier Unique identifier for the eSIM wallet
     function init(
         address _eSIMWalletFactoryAddress,
         address _deviceWalletAddress,
-        address _owner
+        address _owner,
+        string calldata _eSIMUniqueIdentifier
     ) external override initializer {
         require(_owner != address(0), "Owner cannot be address zero");
         require(_eSIMWalletFactoryAddress != address(0), "eSIM wallet factory address cannot be zero");
@@ -51,6 +59,11 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
 
         eSIMWalletFactory = _eSIMWalletFactoryAddress;
         deviceWalletAddress = _deviceWalletAddress;
+
+        if(bytes(_eSIMUniqueIdentifier).length > 0) {
+            eSIMUniqueIdentifier = _eSIMUniqueIdentifier;
+            emit ESIMUniqueIdentifierInitialised(_eSIMUniqueIdentifier);
+        }
 
         _transferOwnership(_owner);
 
