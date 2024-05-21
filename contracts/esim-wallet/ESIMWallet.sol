@@ -72,19 +72,14 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
         emit ESIMUniqueIdentifierInitialised(_eSIMUniqueIdentifier);
     }
 
-    function owner()
-        public
-        view
-        override(IOwnableESIMWallet, Ownable)
-        returns (address)
-    {
+    /// @dev Returns the current owner of the wallet
+    function owner() public view override(IOwnableESIMWallet, Ownable) returns (address) {
         return Ownable.owner();
     }
 
-    function transferOwnership(address newOwner)
-        public
-        override(IOwnableESIMWallet, Ownable)
-    {
+    /// @dev Transfers ownership from the current owner to another address
+    /// @param newOwner The address that will be the new owner
+    function transferOwnership(address newOwner) public override(IOwnableESIMWallet, Ownable) {
         // Only the admin of deviceWalletFactory contract can transfer ownership
         require(
             isTransferApproved(owner(), msg.sender),
@@ -99,15 +94,18 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
         _transferOwnership(newOwner);
     }
 
-    function isTransferApproved(address from, address to)
-        public
-        override
-        view
-        returns (bool)
-    {
+    /// @dev Returns whether the address 'to' can transfer a wallet from address 'from'
+    /// @param from The owner address
+    /// @param to The spender address
+    /// @notice The owner can always transfer the wallet to someone, i.e.,
+    ///         approval from an address to itself is always 'true'
+    function isTransferApproved(address from, address to) public override view returns (bool) {
         return from == to ? true : _isTransferApproved[from][to];
     }
 
+    /// @dev Changes authorization status for transfer approval from msg.sender to an address
+    /// @param to Address to change allowance status for
+    /// @param status The new approval status
     function setApproval(address to, bool status) external onlyOwner override {
         require(
             to != address(0),
