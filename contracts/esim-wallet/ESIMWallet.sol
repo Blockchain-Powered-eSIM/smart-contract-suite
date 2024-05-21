@@ -1,6 +1,6 @@
-pragma solidity ^0.8.18;
-
 // SPDX-License-Identifier: MIT
+
+pragma solidity ^0.8.18;
 
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { Initializable } from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
@@ -28,6 +28,10 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
     /// @notice Address of the device wallet associated with this eSIM wallet
     address public deviceWalletAddress;
 
+    /// @dev A map from owner and spender to transfer approval. Determines whether
+    ///      the spender can transfer this wallet from the owner. 
+    mapping(address => mapping(address => bool)) internal _isTransferApproved;
+
     modifier onlyDeviceWallet() {
         if(msg.sender != deviceWalletAddress) revert OnlyDeviceWallet();
         _;
@@ -36,7 +40,6 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() initializer {}
 
-    // TODO: create interfaces
     function init(
         address _eSIMWalletFactoryAddress,
         address _deviceWalletAddress,
@@ -69,6 +72,15 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
         emit ESIMUniqueIdentifierInitialised(_eSIMUniqueIdentifier);
     }
 
+    function owner()
+        public
+        view
+        override(IOwnableESIMWallet, Ownable)
+        returns (address)
+    {
+        return Ownable.owner();
+    }
+
     function transferOwnership(address newOwner)
         public
         override(IOwnableESIMWallet, Ownable)
@@ -77,14 +89,46 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
         require(
             isTransferApproved(owner(), msg.sender),
             "OwnableSmartWallet: Transfer is not allowed"
-        ); // F: [OSW-4]
+        );
 
         // Approval is revoked, in order to avoid unintended transfer allowance
         // if this wallet ever returns to the previous owner
         if (msg.sender != owner()) {
-            _setApproval(owner(), msg.sender, false); // F: [OSW-5]
+            _setApproval(owner(), msg.sender, false);
         }
-        _transferOwnership(newOwner); // F: [OSW-5]
+        _transferOwnership(newOwner);
+    }
+
+    function isTransferApproved(address from, address to)
+        public
+        override
+        view
+        returns (bool)
+    {
+        return from == to ? true : _isTransferApproved[from][to];
+    }
+
+    function setApproval(address to, bool status) external onlyOwner override {
+        require(
+            to != address(0),
+            "OwnableSmartWallet: Approval cannot be set for zero address"
+        );
+        _setApproval(msg.sender, to, status);
+    }
+
+    /// @param from The owner address
+    /// @param to The spender address
+    /// @param status Status of approval
+    function _setApproval(
+        address from,
+        address to,
+        bool status
+    ) internal {
+        bool statusChanged = _isTransferApproved[from][to] != status;
+        _isTransferApproved[from][to] = status;
+        if (statusChanged) {
+            emit TransferApprovalChanged(from, to, status);
+        }
     }
 
     receive() external payable {
