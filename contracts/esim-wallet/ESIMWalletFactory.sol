@@ -12,7 +12,7 @@ error OnlyDeviceWalletFactory();
 contract ESIMWalletFactory {
 
     /// @notice Emitted when a new eSIM wallet is deployed
-    event ESIMWalletDeployed(address indexed _eSIMWalletAddress, address indexed _deviceWalletAddress);
+    event ESIMWalletDeployed(address indexed _eSIMWalletAddress, string _dataBundleID, uint256 _dataBundlePrice, address indexed _deviceWalletAddress);
 
     /// @notice Address of the device wallet factory
     DeviceWalletFactory public deviceWalletFactory;
@@ -42,15 +42,24 @@ contract ESIMWalletFactory {
     /// @return Address of the newly deployed eSIM wallet
     function deployESIMWallet(
         address _owner,
+        string calldata _dataBundleID,
+        uint256 _dataBundlePrice,
         string calldata _eSIMUniqueIdentifier
     ) public returns (address) {
         require(deviceWalletFactory.isDeviceWalletValid(msg.sender), "Only device wallet can call this");
 
         // TODO: Correctly deploy ESIMWallet as a clone
-        address eSIMWalletAddress = ESIMWallet.init(address(this), msg.sender, _owner, _eSIMUniqueIdentifier);
+        address eSIMWalletAddress = ESIMWallet.init(
+            address(this), 
+            msg.sender, 
+            _owner,
+            _dataBundleID,
+            _dataBundlePrice, 
+            _eSIMUniqueIdentifier
+        );
         isESIMWalletDeployed[eSIMWalletAddress] = true;
 
-        emit ESIMWalletDeployed(eSIMWalletAddress, msg.sender);
+        emit ESIMWalletDeployed(eSIMWalletAddress, _dataBundleID, _dataBundlePrice, msg.sender);
 
         return eSIMWalletAddress;
     }
