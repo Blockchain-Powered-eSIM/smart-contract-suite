@@ -137,6 +137,8 @@ contract DeviceWallet is Ownable, Initializable {
 
         address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet{value: _dataBundlePrice}(
             owner,
+            _dataBundleID,
+            _dataBundlePrice,
             _eSIMUniqueIdentifier
         );
 
