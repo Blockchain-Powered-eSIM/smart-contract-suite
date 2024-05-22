@@ -16,6 +16,9 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
     /// Emitted when the eSIM wallet is deployed
     event ESIMWalletDeployed(address indexed _eSIMWalletAddress, address indexed _deviceWalletAddress, address indexed _owner);
 
+    /// Emitted when the payment for a data bundle is made
+    event DataBundleBought(string _dataBundleID, uint256 _dataBundlePrice, uint256 _transactionCount);
+
     /// @notice Emitted when the eSIM unique identifier is initialised
     event ESIMUniqueIdentifierInitialised(string _eSIMUniqueIdentifier);
 
@@ -27,6 +30,17 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
 
     /// @notice Address of the device wallet associated with this eSIM wallet
     address public deviceWalletAddress;
+
+    /// @notice Total number of data bundle transactions made by user
+    uint256 public lastTransactionCount;
+
+    struct DataBundleDetails {
+        string dataBundleID;
+        uint256 dataBundlePrice;
+    }
+
+    /// @notice lastTransactionCount -> (data bundle ID, data bundle price)
+    mapping(uint256 => DataBundleDetails) public transactionHistory;
 
     /// @dev A map from owner and spender to transfer approval. Determines whether
     ///      the spender can transfer this wallet from the owner. 
@@ -51,8 +65,10 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
         address _eSIMWalletFactoryAddress,
         address _deviceWalletAddress,
         address _owner,
+        string calldata _dataBundleID,
+        uint256 _dataBundlePrice,
         string calldata _eSIMUniqueIdentifier
-    ) external override initializer {
+    ) external payable override initializer {
         require(_owner != address(0), "Owner cannot be address zero");
         require(_eSIMWalletFactoryAddress != address(0), "eSIM wallet factory address cannot be zero");
         require(_deviceWalletAddress != address(0), "Device wallet address cannot be zero");
@@ -66,6 +82,8 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
         }
 
         _transferOwnership(_owner);
+
+        buyDataBundle(_dataBundleID, _dataBundlePrice);
 
         emit ESIMWalletDeployed(address(this), _deviceWalletAddress, _owner);
     }
@@ -83,6 +101,32 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
         eSIMUniqueIdentifier = _eSIMUniqueIdentifier;
 
         emit ESIMUniqueIdentifierInitialised(_eSIMUniqueIdentifier);
+    }
+
+    /// TODO: check if ETH is in the contract, if not pull ETH from device wallet
+    /// For the above TODO, approve eSIM wallet contracts to pull funds from device wallet
+    /// TODO: Send ETH to eSIM wallet project's vault
+    /// @notice Function to make payment for the data bundle
+    /// @param _dataBundleID string data bundle ID from the backend catalogue
+    /// @param _dataBundlePrice uint256 price for the data bundle
+    /// @return True if the transaction is successful
+    function buyDataBundle(
+        string calldata _dataBundleID,
+        uint256 _dataBundlePrice
+    ) public payable returns (bool) {
+        require(bytes(_dataBundleID).length > 0, "Data bundle ID cannot be empty");
+        require(_dataBundlePrice == msg.value, "Incorrect amount");
+        require(_dataBundlePrice > 0, "Price cannot be zero");
+
+        DataBundleDetails storage dataBundleDetails = transactionHistory[lastTransactionCount];
+        dataBundleDetails.dataBundleID = _dataBundleID;
+        dataBundleDetails.dataBundlePrice = _dataBundlePrice;
+
+        emit DataBundleBought(_dataBundleID, _dataBundlePrice, lastTransactionCount);
+
+        lastTransactionCount += 1;
+
+        return true;
     }
 
     /// @dev Returns the current owner of the wallet
