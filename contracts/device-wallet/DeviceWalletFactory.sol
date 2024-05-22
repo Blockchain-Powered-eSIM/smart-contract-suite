@@ -52,12 +52,16 @@ contract DeviceWalletFactory {
 
     /// @notice To deploy multiple device wallets at once
     /// @param _deviceUniqueIdentifiers Array of unique device identifiers for each device wallet
+    /// @param _dataBundleIDs 2D array of IDs of data bundles to be bought for respective eSIMs
+    /// @param _dataBundlePrices 2D array of price of respective data bundles for respective eSIMs
     /// @param _eSIMUniqueIdentifiers 2D array of unique eSIM identifiers for each device wallet
     /// @return Array of deployed device wallet address
     function deployMultipleDeviceWalletsWithESIMWallets(
         string[] calldata _deviceUniqueIdentifiers,
+        string[][] calldata _dataBundleIDs,
+        uint256[][] _dataBundlePrices,
         string[][] calldata _eSIMUniqueIdentifiers
-    ) public returns (address[]) {
+    ) public payable returns (address[]) {
         uint256 numberOfDeviceWallets = _deviceUniqueIdentifiers.length;
         require(numberOfDeviceWallets != 0, "Array cannot be empty");
         require(numberOfDeviceWallets == _eSIMUniqueIdentifiers.length, "Array mismatch");
@@ -67,6 +71,8 @@ contract DeviceWalletFactory {
         for(uint256 i=0; i<numberOfDeviceWallets; ++i) {
             deviceWalletsDeployed[i] = _deployDeviceWalletWithESIMWallets(
                 _deviceUniqueIdentifiers[i],
+                _dataBundleIDs[i],
+                _dataBundlePrices[i],
                 _eSIMUniqueIdentifiers[i],
                 msg.sender
             );
@@ -77,13 +83,18 @@ contract DeviceWalletFactory {
 
     /// @dev To deploy a device wallet and eSIM wallets for given unique eSIM identifiers
     /// @param _deviceUniqueIdentifier Unique device identifier for the device wallet
+    /// @param _dataBundleIDs List of IDs of data bundles to be bought for respective eSIMs
+    /// @param _dataBundlePrices List of price of respective data bundles
     /// @param _eSIMUniqueIdentifiers Array of unique eSIM identifiers for the device wallet
+    /// @param _owner User's address (owner of the device wallet and respective eSIM wallets)
     /// @return Deployed device wallet address
     function _deployDeviceWalletWithESIMWallets(
         string calldata _deviceUniqueIdentifier,
+        string[] calldata _dataBundleIDs,
+        uint256[] _dataBundlePrices,
         string[] calldata _eSIMUniqueIdentifiers,
         address _owner
-    ) internal returns (address) {
+    ) internal payable returns (address) {
         require(bytes(_deviceUniqueIdentifier).length != 0, "Device unique identifier cannot be empty");
         require(eSIMWalletFactoryAddress != address(0), "eSIM wallet factory address not set or contract not deployed");
         
@@ -93,11 +104,13 @@ contract DeviceWalletFactory {
         );
 
         // TODO: Correctly deploy Device wallet as clones
-        address deviceWalletAddress = DeviceWallet.init(
+        address deviceWalletAddress = DeviceWallet.init{value: msg.value}(
             eSIMWalletAdmin,
             eSIMWalletFactoryAddress,
             _owner,
             _deviceUniqueIdentifier,
+            _dataBundleIDs[i],
+            _dataBundlePrices[i],
             _eSIMUniqueIdentifiers[i]
         );
 
