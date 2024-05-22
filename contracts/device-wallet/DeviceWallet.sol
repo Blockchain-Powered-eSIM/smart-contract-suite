@@ -17,7 +17,7 @@ import { ESIMWalletFactory } from "../esim-wallet/ESIMWalletFactory.sol";
 // import { UpgradeableBeacon } from "../proxy/UpgradeableBeacon.sol";
 
 error OnlyESIMWalletAdmin();
-error OnlyESIMWalletAdminOrDeviceWallet();
+error OnlyESIMWalletAdminOrDeviceWalletOwner();
 
 // TODO: Add ReentrancyGuard
 contract DeviceWallet is Ownable, Initializable {
@@ -47,8 +47,8 @@ contract DeviceWallet is Ownable, Initializable {
         _;
     }
 
-    modifier onlyESIMWalletAdminOrDeviceWallet() {
-        if(msg.sender != eSIMWalletAdmin || msg.sender != address(this)) revert OnlyESIMWalletAdminOrDeviceWallet();
+    modifier onlyESIMWalletAdminOrDeviceWalletOwner() {
+        if(msg.sender != eSIMWalletAdmin || msg.sender != owner) revert OnlyESIMWalletAdminOrDeviceWalletOwner();
         _;
     }
 
@@ -151,10 +151,13 @@ contract DeviceWallet is Ownable, Initializable {
         return eSIMWalletAddress;
     }
 
+    /// @notice Allow wallet owner or admin to set unique identifier for their eSIM wallet
+    /// @param _eSIMWalletAddress Address of the eSIM wallet smart contract
+    /// @param _eSIMUniqueIdentifier String unique identifier for the eSIM wallet
     function setESIMUniqueIdentifierForAnESIMWallet(
         address _eSIMWalletAddress,
         string calldata _eSIMUniqueIdentifier
-    ) onlyESIMWalletAdminOrDeviceWallet public returns(string calldata) {
+    ) onlyESIMWalletAdminOrDeviceWalletOwner public returns(string calldata) {
         require(eSIMUniqueIdentifierToESIMWalletAddress[_eSIMUniqueIdentifier] == address(0), "eSIM unique identifier already set for the provided eSIM wallet");
         
         ESIMWallet eSIMWallet = ESIMWallet(payable(_eSIMWalletAddress));
