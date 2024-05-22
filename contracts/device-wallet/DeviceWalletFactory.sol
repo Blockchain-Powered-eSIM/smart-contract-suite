@@ -88,25 +88,25 @@ contract DeviceWalletFactory {
         require(eSIMWalletFactoryAddress != address(0), "eSIM wallet factory address not set or contract not deployed");
         
         require(
-                walletAddressOfDeviceUniqueIdentifier[_deviceUniqueIdentifier] == address(0), 
-                "Device wallet already exists"
-            );
+            walletAddressOfDeviceUniqueIdentifier[_deviceUniqueIdentifier] == address(0), 
+            "Device wallet already exists"
+        );
 
-            // TODO: Correctly deploy Device wallet as clones
-            address deviceWalletAddress = DeviceWallet.init(
-                eSIMWalletAdmin,
-                eSIMWalletFactoryAddress,
-                _owner,
-                _deviceUniqueIdentifier,
-                _eSIMUniqueIdentifiers[i]
-            );
+        // TODO: Correctly deploy Device wallet as clones
+        address deviceWalletAddress = DeviceWallet.init(
+            eSIMWalletAdmin,
+            eSIMWalletFactoryAddress,
+            _owner,
+            _deviceUniqueIdentifier,
+            _eSIMUniqueIdentifiers[i]
+        );
 
-            isDeviceWalletValid[deviceWalletAddress] = true;
-            walletAddressOfDeviceUniqueIdentifier[_deviceUniqueIdentifier] = deviceWalletAddress;
+        isDeviceWalletValid[deviceWalletAddress] = true;
+        walletAddressOfDeviceUniqueIdentifier[_deviceUniqueIdentifier] = deviceWalletAddress;
 
-            emit DeviceWalletDeployed(deviceWalletAddress, _eSIMUniqueIdentifiers[i]);
+        emit DeviceWalletDeployed(deviceWalletAddress, _eSIMUniqueIdentifiers[i]);
 
-            return deviceWalletAddress;
+        return deviceWalletAddress;
     }
 
     /// @notice To deploy a device wallet and an uninitialised eSIM wallet
@@ -121,9 +121,9 @@ contract DeviceWalletFactory {
         require(eSIMWalletFactoryAddress != address(0), "eSIM wallet factory address not set or contract not deployed");
 
         require(
-                walletAddressOfDeviceUniqueIdentifier[_deviceUniqueIdentifier] == address(0), 
-                "Device wallet already exists"
-            );
+            walletAddressOfDeviceUniqueIdentifier[_deviceUniqueIdentifier] == address(0), 
+            "Device wallet already exists"
+        );
 
         // TODO: Correctly deploy Device wallet as clones
         address deviceWalletAddress = DeviceWallet.init(
