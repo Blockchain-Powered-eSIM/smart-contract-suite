@@ -125,20 +125,20 @@ contract DeviceWalletFactory {
                 "Device wallet already exists"
             );
 
-            // TODO: Correctly deploy Device wallet as clones
-            address deviceWalletAddress = DeviceWallet.init(
-                eSIMWalletAdmin,
-                eSIMWalletFactoryAddress,
-                _owner,
-                _deviceUniqueIdentifier,
-                []
-            );
+        // TODO: Correctly deploy Device wallet as clones
+        address deviceWalletAddress = DeviceWallet.init(
+            eSIMWalletAdmin,
+            eSIMWalletFactoryAddress,
+            _owner,
+            _deviceUniqueIdentifier,
+            []
+        );
 
-            isDeviceWalletValid[deviceWalletAddress] = true;
-            walletAddressOfDeviceUniqueIdentifier[_deviceUniqueIdentifier] = deviceWalletAddress;
+        isDeviceWalletValid[deviceWalletAddress] = true;
+        walletAddressOfDeviceUniqueIdentifier[_deviceUniqueIdentifier] = deviceWalletAddress;
 
-            emit DeviceWalletDeployed(deviceWalletAddress, "");
+        emit DeviceWalletDeployed(deviceWalletAddress, "");
 
-            return deviceWalletAddress;
+        return deviceWalletAddress;
     }
 }
