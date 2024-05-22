@@ -39,17 +39,19 @@ contract ESIMWalletFactory {
     /// Function to deploy an eSIM wallet
     /// @dev can only be called by the respective deviceWallet contract
     /// @param _owner Owner of the eSIM wallet
+    /// @param _dataBundleID String ID of data bundle to buy for the new eSIM
+    /// @param _dataBundlePrice uint256 USD price for data bundle
     /// @return Address of the newly deployed eSIM wallet
     function deployESIMWallet(
         address _owner,
         string calldata _dataBundleID,
         uint256 _dataBundlePrice,
         string calldata _eSIMUniqueIdentifier
-    ) public returns (address) {
+    ) external payable returns (address) {
         require(deviceWalletFactory.isDeviceWalletValid(msg.sender), "Only device wallet can call this");
 
         // TODO: Correctly deploy ESIMWallet as a clone
-        address eSIMWalletAddress = ESIMWallet.init(
+        address eSIMWalletAddress = ESIMWallet.init{value: _dataBundlePrice}(
             address(this), 
             msg.sender, 
             _owner,
