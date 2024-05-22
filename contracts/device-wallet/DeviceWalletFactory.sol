@@ -112,25 +112,30 @@ contract DeviceWalletFactory {
     /// @notice To deploy a device wallet and an uninitialised eSIM wallet
     /// @dev The eSIM wallet will have to be initialised with the eSIM unique identifier in a separate function call
     /// @param _deviceUniqueIdentifier Unique device identifier for the device wallet
+    /// @param _owner User's address (Owner of device wallet and respective eSIM wallet)
+    /// @param _dataBundleID String data bundle ID to be bought for eSIM
+    /// @param _dataBundlePrice uint256 price of data bundle
     /// @return Deployed device wallet address
     function deployDeviceWallet(
         string calldata _deviceUniqueIdentifier,
-        address _owner
-    ) public returns (address) {
-        require(bytes(_deviceUniqueIdentifier).length != 0, "Device unique identifier cannot be empty");
+        address _owner,
+        string calldata _dataBundleID,
+        uint256 _dataBundlePrice
+    ) public payable returns (address) {
         require(eSIMWalletFactoryAddress != address(0), "eSIM wallet factory address not set or contract not deployed");
-
         require(
             walletAddressOfDeviceUniqueIdentifier[_deviceUniqueIdentifier] == address(0), 
             "Device wallet already exists"
         );
 
         // TODO: Correctly deploy Device wallet as clones
-        address deviceWalletAddress = DeviceWallet.init(
+        address deviceWalletAddress = DeviceWallet.init{value: msg.value}(
             eSIMWalletAdmin,
             eSIMWalletFactoryAddress,
             _owner,
             _deviceUniqueIdentifier,
+            [_dataBundleID],
+            [_dataBundlePrice],
             []
         );
 
