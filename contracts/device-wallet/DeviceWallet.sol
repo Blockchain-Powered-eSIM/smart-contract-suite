@@ -20,14 +20,23 @@ import { DeviceWalletFactory } from "./DeviceWalletFactory.sol";
 error OnlyESIMWalletAdmin();
 error OnlyESIMWalletAdminOrDeviceWalletOwner();
 error OnlyESIMWalletAdminOrDeviceWalletFactory();
+error OnlyAssociatedESIMWallets();
+error FailedToTransfer();
 
 // TODO: Add ReentrancyGuard
 contract DeviceWallet is Ownable, Initializable {
 
     using Address for address;
 
-    /// @notice ETH balance of the contract
-    uint256 public ethBalance;
+    /// @notice Emitted when the contract pays ETH for data bundle
+    event ETHPaidForDataBundle(address indexed _vault, address indexed _eSIMWallet, uint256 indexed _amount);
+
+    /// @notice Emitted when ower updates ETH access to a particular eSIM wallet
+    event ETHAccessUpdated(address indexed _eSIMWalletAddress, bool _hasAccessToETH);
+
+    /// @notice Emitted when ETH is sent out from the contract
+    /// @dev mostly when an eSIM wallet pulls ETH from this contract
+    event ETHSent(address indexed _eSIMWalletAddress, uint256 _amount);
 
     /// @notice ESIM wallet factory contract instance
     ESIMWalletFactory public eSIMWalletFactory;
@@ -43,6 +52,9 @@ contract DeviceWallet is Ownable, Initializable {
 
     /// @notice Set to true if the eSIM wallet belongs to this device wallet
     mapping(address => bool) public isValidESIMWallet;
+
+    /// @notice Mapping that tracks if an associated eSIM wallet can pull ETH or not
+    mapping(address => bool) public canPullETH;
 
     modifier onlyESIMWalletAdmin() {
         if(msg.sender != deviceWalletFactory.eSIMWalletAdmin()) revert OnlyESIMWalletAdmin();
@@ -62,6 +74,11 @@ contract DeviceWallet is Ownable, Initializable {
             msg.sender != deviceWalletFactory.eSIMWalletAdmin() && 
             msg.sender != owner
         ) revert OnlyESIMWalletAdminOrDeviceWalletOwner();
+        _;
+    }
+
+    modifier onlyAssociatedESIMWallets() {
+        if(!isValidESIMWallet[msg.sender]) revert OnlyAssociatedESIMWallets();
         _;
     }
 
@@ -113,6 +130,7 @@ contract DeviceWallet is Ownable, Initializable {
                 );
                 
                 isValidESIMWallet[eSIMWalletAddress] = true;
+                canPullETH[eSIMWalletAddress] = true;
                 leftOverETH -= _dataBundlePrices[i];
             }
         }
@@ -125,11 +143,8 @@ contract DeviceWallet is Ownable, Initializable {
             );
 
             isValidESIMWallet[eSIMWalletAddress] = true;
+            canPullETH[eSIMWalletAddress] = true;
             leftOverETH -= _dataBundlePrices[0];
-        }
-
-        if(leftOverETH > 0) {
-            ethBalance += leftOverETH;
         }
 
         _transferOwnership(_owner);
@@ -141,11 +156,13 @@ contract DeviceWallet is Ownable, Initializable {
     /// @param _dataBundleID String data bundle ID to be bought for the eSIM
     /// @param _dataBundlePrice Price in uint256 for the data bundle
     /// @param _eSIMUniqueIdentifier String unique identifier for the eSIM wallet
+    /// @param _hasAccessToETH Set to true if the eSIM wallet is allowed to pull ETH from this wallet.
     /// @return eSIM wallet address
     function deployESIMWallet(
         string calldata _dataBundleID,
         uint256 _dataBundlePrice,
-        string calldata _eSIMUniqueIdentifier
+        string calldata _eSIMUniqueIdentifier,
+        bool _hasAccessToETH
     ) onlyOwner external payable returns (address) {
         require(owner != address (0), "eSIM wallet owner cannot be zero address");
 
@@ -157,10 +174,9 @@ contract DeviceWallet is Ownable, Initializable {
         );
 
         isValidESIMWallet[eSIMWalletAddress] = true;
+        canPullETH[eSIMWalletAddress] = _hasAccessToETH;
+
         uint256 leftOverETH = msg.value - _dataBundlePrice;
-        if(leftOverETH > 0) {
-            ethBalance += leftOverETH;
-        }
 
         return eSIMWalletAddress;
     }
@@ -181,12 +197,69 @@ contract DeviceWallet is Ownable, Initializable {
         return eSIMWallet.eSIMUniqueIdentifier();
     }
 
+    /// @notice Allow the eSIM wallets associated with this device wallet to pay ETH for data bundles
+    /// @dev Instead of pulling the ETH into the eSIM wallet and then sending to the vault,
+    ///      the eSIM wallet can directly request the device wallet to pay ETH for the data bundles
+    /// @param _amount Amount of ETH to pull
+    function payETHForDataBundles(
+        uint256 _amount
+    ) onlyAssociatedESIMWallets external returns (uint256) {
+        require(_amount > 0, "Amount cannot be zero");
+        require(canPullETH[msg.sender] == true, "Cannot pull ETH. Access has been revoked");
+        
+        address vault = getVaultAddress();
+        _transferETH(vault, _amount);
+
+        emit ETHPaidForDataBundle(vault, msg.sender, _amount);
+
+        return _amount;
+    }
+
+    /// @notice Allow the eSIM wallets associated with this device wallet to pull ETH (for data bundles)
+    /// @param _amount Amount of ETH to pull
+    function pullETH(
+        uint256 _amount
+    ) onlyAssociatedESIMWallets external returns (uint256) {
+        require(_amount > 0, "Amount cannot be zero");
+        require(canPullETH[msg.sender] == true, "Cannot pull ETH. Access has been revoked");
+        
+        _transferETH(msg.sender, _amount);
+
+        return _amount;
+    }
+
+    /// @notice Fetches the vault address (that receives payment for data bundles) from the device wallet factory
+    /// @dev Mostly used by the associated eSIM wallets for reference
     function getVaultAddress() public view returns (address) {
         return deviceWalletFactory.vault();
     }
 
+    /// @notice Allow owner to revoke or give access to any associated eSIM wallet for pulling ETH
+    /// @param _eSIMWalletAddress Address of the eSIM wallet to toggle ETH access for
+    /// @param _hasAccessToETH Set to true to give access, false to revoke access
+    function toggleAccessToETH(
+        address _eSIMWalletAddress,
+        bool _hasAccessToETH
+    ) onlyOwner external {
+        require(isValidESIMWallet[_eSIMWalletAddress], "Invalid eSIM wallet address");
+
+        canPullETH[_eSIMWalletAddress] = _hasAccessToETH;
+
+        emit ETHAccessUpdated(_eSIMWalletAddress, _hasAccessToETH);
+    }
+
+    function _transferETH(address _recipient, uint256 _amount) internal virtual {
+        require(_amount <= address(this).balance, "Not enough ETH in the wallet. Please topup ETH into the wallet");
+        require(_recipient != address(0), "Recipient cannot be zero address");
+
+        if (_amount > 0) {
+            (bool success,) = _recipient.call{value: _amount}("");
+            if (!success) revert FailedToTransfer();
+            else ETHSent(_recipient, _amount);
+        }
+    }
+
     receive() external payable {
-        ethBalance += msg.value;
         // receive ETH
     }
 }
