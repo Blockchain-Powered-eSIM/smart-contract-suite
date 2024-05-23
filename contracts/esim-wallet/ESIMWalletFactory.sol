@@ -5,8 +5,6 @@ pragma solidity ^0.8.18;
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { ESIMWallet } from "./ESIMWallet.sol";
 import { DeviceWalletFactory } from "../device-wallet/DeviceWalletFactory.sol";
-// TODO: Implement Beacon Proxy, as per need
-// import { BeaconProxy } from "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
 
 error OnlyDeviceWalletFactory();
 
@@ -14,7 +12,7 @@ error OnlyDeviceWalletFactory();
 contract ESIMWalletFactory {
 
     /// @notice Emitted when a new eSIM wallet is deployed
-    event ESIMWalletDeployed(address indexed _eSIMWalletAddress, address indexed _deviceWalletAddress);
+    event ESIMWalletDeployed(address indexed _eSIMWalletAddress, string _dataBundleID, uint256 _dataBundlePrice, address indexed _deviceWalletAddress);
 
     /// @notice Address of the device wallet factory
     DeviceWalletFactory public deviceWalletFactory;
@@ -41,17 +39,29 @@ contract ESIMWalletFactory {
     /// Function to deploy an eSIM wallet
     /// @dev can only be called by the respective deviceWallet contract
     /// @param _owner Owner of the eSIM wallet
+    /// @param _dataBundleID String ID of data bundle to buy for the new eSIM
+    /// @param _dataBundlePrice uint256 USD price for data bundle
     /// @return Address of the newly deployed eSIM wallet
     function deployESIMWallet(
-        address _owner
-    ) public returns (address) {
+        address _owner,
+        string calldata _dataBundleID,
+        uint256 _dataBundlePrice,
+        string calldata _eSIMUniqueIdentifier
+    ) external payable returns (address) {
         require(deviceWalletFactory.isDeviceWalletValid(msg.sender), "Only device wallet can call this");
 
         // TODO: Correctly deploy ESIMWallet as a clone
-        address eSIMWalletAddress = ESIMWallet.init(address(this), msg.sender, _owner);
+        address eSIMWalletAddress = ESIMWallet.init{value: _dataBundlePrice}(
+            address(this), 
+            msg.sender, 
+            _owner,
+            _dataBundleID,
+            _dataBundlePrice, 
+            _eSIMUniqueIdentifier
+        );
         isESIMWalletDeployed[eSIMWalletAddress] = true;
 
-        emit ESIMWalletDeployed(eSIMWalletAddress, msg.sender);
+        emit ESIMWalletDeployed(eSIMWalletAddress, _dataBundleID, _dataBundlePrice, msg.sender);
 
         return eSIMWalletAddress;
     }
