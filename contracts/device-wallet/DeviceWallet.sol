@@ -181,6 +181,10 @@ contract DeviceWallet is Ownable, Initializable {
         return eSIMWallet.eSIMUniqueIdentifier();
     }
 
+    function getVaultAddress() public view returns (address) {
+        return deviceWalletFactory.vault();
+    }
+
     receive() external payable {
         ethBalance += msg.value;
         // receive ETH

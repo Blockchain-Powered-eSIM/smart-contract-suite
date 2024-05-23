@@ -6,6 +6,7 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { Initializable } from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { IOwnableESIMWallet } from "../interfaces/IOwnableESIMWallet.sol";
+import { DeviceWallet } from "../device-wallet/DeviceWallet.sol";
 
 error OnlyDeviceWallet();
 
@@ -22,14 +23,17 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
     /// @notice Emitted when the eSIM unique identifier is initialised
     event ESIMUniqueIdentifierInitialised(string _eSIMUniqueIdentifier);
 
+    /// @notice Address of the vault that receives payments for eSIM data bundles
+    address public vault;
+
     /// @notice Address of the eSIM wallet factory contract
     address public eSIMWalletFactory;
 
     /// @notice String identifier to uniquely identify eSIM wallet
     string public eSIMUniqueIdentifier;
 
-    /// @notice Address of the device wallet associated with this eSIM wallet
-    address public deviceWalletAddress;
+    /// @notice Device wallet contract instance associated with this eSIM wallet
+    DeviceWallet public deviceWallet;
 
     /// @notice Total number of data bundle transactions made by user
     uint256 public lastTransactionCount;
@@ -74,7 +78,7 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
         require(_deviceWalletAddress != address(0), "Device wallet address cannot be zero");
 
         eSIMWalletFactory = _eSIMWalletFactoryAddress;
-        deviceWalletAddress = _deviceWalletAddress;
+        deviceWallet = DeviceWallet(_deviceWalletAddress);
 
         if(bytes(_eSIMUniqueIdentifier).length > 0) {
             eSIMUniqueIdentifier = _eSIMUniqueIdentifier;
@@ -117,6 +121,8 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
         require(bytes(_dataBundleID).length > 0, "Data bundle ID cannot be empty");
         require(_dataBundlePrice == msg.value, "Incorrect amount");
         require(_dataBundlePrice > 0, "Price cannot be zero");
+
+        address vault = deviceWallet.getVaultAddress();
 
         DataBundleDetails storage dataBundleDetails = transactionHistory[lastTransactionCount];
         dataBundleDetails.dataBundleID = _dataBundleID;
