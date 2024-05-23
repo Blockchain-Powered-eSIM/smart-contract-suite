@@ -7,6 +7,8 @@ import { DeviceWallet } from "./DeviceWallet.sol";
 // TODO: Implement Beacon Proxy, as per need
 // import { BeaconProxy } from "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
 
+error OnlyAdmin();
+
 /// @notice Contract for deploying a new eSIM wallet
 contract DeviceWalletFactory {
 
@@ -14,13 +16,19 @@ contract DeviceWalletFactory {
     event SetESIMWalletFactoryAddress(address indexed _eSIMWalletFactoryAddress);
 
     /// @notice Emitted when factory is deployed and admin is set
-    event DeviceWalletFactoryDeployed(address indexed _factoryAddress, address indexed _admin);
+    event DeviceWalletFactoryDeployed(address indexed _factoryAddress, address indexed _admin, address indexed _vault);
+
+    /// @notice Emitted when the Vault address is updated
+    event VaultAddressUpdated(address indexed _updatedVaultAddress);
 
     /// @notice Emitted when a new device wallet is deployed
     event DeviceWalletDeployed(address indexed _deviceWalletAddress, address[] indexed _eSIMUniqueIdentifiers);
 
     /// @notice Admin address of the eSIM wallet project
     address public eSIMWalletAdmin;
+
+    /// @notice Vault address that receives payments for eSIM data bundles
+    address public vault;
 
     /// @notice eSIM wallet factory contract address;
     address public eSIMWalletFactoryAddress;
@@ -31,23 +39,61 @@ contract DeviceWalletFactory {
     /// @notice Set to true if device wallet was deployed by the device wallet factory, false otherwise.
     mapping(address => bool) public isDeviceWalletValid;
 
+    modifier onlyAdmin() {
+        if(msg.sender != eSIMWalletAdmin) revert OnlyAdmin();
+        _;
+    }
+
     constructor(
-        address _eSIMWalletAdmin
+        address _eSIMWalletAdmin,
+        address _vault
     ) {
         require(_eSIMWalletAdmin != address(0), "Admin cannot be zero address");
+        require(_vault != address(0), "Vault address cannot be zero");
 
         eSIMWalletAdmin = _eSIMWalletAdmin;
-        emit DeviceWalletFactoryDeployed(address(this), _eSIMWalletAdmin);
+        vault = _vault;
+        emit DeviceWalletFactoryDeployed(address(this), _eSIMWalletAdmin, _vault);
+    }
+
+    /// @notice Function to update vault address.
+    /// @dev Can only be called by the admin
+    /// @param _newVaultAddress New vault address
+    function updateVaultAddress(
+        address _newVaultAddress
+    ) public onlyAdmin returns (address) {
+        require(vault != _newVaultAddress, "Cannot update to same address");
+        require(_newVaultAddress != address(0), "Vault address cannot be zero");
+
+        vault = _newVaultAddress;
+        emit VaultAddressUpdated(vault);
+
+        return vault;
+    }
+
+    /// @notice Function to update admin address
+    /// @param _newAdmin New admin address
+    function updateAdmin(
+        address _newAdmin
+    ) public onlyAdmin returns (address) {
+        require(eSIMWalletAdmin != _newAdmin, "Cannot update to same address");
+        require(_newAdmin != address(0), "Admin address cannot be zero");
+
+        eSIMWalletAdmin = _newAdmin;
+        emit AdminUpdated(eSIMWalletAdmin);
+
+        return eSIMWalletAdmin;
     }
 
     function setESIMWalletFactoryAddress(
         address _eSIMWalletFactoryAddress
-    ) public {
-        require(msg.sender == eSIMWalletAdmin, "Only eSIM wallet project admin can call");
+    ) public onlyAdmin returns (address) {
+        require(_eSIMWalletFactoryAddress != address(0), "Factory address cannot be zero");
 
         eSIMWalletFactoryAddress = _eSIMWalletFactoryAddress;
-
         emit SetESIMWalletFactoryAddress(eSIMWalletFactoryAddress);
+
+        return eSIMWalletFactoryAddress;
     }
 
     /// @notice To deploy multiple device wallets at once
