@@ -88,7 +88,7 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
 
         _transferOwnership(_owner);
 
-        buyDataBundle(_dataBundleID, _dataBundlePrice);
+        buyDataBundle{value: msg.value}(_dataBundleID, _dataBundlePrice);
 
         emit ESIMWalletDeployed(address(this), _deviceWalletAddress, _owner);
     }
