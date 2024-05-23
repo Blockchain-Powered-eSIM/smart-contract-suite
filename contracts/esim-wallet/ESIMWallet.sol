@@ -6,8 +6,10 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { Initializable } from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { IOwnableESIMWallet } from "../interfaces/IOwnableESIMWallet.sol";
+import { DeviceWallet } from "../device-wallet/DeviceWallet.sol";
 
 error OnlyDeviceWallet();
+error FailedToTransfer();
 
 contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
 
@@ -17,10 +19,13 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
     event ESIMWalletDeployed(address indexed _eSIMWalletAddress, address indexed _deviceWalletAddress, address indexed _owner);
 
     /// Emitted when the payment for a data bundle is made
-    event DataBundleBought(string _dataBundleID, uint256 _dataBundlePrice, uint256 _transactionCount);
+    event DataBundleBought(string _dataBundleID, uint256 _dataBundlePrice, uint256 _ethFromUser, uint256 _transactionCount);
 
     /// @notice Emitted when the eSIM unique identifier is initialised
     event ESIMUniqueIdentifierInitialised(string _eSIMUniqueIdentifier);
+
+    /// @notice Emitted when ETH moves out of this contract
+    event ETHSent(address indexed _recipient, uint256 _amount);
 
     /// @notice Address of the eSIM wallet factory contract
     address public eSIMWalletFactory;
@@ -28,8 +33,8 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
     /// @notice String identifier to uniquely identify eSIM wallet
     string public eSIMUniqueIdentifier;
 
-    /// @notice Address of the device wallet associated with this eSIM wallet
-    address public deviceWalletAddress;
+    /// @notice Device wallet contract instance associated with this eSIM wallet
+    DeviceWallet public deviceWallet;
 
     /// @notice Total number of data bundle transactions made by user
     uint256 public lastTransactionCount;
@@ -74,7 +79,7 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
         require(_deviceWalletAddress != address(0), "Device wallet address cannot be zero");
 
         eSIMWalletFactory = _eSIMWalletFactoryAddress;
-        deviceWalletAddress = _deviceWalletAddress;
+        deviceWallet = DeviceWallet(_deviceWalletAddress);
 
         if(bytes(_eSIMUniqueIdentifier).length > 0) {
             eSIMUniqueIdentifier = _eSIMUniqueIdentifier;
@@ -83,7 +88,7 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
 
         _transferOwnership(_owner);
 
-        buyDataBundle(_dataBundleID, _dataBundlePrice);
+        buyDataBundle{value: msg.value}(_dataBundleID, _dataBundlePrice);
 
         emit ESIMWalletDeployed(address(this), _deviceWalletAddress, _owner);
     }
@@ -103,9 +108,6 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
         emit ESIMUniqueIdentifierInitialised(_eSIMUniqueIdentifier);
     }
 
-    /// TODO: check if ETH is in the contract, if not pull ETH from device wallet
-    /// For the above TODO, approve eSIM wallet contracts to pull funds from device wallet
-    /// TODO: Send ETH to eSIM wallet project's vault
     /// @notice Function to make payment for the data bundle
     /// @param _dataBundleID string data bundle ID from the backend catalogue
     /// @param _dataBundlePrice uint256 price for the data bundle
@@ -115,14 +117,26 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
         uint256 _dataBundlePrice
     ) public payable returns (bool) {
         require(bytes(_dataBundleID).length > 0, "Data bundle ID cannot be empty");
-        require(_dataBundlePrice == msg.value, "Incorrect amount");
         require(_dataBundlePrice > 0, "Price cannot be zero");
+
+        // 1. msg.value is received by contract
+        // 2. if wallet balance is less than _dataBundlePrice, pull ETH from device wallet
+        // 3. send _dataBundlePrice amount of ETH to vault
+        uint256 walletBalance = address(this).balance;
+
+        if(walletBalance < _dataBundlePrice) {
+            uint256 remainingETH = _dataBundlePrice - walletBalance;
+            deviceWallet.pullETH(remainingETH);
+        }
+
+        address vault = deviceWallet.getVaultAddress();
+        _transferETH(vault, _dataBundlePrice);
 
         DataBundleDetails storage dataBundleDetails = transactionHistory[lastTransactionCount];
         dataBundleDetails.dataBundleID = _dataBundleID;
         dataBundleDetails.dataBundlePrice = _dataBundlePrice;
 
-        emit DataBundleBought(_dataBundleID, _dataBundlePrice, lastTransactionCount);
+        emit DataBundleBought(_dataBundleID, _dataBundlePrice, msg.value, lastTransactionCount);
 
         lastTransactionCount += 1;
 
@@ -183,6 +197,18 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
         _isTransferApproved[from][to] = status;
         if (statusChanged) {
             emit TransferApprovalChanged(from, to, status);
+        }
+    }
+
+    /// @dev Internal function to send ETH from this contract
+    function _transferETH(address _recipient, uint256 _amount) internal virtual {
+        require(address(this).balance >= _amount, "Not enough ETH in the wallet. Please topup ETH into the wallet");
+        require(_recipient != address(0), "Recipient cannot be zero address");
+
+        if (_amount > 0) {
+            (bool success,) = _recipient.call{value: _amount}("");
+            if (!success) revert FailedToTransfer();
+            else emit ETHSent(_recipient, _amount);
         }
     }
 
