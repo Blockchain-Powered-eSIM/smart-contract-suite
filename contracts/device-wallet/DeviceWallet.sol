@@ -187,7 +187,7 @@ contract DeviceWallet is Ownable, Initializable {
     function setESIMUniqueIdentifierForAnESIMWallet(
         address _eSIMWalletAddress,
         string calldata _eSIMUniqueIdentifier
-    ) onlyESIMWalletAdminOrDeviceWalletOwner public returns(string calldata) {
+    ) onlyESIMWalletAdmin public returns(string calldata) {
         require(ESIMWalletFactory.isValidESIMWallet(_eSIMWalletAddress) == true, "Unknown eSIM wallet address provided");
         require(eSIMUniqueIdentifierToESIMWalletAddress[_eSIMUniqueIdentifier] == address(0), "eSIM unique identifier already set for the provided eSIM wallet");
         
