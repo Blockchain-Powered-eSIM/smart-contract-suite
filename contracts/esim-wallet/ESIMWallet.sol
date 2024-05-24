@@ -52,7 +52,7 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
     mapping(address => mapping(address => bool)) internal _isTransferApproved;
 
     modifier onlyDeviceWallet() {
-        if(msg.sender != deviceWalletAddress) revert OnlyDeviceWallet();
+        if(msg.sender != address(deviceWallet)) revert OnlyDeviceWallet();
         _;
     }
 
