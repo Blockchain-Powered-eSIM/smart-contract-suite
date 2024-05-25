@@ -44,7 +44,7 @@ contract DeviceWalletFactory {
     address public deviceWalletImplementation;
 
     /// @notice Beacon contract address for this contract
-    address beacon;
+    address public beacon;
 
     /// @notice eSIM wallet factory contract address;
     address public eSIMWalletFactoryAddress;
