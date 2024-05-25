@@ -42,18 +42,16 @@ contract ESIMWalletFactory {
     mapping(address => bool) public isESIMWalletDeployed;
 
     modifier onlyDeviceWalletFactory() {
-        if (msg.sender != address(deviceWalletFactory))
+        if (msg.sender != address(deviceWalletFactory)) {
             revert OnlyDeviceWalletFactory();
+        }
         _;
     }
 
     /// @param _deviceWalletFactoryAddress Address of the device wallet factory address
     /// @param _upgradeManager Admin address responsible for upgrading contracts
     constructor(address _deviceWalletFactoryAddress, address _upgradeManager) {
-        require(
-            _deviceWalletFactoryAddress != address(0),
-            "Address cannot be zero"
-        );
+        require(_deviceWalletFactoryAddress != address(0), "Address cannot be zero");
         require(_upgradeManager != address(0), "Address cannot be zero");
 
         deviceWalletFactory = DeviceWalletFactory(_deviceWalletFactoryAddress);
@@ -61,16 +59,10 @@ contract ESIMWalletFactory {
         // eSIM wallet implementation (logic) contract
         eSIMWalletImplementation = address(new ESIMWallet());
         // Upgradable beacon for eSIM wallet implementation contract
-        beacon = address(
-            new UpgradeableBeacon(eSIMWalletImplementation, _upgradeManager)
-        );
+        beacon = address(new UpgradeableBeacon(eSIMWalletImplementation, _upgradeManager));
 
         emit ESIMWalletFactorydeployed(
-            address(this),
-            address(deviceWalletFactory),
-            _upgradeManager,
-            eSIMWalletImplementation,
-            beacon
+            address(this), address(deviceWalletFactory), _upgradeManager, eSIMWalletImplementation, beacon
         );
     }
 
@@ -86,10 +78,7 @@ contract ESIMWalletFactory {
         uint256 _dataBundlePrice,
         string calldata _eSIMUniqueIdentifier
     ) external payable returns (address) {
-        require(
-            deviceWalletFactory.isDeviceWalletValid(msg.sender),
-            "Only device wallet can call this"
-        );
+        require(deviceWalletFactory.isDeviceWalletValid(msg.sender), "Only device wallet can call this");
 
         // msg.value will be sent along with the abi.encodeCall
         address eSIMWalletAddress = address(
@@ -97,25 +86,13 @@ contract ESIMWalletFactory {
                 beacon,
                 abi.encodeCall(
                     ESIMWallet(payable(eSIMWalletImplementation)).init,
-                    (
-                        address(this),
-                        msg.sender,
-                        _owner,
-                        _dataBundleID,
-                        _dataBundlePrice,
-                        _eSIMUniqueIdentifier
-                    )
+                    (address(this), msg.sender, _owner, _dataBundleID, _dataBundlePrice, _eSIMUniqueIdentifier)
                 )
             )
         );
         isESIMWalletDeployed[eSIMWalletAddress] = true;
 
-        emit ESIMWalletDeployed(
-            eSIMWalletAddress,
-            _dataBundleID,
-            _dataBundlePrice,
-            msg.sender
-        );
+        emit ESIMWalletDeployed(eSIMWalletAddress, _dataBundleID, _dataBundlePrice, msg.sender);
 
         return eSIMWalletAddress;
     }
