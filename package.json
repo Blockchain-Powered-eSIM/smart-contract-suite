@@ -1,7 +1,7 @@
 {
   "name": "smart-contract-suite",
   "scripts": {
-    "forge-build": "forge build",
+    "forge-build": "forge build --via-ir",
     "test": "forge test -vv",
     "test-debug": "forge test -vvv",
     "coverage": "forge coverage",

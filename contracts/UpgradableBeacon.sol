@@ -28,7 +28,7 @@ contract UpgradeableBeacon is IBeacon, Ownable {
     }
 
     /// @return current implementation contract address
-    function implementation() override external view returns (address) {
+    function implementation() external view override returns (address) {
         return implementationContractAddress_;
     }
 
