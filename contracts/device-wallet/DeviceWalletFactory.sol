@@ -3,9 +3,9 @@ pragma solidity ^0.8.18;
 // SPDX-License-Identifier: MIT
 
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
+import { BeaconProxy } from "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
 import { DeviceWallet } from "./DeviceWallet.sol";
-// TODO: Implement Beacon Proxy, as per need
-// import { BeaconProxy } from "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
+import { UpgradeableBeacon } from "../UpgradableBeacon.sol";
 
 error OnlyAdmin();
 
@@ -16,7 +16,14 @@ contract DeviceWalletFactory {
     event SetESIMWalletFactoryAddress(address indexed _eSIMWalletFactoryAddress);
 
     /// @notice Emitted when factory is deployed and admin is set
-    event DeviceWalletFactoryDeployed(address indexed _factoryAddress, address indexed _admin, address indexed _vault);
+    event DeviceWalletFactoryDeployed(
+        address indexed _factoryAddress, 
+        address indexed _admin, 
+        address indexed _vault,
+        address indexed _upgradeManager, 
+        address indexed _deviceWalletImplementation, 
+        address indexed _beacon
+    );
 
     /// @notice Emitted when the Vault address is updated
     event VaultAddressUpdated(address indexed _updatedVaultAddress);
@@ -24,11 +31,20 @@ contract DeviceWalletFactory {
     /// @notice Emitted when a new device wallet is deployed
     event DeviceWalletDeployed(address indexed _deviceWalletAddress, address[] indexed _eSIMUniqueIdentifiers);
 
+    /// @notice Emitted when the admin address is updated
+    event AdminUpdated(address indexed _newAdmin);
+
     /// @notice Admin address of the eSIM wallet project
     address public eSIMWalletAdmin;
 
     /// @notice Vault address that receives payments for eSIM data bundles
     address public vault;
+
+    /// @notice Implementation (logic) contract address of the device wallet
+    address public deviceWalletImplementation;
+
+    /// @notice Beacon contract address for this contract
+    address beacon;
 
     /// @notice eSIM wallet factory contract address;
     address public eSIMWalletFactoryAddress;
@@ -44,16 +60,27 @@ contract DeviceWalletFactory {
         _;
     }
 
+    /// @param _eSIMWalletAdmin Admin address of the eSIM wallet project
+    /// @param _vault Address of the vault that receives payments for the data bundles
+    /// @param _upgradeManager Admin address responsible for upgrading contracts
     constructor(
         address _eSIMWalletAdmin,
-        address _vault
+        address _vault,
+        address _upgradeManager
     ) {
         require(_eSIMWalletAdmin != address(0), "Admin cannot be zero address");
         require(_vault != address(0), "Vault address cannot be zero");
+        require(_upgradeManager != address(0), "Upgrade manager address cannot be zero");
 
         eSIMWalletAdmin = _eSIMWalletAdmin;
         vault = _vault;
-        emit DeviceWalletFactoryDeployed(address(this), _eSIMWalletAdmin, _vault);
+
+        // device wallet implementation (logic) contract
+        deviceWalletImplementation = address(new DeviceWallet());
+        // Upgradable beacon for device wallet implementation contract
+        beacon = address(new UpgradeableBeacon(deviceWalletImplementation, _upgradeManager));
+
+        emit DeviceWalletFactoryDeployed(address(this), _eSIMWalletAdmin, _vault, _upgradeManager, deviceWalletImplementation, beacon);
     }
 
     /// @notice Function to update vault address.
@@ -105,9 +132,9 @@ contract DeviceWalletFactory {
     function deployMultipleDeviceWalletsWithESIMWallets(
         string[] calldata _deviceUniqueIdentifiers,
         string[][] calldata _dataBundleIDs,
-        uint256[][] _dataBundlePrices,
+        uint256[][] calldata _dataBundlePrices,
         string[][] calldata _eSIMUniqueIdentifiers
-    ) public payable returns (address[]) {
+    ) public payable returns (address[] memory) {
         uint256 numberOfDeviceWallets = _deviceUniqueIdentifiers.length;
         require(numberOfDeviceWallets != 0, "Array cannot be empty");
         require(numberOfDeviceWallets == _eSIMUniqueIdentifiers.length, "Array mismatch");
@@ -137,7 +164,7 @@ contract DeviceWalletFactory {
     function _deployDeviceWalletWithESIMWallets(
         string calldata _deviceUniqueIdentifier,
         string[] calldata _dataBundleIDs,
-        uint256[] _dataBundlePrices,
+        uint256[] calldata _dataBundlePrices,
         string[] calldata _eSIMUniqueIdentifiers,
         address _owner
     ) internal payable returns (address) {
@@ -149,21 +176,26 @@ contract DeviceWalletFactory {
             "Device wallet already exists"
         );
 
-        // TODO: Correctly deploy Device wallet as clones
-        address deviceWalletAddress = DeviceWallet.init{value: msg.value}(
-            eSIMWalletAdmin,
-            eSIMWalletFactoryAddress,
-            _owner,
-            _deviceUniqueIdentifier,
-            _dataBundleIDs[i],
-            _dataBundlePrices[i],
-            _eSIMUniqueIdentifiers[i]
-        );
-
+        // msg.value will be sent along with the abi.encodeCall
+        address deviceWalletAddress = address(new BeaconProxy(
+            beacon,
+            abi.encodeCall(
+                DeviceWallet(payable(deviceWalletImplementation)).init,
+                (
+                    address(this),
+                    eSIMWalletFactoryAddress,
+                    _owner,
+                    _deviceUniqueIdentifier,
+                    _dataBundleIDs,
+                    _dataBundlePrices,
+                    _eSIMUniqueIdentifiers
+                )
+            )
+        ));
         isDeviceWalletValid[deviceWalletAddress] = true;
         walletAddressOfDeviceUniqueIdentifier[_deviceUniqueIdentifier] = deviceWalletAddress;
 
-        emit DeviceWalletDeployed(deviceWalletAddress, _eSIMUniqueIdentifiers[i]);
+        emit DeviceWalletDeployed(deviceWalletAddress, _eSIMUniqueIdentifiers);
 
         return deviceWalletAddress;
     }
@@ -187,17 +219,22 @@ contract DeviceWalletFactory {
             "Device wallet already exists"
         );
 
-        // TODO: Correctly deploy Device wallet as clones
-        address deviceWalletAddress = DeviceWallet.init{value: msg.value}(
-            eSIMWalletAdmin,
-            eSIMWalletFactoryAddress,
-            _owner,
-            _deviceUniqueIdentifier,
-            [_dataBundleID],
-            [_dataBundlePrice],
-            []
-        );
-
+        // msg.value will be sent along with the abi.encodeCall
+        address deviceWalletAddress = address(new BeaconProxy(
+            beacon,
+            abi.encodeCall(
+                DeviceWallet(payable(deviceWalletImplementation)).init,
+                (
+                    address(this),
+                    eSIMWalletFactoryAddress,
+                    _owner,
+                    _deviceUniqueIdentifier,
+                    [_dataBundleID],
+                    [_dataBundlePrice],
+                    []
+                )
+            )
+        ));
         isDeviceWalletValid[deviceWalletAddress] = true;
         walletAddressOfDeviceUniqueIdentifier[_deviceUniqueIdentifier] = deviceWalletAddress;
 

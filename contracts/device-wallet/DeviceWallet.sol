@@ -99,11 +99,10 @@ contract DeviceWallet is Ownable, Initializable {
         address _owner,
         string calldata _deviceUniqueIdentifier,
         string[] calldata _dataBundleIDs,
-        uint256[] _dataBundlePrices,
+        uint256[] calldata _dataBundlePrices,
         string[] calldata _eSIMUniqueIdentifiers
     ) external payable returns (address) {
         require(_deviceWalletFactoryAddress != address(0), "Device wallet factory cannot be zero address");
-        require(_eSIMWalletAdmin != address (0), "eSIM wallet admin cannot be zero address");
         require(_owner != address (0), "eSIM wallet owner cannot be zero address");
         require(bytes(_deviceUniqueIdentifier).length != 0, "Device unique identifier cannot be zero");
         require(_dataBundleIDs.length > 0, "Data bundle ID array cannot be zero");
