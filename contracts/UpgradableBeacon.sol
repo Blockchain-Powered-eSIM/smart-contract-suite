@@ -28,21 +28,31 @@ contract UpgradeableBeacon is IBeacon, Ownable {
     }
 
     /// @return current implementation contract address
-    function implementation() override external view returns (address) {
+    function implementation() external view override returns (address) {
         return implementationContractAddress_;
     }
 
     /// @notice Allows the admin to update the logic (implementation) contract address
     /// @param _newImplementationContractAddress Address of the new implementation contract
-    function updateImplementation(address _newImplementationContractAddress) external onlyOwner {
+    function updateImplementation(
+        address _newImplementationContractAddress
+    ) external onlyOwner {
         _setImplementation(_newImplementationContractAddress);
     }
 
     /// @dev internal method for setting/updating the implementation contract address.
     ///      Make sure that the supplied address is a contract
-    function _setImplementation(address _implementationContractAddress) private {
-        require(_implementationContractAddress != address(0), "Invalid implementation");
-        require(_implementationContractAddress.isContract(), "Implementation address must be a contract address");
+    function _setImplementation(
+        address _implementationContractAddress
+    ) private {
+        require(
+            _implementationContractAddress != address(0),
+            "Invalid implementation"
+        );
+        require(
+            _implementationContractAddress.isContract(),
+            "Implementation address must be a contract address"
+        );
         implementationContractAddress_ = _implementationContractAddress;
         emit Upgraded(implementationContractAddress_);
     }

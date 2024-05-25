@@ -12,14 +12,22 @@ error OnlyDeviceWallet();
 error FailedToTransfer();
 
 contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
-
     using Address for address;
 
     /// Emitted when the eSIM wallet is deployed
-    event ESIMWalletDeployed(address indexed _eSIMWalletAddress, address indexed _deviceWalletAddress, address indexed _owner);
+    event ESIMWalletDeployed(
+        address indexed _eSIMWalletAddress,
+        address indexed _deviceWalletAddress,
+        address indexed _owner
+    );
 
     /// Emitted when the payment for a data bundle is made
-    event DataBundleBought(string _dataBundleID, uint256 _dataBundlePrice, uint256 _ethFromUser, uint256 _transactionCount);
+    event DataBundleBought(
+        string _dataBundleID,
+        uint256 _dataBundlePrice,
+        uint256 _ethFromUser,
+        uint256 _transactionCount
+    );
 
     /// @notice Emitted when the eSIM unique identifier is initialised
     event ESIMUniqueIdentifierInitialised(string _eSIMUniqueIdentifier);
@@ -48,11 +56,11 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
     mapping(uint256 => DataBundleDetails) public transactionHistory;
 
     /// @dev A map from owner and spender to transfer approval. Determines whether
-    ///      the spender can transfer this wallet from the owner. 
+    ///      the spender can transfer this wallet from the owner.
     mapping(address => mapping(address => bool)) internal _isTransferApproved;
 
     modifier onlyDeviceWallet() {
-        if(msg.sender != address(deviceWallet)) revert OnlyDeviceWallet();
+        if (msg.sender != address(deviceWallet)) revert OnlyDeviceWallet();
         _;
     }
 
@@ -64,33 +72,44 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
     ///      If _eSIMUniqueIdentifier is non-empty, the eSIM wallet is being deployed after the eSIM has been bought by the user
     /// @param _eSIMWalletFactoryAddress eSIM wallet factory contract address
     /// @param _deviceWalletAddress Device wallet contract address (the contract that deploys this eSIM wallet)
-    /// @param _owner User's address
+    /// @param _eSIMWalletOwner User's address
     /// @param _eSIMUniqueIdentifier Unique identifier for the eSIM wallet
     function init(
         address _eSIMWalletFactoryAddress,
         address _deviceWalletAddress,
-        address _owner,
+        address _eSIMWalletOwner,
         string calldata _dataBundleID,
         uint256 _dataBundlePrice,
         string calldata _eSIMUniqueIdentifier
     ) external payable override initializer {
-        require(_owner != address(0), "Owner cannot be address zero");
-        require(_eSIMWalletFactoryAddress != address(0), "eSIM wallet factory address cannot be zero");
-        require(_deviceWalletAddress != address(0), "Device wallet address cannot be zero");
+        require(_eSIMWalletOwner != address(0), "Owner cannot be address zero");
+        require(
+            _eSIMWalletFactoryAddress != address(0),
+            "eSIM wallet factory address cannot be zero"
+        );
+        require(
+            _deviceWalletAddress != address(0),
+            "Device wallet address cannot be zero"
+        );
 
         eSIMWalletFactory = _eSIMWalletFactoryAddress;
-        deviceWallet = DeviceWallet(_deviceWalletAddress);
+        deviceWallet = DeviceWallet(payable(_deviceWalletAddress));
 
-        if(bytes(_eSIMUniqueIdentifier).length > 0) {
+        if (bytes(_eSIMUniqueIdentifier).length > 0) {
             eSIMUniqueIdentifier = _eSIMUniqueIdentifier;
             emit ESIMUniqueIdentifierInitialised(_eSIMUniqueIdentifier);
         }
 
-        _transferOwnership(_owner);
+        _transferOwnership(_eSIMWalletOwner);
 
-        buyDataBundle{value: msg.value}(_dataBundleID, _dataBundlePrice);
+        // no need to specify {value: msg.value} as the function exists in same contract
+        buyDataBundle(_dataBundleID, _dataBundlePrice);
 
-        emit ESIMWalletDeployed(address(this), _deviceWalletAddress, _owner);
+        emit ESIMWalletDeployed(
+            address(this),
+            _deviceWalletAddress,
+            _eSIMWalletOwner
+        );
     }
 
     /// @notice Since buying the eSIM (along with data bundle) happens before the identifier is generated,
@@ -99,9 +118,15 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
     /// @param _eSIMUniqueIdentifier String that uniquely identifies eSIM wallet
     function setESIMUniqueIdentifier(
         string calldata _eSIMUniqueIdentifier
-    ) onlyDeviceWallet external {
-        require(bytes(eSIMUniqueIdentifier).length == 0, "eSIM unique identifier already initialised");
-        require(bytes(_eSIMUniqueIdentifier).length != 0, "eSIM unique identifier cannot be zero");
+    ) external onlyDeviceWallet {
+        require(
+            bytes(eSIMUniqueIdentifier).length == 0,
+            "eSIM unique identifier already initialised"
+        );
+        require(
+            bytes(_eSIMUniqueIdentifier).length != 0,
+            "eSIM unique identifier cannot be zero"
+        );
 
         eSIMUniqueIdentifier = _eSIMUniqueIdentifier;
 
@@ -116,7 +141,10 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
         string calldata _dataBundleID,
         uint256 _dataBundlePrice
     ) public payable returns (bool) {
-        require(bytes(_dataBundleID).length > 0, "Data bundle ID cannot be empty");
+        require(
+            bytes(_dataBundleID).length > 0,
+            "Data bundle ID cannot be empty"
+        );
         require(_dataBundlePrice > 0, "Price cannot be zero");
 
         // 1. msg.value is received by contract
@@ -124,7 +152,7 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
         // 3. send _dataBundlePrice amount of ETH to vault
         uint256 walletBalance = address(this).balance;
 
-        if(walletBalance < _dataBundlePrice) {
+        if (walletBalance < _dataBundlePrice) {
             uint256 remainingETH = _dataBundlePrice - walletBalance;
             deviceWallet.pullETH(remainingETH);
         }
@@ -132,11 +160,18 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
         address vault = deviceWallet.getVaultAddress();
         _transferETH(vault, _dataBundlePrice);
 
-        DataBundleDetails storage dataBundleDetails = transactionHistory[lastTransactionCount];
+        DataBundleDetails storage dataBundleDetails = transactionHistory[
+            lastTransactionCount
+        ];
         dataBundleDetails.dataBundleID = _dataBundleID;
         dataBundleDetails.dataBundlePrice = _dataBundlePrice;
 
-        emit DataBundleBought(_dataBundleID, _dataBundlePrice, msg.value, lastTransactionCount);
+        emit DataBundleBought(
+            _dataBundleID,
+            _dataBundlePrice,
+            msg.value,
+            lastTransactionCount
+        );
 
         lastTransactionCount += 1;
 
@@ -144,13 +179,20 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
     }
 
     /// @dev Returns the current owner of the wallet
-    function owner() public view override(IOwnableESIMWallet, Ownable) returns (address) {
+    function owner()
+        public
+        view
+        override(IOwnableESIMWallet, Ownable)
+        returns (address)
+    {
         return Ownable.owner();
     }
 
     /// @dev Transfers ownership from the current owner to another address
     /// @param newOwner The address that will be the new owner
-    function transferOwnership(address newOwner) public override(IOwnableESIMWallet, Ownable) {
+    function transferOwnership(
+        address newOwner
+    ) public override(IOwnableESIMWallet, Ownable) {
         // Only the admin of deviceWalletFactory contract can transfer ownership
         require(
             isTransferApproved(owner(), msg.sender),
@@ -170,14 +212,17 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
     /// @param to The spender address
     /// @notice The owner can always transfer the wallet to someone, i.e.,
     ///         approval from an address to itself is always 'true'
-    function isTransferApproved(address from, address to) public override view returns (bool) {
+    function isTransferApproved(
+        address from,
+        address to
+    ) public view override returns (bool) {
         return from == to ? true : _isTransferApproved[from][to];
     }
 
     /// @dev Changes authorization status for transfer approval from msg.sender to an address
     /// @param to Address to change allowance status for
     /// @param status The new approval status
-    function setApproval(address to, bool status) external onlyOwner override {
+    function setApproval(address to, bool status) external override onlyOwner {
         require(
             to != address(0),
             "OwnableSmartWallet: Approval cannot be set for zero address"
@@ -188,11 +233,7 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
     /// @param from The owner address
     /// @param to The spender address
     /// @param status Status of approval
-    function _setApproval(
-        address from,
-        address to,
-        bool status
-    ) internal {
+    function _setApproval(address from, address to, bool status) internal {
         bool statusChanged = _isTransferApproved[from][to] != status;
         _isTransferApproved[from][to] = status;
         if (statusChanged) {
@@ -201,12 +242,18 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
     }
 
     /// @dev Internal function to send ETH from this contract
-    function _transferETH(address _recipient, uint256 _amount) internal virtual {
-        require(address(this).balance >= _amount, "Not enough ETH in the wallet. Please topup ETH into the wallet");
+    function _transferETH(
+        address _recipient,
+        uint256 _amount
+    ) internal virtual {
+        require(
+            address(this).balance >= _amount,
+            "Not enough ETH in the wallet. Please topup ETH into the wallet"
+        );
         require(_recipient != address(0), "Recipient cannot be zero address");
 
         if (_amount > 0) {
-            (bool success,) = _recipient.call{value: _amount}("");
+            (bool success, ) = _recipient.call{value: _amount}("");
             if (!success) revert FailedToTransfer();
             else emit ETHSent(_recipient, _amount);
         }
