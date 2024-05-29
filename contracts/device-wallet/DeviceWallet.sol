@@ -54,9 +54,6 @@ contract DeviceWallet is Ownable, Initializable {
         address _eSIMWalletFactoryAddress;      // eSIM wallet factory smart contract address
         address _deviceWalletOwner;             // User's address (Owner of device wallet and related eSIM wallet smart contracts)
         string _deviceUniqueIdentifier;         // String to uniquely identify the device wallet
-        string[] _dataBundleIDs;                // List of data bundle IDs to be bought for respective eSIMs
-        uint256[] _dataBundlePrices;            // List of data bundle prices for the respective data bundle IDs
-        string[] _eSIMUniqueIdentifiers;        // Unique identifiers for already existing eSIMs
     }
 
     modifier onlyESIMWalletAdmin() {
@@ -90,69 +87,34 @@ contract DeviceWallet is Ownable, Initializable {
 
     /// @notice Initialises the device wallet and deploys eSIM wallets for any already existing eSIMs
     function init(
-        InitParams memory _initParams
-    ) external payable initializer {
-        require(_initParams._deviceWalletFactoryAddress != address(0), "Device wallet factory cannot be zero address");
-        require(_initParams._deviceWalletOwner != address(0), "eSIM wallet owner cannot be zero address");
-        require(bytes(_initParams._deviceUniqueIdentifier).length != 0, "Device unique identifier cannot be zero");
-        require(_initParams._dataBundleIDs.length > 0, "Data bundle ID array cannot be zero");
-        require(_initParams._dataBundleIDs.length == _initParams._dataBundlePrices.length, "Array mismatch");
+        address _deviceWalletFactoryAddress,
+        address _eSIMWalletFactoryAddress,
+        address _deviceWalletOwner,
+        string calldata _deviceUniqueIdentifier
+    ) external initializer {
+        require(_deviceWalletFactoryAddress != address(0), "Device wallet factory cannot be zero address");
+        require(_deviceWalletOwner != address(0), "eSIM wallet owner cannot be zero address");
+        require(bytes(_deviceUniqueIdentifier).length != 0, "Device unique identifier cannot be zero");
 
-        deviceWalletFactory = DeviceWalletFactory(_initParams._deviceWalletFactoryAddress);
-        deviceUniqueIdentifier = _initParams._deviceUniqueIdentifier;
-        eSIMWalletFactory = ESIMWalletFactory(_initParams._eSIMWalletFactoryAddress);
+        deviceWalletFactory = DeviceWalletFactory(_deviceWalletFactoryAddress);
+        deviceUniqueIdentifier = _deviceUniqueIdentifier;
+        eSIMWalletFactory = ESIMWalletFactory(_eSIMWalletFactoryAddress);
 
-        uint256 leftOverETH = msg.value;
+        address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(_deviceWalletOwner);
 
-        if (_initParams._eSIMUniqueIdentifiers.length > 1) {
-            uint256 len = _initParams._eSIMUniqueIdentifiers.length;
-            require(len == _initParams._dataBundleIDs.length, "Insufficient data bundle IDs provided");
+        isValidESIMWallet[eSIMWalletAddress] = true;
+        canPullETH[eSIMWalletAddress] = true;
 
-            for (uint256 i = 0; i < _initParams._eSIMUniqueIdentifiers.length; ++i) {
-                require(leftOverETH >= _initParams._dataBundlePrices[i], "Not enough ETH left for data bundle");
-
-                address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet{value: _initParams._dataBundlePrices[i]}(
-                    _initParams._deviceWalletOwner,
-                    _initParams._dataBundleIDs[i], 
-                    _initParams._dataBundlePrices[i],
-                    _initParams._eSIMUniqueIdentifiers[i]
-                );
-
-                isValidESIMWallet[eSIMWalletAddress] = true;
-                canPullETH[eSIMWalletAddress] = true;
-                leftOverETH -= _initParams._dataBundlePrices[i];
-            }
-        } else {
-            address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet{value: _initParams._dataBundlePrices[0]}(
-                _initParams._deviceWalletOwner,
-                _initParams._dataBundleIDs[0],
-                _initParams._dataBundlePrices[0],
-                _initParams._eSIMUniqueIdentifiers[0]
-            );
-
-            isValidESIMWallet[eSIMWalletAddress] = true;
-            canPullETH[eSIMWalletAddress] = true;
-            leftOverETH -= _initParams._dataBundlePrices[0];
-        }
-
-        _transferOwnership(_initParams._deviceWalletOwner);
+        _transferOwnership(_deviceWalletOwner);
     }
 
     /// @notice Allow device wallet owner to deploy new eSIM wallet
-    /// @param _dataBundleID String data bundle ID to be bought for the eSIM
-    /// @param _dataBundlePrice Price in uint256 for the data bundle
-    /// @param _eSIMUniqueIdentifier String unique identifier for the eSIM wallet
     /// @param _hasAccessToETH Set to true if the eSIM wallet is allowed to pull ETH from this wallet.
     /// @return eSIM wallet address
     function deployESIMWallet(
-        string calldata _dataBundleID,
-        uint256 _dataBundlePrice,
-        string calldata _eSIMUniqueIdentifier,
         bool _hasAccessToETH
-    ) external payable onlyOwner returns (address) {
-        address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet{value: _dataBundlePrice}(
-            owner(), _dataBundleID, _dataBundlePrice, _eSIMUniqueIdentifier
-        );
+    ) external onlyOwner returns (address) {
+        address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(owner());
 
         isValidESIMWallet[eSIMWalletAddress] = true;
         canPullETH[eSIMWalletAddress] = _hasAccessToETH;
