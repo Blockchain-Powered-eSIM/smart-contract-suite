@@ -91,7 +91,7 @@ contract DeviceWallet is Ownable, Initializable {
     /// @notice Initialises the device wallet and deploys eSIM wallets for any already existing eSIMs
     function init(
         InitParams memory _initParams
-    ) external payable returns (address) {
+    ) external payable initializer {
         require(_initParams._deviceWalletFactoryAddress != address(0), "Device wallet factory cannot be zero address");
         require(_initParams._deviceWalletOwner != address(0), "eSIM wallet owner cannot be zero address");
         require(bytes(_initParams._deviceUniqueIdentifier).length != 0, "Device unique identifier cannot be zero");
@@ -136,8 +136,6 @@ contract DeviceWallet is Ownable, Initializable {
         }
 
         _transferOwnership(_initParams._deviceWalletOwner);
-
-        return address(this);
     }
 
     /// @notice Allow device wallet owner to deploy new eSIM wallet
