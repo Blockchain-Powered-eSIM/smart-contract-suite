@@ -68,15 +68,11 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
     /// @param _eSIMWalletFactoryAddress eSIM wallet factory contract address
     /// @param _deviceWalletAddress Device wallet contract address (the contract that deploys this eSIM wallet)
     /// @param _eSIMWalletOwner User's address
-    /// @param _eSIMUniqueIdentifier Unique identifier for the eSIM wallet
     function init(
         address _eSIMWalletFactoryAddress,
         address _deviceWalletAddress,
-        address _eSIMWalletOwner,
-        string calldata _dataBundleID,
-        uint256 _dataBundlePrice,
-        string calldata _eSIMUniqueIdentifier
-    ) external payable override initializer {
+        address _eSIMWalletOwner
+    ) external override initializer {
         require(_eSIMWalletOwner != address(0), "Owner cannot be address zero");
         require(_eSIMWalletFactoryAddress != address(0), "eSIM wallet factory address cannot be zero");
         require(_deviceWalletAddress != address(0), "Device wallet address cannot be zero");
@@ -84,15 +80,7 @@ contract ESIMWallet is IOwnableESIMWallet, Ownable, Initializable {
         eSIMWalletFactory = _eSIMWalletFactoryAddress;
         deviceWallet = DeviceWallet(payable(_deviceWalletAddress));
 
-        if (bytes(_eSIMUniqueIdentifier).length > 0) {
-            eSIMUniqueIdentifier = _eSIMUniqueIdentifier;
-            emit ESIMUniqueIdentifierInitialised(_eSIMUniqueIdentifier);
-        }
-
         _transferOwnership(_eSIMWalletOwner);
-
-        // no need to specify {value: msg.value} as the function exists in same contract
-        buyDataBundle(_dataBundleID, _dataBundlePrice);
 
         emit ESIMWalletDeployed(address(this), _deviceWalletAddress, _eSIMWalletOwner);
     }
