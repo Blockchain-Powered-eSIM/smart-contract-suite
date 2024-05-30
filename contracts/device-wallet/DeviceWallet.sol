@@ -5,10 +5,13 @@ pragma solidity ^0.8.18;
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import {ESIMWallet} from "../esim-wallet/ESIMWallet.sol";
-import {ESIMWalletFactory} from "../esim-wallet/ESIMWalletFactory.sol";
+import {Registry} from "../Registry.sol";
 import {DeviceWalletFactory} from "./DeviceWalletFactory.sol";
+import {ESIMWalletFactory} from "../esim-wallet/ESIMWalletFactory.sol";
+import {ESIMWallet} from "../esim-wallet/ESIMWallet.sol";
 
+error OnlyRegistryOrDeviceWalletFactoryOrOwner();
+error OnlyDeviceWalletOrOwner();
 error OnlyESIMWalletAdmin();
 error OnlyESIMWalletAdminOrDeviceWalletOwner();
 error OnlyESIMWalletAdminOrDeviceWalletFactory();
@@ -16,7 +19,7 @@ error OnlyAssociatedESIMWallets();
 error FailedToTransfer();
 
 // TODO: Add ReentrancyGuard
-contract DeviceWallet is Ownable, Initializable {
+contract DeviceWallet is Initializable, Ownable {
     using Address for address;
 
     /// @notice Emitted when the contract pays ETH for data bundle
@@ -29,17 +32,17 @@ contract DeviceWallet is Ownable, Initializable {
     /// @dev mostly when an eSIM wallet pulls ETH from this contract
     event ETHSent(address indexed _eSIMWalletAddress, uint256 _amount);
 
-    /// @notice ESIM wallet factory contract instance
-    ESIMWalletFactory public eSIMWalletFactory;
+    /// @notice Emitted when eSIM wallet is deployed
+    event ESIMWalletDeployed(address indexed _eSIMWalletAddress, bool _hasAccessToETH);
 
-    /// @notice Device wallet factory contract instance
-    DeviceWalletFactory public deviceWalletFactory;
+    /// @notice Registry contract instance
+    Registry public registry;
 
     /// @notice String identifier to uniquely identify user's device
     string public deviceUniqueIdentifier;
 
     /// @notice Mapping from eSIMUniqueIdentifier to the respective eSIM wallet address
-    mapping(string => address) public eSIMUniqueIdentifierToESIMWalletAddress;
+    mapping(string => address) public uniqueIdentifierToESIMWallet;
 
     /// @notice Set to true if the eSIM wallet belongs to this device wallet
     mapping(address => bool) public isValidESIMWallet;
@@ -47,31 +50,49 @@ contract DeviceWallet is Ownable, Initializable {
     /// @notice Mapping that tracks if an associated eSIM wallet can pull ETH or not
     mapping(address => bool) public canPullETH;
 
-    /// @notice Parameters required to deploy Device Wallet
-    /// @dev Used to solve stack too deep error
-    struct InitParams {
-        address _deviceWalletFactoryAddress;    // Device wallet factory smart contract address
-        address _eSIMWalletFactoryAddress;      // eSIM wallet factory smart contract address
-        address _deviceWalletOwner;             // User's address (Owner of device wallet and related eSIM wallet smart contracts)
-        string _deviceUniqueIdentifier;         // String to uniquely identify the device wallet
+    modifier onlyRegistryOrDeviceWalletFactoryOrOwner() {
+        if(
+            msg.sender != address(registry) &&
+            msg.sender != address(registry.deviceWalletFactory()) &&
+            msg.sender != owner()
+        ) {
+            revert OnlyRegistryOrDeviceWalletFactoryOrOwner();
+        }
+        _;
+    }
+
+    modifier onlyDeviceWalletFactoryOrOwner() {
+        if(
+            msg.sender != owner() &&
+            msg.sender != address(registry.deviceWalletFactory())
+        ) {
+            revert OnlyDeviceWalletOrOwner();
+        }
+        _;
     }
 
     modifier onlyESIMWalletAdmin() {
-        if (msg.sender != deviceWalletFactory.eSIMWalletAdmin()) {
+        if (msg.sender != registry.deviceWalletFactory().eSIMWalletAdmin()) {
             revert OnlyESIMWalletAdmin();
         }
         _;
     }
 
     modifier onlyESIMWalletAdminOrDeviceWalletFactory() {
-        if (msg.sender != deviceWalletFactory.eSIMWalletAdmin() && msg.sender != address(deviceWalletFactory)) {
+        if (
+            msg.sender != registry.deviceWalletFactory().eSIMWalletAdmin() &&
+            msg.sender != address(registry.deviceWalletFactory())
+        ) {
             revert OnlyESIMWalletAdminOrDeviceWalletFactory();
         }
         _;
     }
 
     modifier onlyESIMWalletAdminOrDeviceWalletOwner() {
-        if (msg.sender != deviceWalletFactory.eSIMWalletAdmin() && msg.sender != owner()) {
+        if (
+            msg.sender != registry.deviceWalletFactory().eSIMWalletAdmin() &&
+            msg.sender != owner()
+        ) {
             revert OnlyESIMWalletAdminOrDeviceWalletOwner();
         }
         _;
@@ -87,23 +108,16 @@ contract DeviceWallet is Ownable, Initializable {
 
     /// @notice Initialises the device wallet and deploys eSIM wallets for any already existing eSIMs
     function init(
-        address _deviceWalletFactoryAddress,
-        address _eSIMWalletFactoryAddress,
+        address _registry,
         address _deviceWalletOwner,
         string calldata _deviceUniqueIdentifier
     ) external initializer {
-        require(_deviceWalletFactoryAddress != address(0), "Device wallet factory cannot be zero address");
+        require(_registry != address(0), "Registry contract cannot be zero address");
         require(_deviceWalletOwner != address(0), "eSIM wallet owner cannot be zero address");
         require(bytes(_deviceUniqueIdentifier).length != 0, "Device unique identifier cannot be zero");
 
-        deviceWalletFactory = DeviceWalletFactory(_deviceWalletFactoryAddress);
+        registry = Registry(_registry);
         deviceUniqueIdentifier = _deviceUniqueIdentifier;
-        eSIMWalletFactory = ESIMWalletFactory(_eSIMWalletFactoryAddress);
-
-        address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(_deviceWalletOwner);
-
-        isValidESIMWallet[eSIMWalletAddress] = true;
-        canPullETH[eSIMWalletAddress] = true;
 
         _transferOwnership(_deviceWalletOwner);
     }
@@ -114,10 +128,12 @@ contract DeviceWallet is Ownable, Initializable {
     function deployESIMWallet(
         bool _hasAccessToETH
     ) external onlyOwner returns (address) {
-        address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(owner());
+        ESIMWalletFactory eSIMWalletFactory = registry.eSIMWalletFactory();
+        address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(msg.sender);
 
-        isValidESIMWallet[eSIMWalletAddress] = true;
-        canPullETH[eSIMWalletAddress] = _hasAccessToETH;
+        _updateESIMInfo(eSIMWalletAddress, true, _hasAccessToETH);
+        _updateDeviceWalletAssociatedWithESIMWallet(eSIMWalletAddress, address(this));
+        emit ESIMWalletDeployed(eSIMWalletAddress, _hasAccessToETH);
 
         return eSIMWalletAddress;
     }
@@ -125,16 +141,16 @@ contract DeviceWallet is Ownable, Initializable {
     /// @notice Allow wallet owner or admin to set unique identifier for their eSIM wallet
     /// @param _eSIMWalletAddress Address of the eSIM wallet smart contract
     /// @param _eSIMUniqueIdentifier String unique identifier for the eSIM wallet
-    function setESIMUniqueIdentifierForAnESIMWallet(address _eSIMWalletAddress, string calldata _eSIMUniqueIdentifier)
-        public
-        onlyESIMWalletAdmin
-        returns (string memory)
-    {
+    function setESIMUniqueIdentifierForAnESIMWallet(
+        address _eSIMWalletAddress,
+        string calldata _eSIMUniqueIdentifier
+    ) public onlyESIMWalletAdmin returns (string memory) {
         require(
-            eSIMWalletFactory.isESIMWalletDeployed(_eSIMWalletAddress) == true, "Unknown eSIM wallet address provided"
+            registry.isESIMWalletValid(_eSIMWalletAddress) != address(0),
+            "Unknown eSIM wallet address provided"
         );
         require(
-            eSIMUniqueIdentifierToESIMWalletAddress[_eSIMUniqueIdentifier] == address(0),
+            uniqueIdentifierToESIMWallet[_eSIMUniqueIdentifier] == address(0),
             "eSIM unique identifier already set for the provided eSIM wallet"
         );
 
@@ -174,7 +190,7 @@ contract DeviceWallet is Ownable, Initializable {
     /// @notice Fetches the vault address (that receives payment for data bundles) from the device wallet factory
     /// @dev Mostly used by the associated eSIM wallets for reference
     function getVaultAddress() public view returns (address) {
-        return deviceWalletFactory.vault();
+        return registry.vault();
     }
 
     /// @notice Allow owner to revoke or give access to any associated eSIM wallet for pulling ETH
@@ -197,6 +213,39 @@ contract DeviceWallet is Ownable, Initializable {
             if (!success) revert FailedToTransfer();
             else emit ETHSent(_recipient, _amount);
         }
+    }
+
+    function updateESIMInfo(
+        address _eSIMWalletAddress,
+        bool _isESIMWalletValid,
+        bool _hasAccessToETH
+    ) external onlyRegistryOrDeviceWalletFactoryOrOwner {
+        _updateESIMInfo(_eSIMWalletAddress, _isESIMWalletValid, _hasAccessToETH);
+    }
+
+    function _updateESIMInfo(
+        address _eSIMWalletAddress,
+        bool _isESIMWalletValid,
+        bool _hasAccessToETH
+    ) internal {
+        isValidESIMWallet[_eSIMWalletAddress] = _isESIMWalletValid;
+        canPullETH[_eSIMWalletAddress] = _hasAccessToETH;
+    }
+
+    function updateDeviceWalletAssociatedWithESIMWallet(
+        address _eSIMWalletAddress,
+        address _deviceWalletAddress
+    ) external onlyDeviceWalletFactoryOrOwner {
+        require(_deviceWalletAddress != address(this), "Cannot update device wallet to same address");
+        _updateDeviceWalletAssociatedWithESIMWallet(_eSIMWalletAddress, _deviceWalletAddress);
+        isValidESIMWallet[_eSIMWalletAddress] = false;
+    }
+
+    function _updateDeviceWalletAssociatedWithESIMWallet(
+        address _eSIMWalletAddress,
+        address _deviceWalletAddress
+    ) internal {
+        registry.updateDeviceWalletAssociatedWithESIMWallet(_eSIMWalletAddress, _deviceWalletAddress);
     }
 
     receive() external payable {

@@ -5,18 +5,17 @@ pragma solidity ^0.8.18;
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {BeaconProxy} from "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
 import {ESIMWallet} from "./ESIMWallet.sol";
-import {DeviceWalletFactory} from "../device-wallet/DeviceWalletFactory.sol";
+import {Registry} from "../Registry.sol";
 import {UpgradeableBeacon} from "../UpgradableBeacon.sol";
 
 error OnlyDeviceWalletFactory();
+error OnlyRegistryOrDeviceWalletFactoryOrDeviceWallet();
 
 /// @notice Contract for deploying a new eSIM wallet
 contract ESIMWalletFactory {
     /// @notice Emitted when the eSIM wallet factory is deployed
     event ESIMWalletFactorydeployed(
-        address indexed _eSIMWalletFactory,
-        address _deviceWalletFactory,
-        address _upgradeManager,
+        address indexed _upgradeManager,
         address indexed _eSIMWalletImplementation,
         address indexed beacon
     );
@@ -28,8 +27,8 @@ contract ESIMWalletFactory {
         address indexed _deviceWalletAddress
     );
 
-    /// @notice Address of the device wallet factory
-    DeviceWalletFactory public deviceWalletFactory;
+    /// @notice Address of the registry contract
+    Registry public registry;
 
     /// @notice Implementation at the time of deployment
     address public eSIMWalletImplementation;
@@ -41,19 +40,30 @@ contract ESIMWalletFactory {
     mapping(address => bool) public isESIMWalletDeployed;
 
     modifier onlyDeviceWalletFactory() {
-        if (msg.sender != address(deviceWalletFactory)) {
+        if (msg.sender != address(registry.deviceWalletFactory())) {
             revert OnlyDeviceWalletFactory();
         }
         _;
     }
 
-    /// @param _deviceWalletFactoryAddress Address of the device wallet factory address
+    modifier onlyRegistryOrDeviceWalletFactoryOrDeviceWallet() {
+        if(
+            msg.sender != address(registry) &&
+            msg.sender != address(registry.deviceWalletFactory()) &&
+            registry.isDeviceWalletValid(msg.sender) != address(0)
+        ) {
+            revert OnlyRegistryOrDeviceWalletFactoryOrDeviceWallet();
+        }
+        _;
+    }
+
+    /// @param _registryContractAddress Address of the registry contract
     /// @param _upgradeManager Admin address responsible for upgrading contracts
-    constructor(address _deviceWalletFactoryAddress, address _upgradeManager) {
-        require(_deviceWalletFactoryAddress != address(0), "Address cannot be zero");
+    constructor(address _registryContractAddress, address _upgradeManager) {
+        require(_registryContractAddress != address(0), "Address cannot be zero");
         require(_upgradeManager != address(0), "Address cannot be zero");
 
-        deviceWalletFactory = DeviceWalletFactory(_deviceWalletFactoryAddress);
+        registry = Registry(_registryContractAddress);
 
         // eSIM wallet implementation (logic) contract
         eSIMWalletImplementation = address(new ESIMWallet());
@@ -61,7 +71,9 @@ contract ESIMWalletFactory {
         beacon = address(new UpgradeableBeacon(eSIMWalletImplementation, _upgradeManager));
 
         emit ESIMWalletFactorydeployed(
-            address(this), address(deviceWalletFactory), _upgradeManager, eSIMWalletImplementation, beacon
+            _upgradeManager,
+            eSIMWalletImplementation,
+            beacon
         );
     }
 
@@ -71,8 +83,7 @@ contract ESIMWalletFactory {
     /// @return Address of the newly deployed eSIM wallet
     function deployESIMWallet(
         address _owner
-    ) external returns (address) {
-        require(deviceWalletFactory.isDeviceWalletValid(msg.sender), "Only device wallet can call this");
+    ) external onlyRegistryOrDeviceWalletFactoryOrDeviceWallet returns (address) {
 
         // msg.value will be sent along with the abi.encodeCall
         address eSIMWalletAddress = address(
