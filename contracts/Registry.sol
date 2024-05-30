@@ -13,14 +13,6 @@ error OnlyAdmin();
 error OnlyDeviceWallet();
 error OnlyDeviceWalletFactory();
 
-// TODO:
-// * Add deploy function
-//     * This deploy function should first deploy device wallet
-//     * Then it should deploy esim wallet
-// * Remove the feature of deploying esim wallet from inside device wallet
-// * Update the esimWalletFactory.deployESIM's require statement to allow 
-// this registry to deploy contract
-// * Move necessary mappings from device wallet factory and esim wallet factory to here
 /// @notice Contract for deploying the factory contracts and maintaining registry
 contract Registry {
 
