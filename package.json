@@ -6,7 +6,8 @@
     "test-debug": "forge test -vvv",
     "coverage": "forge coverage",
     "coverage-with-report": "forge coverage --report lcov",
-    "html-coverage-report": "forge coverage --report lcov && genhtml lcov.info -o report"
+    "html-coverage-report": "forge coverage --report lcov && genhtml lcov.info -o report",
+    "generate-doc": "hardhat docgen"
   },
   "dependencies": {
     "@openzeppelin/contracts": "^4.5.0",
@@ -17,6 +18,7 @@
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-foundry": "^1.1.2",
-    "hardhat": "^2.22.4"
+    "hardhat": "^2.22.4",
+    "solidity-docgen": "^0.6.0-beta.36"
   }
 }
