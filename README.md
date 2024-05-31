@@ -18,6 +18,18 @@ For example, if a user has 3 eSIMs in his mobile device, then there will be 3 eS
 For the eSIM wallet and device wallet to perfectly map to a user's mobile device and eSIMs, a server in the backend securely generates unique identifiers. The device wallet and the eSIM wallets deployed by the master keystore (through the eSIM wallet app) store these unique identifiers, thus allowing the server to proceed with generating eSIM (in case of buying a new eSIM) or applying data bundle for the correct eSIM.
 
 
+## Contract Specs:
+
+* [Device Wallet Factory](./docs/device-wallet/DeviceWalletFactory.md)  
+
+* [Device Wallet](./docs/device-wallet/DeviceWallet.md)  
+
+* [eSIM Wallet Factory](./docs/esim-wallet/ESIMWalletFactory.md)  
+
+* [eSIM Wallet](./docs/esim-wallet/ESIMWallet.md)
+
+* [eSIM Wallet Interface](./docs/interfaces/IOwnableESIMWallet.md)
+
 ## Smart Contract Suite User Flow:
 
 1. User installs eSIM wallet app  
