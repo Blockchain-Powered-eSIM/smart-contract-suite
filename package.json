@@ -1,7 +1,7 @@
 {
   "name": "smart-contract-suite",
   "scripts": {
-    "forge-build": "forge build --via-ir",
+    "forge-build": "forge build",
     "test": "forge test -vv",
     "test-debug": "forge test -vvv",
     "coverage": "forge coverage",
@@ -11,8 +11,12 @@
   "dependencies": {
     "@openzeppelin/contracts": "^4.5.0",
     "@openzeppelin/contracts-upgradeable": "4.5.0",
-    "dotenv": "^16.0.3",
-    "ethers": "^5.7.1",
+    "dotenv": "^16.4.5",
+    "ethers": "^5.7.2",
     "lcov-filter": "^0.1.1"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-foundry": "^1.1.2",
+    "hardhat": "^2.22.4"
   }
 }

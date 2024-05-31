@@ -173,13 +173,15 @@ contract DeviceWalletFactory {
                 abi.encodeCall(
                     DeviceWallet(payable(deviceWalletImplementation)).init,
                     (
-                        address(this),
-                        eSIMWalletFactoryAddress,
-                        _deviceWalletOwner,
-                        _deviceUniqueIdentifier,
-                        _dataBundleIDs,
-                        _dataBundlePrices,
-                        _eSIMUniqueIdentifiers
+                        DeviceWallet.InitParams(
+                            address(this),
+                            eSIMWalletFactoryAddress,
+                            _deviceWalletOwner,
+                            _deviceUniqueIdentifier,
+                            _dataBundleIDs,
+                            _dataBundlePrices,
+                            _eSIMUniqueIdentifiers
+                        )
                     )
                 )
             )
