@@ -1,5 +1,6 @@
 require('dotenv').config();
 require("@nomicfoundation/hardhat-foundry");
+require('solidity-docgen');
 
 const PRIV_KEY = process.env.PRIV_KEY;
 const ALCHEMY_SEPOLIA_HTTPS = process.env.ALCHEMY_SEPOLIA_HTTPS;
@@ -43,5 +44,15 @@ module.exports = {
   },
   mocha: {
     timeout: 40000
+  },
+  docgen: {
+    root: process.cwd(),
+    sourcesDir: 'contracts',
+    outputDir: 'docs',
+    pages: 'files',
+    exclude: [],
+    theme: 'markdown',
+    collapseNewlines: true,
+    pageExtension: '.md',
   }
 };
