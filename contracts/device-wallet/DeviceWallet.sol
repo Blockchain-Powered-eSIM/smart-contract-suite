@@ -2,9 +2,9 @@ pragma solidity ^0.8.18;
 
 // SPDX-License-Identifier: MIT
 
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {Registry} from "../Registry.sol";
 import {DeviceWalletFactory} from "./DeviceWalletFactory.sol";
 import {ESIMWalletFactory} from "../esim-wallet/ESIMWalletFactory.sol";
@@ -19,7 +19,7 @@ error OnlyAssociatedESIMWallets();
 error FailedToTransfer();
 
 // TODO: Add ReentrancyGuard
-contract DeviceWallet is Initializable, Ownable {
+contract DeviceWallet is Initializable, OwnableUpgradeable {
     using Address for address;
 
     /// @notice Emitted when the contract pays ETH for data bundle
@@ -50,7 +50,7 @@ contract DeviceWallet is Initializable, Ownable {
     /// @notice Mapping that tracks if an associated eSIM wallet can pull ETH or not
     mapping(address => bool) public canPullETH;
 
-    modifier onlyRegistryOrDeviceWalletFactoryOrOwner() {
+    function _onlyRegistryOrDeviceWalletFactoryOrOwner() private view {
         if(
             msg.sender != address(registry) &&
             msg.sender != address(registry.deviceWalletFactory()) &&
@@ -58,48 +58,44 @@ contract DeviceWallet is Initializable, Ownable {
         ) {
             revert OnlyRegistryOrDeviceWalletFactoryOrOwner();
         }
+    }
+
+    modifier onlyRegistryOrDeviceWalletFactoryOrOwner() {
+        _onlyRegistryOrDeviceWalletFactoryOrOwner();
         _;
     }
 
-    modifier onlyDeviceWalletFactoryOrOwner() {
+    function _onlyDeviceWalletFactoryOrOwner() private view {
         if(
             msg.sender != owner() &&
             msg.sender != address(registry.deviceWalletFactory())
         ) {
             revert OnlyDeviceWalletOrOwner();
         }
+    }
+
+    modifier onlyDeviceWalletFactoryOrOwner() {
+        _onlyDeviceWalletFactoryOrOwner();
         _;
     }
 
-    modifier onlyESIMWalletAdmin() {
+    function _onlyESIMWalletAdmin() private view {
         if (msg.sender != registry.deviceWalletFactory().eSIMWalletAdmin()) {
             revert OnlyESIMWalletAdmin();
         }
+    }
+
+    modifier onlyESIMWalletAdmin() {
+        _onlyESIMWalletAdmin();
         _;
     }
 
-    modifier onlyESIMWalletAdminOrDeviceWalletFactory() {
-        if (
-            msg.sender != registry.deviceWalletFactory().eSIMWalletAdmin() &&
-            msg.sender != address(registry.deviceWalletFactory())
-        ) {
-            revert OnlyESIMWalletAdminOrDeviceWalletFactory();
-        }
-        _;
-    }
-
-    modifier onlyESIMWalletAdminOrDeviceWalletOwner() {
-        if (
-            msg.sender != registry.deviceWalletFactory().eSIMWalletAdmin() &&
-            msg.sender != owner()
-        ) {
-            revert OnlyESIMWalletAdminOrDeviceWalletOwner();
-        }
-        _;
+    function _onlyAssociatedESIMWallets() private view {
+        if (!isValidESIMWallet[msg.sender]) revert OnlyAssociatedESIMWallets();
     }
 
     modifier onlyAssociatedESIMWallets() {
-        if (!isValidESIMWallet[msg.sender]) revert OnlyAssociatedESIMWallets();
+        _onlyAssociatedESIMWallets();
         _;
     }
 
@@ -107,7 +103,7 @@ contract DeviceWallet is Initializable, Ownable {
     constructor() initializer {}
 
     /// @notice Initialises the device wallet and deploys eSIM wallets for any already existing eSIMs
-    function init(
+    function initialize(
         address _registry,
         address _deviceWalletOwner,
         string calldata _deviceUniqueIdentifier
@@ -119,7 +115,7 @@ contract DeviceWallet is Initializable, Ownable {
         registry = Registry(_registry);
         deviceUniqueIdentifier = _deviceUniqueIdentifier;
 
-        _transferOwnership(_deviceWalletOwner);
+        __Ownable_init(_deviceWalletOwner);
     }
 
     /// @notice Allow device wallet owner to deploy new eSIM wallet

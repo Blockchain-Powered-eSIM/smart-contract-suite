@@ -4,14 +4,15 @@ pragma solidity ^0.8.18;
 
 import "@openzeppelin/contracts/proxy/beacon/IBeacon.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
 /// @title Beacon with upgradeable implementation
 /// @dev Beacon contract holds information about the implementation contract
 ///      and is used by all the proxy contracts to interact with the implementation contract
 ///      A beacon proxy is used in scenarios where a single implementation contract is used by
 ///      multiple proxy contracts. In this case, eSIM wallets and device wallets
-contract UpgradeableBeacon is IBeacon, Ownable {
+// contract UpgradeableBeacon is IBeacon, OwnableUpgradeable {
+contract UpgradeableBeacon is IBeacon, OwnableUpgradeable {
     using Address for address;
 
     address private implementationContractAddress_;
@@ -23,8 +24,7 @@ contract UpgradeableBeacon is IBeacon, Ownable {
     /// @dev ownership is transferred to an address owned by admin
     constructor(address _implementation, address _owner) {
         _setImplementation(_implementation);
-
-        transferOwnership(_owner);
+        __Ownable_init(_owner);
     }
 
     /// @return current implementation contract address
@@ -42,7 +42,7 @@ contract UpgradeableBeacon is IBeacon, Ownable {
     ///      Make sure that the supplied address is a contract
     function _setImplementation(address _implementationContractAddress) private {
         require(_implementationContractAddress != address(0), "Invalid implementation");
-        require(_implementationContractAddress.isContract(), "Implementation address must be a contract address");
+        // require(_implementationContractAddress.isContract(), "Implementation address must be a contract address");
         implementationContractAddress_ = _implementationContractAddress;
         emit Upgraded(implementationContractAddress_);
     }

@@ -6,7 +6,7 @@ interface IOwnableESIMWalletEvents {
 }
 
 interface IOwnableESIMWallet is IOwnableESIMWalletEvents {
-    function init(
+    function initialize(
         address eSIMWalletFactoryAddress,
         address deviceWalletAddress,
         address owner

@@ -3,6 +3,8 @@ pragma solidity ^0.8.18;
 // SPDX-License-Identifier: MIT
 
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {BeaconProxy} from "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
 import {Registry} from "../Registry.sol";
 import {DeviceWallet} from "./DeviceWallet.sol";
@@ -12,7 +14,7 @@ import {UpgradeableBeacon} from "../UpgradableBeacon.sol";
 error OnlyAdmin();
 
 /// @notice Contract for deploying a new eSIM wallet
-contract DeviceWalletFactory {
+contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
 
     /// @notice Emitted when factory is deployed and admin is set
     event DeviceWalletFactoryDeployed(
@@ -51,20 +53,33 @@ contract DeviceWalletFactory {
     ///@notice Registry contract instance
     Registry public registry;
 
-    modifier onlyAdmin() {
+    function _onlyAdmin() private view {
         if (msg.sender != eSIMWalletAdmin) revert OnlyAdmin();
+    }
+
+    modifier onlyAdmin() {
+        _onlyAdmin();
         _;
     }
+
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() initializer {}
+
+    /// @dev Owner based upgrades
+    function _authorizeUpgrade(address newImplementation)
+    internal
+    onlyOwner
+    {}
 
     /// @param _eSIMWalletAdmin Admin address of the eSIM wallet project
     /// @param _vault Address of the vault that receives payments for the data bundles
     /// @param _upgradeManager Admin address responsible for upgrading contracts
-    constructor(
+    function initialize(
         address _registryContractAddress,
         address _eSIMWalletAdmin,
         address _vault,
         address _upgradeManager
-    ) {
+    ) external initializer {
         require(_eSIMWalletAdmin != address(0), "Admin cannot be zero address");
         require(_vault != address(0), "Vault address cannot be zero");
         require(_upgradeManager != address(0), "Upgrade manager address cannot be zero");
@@ -85,6 +100,8 @@ contract DeviceWalletFactory {
             deviceWalletImplementation,
             beacon
         );
+        
+        __Ownable_init(_upgradeManager);
     }
 
     /// @notice Function to update vault address.
@@ -162,7 +179,7 @@ contract DeviceWalletFactory {
             new BeaconProxy(
                 beacon,
                 abi.encodeCall(
-                    DeviceWallet(payable(deviceWalletImplementation)).init,
+                    DeviceWallet(payable(deviceWalletImplementation)).initialize,
                     (
                         address(registry),
                         _deviceWalletOwner,
@@ -198,7 +215,7 @@ contract DeviceWalletFactory {
         string calldata _deviceUniqueIdentifier,
         address _deviceWalletOwner
     ) public returns (address) {
-        require(msg.sender != address(registry), "Only registry can call");
+        require(msg.sender == address(registry), "Only registry can call");
         require(
             registry.ownerToDeviceWallet(_deviceWalletOwner) == address(0),
             "User already owns a device wallet"
@@ -217,7 +234,7 @@ contract DeviceWalletFactory {
             new BeaconProxy(
                 beacon,
                 abi.encodeCall(
-                    DeviceWallet(payable(deviceWalletImplementation)).init,
+                    DeviceWallet(payable(deviceWalletImplementation)).initialize,
                     (
                         address(registry),
                         _deviceWalletOwner,

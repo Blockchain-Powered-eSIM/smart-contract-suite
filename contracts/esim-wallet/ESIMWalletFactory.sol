@@ -3,16 +3,17 @@ pragma solidity ^0.8.18;
 // SPDX-License-Identifier: MIT
 
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {BeaconProxy} from "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
 import {ESIMWallet} from "./ESIMWallet.sol";
 import {Registry} from "../Registry.sol";
 import {UpgradeableBeacon} from "../UpgradableBeacon.sol";
 
-error OnlyDeviceWalletFactory();
 error OnlyRegistryOrDeviceWalletFactoryOrDeviceWallet();
 
 /// @notice Contract for deploying a new eSIM wallet
-contract ESIMWalletFactory {
+contract ESIMWalletFactory is Initializable, OwnableUpgradeable {
     /// @notice Emitted when the eSIM wallet factory is deployed
     event ESIMWalletFactorydeployed(
         address indexed _upgradeManager,
@@ -39,13 +40,6 @@ contract ESIMWalletFactory {
     /// @notice Set to true if eSIM wallet address is deployed using the factory, false otherwise
     mapping(address => bool) public isESIMWalletDeployed;
 
-    modifier onlyDeviceWalletFactory() {
-        if (msg.sender != address(registry.deviceWalletFactory())) {
-            revert OnlyDeviceWalletFactory();
-        }
-        _;
-    }
-
     modifier onlyRegistryOrDeviceWalletFactoryOrDeviceWallet() {
         if(
             msg.sender != address(registry) &&
@@ -56,16 +50,25 @@ contract ESIMWalletFactory {
         }
         _;
     }
+    
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() initializer {}
+
+    /// @dev Owner based upgrades
+    function _authorizeUpgrade(address newImplementation)
+    internal
+    onlyOwner
+    {}
 
     /// @param _registryContractAddress Address of the registry contract
     /// @param _upgradeManager Admin address responsible for upgrading contracts
-    constructor(address _registryContractAddress, address _upgradeManager) {
+    function initialize (address _registryContractAddress, address _upgradeManager) external initializer {
         require(_registryContractAddress != address(0), "Address cannot be zero");
         require(_upgradeManager != address(0), "Address cannot be zero");
 
         registry = Registry(_registryContractAddress);
 
-        // eSIM wallet implementation (logic) contract
+        // eSIM wallet implementation (logic) contract during deployment
         eSIMWalletImplementation = address(new ESIMWallet());
         // Upgradable beacon for eSIM wallet implementation contract
         beacon = address(new UpgradeableBeacon(eSIMWalletImplementation, _upgradeManager));
@@ -75,6 +78,8 @@ contract ESIMWalletFactory {
             eSIMWalletImplementation,
             beacon
         );
+
+        _transferOwnership(_upgradeManager);
     }
 
     /// Function to deploy an eSIM wallet
@@ -90,7 +95,7 @@ contract ESIMWalletFactory {
             new BeaconProxy(
                 beacon,
                 abi.encodeCall(
-                    ESIMWallet(payable(eSIMWalletImplementation)).init,
+                    ESIMWallet(payable(eSIMWalletImplementation)).initialize,
                     (address(this), msg.sender, _owner)
                 )
             )

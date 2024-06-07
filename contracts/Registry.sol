@@ -4,17 +4,20 @@ pragma solidity ^0.8.18;
 
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {BeaconProxy} from "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {DeviceWalletFactory} from "./device-wallet/DeviceWalletFactory.sol";
 import {DeviceWallet} from "./device-wallet/DeviceWallet.sol";
 import {ESIMWalletFactory} from "./esim-wallet/ESIMWalletFactory.sol";
 import {ESIMWallet} from "./esim-wallet/ESIMWallet.sol";
 
-error OnlyAdmin();
 error OnlyDeviceWallet();
 error OnlyDeviceWalletFactory();
 
 /// @notice Contract for deploying the factory contracts and maintaining registry
-contract Registry {
+contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable  {
 
     event WalletDeployed(
         string _deviceUniqueIdentifier,
@@ -72,20 +75,25 @@ contract Registry {
         _;
     }
 
-    modifier onlyAdmin() {
-        if (msg.sender != admin) revert OnlyAdmin();
-        _;
-    }
-
     modifier onlyDeviceWalletFactory() {
         if(msg.sender != address(deviceWalletFactory)) revert OnlyDeviceWalletFactory();
         _;
     }
 
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() initializer {}
+
+    /// @dev Owner based upgrades
+    function _authorizeUpgrade(address newImplementation)
+    internal
+    onlyOwner
+    override
+    {}
+
     /// @param _eSIMWalletAdmin Admin address of the eSIM wallet project
     /// @param _vault Address of the vault that receives payments for the data bundles
     /// @param _upgradeManager Admin address responsible for upgrading contracts
-    constructor(address _eSIMWalletAdmin, address _vault, address _upgradeManager) {
+    function initialize(address _eSIMWalletAdmin, address _vault, address _upgradeManager) external initializer {
         require(_eSIMWalletAdmin != address(0), "eSIM Admin address cannot be zero address");
         require(_vault != address(0), "Vault address cannot be zero address");
         require(_upgradeManager != address(0), "Upgrade Manager address cannot be zero address");
@@ -94,19 +102,28 @@ contract Registry {
         vault = _vault;
         upgradeManager = _upgradeManager;
 
-        // TODO: Make The factory contract ERC1967 Proxy + Upgradable
-        deviceWalletFactory = new DeviceWalletFactory(
-            address(this),
-            _eSIMWalletAdmin,
-            _vault,
-            _upgradeManager
+        address deviceWalletFactoryImplementation = address(new DeviceWalletFactory());
+        ERC1967Proxy deviceWalletFactoryProxy = new ERC1967Proxy(
+            deviceWalletFactoryImplementation,
+            abi.encodeCall(
+                DeviceWalletFactory(deviceWalletFactoryImplementation).initialize,
+                (address(this), _eSIMWalletAdmin, _vault, _upgradeManager)
+            )
+        );
+        deviceWalletFactory = DeviceWalletFactory(address(deviceWalletFactoryProxy));
+
+        address eSIMWalletFactoryImplementation = address(new ESIMWalletFactory());
+        ERC1967Proxy eSIMWalletFactoryProxy = new ERC1967Proxy(
+            eSIMWalletFactoryImplementation,
+            abi.encodeCall(
+                ESIMWalletFactory(eSIMWalletFactoryImplementation).initialize,
+                (address(this), _upgradeManager)
+            )
         );
 
-        // TODO: Make The factory contract ERC1967 Proxy + Upgradable
-        eSIMWalletFactory = new ESIMWalletFactory(
-            address(this),
-            _upgradeManager
-        );
+        eSIMWalletFactory = ESIMWalletFactory(address(eSIMWalletFactoryProxy));
+
+        __Ownable_init(_upgradeManager);
     }
 
     /// Allow anyone to deploy a device wallet and an eSIM wallet for themselves
@@ -174,7 +191,6 @@ contract Registry {
             _eSIMWalletAddress,
             _deviceWalletAddress
         );
-
 
         isESIMWalletValid[_eSIMWalletAddress] = _deviceWalletAddress;
     }

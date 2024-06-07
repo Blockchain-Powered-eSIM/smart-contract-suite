@@ -1,4 +1,5 @@
 require('dotenv').config();
+require("hardhat");
 require("@nomicfoundation/hardhat-foundry");
 
 const PRIV_KEY = process.env.PRIV_KEY;
