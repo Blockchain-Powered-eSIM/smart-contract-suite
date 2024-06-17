@@ -1,5 +1,17 @@
 # Solidity API
 
+## OnlyRegistryOrDeviceWalletFactoryOrOwner
+
+```solidity
+error OnlyRegistryOrDeviceWalletFactoryOrOwner()
+```
+
+## OnlyDeviceWalletOrOwner
+
+```solidity
+error OnlyDeviceWalletOrOwner()
+```
+
 ## OnlyESIMWalletAdmin
 
 ```solidity
@@ -58,21 +70,21 @@ Emitted when ETH is sent out from the contract
 
 _mostly when an eSIM wallet pulls ETH from this contract_
 
-### eSIMWalletFactory
+### ESIMWalletDeployed
 
 ```solidity
-contract ESIMWalletFactory eSIMWalletFactory
+event ESIMWalletDeployed(address _eSIMWalletAddress, bool _hasAccessToETH)
 ```
 
-ESIM wallet factory contract instance
+Emitted when eSIM wallet is deployed
 
-### deviceWalletFactory
+### registry
 
 ```solidity
-contract DeviceWalletFactory deviceWalletFactory
+contract Registry registry
 ```
 
-Device wallet factory contract instance
+Registry contract instance
 
 ### deviceUniqueIdentifier
 
@@ -82,10 +94,10 @@ string deviceUniqueIdentifier
 
 String identifier to uniquely identify user's device
 
-### eSIMUniqueIdentifierToESIMWalletAddress
+### uniqueIdentifierToESIMWallet
 
 ```solidity
-mapping(string => address) eSIMUniqueIdentifierToESIMWalletAddress
+mapping(string => address) uniqueIdentifierToESIMWallet
 ```
 
 Mapping from eSIMUniqueIdentifier to the respective eSIM wallet address
@@ -106,40 +118,22 @@ mapping(address => bool) canPullETH
 
 Mapping that tracks if an associated eSIM wallet can pull ETH or not
 
-### InitParams
-
-Parameters required to deploy Device Wallet
-
-_Used to solve stack too deep error_
+### onlyRegistryOrDeviceWalletFactoryOrOwner
 
 ```solidity
-struct InitParams {
-  address _deviceWalletFactoryAddress;
-  address _eSIMWalletFactoryAddress;
-  address _deviceWalletOwner;
-  string _deviceUniqueIdentifier;
-  string[] _dataBundleIDs;
-  uint256[] _dataBundlePrices;
-  string[] _eSIMUniqueIdentifiers;
-}
+modifier onlyRegistryOrDeviceWalletFactoryOrOwner()
+```
+
+### onlyDeviceWalletFactoryOrOwner
+
+```solidity
+modifier onlyDeviceWalletFactoryOrOwner()
 ```
 
 ### onlyESIMWalletAdmin
 
 ```solidity
 modifier onlyESIMWalletAdmin()
-```
-
-### onlyESIMWalletAdminOrDeviceWalletFactory
-
-```solidity
-modifier onlyESIMWalletAdminOrDeviceWalletFactory()
-```
-
-### onlyESIMWalletAdminOrDeviceWalletOwner
-
-```solidity
-modifier onlyESIMWalletAdminOrDeviceWalletOwner()
 ```
 
 ### onlyAssociatedESIMWallets
@@ -154,10 +148,10 @@ modifier onlyAssociatedESIMWallets()
 constructor() public
 ```
 
-### init
+### initialize
 
 ```solidity
-function init(struct DeviceWallet.InitParams _initParams) external payable
+function initialize(address _registry, address _deviceWalletOwner, string _deviceUniqueIdentifier) external
 ```
 
 Initialises the device wallet and deploys eSIM wallets for any already existing eSIMs
@@ -165,7 +159,7 @@ Initialises the device wallet and deploys eSIM wallets for any already existing 
 ### deployESIMWallet
 
 ```solidity
-function deployESIMWallet(string _dataBundleID, uint256 _dataBundlePrice, string _eSIMUniqueIdentifier, bool _hasAccessToETH) external payable returns (address)
+function deployESIMWallet(bool _hasAccessToETH) external returns (address)
 ```
 
 Allow device wallet owner to deploy new eSIM wallet
@@ -174,9 +168,6 @@ Allow device wallet owner to deploy new eSIM wallet
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| _dataBundleID | string | String data bundle ID to be bought for the eSIM |
-| _dataBundlePrice | uint256 | Price in uint256 for the data bundle |
-| _eSIMUniqueIdentifier | string | String unique identifier for the eSIM wallet |
 | _hasAccessToETH | bool | Set to true if the eSIM wallet is allowed to pull ETH from this wallet. |
 
 #### Return Values
@@ -260,6 +251,30 @@ Allow owner to revoke or give access to any associated eSIM wallet for pulling E
 
 ```solidity
 function _transferETH(address _recipient, uint256 _amount) internal virtual
+```
+
+### updateESIMInfo
+
+```solidity
+function updateESIMInfo(address _eSIMWalletAddress, bool _isESIMWalletValid, bool _hasAccessToETH) external
+```
+
+### _updateESIMInfo
+
+```solidity
+function _updateESIMInfo(address _eSIMWalletAddress, bool _isESIMWalletValid, bool _hasAccessToETH) internal
+```
+
+### updateDeviceWalletAssociatedWithESIMWallet
+
+```solidity
+function updateDeviceWalletAssociatedWithESIMWallet(address _eSIMWalletAddress, address _deviceWalletAddress) external
+```
+
+### _updateDeviceWalletAssociatedWithESIMWallet
+
+```solidity
+function _updateDeviceWalletAssociatedWithESIMWallet(address _eSIMWalletAddress, address _deviceWalletAddress) internal
 ```
 
 ### receive

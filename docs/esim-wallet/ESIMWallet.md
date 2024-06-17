@@ -116,13 +116,13 @@ modifier onlyDeviceWallet()
 constructor() public
 ```
 
-### init
+### initialize
 
 ```solidity
-function init(address _eSIMWalletFactoryAddress, address _deviceWalletAddress, address _eSIMWalletOwner, string _dataBundleID, uint256 _dataBundlePrice, string _eSIMUniqueIdentifier) external payable
+function initialize(address _eSIMWalletFactoryAddress, address _deviceWalletAddress, address _eSIMWalletOwner) external
 ```
 
-ESIMWallet init function to initialise the contract
+ESIMWallet initialize function to initialise the contract
 
 _If _eSIMUniqueIdentifier is empty, the eSIM wallet is being deployed before buying an eSIM
      If _eSIMUniqueIdentifier is non-empty, the eSIM wallet is being deployed after the eSIM has been bought by the user_
@@ -134,9 +134,6 @@ _If _eSIMUniqueIdentifier is empty, the eSIM wallet is being deployed before buy
 | _eSIMWalletFactoryAddress | address | eSIM wallet factory contract address |
 | _deviceWalletAddress | address | Device wallet contract address (the contract that deploys this eSIM wallet) |
 | _eSIMWalletOwner | address | User's address |
-| _dataBundleID | string |  |
-| _dataBundlePrice | uint256 |  |
-| _eSIMUniqueIdentifier | string | Unique identifier for the eSIM wallet |
 
 ### setESIMUniqueIdentifier
 
