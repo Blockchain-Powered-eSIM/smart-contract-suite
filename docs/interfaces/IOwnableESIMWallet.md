@@ -10,10 +10,10 @@ event TransferApprovalChanged(address from, address to, bool status)
 
 ## IOwnableESIMWallet
 
-### init
+### initialize
 
 ```solidity
-function init(address eSIMWalletFactoryAddress, address deviceWalletAddress, address owner, string _dataBundleID, uint256 _dataBundlePrice, string eSIMUniqueIdentifier) external payable
+function initialize(address eSIMWalletFactoryAddress, address deviceWalletAddress, address owner) external
 ```
 
 ### setESIMUniqueIdentifier

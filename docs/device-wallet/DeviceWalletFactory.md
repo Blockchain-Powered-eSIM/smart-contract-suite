@@ -10,18 +10,10 @@ error OnlyAdmin()
 
 Contract for deploying a new eSIM wallet
 
-### SetESIMWalletFactoryAddress
-
-```solidity
-event SetESIMWalletFactoryAddress(address _eSIMWalletFactoryAddress)
-```
-
-Emitted when the admin sets the eSIM wallet factory address
-
 ### DeviceWalletFactoryDeployed
 
 ```solidity
-event DeviceWalletFactoryDeployed(address _factoryAddress, address _admin, address _vault, address _upgradeManager, address _deviceWalletImplementation, address _beacon)
+event DeviceWalletFactoryDeployed(address _admin, address _vault, address _upgradeManager, address _deviceWalletImplementation, address _beacon)
 ```
 
 Emitted when factory is deployed and admin is set
@@ -37,7 +29,7 @@ Emitted when the Vault address is updated
 ### DeviceWalletDeployed
 
 ```solidity
-event DeviceWalletDeployed(address _deviceWalletAddress, string[] _eSIMUniqueIdentifiers)
+event DeviceWalletDeployed(address _deviceWalletAddress, address _eSIMWalletAddress, address _deviceWalletOwner)
 ```
 
 Emitted when a new device wallet is deployed
@@ -82,29 +74,13 @@ address beacon
 
 Beacon contract address for this contract
 
-### eSIMWalletFactoryAddress
+### registry
 
 ```solidity
-address eSIMWalletFactoryAddress
+contract Registry registry
 ```
 
-eSIM wallet factory contract address;
-
-### walletAddressOfDeviceUniqueIdentifier
-
-```solidity
-mapping(string => address) walletAddressOfDeviceUniqueIdentifier
-```
-
-deviceUniqueIdentifier <> deviceWalletAddress
-
-### isDeviceWalletValid
-
-```solidity
-mapping(address => bool) isDeviceWalletValid
-```
-
-Set to true if device wallet was deployed by the device wallet factory, false otherwise.
+Registry contract instance
 
 ### onlyAdmin
 
@@ -115,13 +91,28 @@ modifier onlyAdmin()
 ### constructor
 
 ```solidity
-constructor(address _eSIMWalletAdmin, address _vault, address _upgradeManager) public
+constructor() public
+```
+
+### _authorizeUpgrade
+
+```solidity
+function _authorizeUpgrade(address newImplementation) internal
+```
+
+_Owner based upgrades_
+
+### initialize
+
+```solidity
+function initialize(address _registryContractAddress, address _eSIMWalletAdmin, address _vault, address _upgradeManager) external
 ```
 
 #### Parameters
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
+| _registryContractAddress | address |  |
 | _eSIMWalletAdmin | address | Admin address of the eSIM wallet project |
 | _vault | address | Address of the vault that receives payments for the data bundles |
 | _upgradeManager | address | Admin address responsible for upgrading contracts |
@@ -156,16 +147,10 @@ Function to update admin address
 | ---- | ---- | ----------- |
 | _newAdmin | address | New admin address |
 
-### setESIMWalletFactoryAddress
+### deployDeviceWalletForUsers
 
 ```solidity
-function setESIMWalletFactoryAddress(address _eSIMWalletFactoryAddress) public returns (address)
-```
-
-### deployMultipleDeviceWalletsWithESIMWallets
-
-```solidity
-function deployMultipleDeviceWalletsWithESIMWallets(string[] _deviceUniqueIdentifiers, string[][] _dataBundleIDs, uint256[][] _dataBundlePrices, string[][] _eSIMUniqueIdentifiers) public payable returns (address[])
+function deployDeviceWalletForUsers(string[] _deviceUniqueIdentifiers, address[] _deviceWalletOwners) public returns (address[])
 ```
 
 To deploy multiple device wallets at once
@@ -175,9 +160,7 @@ To deploy multiple device wallets at once
 | Name | Type | Description |
 | ---- | ---- | ----------- |
 | _deviceUniqueIdentifiers | string[] | Array of unique device identifiers for each device wallet |
-| _dataBundleIDs | string[][] | 2D array of IDs of data bundles to be bought for respective eSIMs |
-| _dataBundlePrices | uint256[][] | 2D array of price of respective data bundles for respective eSIMs |
-| _eSIMUniqueIdentifiers | string[][] | 2D array of unique eSIM identifiers for each device wallet |
+| _deviceWalletOwners | address[] | Array of owner address of the respective device wallets |
 
 #### Return Values
 
@@ -185,22 +168,40 @@ To deploy multiple device wallets at once
 | ---- | ---- | ----------- |
 | [0] | address[] | Array of deployed device wallet address |
 
-### deployDeviceWalletWithESIMWallets
+### deployDeviceWalletAsAdmin
 
 ```solidity
-function deployDeviceWalletWithESIMWallets(string _deviceUniqueIdentifier, string[] _dataBundleIDs, uint256[] _dataBundlePrices, string[] _eSIMUniqueIdentifiers, address _deviceWalletOwner) public payable returns (address)
+function deployDeviceWalletAsAdmin(string _deviceUniqueIdentifier, address _deviceWalletOwner) public returns (address)
 ```
 
-_To deploy a device wallet and eSIM wallets for given unique eSIM identifiers_
+_Allow admin to deploy a device wallet (and an eSIM wallet) for given unique device identifiers_
 
 #### Parameters
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
 | _deviceUniqueIdentifier | string | Unique device identifier for the device wallet |
-| _dataBundleIDs | string[] | List of IDs of data bundles to be bought for respective eSIMs |
-| _dataBundlePrices | uint256[] | List of price of respective data bundles |
-| _eSIMUniqueIdentifiers | string[] | Array of unique eSIM identifiers for the device wallet |
+| _deviceWalletOwner | address | User's address (owner of the device wallet and respective eSIM wallets) |
+
+#### Return Values
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| [0] | address | Deployed device wallet address |
+
+### deployDeviceWallet
+
+```solidity
+function deployDeviceWallet(string _deviceUniqueIdentifier, address _deviceWalletOwner) public returns (address)
+```
+
+_Allow admin to deploy a device wallet (and an eSIM wallet) for given unique device identifiers_
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _deviceUniqueIdentifier | string | Unique device identifier for the device wallet |
 | _deviceWalletOwner | address | User's address (owner of the device wallet and respective eSIM wallets) |
 
 #### Return Values
