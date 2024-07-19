@@ -6,6 +6,10 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {BaseAccount} from "@account-abstraction/contracts/core/BaseAccount.sol";
+import {TokenCallbackHandler} from "@account-abstraction/contracts/samples/callback/TokenCallbackHandler.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+
 import {RegistryHelper} from "./RegistryHelper.sol";
 import {DeviceWalletFactory} from "./device-wallet/DeviceWalletFactory.sol";
 import {ESIMWalletFactory} from "./esim-wallet/ESIMWalletFactory.sol";
@@ -14,7 +18,14 @@ error OnlyDeviceWallet();
 error OnlyDeviceWalletFactory();
 
 /// @notice Contract for deploying the factory contracts and maintaining registry
-contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, RegistryHelper {
+contract Registry is BaseAccount, Initializable, UUPSUpgradeable, OwnableUpgradeable, RegistryHelper {
+    using ECDSA for bytes32;
+
+    /// @dev Immutable entry point address
+    /// There exists only one entryPoint for a chain
+    /// Incase, the entry point needs to be updated,
+    /// the contract needs to be redeployed
+    IEntryPoint private immutable _entryPoint;
 
     ///@notice eSIM wallet project admin address
     address public admin;
@@ -39,6 +50,11 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
     modifier onlyDeviceWalletFactory() {
         if(msg.sender != address(deviceWalletFactory)) revert OnlyDeviceWalletFactory();
         _;
+    }
+
+    /// @inheritdoc BaseAccount
+    function entryPoint() public view virtual override returns (IEntryPoint) {
+        return _entryPoint;
     }
 
     /// @custom:oz-upgrades-unsafe-allow constructor
