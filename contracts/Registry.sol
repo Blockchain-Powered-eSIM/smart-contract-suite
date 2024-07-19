@@ -58,7 +58,10 @@ contract Registry is BaseAccount, Initializable, UUPSUpgradeable, OwnableUpgrade
     }
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() initializer {}
+    constructor(IEntryPoint anEntryPoint) initializer {
+        _entryPoint = anEntryPoint;
+        _disableInitializers();
+    }
 
     /// @dev Owner based upgrades
     function _authorizeUpgrade(address newImplementation)
