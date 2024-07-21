@@ -8,7 +8,6 @@ import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/U
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {BaseAccount} from "@account-abstraction/contracts/core/BaseAccount.sol";
 import {TokenCallbackHandler} from "@account-abstraction/contracts/samples/callback/TokenCallbackHandler.sol";
-import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 import {RegistryHelper} from "./RegistryHelper.sol";
 import {DeviceWalletFactory} from "./device-wallet/DeviceWalletFactory.sol";
@@ -19,7 +18,6 @@ error OnlyDeviceWalletFactory();
 
 /// @notice Contract for deploying the factory contracts and maintaining registry
 contract Registry is BaseAccount, Initializable, UUPSUpgradeable, OwnableUpgradeable, RegistryHelper {
-    using ECDSA for bytes32;
 
     /// @dev Immutable entry point address
     /// There exists only one entryPoint for a chain
