@@ -10,6 +10,7 @@ import "@account-abstraction/contracts/core/BaseAccount.sol";
 import "@account-abstraction/contracts/core/Helpers.sol";
 
 contract Account4337 is BaseAccount, UUPSUpgradeable, Initializable {
+    using MessageHashUtils for bytes32;
     using ECDSA for bytes32;
 
     address public owner;
@@ -98,7 +99,7 @@ contract Account4337 is BaseAccount, UUPSUpgradeable, Initializable {
     }
 
     /// implement template method of BaseAccount
-    function _validateSignature(UserOperation calldata userOp, bytes32 userOpHash)
+    function _validateSignature(PackedUserOperation calldata userOp, bytes32 userOpHash)
         internal
         virtual
         override
