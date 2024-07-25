@@ -23,7 +23,7 @@ error OnlyAssociatedESIMWallets();
 error FailedToTransfer();
 
 // TODO: Add ReentrancyGuard
-contract DeviceWallet is Initializable, OwnableUpgradeable, Account4337 {
+contract DeviceWallet is Initializable, Account4337 {
     using Address for address;
 
     /// @notice Emitted when the contract pays ETH for data bundle
@@ -58,7 +58,7 @@ contract DeviceWallet is Initializable, OwnableUpgradeable, Account4337 {
         if(
             msg.sender != address(registry) &&
             msg.sender != address(registry.deviceWalletFactory()) &&
-            msg.sender != owner()
+            msg.sender != owner
         ) {
             revert OnlyRegistryOrDeviceWalletFactoryOrOwner();
         }
@@ -71,7 +71,7 @@ contract DeviceWallet is Initializable, OwnableUpgradeable, Account4337 {
 
     function _onlyDeviceWalletFactoryOrOwner() private view {
         if(
-            msg.sender != owner() &&
+            msg.sender != owner &&
             msg.sender != address(registry.deviceWalletFactory())
         ) {
             revert OnlyDeviceWalletOrOwner();
@@ -104,8 +104,7 @@ contract DeviceWallet is Initializable, OwnableUpgradeable, Account4337 {
     }
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(IEntryPoint anEntryPoint) initializer {
-        Account4337(anEntryPoint);
+    constructor(IEntryPoint anEntryPoint) Account4337(anEntryPoint) initializer {
         _disableInitializers();
     }
 
@@ -121,8 +120,8 @@ contract DeviceWallet is Initializable, OwnableUpgradeable, Account4337 {
 
         registry = Registry(_registry);
         deviceUniqueIdentifier = _deviceUniqueIdentifier;
-
-        __Ownable_init(_deviceWalletOwner);
+        
+        initialize(_deviceWalletOwner);
     }
 
     /// @notice Allow device wallet owner to deploy new eSIM wallet

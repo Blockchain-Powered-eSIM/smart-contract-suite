@@ -6,13 +6,13 @@ pragma solidity ^0.8.18;
 
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
-import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
-import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@account-abstraction/contracts/core/BaseAccount.sol";
 import "@account-abstraction/contracts/core/Helpers.sol";
 import "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 
-contract Account4337 is BaseAccount, UUPSUpgradeable, Initializable {
+contract Account4337 is BaseAccount, Initializable, UUPSUpgradeable {
     using MessageHashUtils for bytes32;
     using ECDSA for bytes32;
 
@@ -21,6 +21,8 @@ contract Account4337 is BaseAccount, UUPSUpgradeable, Initializable {
     IEntryPoint private immutable _entryPoint;
     
     event Account4337Initialized(IEntryPoint indexed entryPoint, address indexed owner);
+
+    event AccountOwnershipTransferred(address oldOwner, address newOwner);
 
     modifier onlyOwner() {
         _onlyOwner();
@@ -40,6 +42,12 @@ contract Account4337 is BaseAccount, UUPSUpgradeable, Initializable {
     function _onlyOwner() internal view {
         //directly from EOA owner, or through the account itself (which gets redirected through execute())
         require(msg.sender == owner || msg.sender == address(this), "only owner");
+    }
+
+    function transferOwnership(address newOwner) onlyOwner public returns (address) {
+        owner = newOwner;
+        emit AccountOwnershipTransferred(msg.sender, newOwner);
+        return newOwner;
     }
 
     /**

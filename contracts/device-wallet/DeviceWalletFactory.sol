@@ -270,7 +270,7 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
         address _deviceWalletOwner,
         string calldata _deviceUniqueIdentifier,
         uint256 salt
-    ) public returns (DeviceWallet ret) {
+    ) public payable returns (DeviceWallet ret) {
         address addr = getAddress(
             _registry,
             _deviceWalletOwner,
