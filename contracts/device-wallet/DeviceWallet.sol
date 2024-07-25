@@ -5,10 +5,14 @@ pragma solidity ^0.8.18;
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
+
+import "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
+
 import {Registry} from "../Registry.sol";
 import {DeviceWalletFactory} from "./DeviceWalletFactory.sol";
 import {ESIMWalletFactory} from "../esim-wallet/ESIMWalletFactory.sol";
 import {ESIMWallet} from "../esim-wallet/ESIMWallet.sol";
+import {Account4337} from "../aa-helper/Account4337.sol";
 
 error OnlyRegistryOrDeviceWalletFactoryOrOwner();
 error OnlyDeviceWalletOrOwner();
@@ -19,7 +23,7 @@ error OnlyAssociatedESIMWallets();
 error FailedToTransfer();
 
 // TODO: Add ReentrancyGuard
-contract DeviceWallet is Initializable, OwnableUpgradeable {
+contract DeviceWallet is Initializable, OwnableUpgradeable, Account4337 {
     using Address for address;
 
     /// @notice Emitted when the contract pays ETH for data bundle
@@ -100,10 +104,13 @@ contract DeviceWallet is Initializable, OwnableUpgradeable {
     }
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() initializer {}
+    constructor(IEntryPoint anEntryPoint) initializer {
+        Account4337(anEntryPoint);
+        _disableInitializers();
+    }
 
     /// @notice Initialises the device wallet and deploys eSIM wallets for any already existing eSIMs
-    function initialize(
+    function init(
         address _registry,
         address _deviceWalletOwner,
         string calldata _deviceUniqueIdentifier
@@ -244,7 +251,8 @@ contract DeviceWallet is Initializable, OwnableUpgradeable {
         registry.updateDeviceWalletAssociatedWithESIMWallet(_eSIMWalletAddress, _deviceWalletAddress);
     }
 
-    receive() external payable {
-        // receive ETH
-    }
+    // receive function already exists in the Account4337.sol
+    // receive() external payable {
+    //     receive ETH
+    // }
 }
