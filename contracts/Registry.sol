@@ -11,11 +11,16 @@ import {RegistryHelper} from "./RegistryHelper.sol";
 import {DeviceWalletFactory} from "./device-wallet/DeviceWalletFactory.sol";
 import {ESIMWalletFactory} from "./esim-wallet/ESIMWalletFactory.sol";
 
+import "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
+
 error OnlyDeviceWallet();
 error OnlyDeviceWalletFactory();
 
 /// @notice Contract for deploying the factory contracts and maintaining registry
 contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, RegistryHelper {
+
+    /// @notice Entry point contract address (one entryPoint per chain)
+    IEntryPoint public immutable entryPoint;
 
     ///@notice eSIM wallet project admin address
     address public admin;
@@ -43,7 +48,8 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
     }
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() initializer {
+    constructor(IEntryPoint _entryPoint) initializer {
+        entryPoint = _entryPoint;
         _disableInitializers();
     }
 
@@ -66,7 +72,7 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
         vault = _vault;
         upgradeManager = _upgradeManager;
 
-        address deviceWalletFactoryImplementation = address(new DeviceWalletFactory());
+        address deviceWalletFactoryImplementation = address(new DeviceWalletFactory(entryPoint));
         ERC1967Proxy deviceWalletFactoryProxy = new ERC1967Proxy(
             deviceWalletFactoryImplementation,
             abi.encodeCall(
