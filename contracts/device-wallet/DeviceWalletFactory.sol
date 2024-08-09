@@ -262,13 +262,13 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
         address _registry,
         address _deviceWalletOwner,
         string calldata _deviceUniqueIdentifier,
-        uint256 salt
+        uint256 _salt
     ) public payable returns (DeviceWallet ret) {
         address addr = getAddress(
             _registry,
             _deviceWalletOwner,
             _deviceUniqueIdentifier,
-            salt
+            _salt
         );
 
         // Prefund the account with msg.value
@@ -283,7 +283,7 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
 
         ret = DeviceWallet(
             payable(
-                new ERC1967Proxy{salt : bytes32(salt)}(
+                new ERC1967Proxy{salt : bytes32(_salt)}(
                     address(deviceWalletImplementation),
                     abi.encodeCall(
                         DeviceWallet.init, 
@@ -301,10 +301,10 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
         address _registry,
         address _deviceWalletOwner,
         string calldata _deviceUniqueIdentifier,
-        uint256 salt
+        uint256 _salt
     ) public view returns (address) {
         return Create2.computeAddress(
-            bytes32(salt),
+            bytes32(_salt),
             keccak256(
                 abi.encodePacked(
                     type(ERC1967Proxy).creationCode,
