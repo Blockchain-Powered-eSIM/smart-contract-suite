@@ -128,10 +128,11 @@ contract DeviceWallet is Initializable, Account4337 {
     /// @param _hasAccessToETH Set to true if the eSIM wallet is allowed to pull ETH from this wallet.
     /// @return eSIM wallet address
     function deployESIMWallet(
-        bool _hasAccessToETH
+        bool _hasAccessToETH,
+        uint256 _salt
     ) external onlyOwner returns (address) {
         ESIMWalletFactory eSIMWalletFactory = registry.eSIMWalletFactory();
-        address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(msg.sender);
+        address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(msg.sender, _salt);
 
         _updateESIMInfo(eSIMWalletAddress, true, _hasAccessToETH);
         _updateDeviceWalletAssociatedWithESIMWallet(eSIMWalletAddress, address(this));

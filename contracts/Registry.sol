@@ -113,7 +113,7 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
         address deviceWallet = deviceWalletFactory.deployDeviceWallet(_deviceUniqueIdentifier, msg.sender, _salt);
         _updateDeviceWalletInfo(deviceWallet, _deviceUniqueIdentifier, msg.sender);
 
-        address eSIMWallet = eSIMWalletFactory.deployESIMWallet(msg.sender);
+        address eSIMWallet = eSIMWalletFactory.deployESIMWallet(msg.sender, _salt);
         _updateESIMInfo(eSIMWallet, deviceWallet);
 
         emit WalletDeployed(_deviceUniqueIdentifier, deviceWallet, eSIMWallet);

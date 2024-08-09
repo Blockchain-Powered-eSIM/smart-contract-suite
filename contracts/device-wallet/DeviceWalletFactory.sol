@@ -199,7 +199,7 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
         registry.updateDeviceWalletInfo(deviceWalletAddress, _deviceUniqueIdentifier, _deviceWalletOwner);
 
         ESIMWalletFactory eSIMWalletFactory = registry.eSIMWalletFactory();
-        address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(_deviceWalletOwner);
+        address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(_deviceWalletOwner, _salt);
         DeviceWallet(payable(deviceWalletAddress)).updateESIMInfo(
             eSIMWalletAddress,
             true,

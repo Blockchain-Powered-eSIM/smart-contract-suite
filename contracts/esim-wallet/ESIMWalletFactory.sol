@@ -5,7 +5,7 @@ pragma solidity ^0.8.18;
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import {BeaconProxy} from "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
+import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {ESIMWallet} from "./ESIMWallet.sol";
 import {Registry} from "../Registry.sol";
 import {UpgradeableBeacon} from "../UpgradableBeacon.sol";
@@ -87,16 +87,19 @@ contract ESIMWalletFactory is Initializable, OwnableUpgradeable {
     /// @param _owner Owner of the eSIM wallet
     /// @return Address of the newly deployed eSIM wallet
     function deployESIMWallet(
-        address _owner
+        address _owner,
+        uint256 _salt
     ) external onlyRegistryOrDeviceWalletFactoryOrDeviceWallet returns (address) {
 
         // msg.value will be sent along with the abi.encodeCall
         address eSIMWalletAddress = address(
-            new BeaconProxy(
-                beacon,
-                abi.encodeCall(
-                    ESIMWallet(payable(eSIMWalletImplementation)).initialize,
-                    (address(this), msg.sender, _owner)
+            payable(
+                new ERC1967Proxy{salt : bytes32(_salt)}(
+                    address(eSIMWalletImplementation),
+                    abi.encodeCall(
+                        ESIMWallet.initialize, 
+                        (address(this), msg.sender, _owner)
+                    )
                 )
             )
         );
