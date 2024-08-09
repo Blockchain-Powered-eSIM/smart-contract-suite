@@ -100,7 +100,8 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
     /// @param _deviceUniqueIdentifier Unique device identifier associated with the device
     /// @return Return device wallet address and eSIM wallet address
     function deployWallet(
-        string calldata _deviceUniqueIdentifier
+        string calldata _deviceUniqueIdentifier,
+        uint256 _salt
     ) external returns (address, address) {
         require(bytes(_deviceUniqueIdentifier).length >= 1, "Device unique identifier cannot be empty");
         require(ownerToDeviceWallet[msg.sender] == address(0), "User is already an owner of a device wallet");
@@ -109,7 +110,7 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
             "Device wallet already exists"
         );
 
-        address deviceWallet = deviceWalletFactory.deployDeviceWallet(_deviceUniqueIdentifier, msg.sender);
+        address deviceWallet = deviceWalletFactory.deployDeviceWallet(_deviceUniqueIdentifier, msg.sender, _salt);
         _updateDeviceWalletInfo(deviceWallet, _deviceUniqueIdentifier, msg.sender);
 
         address eSIMWallet = eSIMWalletFactory.deployESIMWallet(msg.sender);

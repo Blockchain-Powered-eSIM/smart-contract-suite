@@ -5,7 +5,6 @@ pragma solidity ^0.8.18;
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import {BeaconProxy} from "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
 
 import "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 import "@openzeppelin/contracts/utils/Create2.sol";
@@ -146,7 +145,8 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
     /// @return Array of deployed device wallet address
     function deployDeviceWalletForUsers(
         string[] calldata _deviceUniqueIdentifiers,
-        address[] calldata _deviceWalletOwners
+        address[] calldata _deviceWalletOwners,
+        uint256[] calldata _salts
     ) public onlyAdmin returns (address[] memory) {
         uint256 numberOfDeviceWallets = _deviceUniqueIdentifiers.length;
         require(numberOfDeviceWallets != 0, "Array cannot be empty");
@@ -157,7 +157,8 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
         for (uint256 i = 0; i < numberOfDeviceWallets; ++i) {
             deviceWalletsDeployed[i] = deployDeviceWalletAsAdmin(
                 _deviceUniqueIdentifiers[i],
-                _deviceWalletOwners[i]
+                _deviceWalletOwners[i],
+                _salts[i]
             );
         }
 
@@ -170,7 +171,8 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
     /// @return Deployed device wallet address
     function deployDeviceWalletAsAdmin(
         string calldata _deviceUniqueIdentifier,
-        address _deviceWalletOwner
+        address _deviceWalletOwner,
+        uint256 _salt
     ) public onlyAdmin returns (address) {
         require(
             registry.ownerToDeviceWallet(_deviceWalletOwner) == address(0),
@@ -187,16 +189,11 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
 
         // msg.value (if added) will be sent along with the abi.encodeCall
         address deviceWalletAddress = address(
-            new BeaconProxy(
-                beacon,
-                abi.encodeCall(
-                    DeviceWallet(payable(address(deviceWalletImplementation))).init,
-                    (
-                        address(registry),
-                        _deviceWalletOwner,
-                        _deviceUniqueIdentifier
-                    )
-                )
+            createAccount(
+                address(registry),
+                _deviceWalletOwner,
+                _deviceUniqueIdentifier,
+                _salt
             )
         );
         registry.updateDeviceWalletInfo(deviceWalletAddress, _deviceUniqueIdentifier, _deviceWalletOwner);
@@ -224,7 +221,8 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
     /// @return Deployed device wallet address
     function deployDeviceWallet(
         string calldata _deviceUniqueIdentifier,
-        address _deviceWalletOwner
+        address _deviceWalletOwner,
+        uint256 _salt
     ) public returns (address) {
         require(msg.sender == address(registry), "Only registry can call");
         require(
@@ -242,16 +240,11 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
 
         // msg.value (if added) will be sent along with the abi.encodeCall
         address deviceWalletAddress = address(
-            new BeaconProxy(
-                beacon,
-                abi.encodeCall(
-                    DeviceWallet(payable(address(deviceWalletImplementation))).init,
-                    (
-                        address(registry),
-                        _deviceWalletOwner,
-                        _deviceUniqueIdentifier
-                    )
-                )
+            createAccount(
+                address(registry),
+                _deviceWalletOwner,
+                _deviceUniqueIdentifier,
+                _salt
             )
         );
         registry.updateDeviceWalletInfo(deviceWalletAddress, _deviceUniqueIdentifier, _deviceWalletOwner);
