@@ -145,13 +145,13 @@ modifier onlyAssociatedESIMWallets()
 ### constructor
 
 ```solidity
-constructor() public
+constructor(contract IEntryPoint anEntryPoint) public
 ```
 
-### initialize
+### init
 
 ```solidity
-function initialize(address _registry, address _deviceWalletOwner, string _deviceUniqueIdentifier) external
+function init(address _registry, address _deviceWalletOwner, string _deviceUniqueIdentifier) external
 ```
 
 Initialises the device wallet and deploys eSIM wallets for any already existing eSIMs
@@ -159,7 +159,7 @@ Initialises the device wallet and deploys eSIM wallets for any already existing 
 ### deployESIMWallet
 
 ```solidity
-function deployESIMWallet(bool _hasAccessToETH) external returns (address)
+function deployESIMWallet(bool _hasAccessToETH, uint256 _salt) external returns (address)
 ```
 
 Allow device wallet owner to deploy new eSIM wallet
@@ -169,6 +169,7 @@ Allow device wallet owner to deploy new eSIM wallet
 | Name | Type | Description |
 | ---- | ---- | ----------- |
 | _hasAccessToETH | bool | Set to true if the eSIM wallet is allowed to pull ETH from this wallet. |
+| _salt | uint256 |  |
 
 #### Return Values
 
@@ -275,11 +276,5 @@ function updateDeviceWalletAssociatedWithESIMWallet(address _eSIMWalletAddress, 
 
 ```solidity
 function _updateDeviceWalletAssociatedWithESIMWallet(address _eSIMWalletAddress, address _deviceWalletAddress) internal
-```
-
-### receive
-
-```solidity
-receive() external payable
 ```
 

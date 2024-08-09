@@ -5,7 +5,11 @@ pragma solidity ^0.8.18;
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import {BeaconProxy} from "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
+
+import "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
+import "@openzeppelin/contracts/utils/Create2.sol";
+import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+
 import {Registry} from "../Registry.sol";
 import {DeviceWallet} from "./DeviceWallet.sol";
 import {ESIMWalletFactory} from "../esim-wallet/ESIMWalletFactory.sol";
@@ -38,6 +42,8 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
     /// @notice Emitted when the admin address is updated
     event AdminUpdated(address indexed _newAdmin);
 
+    IEntryPoint public immutable entryPoint;
+
     /// @notice Admin address of the eSIM wallet project
     address public eSIMWalletAdmin;
 
@@ -45,7 +51,7 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
     address public vault;
 
     /// @notice Implementation (logic) contract address of the device wallet
-    address public deviceWalletImplementation;
+    DeviceWallet public deviceWalletImplementation;
 
     /// @notice Beacon contract address for this contract
     address public beacon;
@@ -63,7 +69,13 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
     }
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() initializer {}
+    constructor(IEntryPoint _entryPoint) initializer {
+        entryPoint = _entryPoint;
+        
+        // device wallet implementation (logic) contract
+        deviceWalletImplementation = new DeviceWallet(_entryPoint);
+        _disableInitializers();
+    }
 
     /// @dev Owner based upgrades
     function _authorizeUpgrade(address newImplementation)
@@ -88,16 +100,14 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
         vault = _vault;
         registry = Registry(_registryContractAddress);
 
-        // device wallet implementation (logic) contract
-        deviceWalletImplementation = address(new DeviceWallet());
         // Upgradable beacon for device wallet implementation contract
-        beacon = address(new UpgradeableBeacon(deviceWalletImplementation, _upgradeManager));
+        beacon = address(new UpgradeableBeacon(address(deviceWalletImplementation), _upgradeManager));
 
         emit DeviceWalletFactoryDeployed(
             _eSIMWalletAdmin,
             _vault,
             _upgradeManager,
-            deviceWalletImplementation,
+            address(deviceWalletImplementation),
             beacon
         );
         
@@ -135,7 +145,8 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
     /// @return Array of deployed device wallet address
     function deployDeviceWalletForUsers(
         string[] calldata _deviceUniqueIdentifiers,
-        address[] calldata _deviceWalletOwners
+        address[] calldata _deviceWalletOwners,
+        uint256[] calldata _salts
     ) public onlyAdmin returns (address[] memory) {
         uint256 numberOfDeviceWallets = _deviceUniqueIdentifiers.length;
         require(numberOfDeviceWallets != 0, "Array cannot be empty");
@@ -146,7 +157,8 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
         for (uint256 i = 0; i < numberOfDeviceWallets; ++i) {
             deviceWalletsDeployed[i] = deployDeviceWalletAsAdmin(
                 _deviceUniqueIdentifiers[i],
-                _deviceWalletOwners[i]
+                _deviceWalletOwners[i],
+                _salts[i]
             );
         }
 
@@ -159,7 +171,8 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
     /// @return Deployed device wallet address
     function deployDeviceWalletAsAdmin(
         string calldata _deviceUniqueIdentifier,
-        address _deviceWalletOwner
+        address _deviceWalletOwner,
+        uint256 _salt
     ) public onlyAdmin returns (address) {
         require(
             registry.ownerToDeviceWallet(_deviceWalletOwner) == address(0),
@@ -176,22 +189,17 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
 
         // msg.value (if added) will be sent along with the abi.encodeCall
         address deviceWalletAddress = address(
-            new BeaconProxy(
-                beacon,
-                abi.encodeCall(
-                    DeviceWallet(payable(deviceWalletImplementation)).initialize,
-                    (
-                        address(registry),
-                        _deviceWalletOwner,
-                        _deviceUniqueIdentifier
-                    )
-                )
+            createAccount(
+                address(registry),
+                _deviceWalletOwner,
+                _deviceUniqueIdentifier,
+                _salt
             )
         );
         registry.updateDeviceWalletInfo(deviceWalletAddress, _deviceUniqueIdentifier, _deviceWalletOwner);
 
         ESIMWalletFactory eSIMWalletFactory = registry.eSIMWalletFactory();
-        address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(_deviceWalletOwner);
+        address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(_deviceWalletOwner, _salt);
         DeviceWallet(payable(deviceWalletAddress)).updateESIMInfo(
             eSIMWalletAddress,
             true,
@@ -213,7 +221,8 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
     /// @return Deployed device wallet address
     function deployDeviceWallet(
         string calldata _deviceUniqueIdentifier,
-        address _deviceWalletOwner
+        address _deviceWalletOwner,
+        uint256 _salt
     ) public returns (address) {
         require(msg.sender == address(registry), "Only registry can call");
         require(
@@ -231,20 +240,83 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
 
         // msg.value (if added) will be sent along with the abi.encodeCall
         address deviceWalletAddress = address(
-            new BeaconProxy(
-                beacon,
-                abi.encodeCall(
-                    DeviceWallet(payable(deviceWalletImplementation)).initialize,
-                    (
-                        address(registry),
-                        _deviceWalletOwner,
-                        _deviceUniqueIdentifier
-                    )
-                )
+            createAccount(
+                address(registry),
+                _deviceWalletOwner,
+                _deviceUniqueIdentifier,
+                _salt
             )
         );
         registry.updateDeviceWalletInfo(deviceWalletAddress, _deviceUniqueIdentifier, _deviceWalletOwner);
 
         return deviceWalletAddress;
+    }
+
+    /**
+     * create an account, and return its address.
+     * returns the address even if the account is already deployed.
+     * Note that during UserOperation execution, this method is called only if the account is not deployed.
+     * This method returns an existing account address so that entryPoint.getSenderAddress() would work even after account creation
+     */
+    function createAccount(
+        address _registry,
+        address _deviceWalletOwner,
+        string calldata _deviceUniqueIdentifier,
+        uint256 _salt
+    ) public payable returns (DeviceWallet ret) {
+        address addr = getAddress(
+            _registry,
+            _deviceWalletOwner,
+            _deviceUniqueIdentifier,
+            _salt
+        );
+
+        // Prefund the account with msg.value
+        if (msg.value > 0) {
+            entryPoint.depositTo{value: msg.value}(addr);
+        }
+
+        uint256 codeSize = addr.code.length;
+        if (codeSize > 0) {
+            return DeviceWallet(payable(addr));
+        }
+
+        ret = DeviceWallet(
+            payable(
+                new ERC1967Proxy{salt : bytes32(_salt)}(
+                    address(deviceWalletImplementation),
+                    abi.encodeCall(
+                        DeviceWallet.init, 
+                        (_registry, _deviceWalletOwner, _deviceUniqueIdentifier)
+                    )
+                )
+            )
+        );
+    }
+
+    /**
+     * calculate the counterfactual address of this account as it would be returned by createAccount()
+     */
+    function getAddress(
+        address _registry,
+        address _deviceWalletOwner,
+        string calldata _deviceUniqueIdentifier,
+        uint256 _salt
+    ) public view returns (address) {
+        return Create2.computeAddress(
+            bytes32(_salt),
+            keccak256(
+                abi.encodePacked(
+                    type(ERC1967Proxy).creationCode,
+                    abi.encode(
+                        address(deviceWalletImplementation),
+                        abi.encodeCall(
+                            DeviceWallet.init,
+                            (_registry, _deviceWalletOwner, _deviceUniqueIdentifier)
+                        )
+                    )
+                )
+            )
+        );
     }
 }

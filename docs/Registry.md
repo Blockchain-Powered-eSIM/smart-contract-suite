@@ -16,23 +16,13 @@ error OnlyDeviceWalletFactory()
 
 Contract for deploying the factory contracts and maintaining registry
 
-### WalletDeployed
+### entryPoint
 
 ```solidity
-event WalletDeployed(string _deviceUniqueIdentifier, address _deviceWallet, address _eSIMWallet)
+contract IEntryPoint entryPoint
 ```
 
-### DeviceWalletInfoUpdated
-
-```solidity
-event DeviceWalletInfoUpdated(address _deviceWallet, string _deviceUniqueIdentifier, address _deviceWalletOwner)
-```
-
-### UpdatedDeviceWalletassociatedWithESIMWallet
-
-```solidity
-event UpdatedDeviceWalletassociatedWithESIMWallet(address _eSIMWalletAddress, address _deviceWalletAddress)
-```
+Entry point contract address (one entryPoint per chain)
 
 ### admin
 
@@ -74,47 +64,6 @@ contract ESIMWalletFactory eSIMWalletFactory
 
 eSIM wallet factory instance
 
-### ownerToDeviceWallet
-
-```solidity
-mapping(address => address) ownerToDeviceWallet
-```
-
-owner <> device wallet address
-
-_There can only be one device wallet per user (ETH address)_
-
-### uniqueIdentifierToDeviceWallet
-
-```solidity
-mapping(string => address) uniqueIdentifierToDeviceWallet
-```
-
-device unique identifier <> device wallet address
-        Mapping for all the device wallets deployed by the registry
-
-_Use this to check if a device identifier has already been used or not_
-
-### isDeviceWalletValid
-
-```solidity
-mapping(address => address) isDeviceWalletValid
-```
-
-device wallet address <> owner.
-        Mapping of all the devce wallets deployed by the registry (or the device wallet factory)
-        to their respecitve owner.
-        Mapping returns address(0) if device wallet doesn't exist or if not deployed by the said contracts
-
-### isESIMWalletValid
-
-```solidity
-mapping(address => address) isESIMWalletValid
-```
-
-eSIM wallet address <> device wallet address
-        All the eSIM wallets deployed using this registry are valid and set to true
-
 ### onlyDeviceWallet
 
 ```solidity
@@ -130,7 +79,7 @@ modifier onlyDeviceWalletFactory()
 ### constructor
 
 ```solidity
-constructor() public
+constructor(contract IEntryPoint _entryPoint) public
 ```
 
 ### _authorizeUpgrade
@@ -158,7 +107,7 @@ function initialize(address _eSIMWalletAdmin, address _vault, address _upgradeMa
 ### deployWallet
 
 ```solidity
-function deployWallet(string _deviceUniqueIdentifier) external returns (address, address)
+function deployWallet(string _deviceUniqueIdentifier, uint256 _salt) external returns (address, address)
 ```
 
 Allow anyone to deploy a device wallet and an eSIM wallet for themselves
@@ -168,6 +117,7 @@ Allow anyone to deploy a device wallet and an eSIM wallet for themselves
 | Name | Type | Description |
 | ---- | ---- | ----------- |
 | _deviceUniqueIdentifier | string | Unique device identifier associated with the device |
+| _salt | uint256 |  |
 
 #### Return Values
 
@@ -198,16 +148,4 @@ _For all the device wallets deployed by the esim wallet admin using the device w
 | _deviceWallet | address | Address of the device wallet |
 | _deviceUniqueIdentifier | string | String unique identifier associated with the device wallet |
 | _deviceWalletOwner | address |  |
-
-### _updateDeviceWalletInfo
-
-```solidity
-function _updateDeviceWalletInfo(address _deviceWallet, string _deviceUniqueIdentifier, address _deviceWalletOwner) internal
-```
-
-### _updateESIMInfo
-
-```solidity
-function _updateESIMInfo(address _eSIMWalletAddress, address _deviceWalletAddress) internal
-```
 

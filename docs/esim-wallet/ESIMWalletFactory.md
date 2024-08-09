@@ -94,7 +94,7 @@ function initialize(address _registryContractAddress, address _upgradeManager) e
 ### deployESIMWallet
 
 ```solidity
-function deployESIMWallet(address _owner) external returns (address)
+function deployESIMWallet(address _owner, uint256 _salt) external returns (address)
 ```
 
 Function to deploy an eSIM wallet
@@ -106,6 +106,7 @@ _can only be called by the respective deviceWallet contract_
 | Name | Type | Description |
 | ---- | ---- | ----------- |
 | _owner | address | Owner of the eSIM wallet |
+| _salt | uint256 |  |
 
 #### Return Values
 
