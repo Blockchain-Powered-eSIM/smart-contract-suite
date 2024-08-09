@@ -42,6 +42,12 @@ event AdminUpdated(address _newAdmin)
 
 Emitted when the admin address is updated
 
+### entryPoint
+
+```solidity
+contract IEntryPoint entryPoint
+```
+
 ### eSIMWalletAdmin
 
 ```solidity
@@ -61,7 +67,7 @@ Vault address that receives payments for eSIM data bundles
 ### deviceWalletImplementation
 
 ```solidity
-address deviceWalletImplementation
+contract DeviceWallet deviceWalletImplementation
 ```
 
 Implementation (logic) contract address of the device wallet
@@ -91,7 +97,7 @@ modifier onlyAdmin()
 ### constructor
 
 ```solidity
-constructor() public
+constructor(contract IEntryPoint _entryPoint) public
 ```
 
 ### _authorizeUpgrade
@@ -150,7 +156,7 @@ Function to update admin address
 ### deployDeviceWalletForUsers
 
 ```solidity
-function deployDeviceWalletForUsers(string[] _deviceUniqueIdentifiers, address[] _deviceWalletOwners) public returns (address[])
+function deployDeviceWalletForUsers(string[] _deviceUniqueIdentifiers, address[] _deviceWalletOwners, uint256[] _salts) public returns (address[])
 ```
 
 To deploy multiple device wallets at once
@@ -161,6 +167,7 @@ To deploy multiple device wallets at once
 | ---- | ---- | ----------- |
 | _deviceUniqueIdentifiers | string[] | Array of unique device identifiers for each device wallet |
 | _deviceWalletOwners | address[] | Array of owner address of the respective device wallets |
+| _salts | uint256[] |  |
 
 #### Return Values
 
@@ -171,7 +178,7 @@ To deploy multiple device wallets at once
 ### deployDeviceWalletAsAdmin
 
 ```solidity
-function deployDeviceWalletAsAdmin(string _deviceUniqueIdentifier, address _deviceWalletOwner) public returns (address)
+function deployDeviceWalletAsAdmin(string _deviceUniqueIdentifier, address _deviceWalletOwner, uint256 _salt) public returns (address)
 ```
 
 _Allow admin to deploy a device wallet (and an eSIM wallet) for given unique device identifiers_
@@ -182,6 +189,7 @@ _Allow admin to deploy a device wallet (and an eSIM wallet) for given unique dev
 | ---- | ---- | ----------- |
 | _deviceUniqueIdentifier | string | Unique device identifier for the device wallet |
 | _deviceWalletOwner | address | User's address (owner of the device wallet and respective eSIM wallets) |
+| _salt | uint256 |  |
 
 #### Return Values
 
@@ -192,7 +200,7 @@ _Allow admin to deploy a device wallet (and an eSIM wallet) for given unique dev
 ### deployDeviceWallet
 
 ```solidity
-function deployDeviceWallet(string _deviceUniqueIdentifier, address _deviceWalletOwner) public returns (address)
+function deployDeviceWallet(string _deviceUniqueIdentifier, address _deviceWalletOwner, uint256 _salt) public returns (address)
 ```
 
 _Allow admin to deploy a device wallet (and an eSIM wallet) for given unique device identifiers_
@@ -203,10 +211,30 @@ _Allow admin to deploy a device wallet (and an eSIM wallet) for given unique dev
 | ---- | ---- | ----------- |
 | _deviceUniqueIdentifier | string | Unique device identifier for the device wallet |
 | _deviceWalletOwner | address | User's address (owner of the device wallet and respective eSIM wallets) |
+| _salt | uint256 |  |
 
 #### Return Values
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
 | [0] | address | Deployed device wallet address |
+
+### createAccount
+
+```solidity
+function createAccount(address _registry, address _deviceWalletOwner, string _deviceUniqueIdentifier, uint256 _salt) public payable returns (contract DeviceWallet ret)
+```
+
+create an account, and return its address.
+returns the address even if the account is already deployed.
+Note that during UserOperation execution, this method is called only if the account is not deployed.
+This method returns an existing account address so that entryPoint.getSenderAddress() would work even after account creation
+
+### getAddress
+
+```solidity
+function getAddress(address _registry, address _deviceWalletOwner, string _deviceUniqueIdentifier, uint256 _salt) public view returns (address)
+```
+
+calculate the counterfactual address of this account as it would be returned by createAccount()
 
