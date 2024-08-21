@@ -9,6 +9,9 @@ import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Own
 /// @notice Contract for deploying the factory contracts and maintaining registry
 contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeable, RegistryHelper {
 
+    /// @notice Address (owned/controlled by eSIM wallet project) that can upgrade contracts
+    address public upgradeManager;
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() initializer {
         _disableInitializers();
@@ -21,4 +24,10 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
     override
     {}
 
+    function initialize(address _upgradeManager) external initializer {
+        require(_upgradeManager != address(0), "Upgrade Manager address cannot be zero address");
+        upgradeManager = _upgradeManager;
+
+        __Ownable_init(_upgradeManager);
+    }
 }
