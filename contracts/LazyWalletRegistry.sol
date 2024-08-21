@@ -12,6 +12,21 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
     /// @notice Address (owned/controlled by eSIM wallet project) that can upgrade contracts
     address public upgradeManager;
 
+    /// @notice Data Bundle related details stored in the eSIM wallet
+    struct DataBundleDetail {
+        string dataBundleID;
+        uint256 dataBundlePrice;
+    }
+
+    /// @notice Details related to eSIM purchased by the fiat user
+    struct eSIMDetails {
+        uint256 id;
+        DataBundleDetail[] history;
+    }
+
+    /// @notice Mapping from fiat user's unique device identifier to the eSIM details
+    mapping(string => eSIMDetails[]) public deviceIdentifierToESIMDetails;
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() initializer {
         _disableInitializers();
