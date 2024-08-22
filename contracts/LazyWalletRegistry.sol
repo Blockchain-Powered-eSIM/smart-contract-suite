@@ -94,7 +94,6 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
 
     /*
         TODO: 
-        * See if registry can inherit LazyWalletRegistry for deploying wallets
         * Make changes in device wallet to add history
         * Make changes in eSIM wallet to add history and other important data
         * Look into eSIM state and if possible create 
