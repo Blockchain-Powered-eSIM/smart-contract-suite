@@ -74,6 +74,7 @@ contract RegistryHelper {
     function deployLazyWallet(
         address _deviceOwner,
         string calldata _deviceUniqueIdentifier,
+        string calldata _eSIMUniqueIdentifier,
         uint256 _salt
     ) external onlyLazyWalletRegistry returns (address, address) {
         require(bytes(_deviceUniqueIdentifier).length >= 1, "Device unique identifier cannot be empty");
