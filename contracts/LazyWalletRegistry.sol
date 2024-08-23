@@ -7,13 +7,14 @@ import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/U
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
 import {Registry} from "./Registry.sol";
+import "./CustomStructs.sol";
 
 /// @notice Contract for deploying the factory contracts and maintaining registry
 contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeable, RegistryHelper {
 
     /// @notice Emitted when data related to a device is updated
     event DataUpdatedForDevice(
-        string _deviceUniqueIdentifier, string[] _eSIMUniqueIdentifiers, DataBundleDetail[] _dataBundleDetails
+        string _deviceUniqueIdentifier, string[] _eSIMUniqueIdentifiers, DataBundleDetails[] _dataBundleDetails
     );
 
     event LazyWalletDeployed(
@@ -29,22 +30,6 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
 
     /// @notice Registry contract instance
     Registry public registry;
-
-    /// @notice Data Bundle related details stored in the eSIM wallet
-    struct DataBundleDetail {
-        string dataBundleID;
-        uint256 dataBundlePrice;
-    }
-
-    /// @notice Details related to eSIM purchased by the fiat user
-    struct ESIMDetails {
-        DataBundleDetail[] history;
-    }
-
-    /// @notice Struct to store list of all eSIMs associated with a device
-    struct AssociatedESIMIdentifiers {
-        string[] eSIMIdentifiers;
-    }
 
     /// @notice Device identifier <> eSIM identifier <> ESIMDetails(purchase history)
     mapping(string => mapping(string => ESIMDetails)) public deviceIdentifierToESIMDetails;
@@ -104,7 +89,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
     function batchPopulateHistory(
         string[] calldata _deviceUniqueIdentifiers,
         string[][] calldata _eSIMUniqueIdentifiers,
-        DataBundleDetail[][] calldata _dataBundleDetails
+        DataBundleDetails[][] calldata _dataBundleDetails
     ) external {
         uint256 len = _deviceUniqueIdentifiers.length;
         require(len == _eSIMUniqueIdentifiers.length, "Unequal array provided");
@@ -161,7 +146,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
     function _populateHistory(
         string calldata _deviceUniqueIdentifier,
         string[] calldata _eSIMUniqueIdentifiers,
-        DataBundleDetail[] calldata _dataBundleDetails
+        DataBundleDetails[] calldata _dataBundleDetails
     ) internal {
         require(isLazyWalletDeployed(_deviceUniqueIdentifier) == false, "Device identifier is already associated with a device wallet");
         
@@ -181,7 +166,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
             }
 
             ESIMDetails storage eSIMDetails = deviceIdentifierToESIMDetails[_deviceUniqueIdentifier][eSIMUniqueIdentifier];
-            DataBundleDetail[] storage details = eSIMDetails.history;
+            DataBundleDetails[] storage details = eSIMDetails.history;
             details.push(_dataBundleDetails[i]);
             eSIMDetails.history = details;
         }

@@ -7,6 +7,7 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {IOwnableESIMWallet} from "../interfaces/IOwnableESIMWallet.sol";
 import {DeviceWallet} from "../device-wallet/DeviceWallet.sol";
+import "../CustomStructs.sol";
 
 error OnlyDeviceWallet();
 error FailedToTransfer();
@@ -41,11 +42,6 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
 
     /// @notice Total number of data bundle transactions made by user
     uint256 public lastTransactionCount;
-
-    struct DataBundleDetails {
-        string dataBundleID;
-        uint256 dataBundlePrice;
-    }
 
     /// @notice lastTransactionCount -> (data bundle ID, data bundle price)
     mapping(uint256 => DataBundleDetails) public transactionHistory;
