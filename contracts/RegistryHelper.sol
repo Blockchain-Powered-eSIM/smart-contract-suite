@@ -92,6 +92,10 @@ contract RegistryHelper {
 
         emit WalletDeployed(_deviceUniqueIdentifier, deviceWallet, eSIMWallet);
 
+        // Since the eSIM unique identifier is already known in this scenario
+        // We can execute the setESIMUniqueIdentifierForAnESIMWallet function in same transaction as deploying the smart wallet
+        DeviceWallet(deviceWallet).setESIMUniqueIdentifierForAnESIMWallet(eSIMWallet, _eSIMUniqueIdentifier);
+
         return (deviceWallet, eSIMWallet);
     }
 
