@@ -87,6 +87,16 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         __Ownable_init(_upgradeManager);
     }
 
+    /// @notice Function to check if a lazy wallet has been deployed or not
+    /// @return Boolean. True if deployed, false otherwise
+    function isLazyWalletDeployed(string calldata _deviceUniqueIdentifier) public returns (bool) {
+        if(registry.uniqueIdentifierToDeviceWallet(_deviceUniqueIdentifier) != address(0)) {
+            return true;
+        }
+
+        return false;
+    }
+
     /// @notice Function to populate all the device and eSIM related data along with the data bundles
     /// @param _deviceUniqueIdentifiers List of device unique identifiers associated with the eSIM related data
     /// @param _eSIMUniqueIdentifiers 2D array of all the eSIMs corresponding to their device identifiers.
@@ -116,6 +126,8 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         string calldata _eSIMUniqueIdentifier,
         uint256 _salt
     ) external onlyESIMWalletAdmin returns (address, address) {
+        require(isLazyWalletDeployed(_deviceUniqueIdentifier) == false, "Device identifier is already associated with a device wallet");
+
         address deviceWallet;
         address eSIMWallet;
         (deviceWallet, eSIMWallet) = registry.deployLazyWallet(
@@ -138,7 +150,6 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
 
     /*
         TODO: 
-        * Once lazy wallet is deployed, update some storage to not accept any new updates in populateHistory function
         * Make changes in device wallet to add history
         * Make changes in eSIM wallet to add history and other important data
         * Use populate history in the deploy lazy wallet function
@@ -152,7 +163,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         string[] calldata _eSIMUniqueIdentifiers,
         DataBundleDetail[] calldata _dataBundleDetails
     ) internal {
-        require(registry.uniqueIdentifierToDeviceWallet(_deviceUniqueIdentifier) == address(0), "Device identifier is already associated with a device wallet");
+        require(isLazyWalletDeployed(_deviceUniqueIdentifier) == false, "Device identifier is already associated with a device wallet");
         
         uint256 len = _eSIMUniqueIdentifiers.length;
         require(len == _dataBundleDetails.length, "Unequal array provided");
