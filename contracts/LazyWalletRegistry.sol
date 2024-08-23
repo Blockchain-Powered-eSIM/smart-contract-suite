@@ -16,6 +16,14 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         string _deviceUniqueIdentifier, string[] _eSIMUniqueIdentifiers, DataBundleDetail[] _dataBundleDetails
     );
 
+    event LazyWalletDeployed(
+        address _deviceOwner,
+        address deviceWallet,
+        string _deviceUniqueIdentifier,
+        address eSIMWallet,
+        string _eSIMUniqueIdentifier
+    );
+
     /// @notice Address (owned/controlled by eSIM wallet project) that can upgrade contracts
     address public upgradeManager;
 
@@ -48,6 +56,11 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
 
     /// @notice Device identifier <> List of associated eSIM identifiers
     mapping(string => AssociatedESIMIdentifiers) public eSIMIdentifiersAssociatedWithDeviceIdentifier;
+
+    modifier onlyESIMWalletAdmin() {
+        require(msg.sender == registry.admin(), "Only eSIM wallet admin");
+        _;
+    }
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() initializer {
@@ -92,11 +105,43 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         }
     }
 
+    /// @notice Function to deploy a device wallet and an eSIM wallet on behalf of a user, also setting the eSIM identifier
+    /// @param _deviceOwner Address of the device owner
+    /// @param _deviceUniqueIdentifier Unique device identifier associated with the device
+    /// @param _eSIMUniqueIdentifier Unique eSIM identifier associated with the eSIM of the device
+    /// @return Return device wallet address and eSIM wallet address
+    function deployLazyWalletAndSetESIMIdentifier(
+        address _deviceOwner,
+        string calldata _deviceUniqueIdentifier,
+        string calldata _eSIMUniqueIdentifier,
+        uint256 _salt
+    ) external onlyESIMWalletAdmin returns (address, address) {
+        address deviceWallet;
+        address eSIMWallet;
+        (deviceWallet, eSIMWallet) = registry.deployLazyWallet(
+            _deviceOwner,
+            _deviceUniqueIdentifier,
+            _eSIMUniqueIdentifier,
+            _salt
+        );
+
+        emit LazyWalletDeployed(
+            _deviceOwner,
+            deviceWallet,
+            _deviceUniqueIdentifier,
+            eSIMWallet,
+            _eSIMUniqueIdentifier
+        );
+
+        return (deviceWallet, eSIMWallet);
+    }
+
     /*
         TODO: 
-        * Use deployLazyWallet function from RegistryHelper in this contract
+        * Once lazy wallet is deployed, update some storage to not accept any new updates in populateHistory function
         * Make changes in device wallet to add history
         * Make changes in eSIM wallet to add history and other important data
+        * Use populate history in the deploy lazy wallet function
         * Look into eSIM state and if possible create 
         an architecture standard for eSIM profile,
     */

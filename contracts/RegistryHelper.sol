@@ -67,7 +67,7 @@ contract RegistryHelper {
         emit UpdatedLazyWalletRegistryAddress(_lazyWalletRegistry);
     }
 
-    /// Allow LazyWalletRegistry  to deploy a device wallet and an eSIM wallet on behalf of a user
+    /// @notice Allow LazyWalletRegistry to deploy a device wallet and an eSIM wallet on behalf of a user
     /// @param _deviceOwner Address of the device owner
     /// @param _deviceUniqueIdentifier Unique device identifier associated with the device
     /// @return Return device wallet address and eSIM wallet address
@@ -78,6 +78,7 @@ contract RegistryHelper {
         uint256 _salt
     ) external onlyLazyWalletRegistry returns (address, address) {
         require(bytes(_deviceUniqueIdentifier).length >= 1, "Device unique identifier cannot be empty");
+        require(bytes(_eSIMUniqueIdentifier).length >= 1, "eSIM unique identifier cannot be empty");
         require(ownerToDeviceWallet[_deviceOwner] == address(0), "User is already an owner of a device wallet");
         require(
             uniqueIdentifierToDeviceWallet[_deviceUniqueIdentifier] == address(0),
