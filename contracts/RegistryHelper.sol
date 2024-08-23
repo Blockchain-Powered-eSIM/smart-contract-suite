@@ -30,7 +30,7 @@ contract RegistryHelper {
     );
 
     /// @notice Address of the Lazy wallet registry
-    adress public lazyWalletRegistry;
+    address public lazyWalletRegistry;
 
     /// @notice owner <> device wallet address
     /// @dev There can only be one device wallet per user (ETH address)
