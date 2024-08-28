@@ -7,8 +7,10 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {IOwnableESIMWallet} from "../interfaces/IOwnableESIMWallet.sol";
 import {DeviceWallet} from "../device-wallet/DeviceWallet.sol";
+import "../CustomStructs.sol";
 
 error OnlyDeviceWallet();
+error OnlyRegistry();
 error FailedToTransfer();
 
 contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
@@ -27,6 +29,9 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
     /// @notice Emitted when the eSIM unique identifier is initialised
     event ESIMUniqueIdentifierInitialised(string _eSIMUniqueIdentifier);
 
+    /// @notice Emitted when the lazy wallet registry populates history after wallet deployment
+    event TransactionHistoryPopulated(DataBundleDetails _dataBundleDetails);
+
     /// @notice Emitted when ETH moves out of this contract
     event ETHSent(address indexed _recipient, uint256 _amount);
 
@@ -39,16 +44,8 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
     /// @notice Device wallet contract instance associated with this eSIM wallet
     DeviceWallet public deviceWallet;
 
-    /// @notice Total number of data bundle transactions made by user
-    uint256 public lastTransactionCount;
-
-    struct DataBundleDetails {
-        string dataBundleID;
-        uint256 dataBundlePrice;
-    }
-
-    /// @notice lastTransactionCount -> (data bundle ID, data bundle price)
-    mapping(uint256 => DataBundleDetails) public transactionHistory;
+    /// @notice Array of all the data bundle purchase
+    DataBundleDetails[] public transactionHistory;
 
     /// @dev A map from owner and spender to transfer approval. Determines whether
     ///      the spender can transfer this wallet from the owner.
@@ -56,6 +53,11 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
 
     modifier onlyDeviceWallet() {
         if (msg.sender != address(deviceWallet)) revert OnlyDeviceWallet();
+        _;
+    }
+
+    modifier onlyRegistry() {
+        if(msg.sender != address(deviceWallet.registry())) revert OnlyRegistry();
         _;
     }
 
@@ -99,33 +101,42 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
     }
 
     /// @notice Function to make payment for the data bundle
-    /// @param _dataBundleID string data bundle ID from the backend catalogue
-    /// @param _dataBundlePrice uint256 price for the data bundle
+    /// @param _dataBundleDetail Details of the data bundle being bought. (dataBundleID, dataBundlePrice)
     /// @return True if the transaction is successful
-    function buyDataBundle(string calldata _dataBundleID, uint256 _dataBundlePrice) public payable returns (bool) {
-        require(bytes(_dataBundleID).length > 0, "Data bundle ID cannot be empty");
-        require(_dataBundlePrice > 0, "Price cannot be zero");
+    function buyDataBundle(DataBundleDetails memory _dataBundleDetail) public payable returns (bool) {
+        require(bytes(_dataBundleDetail.dataBundleID).length > 0, "Data bundle ID cannot be empty");
+        require(_dataBundleDetail.dataBundlePrice > 0, "Price cannot be zero");
 
         // 1. msg.value is received by contract
-        // 2. if wallet balance is less than _dataBundlePrice, pull ETH from device wallet
-        // 3. send _dataBundlePrice amount of ETH to vault
+        // 2. if wallet balance is less than dataBundlePrice, pull ETH from device wallet
+        // 3. send dataBundlePrice amount of ETH to vault
         uint256 walletBalance = address(this).balance;
 
-        if (walletBalance < _dataBundlePrice) {
-            uint256 remainingETH = _dataBundlePrice - walletBalance;
+        if (walletBalance < _dataBundleDetail.dataBundlePrice) {
+            uint256 remainingETH = _dataBundleDetail.dataBundlePrice - walletBalance;
             deviceWallet.pullETH(remainingETH);
         }
 
         address vault = deviceWallet.getVaultAddress();
-        _transferETH(vault, _dataBundlePrice);
+        _transferETH(vault, _dataBundleDetail.dataBundlePrice);
 
-        DataBundleDetails storage dataBundleDetails = transactionHistory[lastTransactionCount];
-        dataBundleDetails.dataBundleID = _dataBundleID;
-        dataBundleDetails.dataBundlePrice = _dataBundlePrice;
+        transactionHistory.push(_dataBundleDetail);
 
-        emit DataBundleBought(_dataBundleID, _dataBundlePrice, msg.value, lastTransactionCount);
+        emit DataBundleBought(_dataBundleDetail.dataBundleID, _dataBundleDetail.dataBundlePrice, msg.value, lastTransactionCount);
 
-        lastTransactionCount += 1;
+        return true;
+    }
+
+    /// @notice Function to populate history for lazy wallets. Can only be called once, by lazy wallet registry
+    /// @param _dataBundleDetails Array of all the data bundle purchase details before the wallet was deployed
+    function populateHistory(DataBundleDetails[] memory _dataBundleDetails) external onlyRegistry returns (bool) {
+        require(transactionHistory.length == 0, "Cannot populate an already in-use wallet");
+
+        // push memory to storage
+        // more gas optimised compared to loop iteration for copying data
+        transactionHistory = _dataBundleDetails;
+
+        emit TransactionHistoryPopulated(_dataBundleDetails);
 
         return true;
     }

@@ -3,6 +3,10 @@ pragma solidity ^0.8.18;
 // SPDX-License-Identifier: MIT
 
 import {DeviceWallet} from "./device-wallet/DeviceWallet.sol";
+import {ESIMWallet} from "./esim-wallet/ESIMWallet.sol";
+import "./CustomStructs.sol";
+
+error OnlyLazyWalletRegistry();
 
 contract RegistryHelper {
 
@@ -23,6 +27,13 @@ contract RegistryHelper {
         address indexed _deviceWalletAddress
     );
 
+    event UpdatedLazyWalletRegistryAddress(
+        address indexed _lazyWalletRegistry
+    );
+
+    /// @notice Address of the Lazy wallet registry
+    address public lazyWalletRegistry;
+
     /// @notice owner <> device wallet address
     /// @dev There can only be one device wallet per user (ETH address)
     mapping(address => address) public ownerToDeviceWallet;
@@ -41,6 +52,63 @@ contract RegistryHelper {
     /// @notice eSIM wallet address <> device wallet address
     ///         All the eSIM wallets deployed using this registry are valid and set to true
     mapping(address => address) public isESIMWalletValid;
+
+    modifier onlyLazyWalletRegistry() {
+        if(msg.sender != lazyWalletRegistry) revert OnlyLazyWalletRegistry();
+        _;
+    }
+
+    /// @notice Function to add or update the lazy wallet registry address
+    function addOrUpdateLazyWalletRegistryAddress(
+        address _lazyWalletRegistry
+    ) public onlyOwner returns (address) {
+        require(_lazyWalletRegistry != address(0), "Cannot be zero address");
+
+        lazyWalletRegistry = _lazyWalletRegistry;
+
+        emit UpdatedLazyWalletRegistryAddress(_lazyWalletRegistry);
+    }
+
+    /// @notice Allow LazyWalletRegistry to deploy a device wallet and an eSIM wallet on behalf of a user
+    /// @param _deviceOwner Address of the device owner
+    /// @param _deviceUniqueIdentifier Unique device identifier associated with the device
+    /// @return Return device wallet address and list of addresses of all the eSIM wallets
+    function deployLazyWallet(
+        address _deviceOwner,
+        string calldata _deviceUniqueIdentifier,
+        uint256 _salt,
+        string[] calldata _eSIMUniqueIdentifiers,
+        DataBundleDetails[][] memory _dataBundleDetails
+    ) external onlyLazyWalletRegistry returns (address, address[]) {
+        require(ownerToDeviceWallet[_deviceOwner] == address(0), "User is already an owner of a device wallet");
+        require(
+            uniqueIdentifierToDeviceWallet[_deviceUniqueIdentifier] == address(0),
+            "Device wallet already exists"
+        );
+
+        address deviceWallet = deviceWalletFactory.deployDeviceWallet(_deviceUniqueIdentifier, _deviceOwner, _salt);
+        _updateDeviceWalletInfo(deviceWallet, _deviceUniqueIdentifier, _deviceOwner);
+
+        address[] eSIMWallets;
+
+        for(uint256 i=0; i<_eSIMUniqueIdentifiers.length; ++i) {
+            // increase salt for subsequent eSIM wallet deployments
+            address eSIMWallet = eSIMWalletFactory.deployESIMWallet(_deviceOwner, (_salt + i));
+            emit WalletDeployed(_deviceUniqueIdentifier, deviceWallet, eSIMWallet);
+            _updateESIMInfo(eSIMWallet, deviceWallet);
+
+            // Since the eSIM unique identifier is already known in this scenario
+            // We can execute the setESIMUniqueIdentifierForAnESIMWallet function in same transaction as deploying the smart wallet
+            DeviceWallet(deviceWallet).setESIMUniqueIdentifierForAnESIMWallet(eSIMWallet, _eSIMUniqueIdentifiers[i]);
+
+            // Populate data bundle purchase details for the eSIM wallet
+            ESIMWallet(eSIMWallet).populateHistory(_dataBundleDetails[i]);
+
+            eSIMWallets.push(eSIMWallet);
+        }
+
+        return (deviceWallet, eSIMWallets);
+    }
 
     function _updateDeviceWalletInfo(
         address _deviceWallet,
