@@ -135,8 +135,6 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
 
     /*
         TODO: 
-        * Make changes in device wallet to add history
-        * Make changes in eSIM wallet to add history and other important data
         * Use populate history in the deploy lazy wallet function
         * Look into eSIM state and if possible create 
         an architecture standard for eSIM profile,
