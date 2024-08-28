@@ -3,6 +3,8 @@ pragma solidity ^0.8.18;
 // SPDX-License-Identifier: MIT
 
 import {DeviceWallet} from "./device-wallet/DeviceWallet.sol";
+import {ESIMWallet} from "./esim-wallet/ESIMWallet.sol";
+import "./CustomStructs.sol";
 
 error OnlyLazyWalletRegistry();
 
@@ -75,7 +77,8 @@ contract RegistryHelper {
         address _deviceOwner,
         string calldata _deviceUniqueIdentifier,
         string calldata _eSIMUniqueIdentifier,
-        uint256 _salt
+        uint256 _salt,
+        DataBundleDetails[] memory _dataBundleDetails
     ) external onlyLazyWalletRegistry returns (address, address) {
         require(bytes(_deviceUniqueIdentifier).length >= 1, "Device unique identifier cannot be empty");
         require(bytes(_eSIMUniqueIdentifier).length >= 1, "eSIM unique identifier cannot be empty");
@@ -96,6 +99,9 @@ contract RegistryHelper {
         // Since the eSIM unique identifier is already known in this scenario
         // We can execute the setESIMUniqueIdentifierForAnESIMWallet function in same transaction as deploying the smart wallet
         DeviceWallet(deviceWallet).setESIMUniqueIdentifierForAnESIMWallet(eSIMWallet, _eSIMUniqueIdentifier);
+
+        // Populate data bundle purchase details for the eSIM wallet
+        ESIMWallet(eSIMWallet).populateHistory(_dataBundleDetails);
 
         return (deviceWallet, eSIMWallet);
     }

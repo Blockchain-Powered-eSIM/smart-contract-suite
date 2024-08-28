@@ -10,6 +10,7 @@ import {DeviceWallet} from "../device-wallet/DeviceWallet.sol";
 import "../CustomStructs.sol";
 
 error OnlyDeviceWallet();
+error OnlyRegistry();
 error FailedToTransfer();
 
 contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
@@ -28,6 +29,9 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
     /// @notice Emitted when the eSIM unique identifier is initialised
     event ESIMUniqueIdentifierInitialised(string _eSIMUniqueIdentifier);
 
+    /// @notice Emitted when the lazy wallet registry populates history after wallet deployment
+    event TransactionHistoryPopulated(DataBundleDetails _dataBundleDetails);
+
     /// @notice Emitted when ETH moves out of this contract
     event ETHSent(address indexed _recipient, uint256 _amount);
 
@@ -40,11 +44,8 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
     /// @notice Device wallet contract instance associated with this eSIM wallet
     DeviceWallet public deviceWallet;
 
-    /// @notice Total number of data bundle transactions made by user
-    uint256 public lastTransactionCount;
-
-    /// @notice lastTransactionCount -> (data bundle ID, data bundle price)
-    mapping(uint256 => DataBundleDetails) public transactionHistory;
+    /// @notice Array of all the data bundle purchase
+    DataBundleDetails[] public transactionHistory;
 
     /// @dev A map from owner and spender to transfer approval. Determines whether
     ///      the spender can transfer this wallet from the owner.
@@ -52,6 +53,11 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
 
     modifier onlyDeviceWallet() {
         if (msg.sender != address(deviceWallet)) revert OnlyDeviceWallet();
+        _;
+    }
+
+    modifier onlyRegistry() {
+        if(msg.sender != address(deviceWallet.registry())) revert OnlyRegistry();
         _;
     }
 
@@ -75,7 +81,6 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
 
         eSIMWalletFactory = _eSIMWalletFactoryAddress;
         deviceWallet = DeviceWallet(payable(_deviceWalletAddress));
-        lastTransactionCount = 0;
 
         __Ownable_init(_eSIMWalletOwner);
 
@@ -98,7 +103,7 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
     /// @notice Function to make payment for the data bundle
     /// @param _dataBundleDetail Details of the data bundle being bought. (dataBundleID, dataBundlePrice)
     /// @return True if the transaction is successful
-    function buyDataBundle(DataBundleDetails calldata _dataBundleDetail) public payable returns (bool) {
+    function buyDataBundle(DataBundleDetails memory _dataBundleDetail) public payable returns (bool) {
         require(bytes(_dataBundleDetail.dataBundleID).length > 0, "Data bundle ID cannot be empty");
         require(_dataBundleDetail.dataBundlePrice > 0, "Price cannot be zero");
 
@@ -115,14 +120,23 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
         address vault = deviceWallet.getVaultAddress();
         _transferETH(vault, _dataBundleDetail.dataBundlePrice);
 
-        DataBundleDetails storage dataBundleDetails = transactionHistory[lastTransactionCount];
-        dataBundleDetails.dataBundleID = _dataBundleDetail.dataBundleID;
-        dataBundleDetails.dataBundlePrice = _dataBundleDetail.dataBundlePrice;
-        transactionHistory[lastTransactionCount] = dataBundleDetails;
+        transactionHistory.push(_dataBundleDetail);
 
         emit DataBundleBought(_dataBundleDetail.dataBundleID, _dataBundleDetail.dataBundlePrice, msg.value, lastTransactionCount);
 
-        lastTransactionCount += 1;
+        return true;
+    }
+
+    /// @notice Function to populate history for lazy wallets. Can only be called once, by lazy wallet registry
+    /// @param _dataBundleDetails Array of all the data bundle purchase details before the wallet was deployed
+    function populateHistory(DataBundleDetails[] memory _dataBundleDetails) external onlyRegistry returns (bool) {
+        require(transactionHistory.length == 0, "Cannot populate an already in-use wallet");
+
+        // push memory to storage
+        // more gas optimised compared to loop iteration for copying data
+        transactionHistory = _dataBundleDetails;
+
+        emit TransactionHistoryPopulated(_dataBundleDetails);
 
         return true;
     }
