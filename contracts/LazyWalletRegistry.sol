@@ -21,8 +21,8 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         address _deviceOwner,
         address deviceWallet,
         string _deviceUniqueIdentifier,
-        address eSIMWallet,
-        string _eSIMUniqueIdentifier
+        address[] eSIMWallets,
+        string[] _eSIMUniqueIdentifiers
     );
 
     /// @notice Address (owned/controlled by eSIM wallet project) that can upgrade contracts
@@ -100,45 +100,51 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         }
     }
 
-    /// @notice Function to deploy a device wallet and an eSIM wallet on behalf of a user, also setting the eSIM identifier
+    /// @notice Function to deploy a device wallet and eSIM wallets on behalf of a user, also setting the eSIM identifiers
+    /// @dev _salt should never be near to max value of uint256, if it is, the function call fails
     /// @param _deviceOwner Address of the device owner
     /// @param _deviceUniqueIdentifier Unique device identifier associated with the device
-    /// @param _eSIMUniqueIdentifier Unique eSIM identifier associated with the eSIM of the device
-    /// @return Return device wallet address and eSIM wallet address
+    /// @return Return device wallet address and list of eSIM wallet addresses
     function deployLazyWalletAndSetESIMIdentifier(
         address _deviceOwner,
         string calldata _deviceUniqueIdentifier,
-        string calldata _eSIMUniqueIdentifier,
         uint256 _salt
-    ) external onlyESIMWalletAdmin returns (address, address) {
+    ) external onlyESIMWalletAdmin returns (address, address[]) {
         require(isLazyWalletDeployed(_deviceUniqueIdentifier) == false, "Device identifier is already associated with a device wallet");
 
         address deviceWallet;
-        address eSIMWallet;
-        (deviceWallet, eSIMWallet) = registry.deployLazyWallet(
+        address[] eSIMWallets;
+
+        AssociatedESIMIdentifiers associatedESIMIdentifiers = eSIMIdentifiersAssociatedWithDeviceIdentifier[_deviceUniqueIdentifier];
+        string[] eSIMUniqueIdentifiers = associatedESIMIdentifiers.eSIMIdentifiers;
+
+        DataBundleDetails[][] memory listOfDataBundleDetails;
+
+        for(uint256 i=0; i<eSIMUniqueIdentifiers.length; ++i) {
+            ESIMDetails memory eSIMDetails = deviceIdentifierToESIMDetails[_deviceUniqueIdentifier][_eSIMUniqueIdentifier];
+            DataBundleDetails[] memory dataBundleDetails = eSIMDetails.history;
+            listOfDataBundleDetails.push(dataBundleDetails);
+        }
+
+        (deviceWallet, eSIMWallets) = registry.deployLazyWallet(
             _deviceOwner,
             _deviceUniqueIdentifier,
-            _eSIMUniqueIdentifier,
-            _salt
+            _salt,
+            eSIMUniqueIdentifiers,
+            listOfDataBundleDetails
         );
 
         emit LazyWalletDeployed(
             _deviceOwner,
             deviceWallet,
             _deviceUniqueIdentifier,
-            eSIMWallet,
-            _eSIMUniqueIdentifier
+            eSIMWallets,
+            eSIMUniqueIdentifiers
         );
 
-        return (deviceWallet, eSIMWallet);
+        return (deviceWallet, eSIMWallets);
     }
 
-    /*
-        TODO: 
-        * Use populate history in the deploy lazy wallet function
-        * Look into eSIM state and if possible create 
-        an architecture standard for eSIM profile,
-    */
     /// @notice Internal function for populating information of all the eSIMs related to a device
     /// @dev The _eSIMUniqueIdentifiers array can have multiple repeating occurrences since there can be multiple purchases per eSIM
     function _populateHistory(
@@ -146,6 +152,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         string[] calldata _eSIMUniqueIdentifiers,
         DataBundleDetails[] calldata _dataBundleDetails
     ) internal {
+        require(bytes(_deviceUniqueIdentifier).length >= 1, "Device unique identifier cannot be empty");
         require(isLazyWalletDeployed(_deviceUniqueIdentifier) == false, "Device identifier is already associated with a device wallet");
         
         uint256 len = _eSIMUniqueIdentifiers.length;
@@ -153,6 +160,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
 
         for(uint256 i=0; i<len; ++i) {
             string eSIMUniqueIdentifier = _eSIMUniqueIdentifiers[i];
+            require(bytes(eSIMUniqueIdentifier).length >= 1, "eSIM unique identifier cannot be empty");
 
             if(eSIMIdentifierToDeviceIdentifier[eSIMUniqueIdentifier].length == 0) {
                 eSIMIdentifierToDeviceIdentifier[eSIMUniqueIdentifier] = _deviceUniqueIdentifier;

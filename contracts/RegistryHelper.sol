@@ -72,16 +72,14 @@ contract RegistryHelper {
     /// @notice Allow LazyWalletRegistry to deploy a device wallet and an eSIM wallet on behalf of a user
     /// @param _deviceOwner Address of the device owner
     /// @param _deviceUniqueIdentifier Unique device identifier associated with the device
-    /// @return Return device wallet address and eSIM wallet address
+    /// @return Return device wallet address and list of addresses of all the eSIM wallets
     function deployLazyWallet(
         address _deviceOwner,
         string calldata _deviceUniqueIdentifier,
-        string calldata _eSIMUniqueIdentifier,
         uint256 _salt,
-        DataBundleDetails[] memory _dataBundleDetails
-    ) external onlyLazyWalletRegistry returns (address, address) {
-        require(bytes(_deviceUniqueIdentifier).length >= 1, "Device unique identifier cannot be empty");
-        require(bytes(_eSIMUniqueIdentifier).length >= 1, "eSIM unique identifier cannot be empty");
+        string[] calldata _eSIMUniqueIdentifiers,
+        DataBundleDetails[][] memory _dataBundleDetails
+    ) external onlyLazyWalletRegistry returns (address, address[]) {
         require(ownerToDeviceWallet[_deviceOwner] == address(0), "User is already an owner of a device wallet");
         require(
             uniqueIdentifierToDeviceWallet[_deviceUniqueIdentifier] == address(0),
@@ -91,19 +89,25 @@ contract RegistryHelper {
         address deviceWallet = deviceWalletFactory.deployDeviceWallet(_deviceUniqueIdentifier, _deviceOwner, _salt);
         _updateDeviceWalletInfo(deviceWallet, _deviceUniqueIdentifier, _deviceOwner);
 
-        address eSIMWallet = eSIMWalletFactory.deployESIMWallet(_deviceOwner, _salt);
-        _updateESIMInfo(eSIMWallet, deviceWallet);
+        address[] eSIMWallets;
 
-        emit WalletDeployed(_deviceUniqueIdentifier, deviceWallet, eSIMWallet);
+        for(uint256 i=0; i<_eSIMUniqueIdentifiers.length; ++i) {
+            // increase salt for subsequent eSIM wallet deployments
+            address eSIMWallet = eSIMWalletFactory.deployESIMWallet(_deviceOwner, (_salt + i));
+            emit WalletDeployed(_deviceUniqueIdentifier, deviceWallet, eSIMWallet);
+            _updateESIMInfo(eSIMWallet, deviceWallet);
 
-        // Since the eSIM unique identifier is already known in this scenario
-        // We can execute the setESIMUniqueIdentifierForAnESIMWallet function in same transaction as deploying the smart wallet
-        DeviceWallet(deviceWallet).setESIMUniqueIdentifierForAnESIMWallet(eSIMWallet, _eSIMUniqueIdentifier);
+            // Since the eSIM unique identifier is already known in this scenario
+            // We can execute the setESIMUniqueIdentifierForAnESIMWallet function in same transaction as deploying the smart wallet
+            DeviceWallet(deviceWallet).setESIMUniqueIdentifierForAnESIMWallet(eSIMWallet, _eSIMUniqueIdentifiers[i]);
 
-        // Populate data bundle purchase details for the eSIM wallet
-        ESIMWallet(eSIMWallet).populateHistory(_dataBundleDetails);
+            // Populate data bundle purchase details for the eSIM wallet
+            ESIMWallet(eSIMWallet).populateHistory(_dataBundleDetails[i]);
 
-        return (deviceWallet, eSIMWallet);
+            eSIMWallets.push(eSIMWallet);
+        }
+
+        return (deviceWallet, eSIMWallets);
     }
 
     function _updateDeviceWalletInfo(
