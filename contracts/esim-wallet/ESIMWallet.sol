@@ -75,6 +75,7 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
 
         eSIMWalletFactory = _eSIMWalletFactoryAddress;
         deviceWallet = DeviceWallet(payable(_deviceWalletAddress));
+        lastTransactionCount = 0;
 
         __Ownable_init(_eSIMWalletOwner);
 
@@ -95,31 +96,31 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
     }
 
     /// @notice Function to make payment for the data bundle
-    /// @param _dataBundleID string data bundle ID from the backend catalogue
-    /// @param _dataBundlePrice uint256 price for the data bundle
+    /// @param _dataBundleDetail Details of the data bundle being bought. (dataBundleID, dataBundlePrice)
     /// @return True if the transaction is successful
-    function buyDataBundle(string calldata _dataBundleID, uint256 _dataBundlePrice) public payable returns (bool) {
-        require(bytes(_dataBundleID).length > 0, "Data bundle ID cannot be empty");
-        require(_dataBundlePrice > 0, "Price cannot be zero");
+    function buyDataBundle(DataBundleDetails calldata _dataBundleDetail) public payable returns (bool) {
+        require(bytes(_dataBundleDetail.dataBundleID).length > 0, "Data bundle ID cannot be empty");
+        require(_dataBundleDetail.dataBundlePrice > 0, "Price cannot be zero");
 
         // 1. msg.value is received by contract
-        // 2. if wallet balance is less than _dataBundlePrice, pull ETH from device wallet
-        // 3. send _dataBundlePrice amount of ETH to vault
+        // 2. if wallet balance is less than dataBundlePrice, pull ETH from device wallet
+        // 3. send dataBundlePrice amount of ETH to vault
         uint256 walletBalance = address(this).balance;
 
-        if (walletBalance < _dataBundlePrice) {
-            uint256 remainingETH = _dataBundlePrice - walletBalance;
+        if (walletBalance < _dataBundleDetail.dataBundlePrice) {
+            uint256 remainingETH = _dataBundleDetail.dataBundlePrice - walletBalance;
             deviceWallet.pullETH(remainingETH);
         }
 
         address vault = deviceWallet.getVaultAddress();
-        _transferETH(vault, _dataBundlePrice);
+        _transferETH(vault, _dataBundleDetail.dataBundlePrice);
 
         DataBundleDetails storage dataBundleDetails = transactionHistory[lastTransactionCount];
-        dataBundleDetails.dataBundleID = _dataBundleID;
-        dataBundleDetails.dataBundlePrice = _dataBundlePrice;
+        dataBundleDetails.dataBundleID = _dataBundleDetail.dataBundleID;
+        dataBundleDetails.dataBundlePrice = _dataBundleDetail.dataBundlePrice;
+        transactionHistory[lastTransactionCount] = dataBundleDetails;
 
-        emit DataBundleBought(_dataBundleID, _dataBundlePrice, msg.value, lastTransactionCount);
+        emit DataBundleBought(_dataBundleDetail.dataBundleID, _dataBundleDetail.dataBundlePrice, msg.value, lastTransactionCount);
 
         lastTransactionCount += 1;
 
