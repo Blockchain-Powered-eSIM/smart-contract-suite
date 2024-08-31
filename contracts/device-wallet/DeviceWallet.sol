@@ -16,7 +16,7 @@ import {Account4337} from "../aa-helper/Account4337.sol";
 
 error OnlyRegistryOrDeviceWalletFactoryOrOwner();
 error OnlyDeviceWalletOrOwner();
-error OnlyESIMWalletAdmin();
+error OnlyESIMWalletAdminOrLazyWallet();
 error OnlyESIMWalletAdminOrDeviceWalletOwner();
 error OnlyESIMWalletAdminOrDeviceWalletFactory();
 error OnlyAssociatedESIMWallets();
@@ -83,14 +83,17 @@ contract DeviceWallet is Initializable, Account4337 {
         _;
     }
 
-    function _onlyESIMWalletAdmin() private view {
-        if (msg.sender != registry.deviceWalletFactory().eSIMWalletAdmin()) {
-            revert OnlyESIMWalletAdmin();
+    function _onlyESIMWalletAdminOrLazyWallet() private view {
+        if (
+            msg.sender != registry.deviceWalletFactory().eSIMWalletAdmin() &&
+            msg.sender != registry.lazyWalletRegistry()
+        ) {
+            revert OnlyESIMWalletAdminOrLazyWallet();
         }
     }
 
-    modifier onlyESIMWalletAdmin() {
-        _onlyESIMWalletAdmin();
+    modifier onlyESIMWalletAdminOrLazyWallet() {
+        _onlyESIMWalletAdminOrLazyWallet();
         _;
     }
 
@@ -142,12 +145,13 @@ contract DeviceWallet is Initializable, Account4337 {
     }
 
     /// @notice Allow wallet owner or admin to set unique identifier for their eSIM wallet
+    /// @dev Allow lazy wallet registry to call the function for fiat users who later decided to get a smart wallet
     /// @param _eSIMWalletAddress Address of the eSIM wallet smart contract
     /// @param _eSIMUniqueIdentifier String unique identifier for the eSIM wallet
     function setESIMUniqueIdentifierForAnESIMWallet(
         address _eSIMWalletAddress,
         string calldata _eSIMUniqueIdentifier
-    ) public onlyESIMWalletAdmin returns (string memory) {
+    ) public onlyESIMWalletAdminOrLazyWallet() returns (string memory) {
         require(
             registry.isESIMWalletValid(_eSIMWalletAddress) != address(0),
             "Unknown eSIM wallet address provided"

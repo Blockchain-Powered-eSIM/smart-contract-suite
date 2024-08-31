@@ -11,8 +11,10 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@account-abstraction/contracts/core/BaseAccount.sol";
 import "@account-abstraction/contracts/core/Helpers.sol";
 import "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
+// To allow the smart wallet to handle ERC20 and ERC721 tokens
+import {TokenCallbackHandler} from "@account-abstraction/contracts/samples/callback/TokenCallbackHandler.sol";
 
-contract Account4337 is BaseAccount, Initializable, UUPSUpgradeable {
+contract Account4337 is BaseAccount, Initializable, UUPSUpgradeable, TokenCallbackHandler {
     using MessageHashUtils for bytes32;
     using ECDSA for bytes32;
 
