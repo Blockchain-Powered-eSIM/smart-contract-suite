@@ -10,7 +10,7 @@ import {Registry} from "./Registry.sol";
 import "./CustomStructs.sol";
 
 /// @notice Contract for deploying the factory contracts and maintaining registry
-contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeable, RegistryHelper {
+contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeable{
 
     /// @notice Emitted when data related to a device is updated
     event DataUpdatedForDevice(
@@ -87,7 +87,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
     /// @param _eSIMUniqueIdentifiers 2D array of all the eSIMs corresponding to their device identifiers.
     /// @param _dataBundleDetails 2D array of all the new data bundles bought for the respective eSIMs
     function batchPopulateHistory(
-        string[] calldata _deviceUniqueIdentifiers,
+        string[] memory _deviceUniqueIdentifiers,
         string[][] calldata _eSIMUniqueIdentifiers,
         DataBundleDetails[][] calldata _dataBundleDetails
     ) external {
@@ -109,21 +109,21 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         address _deviceOwner,
         string calldata _deviceUniqueIdentifier,
         uint256 _salt
-    ) external onlyESIMWalletAdmin returns (address, address[]) {
+    ) external onlyESIMWalletAdmin returns (address, address[] memory) {
         require(isLazyWalletDeployed(_deviceUniqueIdentifier) == false, "Device identifier is already associated with a device wallet");
 
         address deviceWallet;
-        address[] eSIMWallets;
+        address[] memory eSIMWallets;
 
-        AssociatedESIMIdentifiers associatedESIMIdentifiers = eSIMIdentifiersAssociatedWithDeviceIdentifier[_deviceUniqueIdentifier];
-        string[] eSIMUniqueIdentifiers = associatedESIMIdentifiers.eSIMIdentifiers;
+        AssociatedESIMIdentifiers memory associatedESIMIdentifiers = eSIMIdentifiersAssociatedWithDeviceIdentifier[_deviceUniqueIdentifier];
+        string[] memory eSIMUniqueIdentifiers = associatedESIMIdentifiers.eSIMIdentifiers;
 
         DataBundleDetails[][] memory listOfDataBundleDetails;
 
         for(uint256 i=0; i<eSIMUniqueIdentifiers.length; ++i) {
-            ESIMDetails memory eSIMDetails = deviceIdentifierToESIMDetails[_deviceUniqueIdentifier][_eSIMUniqueIdentifier];
+            ESIMDetails memory eSIMDetails = deviceIdentifierToESIMDetails[_deviceUniqueIdentifier][eSIMUniqueIdentifiers[i]];
             DataBundleDetails[] memory dataBundleDetails = eSIMDetails.history;
-            listOfDataBundleDetails.push(dataBundleDetails);
+            listOfDataBundleDetails[i] = dataBundleDetails;
         }
 
         (deviceWallet, eSIMWallets) = registry.deployLazyWallet(
@@ -148,7 +148,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
     /// @notice Internal function for populating information of all the eSIMs related to a device
     /// @dev The _eSIMUniqueIdentifiers array can have multiple repeating occurrences since there can be multiple purchases per eSIM
     function _populateHistory(
-        string calldata _deviceUniqueIdentifier,
+        string storage _deviceUniqueIdentifier,
         string[] calldata _eSIMUniqueIdentifiers,
         DataBundleDetails[] calldata _dataBundleDetails
     ) internal {
@@ -159,11 +159,15 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         require(len == _dataBundleDetails.length, "Unequal array provided");
 
         for(uint256 i=0; i<len; ++i) {
-            string eSIMUniqueIdentifier = _eSIMUniqueIdentifiers[i];
+            string calldata eSIMUniqueIdentifier = _eSIMUniqueIdentifiers[i];
             require(bytes(eSIMUniqueIdentifier).length >= 1, "eSIM unique identifier cannot be empty");
 
-            if(eSIMIdentifierToDeviceIdentifier[eSIMUniqueIdentifier].length == 0) {
-                eSIMIdentifierToDeviceIdentifier[eSIMUniqueIdentifier] = _deviceUniqueIdentifier;
+            string storage deviceIdentifier = eSIMIdentifierToDeviceIdentifier[eSIMUniqueIdentifier];
+
+            if(bytes(deviceIdentifier).length == 0) {
+                deviceIdentifier = _deviceUniqueIdentifier;
+                // TODO: check if this line is needed
+                eSIMIdentifierToDeviceIdentifier[eSIMUniqueIdentifier] = deviceIdentifier;
 
                 AssociatedESIMIdentifiers storage associatedESIMIdentifiers = eSIMIdentifiersAssociatedWithDeviceIdentifier[_deviceUniqueIdentifier];
                 string[] storage listOfIdentifiers = associatedESIMIdentifiers.eSIMIdentifiers;

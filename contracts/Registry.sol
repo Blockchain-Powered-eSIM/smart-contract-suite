@@ -31,12 +31,6 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
     /// @notice Address (owned/controlled by eSIM wallet project) that can upgrade contracts
     address public upgradeManager;
 
-    /// @notice Device wallet factory instance
-    DeviceWalletFactory public deviceWalletFactory;
-
-    /// @notice eSIM wallet factory instance
-    ESIMWalletFactory public eSIMWalletFactory;
-
     modifier onlyDeviceWallet() {
         if(isDeviceWalletValid[msg.sender] == address(0)) revert OnlyDeviceWallet();
         _;
@@ -94,6 +88,17 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
         eSIMWalletFactory = ESIMWalletFactory(address(eSIMWalletFactoryProxy));
 
         __Ownable_init(_upgradeManager);
+    }
+
+    /// @notice Function to add or update the lazy wallet registry address
+    function addOrUpdateLazyWalletRegistryAddress(
+        address _lazyWalletRegistry
+    ) public onlyOwner returns (address) {
+        require(_lazyWalletRegistry != address(0), "Cannot be zero address");
+
+        lazyWalletRegistry = _lazyWalletRegistry;
+
+        emit UpdatedLazyWalletRegistryAddress(_lazyWalletRegistry);
     }
 
     /// Allow anyone to deploy a device wallet and an eSIM wallet for themselves

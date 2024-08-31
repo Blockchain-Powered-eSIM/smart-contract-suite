@@ -23,14 +23,14 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
 
     /// Emitted when the payment for a data bundle is made
     event DataBundleBought(
-        string _dataBundleID, uint256 _dataBundlePrice, uint256 _ethFromUser, uint256 _transactionCount
+        string _dataBundleID, uint256 _dataBundlePrice, uint256 _ethFromUser
     );
 
     /// @notice Emitted when the eSIM unique identifier is initialised
     event ESIMUniqueIdentifierInitialised(string _eSIMUniqueIdentifier);
 
     /// @notice Emitted when the lazy wallet registry populates history after wallet deployment
-    event TransactionHistoryPopulated(DataBundleDetails _dataBundleDetails);
+    event TransactionHistoryPopulated(DataBundleDetails[] _dataBundleDetails);
 
     /// @notice Emitted when ETH moves out of this contract
     event ETHSent(address indexed _recipient, uint256 _amount);
@@ -122,7 +122,7 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
 
         transactionHistory.push(_dataBundleDetail);
 
-        emit DataBundleBought(_dataBundleDetail.dataBundleID, _dataBundleDetail.dataBundlePrice, msg.value, lastTransactionCount);
+        emit DataBundleBought(_dataBundleDetail.dataBundleID, _dataBundleDetail.dataBundlePrice, msg.value);
 
         return true;
     }
