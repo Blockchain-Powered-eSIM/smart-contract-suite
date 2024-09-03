@@ -132,9 +132,15 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
     function populateHistory(DataBundleDetails[] memory _dataBundleDetails) external onlyRegistry returns (bool) {
         require(transactionHistory.length == 0, "Cannot populate an already in-use wallet");
 
-        // push memory to storage
-        // more gas optimised compared to loop iteration for copying data
-        transactionHistory = _dataBundleDetails;
+        // Using transactionHistory = _dataBundleDetails; would be gas efficient
+        // but it is not yet supported for struct types, hence using the loop
+        for (uint256 i = 0; i < _dataBundleDetails.length; i++) {
+            // Create a temporary variable in storage
+            transactionHistory.push(); // Increase the length of transactionHistory by 1
+            DataBundleDetails storage newTransaction = transactionHistory[transactionHistory.length - 1];
+            newTransaction.dataBundleID = _dataBundleDetails[i].dataBundleID;
+            newTransaction.dataBundlePrice = _dataBundleDetails[i].dataBundlePrice;
+        }
 
         emit TransactionHistoryPopulated(_dataBundleDetails);
 

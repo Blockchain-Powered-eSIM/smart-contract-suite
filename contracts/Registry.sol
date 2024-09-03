@@ -99,6 +99,8 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
         lazyWalletRegistry = _lazyWalletRegistry;
 
         emit UpdatedLazyWalletRegistryAddress(_lazyWalletRegistry);
+
+        return lazyWalletRegistry;
     }
 
     /// Allow anyone to deploy a device wallet and an eSIM wallet for themselves

@@ -74,7 +74,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
 
     /// @notice Function to check if a lazy wallet has been deployed or not
     /// @return Boolean. True if deployed, false otherwise
-    function isLazyWalletDeployed(string calldata _deviceUniqueIdentifier) public returns (bool) {
+    function isLazyWalletDeployed(string calldata _deviceUniqueIdentifier) public view returns (bool) {
         if(registry.uniqueIdentifierToDeviceWallet(_deviceUniqueIdentifier) != address(0)) {
             return true;
         }
@@ -87,7 +87,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
     /// @param _eSIMUniqueIdentifiers 2D array of all the eSIMs corresponding to their device identifiers.
     /// @param _dataBundleDetails 2D array of all the new data bundles bought for the respective eSIMs
     function batchPopulateHistory(
-        string[] memory _deviceUniqueIdentifiers,
+        string[] calldata _deviceUniqueIdentifiers,
         string[][] calldata _eSIMUniqueIdentifiers,
         DataBundleDetails[][] calldata _dataBundleDetails
     ) external {
@@ -148,7 +148,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
     /// @notice Internal function for populating information of all the eSIMs related to a device
     /// @dev The _eSIMUniqueIdentifiers array can have multiple repeating occurrences since there can be multiple purchases per eSIM
     function _populateHistory(
-        string storage _deviceUniqueIdentifier,
+        string calldata _deviceUniqueIdentifier,
         string[] calldata _eSIMUniqueIdentifiers,
         DataBundleDetails[] calldata _dataBundleDetails
     ) internal {
@@ -162,17 +162,23 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
             string calldata eSIMUniqueIdentifier = _eSIMUniqueIdentifiers[i];
             require(bytes(eSIMUniqueIdentifier).length >= 1, "eSIM unique identifier cannot be empty");
 
-            string storage deviceIdentifier = eSIMIdentifierToDeviceIdentifier[eSIMUniqueIdentifier];
-
-            if(bytes(deviceIdentifier).length == 0) {
-                deviceIdentifier = _deviceUniqueIdentifier;
+            if(bytes(eSIMIdentifierToDeviceIdentifier[eSIMUniqueIdentifier]).length == 0) {
+                eSIMIdentifierToDeviceIdentifier[eSIMUniqueIdentifier] = _deviceUniqueIdentifier;
 
                 AssociatedESIMIdentifiers storage associatedESIMIdentifiers = eSIMIdentifiersAssociatedWithDeviceIdentifier[_deviceUniqueIdentifier];
+                associatedESIMIdentifiers.deviceUniqueIdentifier = _deviceUniqueIdentifier;
                 associatedESIMIdentifiers.eSIMIdentifiers.push(eSIMUniqueIdentifier);
             }
 
             ESIMDetails storage eSIMDetails = deviceIdentifierToESIMDetails[_deviceUniqueIdentifier][eSIMUniqueIdentifier];
-            eSIMDetails.history.push(_dataBundleDetails[i]);
+            if(bytes(eSIMDetails.eSIMUniqueIdentifier).length == 0) {
+                eSIMDetails.eSIMUniqueIdentifier = eSIMUniqueIdentifier;
+            }
+            // Manually add a new struct to history and then set its fields
+            eSIMDetails.history.push();  // Increase the array length by one
+            DataBundleDetails storage newDataBundleDetail = eSIMDetails.history[eSIMDetails.history.length - 1];
+            newDataBundleDetail.dataBundleID = _dataBundleDetails[i].dataBundleID;
+            newDataBundleDetail.dataBundlePrice = _dataBundleDetails[i].dataBundlePrice;
         }
 
         emit DataUpdatedForDevice(_deviceUniqueIdentifier, _eSIMUniqueIdentifiers, _dataBundleDetails);

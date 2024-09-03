@@ -10,10 +10,12 @@ struct DataBundleDetails {
 
 /// @notice Details related to eSIM purchased by the fiat user
 struct ESIMDetails {
+    string eSIMUniqueIdentifier;
     DataBundleDetails[] history;
 }
 
 /// @notice Struct to store list of all eSIMs associated with a device
 struct AssociatedESIMIdentifiers {
+    string deviceUniqueIdentifier;
     string[] eSIMIdentifiers;
 }
