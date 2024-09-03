@@ -166,19 +166,13 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
 
             if(bytes(deviceIdentifier).length == 0) {
                 deviceIdentifier = _deviceUniqueIdentifier;
-                // TODO: check if this line is needed
-                eSIMIdentifierToDeviceIdentifier[eSIMUniqueIdentifier] = deviceIdentifier;
 
                 AssociatedESIMIdentifiers storage associatedESIMIdentifiers = eSIMIdentifiersAssociatedWithDeviceIdentifier[_deviceUniqueIdentifier];
-                string[] storage listOfIdentifiers = associatedESIMIdentifiers.eSIMIdentifiers;
-                listOfIdentifiers.push(eSIMUniqueIdentifier);
-                associatedESIMIdentifiers.eSIMIdentifiers = listOfIdentifiers;
+                associatedESIMIdentifiers.eSIMIdentifiers.push(eSIMUniqueIdentifier);
             }
 
             ESIMDetails storage eSIMDetails = deviceIdentifierToESIMDetails[_deviceUniqueIdentifier][eSIMUniqueIdentifier];
-            DataBundleDetails[] storage details = eSIMDetails.history;
-            details.push(_dataBundleDetails[i]);
-            eSIMDetails.history = details;
+            eSIMDetails.history.push(_dataBundleDetails[i]);
         }
 
         emit DataUpdatedForDevice(_deviceUniqueIdentifier, _eSIMUniqueIdentifiers, _dataBundleDetails);
