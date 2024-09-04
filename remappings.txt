@@ -1,3 +1,4 @@
 forge-std/=lib/forge-std/src/
 p256-verifier/=lib/p256-verifier/src/
 @openzeppelin/=node_modules/@openzeppelin/
+solady/utils/=lib/solady/src/utils/
