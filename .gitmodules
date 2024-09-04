@@ -7,3 +7,6 @@
 [submodule "lib/solady"]
 	path = lib/solady
 	url = https://github.com/vectorized/solady
+[submodule "lib/FreshCryptoLib"]
+	path = lib/FreshCryptoLib
+	url = https://github.com/rdubois-crypto/FreshCryptoLib
