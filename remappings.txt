@@ -4,3 +4,4 @@ p256-verifier/=lib/p256-verifier/src/
 solady/utils/=lib/solady/src/utils/
 FreshCryptoLib/=lib/FreshCryptoLib/solidity/src/
 openzeppelin-contracts/=lib/openzeppelin-contracts/
+openzeppelin-contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/
