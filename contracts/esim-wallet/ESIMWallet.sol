@@ -2,9 +2,9 @@
 
 pragma solidity ^0.8.18;
 
-import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import {Address} from "@openzeppelin/contracts/utils/Address.sol";
+import {OwnableUpgradeable} from "openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
+import {Initializable} from "openzeppelin-contracts-upgradeable/contracts/proxy/utils/Initializable.sol";
+import {Address} from "openzeppelin-contracts/contracts/utils/Address.sol";
 import {IOwnableESIMWallet} from "../interfaces/IOwnableESIMWallet.sol";
 import {DeviceWallet} from "../device-wallet/DeviceWallet.sol";
 import "../CustomStructs.sol";

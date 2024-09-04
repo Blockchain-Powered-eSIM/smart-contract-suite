@@ -2,11 +2,11 @@ pragma solidity ^0.8.18;
 
 // SPDX-License-Identifier: MIT
 
-import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import {Address} from "@openzeppelin/contracts/utils/Address.sol";
+import {Initializable} from "openzeppelin-contracts-upgradeable/contracts/proxy/utils/Initializable.sol";
+import {OwnableUpgradeable} from "openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
+import {Address} from "openzeppelin-contracts/contracts/utils/Address.sol";
 
-import "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
+import "account-abstraction/contracts/interfaces/IEntryPoint.sol";
 
 import {Registry} from "../Registry.sol";
 import {DeviceWalletFactory} from "./DeviceWalletFactory.sol";

@@ -4,15 +4,15 @@ pragma solidity ^0.8.18;
 
 // import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
-import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "@account-abstraction/contracts/core/BaseAccount.sol";
-import "@account-abstraction/contracts/core/Helpers.sol";
-import "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
+import "openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol";
+import "openzeppelin-contracts/contracts/utils/cryptography/MessageHashUtils.sol";
+import "openzeppelin-contracts-upgradeable/contracts/proxy/utils/Initializable.sol";
+import "openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
+import "account-abstraction/contracts/core/BaseAccount.sol";
+import "account-abstraction/contracts/core/Helpers.sol";
+import "account-abstraction/contracts/interfaces/IEntryPoint.sol";
 // To allow the smart wallet to handle ERC20 and ERC721 tokens
-import {TokenCallbackHandler} from "@account-abstraction/contracts/samples/callback/TokenCallbackHandler.sol";
+import {TokenCallbackHandler} from "account-abstraction/contracts/samples/callback/TokenCallbackHandler.sol";
 
 contract Account4337 is BaseAccount, Initializable, UUPSUpgradeable, TokenCallbackHandler {
     using MessageHashUtils for bytes32;
