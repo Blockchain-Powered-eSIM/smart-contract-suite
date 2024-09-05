@@ -8,18 +8,6 @@ struct DataBundleDetails {
     uint256 dataBundlePrice;
 }
 
-/// @notice Details related to eSIM purchased by the fiat user
-struct ESIMDetails {
-    string eSIMUniqueIdentifier;
-    DataBundleDetails[] history;
-}
-
-/// @notice Struct to store list of all eSIMs associated with a device
-struct AssociatedESIMIdentifiers {
-    string deviceUniqueIdentifier;
-    string[] eSIMIdentifiers;
-}
-
 struct WebAuthnSignature {
     bytes authenticatorData;    // The WebAuthn authenticator data.
                                 // See https://www.w3.org/TR/webauthn-2/#dom-authenticatorassertionresponse-authenticatordata.

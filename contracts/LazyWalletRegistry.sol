@@ -31,8 +31,8 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
     /// @notice Registry contract instance
     Registry public registry;
 
-    /// @notice Device identifier <> eSIM identifier <> ESIMDetails(purchase history)
-    mapping(string => mapping(string => ESIMDetails)) public deviceIdentifierToESIMDetails;
+    /// @notice Device identifier <> eSIM identifier <> DataBundleDetails[](list of purchase history)
+    mapping(string => mapping(string => DataBundleDetails[])) public deviceIdentifierToESIMDetails;
 
     /// @notice Mapping from eSIM unique identifier to device unique identifier
     /// @dev A device identifier can have multiple associated eSIM identifiers.
@@ -40,7 +40,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
     mapping(string => string) public eSIMIdentifierToDeviceIdentifier;
 
     /// @notice Device identifier <> List of associated eSIM identifiers
-    mapping(string => AssociatedESIMIdentifiers) public eSIMIdentifiersAssociatedWithDeviceIdentifier;
+    mapping(string => string[]) public eSIMIdentifiersAssociatedWithDeviceIdentifier;
 
     modifier onlyESIMWalletAdmin() {
         require(msg.sender == registry.admin(), "Only eSIM wallet admin");
@@ -115,15 +115,12 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         address deviceWallet;
         address[] memory eSIMWallets;
 
-        AssociatedESIMIdentifiers memory associatedESIMIdentifiers = eSIMIdentifiersAssociatedWithDeviceIdentifier[_deviceUniqueIdentifier];
-        string[] memory eSIMUniqueIdentifiers = associatedESIMIdentifiers.eSIMIdentifiers;
+        string[] memory eSIMUniqueIdentifiers = eSIMIdentifiersAssociatedWithDeviceIdentifier[_deviceUniqueIdentifier];
 
         DataBundleDetails[][] memory listOfDataBundleDetails;
 
         for(uint256 i=0; i<eSIMUniqueIdentifiers.length; ++i) {
-            ESIMDetails memory eSIMDetails = deviceIdentifierToESIMDetails[_deviceUniqueIdentifier][eSIMUniqueIdentifiers[i]];
-            DataBundleDetails[] memory dataBundleDetails = eSIMDetails.history;
-            listOfDataBundleDetails[i] = dataBundleDetails;
+            listOfDataBundleDetails[i] = deviceIdentifierToESIMDetails[_deviceUniqueIdentifier][eSIMUniqueIdentifiers[i]];
         }
 
         (deviceWallet, eSIMWallets) = registry.deployLazyWallet(
@@ -165,18 +162,14 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
             if(bytes(eSIMIdentifierToDeviceIdentifier[eSIMUniqueIdentifier]).length == 0) {
                 eSIMIdentifierToDeviceIdentifier[eSIMUniqueIdentifier] = _deviceUniqueIdentifier;
 
-                AssociatedESIMIdentifiers storage associatedESIMIdentifiers = eSIMIdentifiersAssociatedWithDeviceIdentifier[_deviceUniqueIdentifier];
-                associatedESIMIdentifiers.deviceUniqueIdentifier = _deviceUniqueIdentifier;
-                associatedESIMIdentifiers.eSIMIdentifiers.push(eSIMUniqueIdentifier);
+                string[] storage associatedESIMIdentifiers = eSIMIdentifiersAssociatedWithDeviceIdentifier[_deviceUniqueIdentifier];
+                associatedESIMIdentifiers.push(eSIMUniqueIdentifier);
             }
 
-            ESIMDetails storage eSIMDetails = deviceIdentifierToESIMDetails[_deviceUniqueIdentifier][eSIMUniqueIdentifier];
-            if(bytes(eSIMDetails.eSIMUniqueIdentifier).length == 0) {
-                eSIMDetails.eSIMUniqueIdentifier = eSIMUniqueIdentifier;
-            }
+            DataBundleDetails[] storage dataBundleDetails = deviceIdentifierToESIMDetails[_deviceUniqueIdentifier][eSIMUniqueIdentifier];
             // Manually add a new struct to history and then set its fields
-            eSIMDetails.history.push();  // Increase the array length by one
-            DataBundleDetails storage newDataBundleDetail = eSIMDetails.history[eSIMDetails.history.length - 1];
+            dataBundleDetails.push();  // Increase the array length by one
+            DataBundleDetails storage newDataBundleDetail = dataBundleDetails[dataBundleDetails.length - 1];
             newDataBundleDetail.dataBundleID = _dataBundleDetails[i].dataBundleID;
             newDataBundleDetail.dataBundlePrice = _dataBundleDetails[i].dataBundlePrice;
         }
