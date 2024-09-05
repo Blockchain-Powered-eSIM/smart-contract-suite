@@ -33,9 +33,7 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
     address public upgradeManager;
 
     modifier onlyDeviceWallet() {
-        bytes32[2] memory walletOwner = isDeviceWalletValid[msg.sender];
-        // DeviceWallet is invalid (/doesn't exist) if P256 Public Key's (X, Y) is set to (0, 0)
-        if(walletOwner[0] == bytes32(0) && walletOwner[1] == bytes32(0)) revert OnlyDeviceWallet();
+        if(isDeviceWalletValid[msg.sender] != true) revert OnlyDeviceWallet();
         _;
     }
 

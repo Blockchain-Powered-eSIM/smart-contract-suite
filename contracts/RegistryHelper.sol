@@ -47,11 +47,13 @@ contract RegistryHelper {
     /// @dev Use this to check if a device identifier has already been used or not
     mapping(string => address) public uniqueIdentifierToDeviceWallet;
 
-    /// @notice device wallet address <> owner.
-    ///         Mapping of all the devce wallets deployed by the registry (or the device wallet factory)
-    ///         to their respecitve owner.
-    ///         Mapping returns address(0) if device wallet doesn't exist or if not deployed by the said contracts
-    mapping(address => bytes32[2]) public isDeviceWalletValid;
+    /// @notice device wallet address <> owner P256 public key.
+    mapping(address => bytes32[2]) public deviceWalletToOwner;
+
+    /// @notice device wallet address <> boolean (true if deployed by the registry or device wallet factory)
+    ///         Mapping of all the device wallets deployed by the registry (or the device wallet factory)
+    ///         to their respective owner.
+    mapping(address => bool) public isDeviceWalletValid;
 
     /// @notice eSIM wallet address <> device wallet address
     ///         All the eSIM wallets deployed using this registry are valid and set to true
@@ -108,7 +110,8 @@ contract RegistryHelper {
         bytes32[2] memory _deviceWalletOwnerKey
     ) internal {
         uniqueIdentifierToDeviceWallet[_deviceUniqueIdentifier] = _deviceWallet;
-        isDeviceWalletValid[_deviceWallet] = _deviceWalletOwnerKey;
+        isDeviceWalletValid[_deviceWallet] = true;
+        deviceWalletToOwner[_deviceWallet] = _deviceWalletOwnerKey;
 
         emit DeviceWalletInfoUpdated(_deviceWallet, _deviceUniqueIdentifier, _deviceWalletOwnerKey);
     }
