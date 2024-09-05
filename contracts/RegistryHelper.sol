@@ -87,7 +87,7 @@ contract RegistryHelper {
 
         for(uint256 i=0; i<_eSIMUniqueIdentifiers.length; ++i) {
             // increase salt for subsequent eSIM wallet deployments
-            address eSIMWallet = eSIMWalletFactory.deployESIMWallet(_deviceWalletOwnerKey, (_salt + i));
+            address eSIMWallet = eSIMWalletFactory.deployESIMWallet(deviceWallet, (_salt + i));
             emit WalletDeployed(_deviceUniqueIdentifier, deviceWallet, eSIMWallet);
             _updateESIMInfo(eSIMWallet, deviceWallet);
 

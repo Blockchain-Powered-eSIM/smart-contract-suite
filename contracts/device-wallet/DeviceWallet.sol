@@ -138,7 +138,7 @@ contract DeviceWallet is Initializable, Account4337 {
         uint256 _salt
     ) external onlySelf returns (address) {
         ESIMWalletFactory eSIMWalletFactory = registry.eSIMWalletFactory();
-        address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(owner, _salt);
+        address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(address(this), _salt);
 
         _updateESIMInfo(eSIMWalletAddress, true, _hasAccessToETH);
         _updateDeviceWalletAssociatedWithESIMWallet(eSIMWalletAddress, address(this));

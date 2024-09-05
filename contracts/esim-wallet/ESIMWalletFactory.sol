@@ -24,8 +24,8 @@ contract ESIMWalletFactory is Initializable, OwnableUpgradeable {
     /// @notice Emitted when a new eSIM wallet is deployed
     event ESIMWalletDeployed(
         address indexed _eSIMWalletAddress,
-        bytes32[2] _owner,
-        address indexed _deviceWalletAddress
+        address indexed _deviceWalletAddress,
+        address indexed _caller
     );
 
     /// @notice Address of the registry contract
@@ -84,10 +84,10 @@ contract ESIMWalletFactory is Initializable, OwnableUpgradeable {
 
     /// Function to deploy an eSIM wallet
     /// @dev can only be called by the respective deviceWallet contract
-    /// @param _owner Owner of the eSIM wallet
+    /// @param _deviceWalletAddress Address of the associated device wallet
     /// @return Address of the newly deployed eSIM wallet
     function deployESIMWallet(
-        bytes32[2] memory _owner,
+        address _deviceWalletAddress,
         uint256 _salt
     ) external onlyRegistryOrDeviceWalletFactoryOrDeviceWallet returns (address) {
 
@@ -98,14 +98,14 @@ contract ESIMWalletFactory is Initializable, OwnableUpgradeable {
                     address(eSIMWalletImplementation),
                     abi.encodeCall(
                         ESIMWallet.initialize, 
-                        (address(this), msg.sender, _owner)
+                        (address(this), _deviceWalletAddress)
                     )
                 )
             )
         );
         isESIMWalletDeployed[eSIMWalletAddress] = true;
 
-        emit ESIMWalletDeployed(eSIMWalletAddress, _owner, msg.sender);
+        emit ESIMWalletDeployed(eSIMWalletAddress, _deviceWalletAddress, msg.sender);
 
         return eSIMWalletAddress;
     }
