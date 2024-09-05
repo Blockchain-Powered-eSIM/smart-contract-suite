@@ -2,16 +2,17 @@ pragma solidity ^0.8.18;
 
 // SPDX-License-Identifier: MIT
 
-import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {Initializable} from "openzeppelin-contracts-upgradeable/contracts/proxy/utils/Initializable.sol";
+import {ERC1967Proxy} from "openzeppelin-contracts/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {UUPSUpgradeable} from "openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
+import {OwnableUpgradeable} from "openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
 
 import {RegistryHelper} from "./RegistryHelper.sol";
 import {DeviceWalletFactory} from "./device-wallet/DeviceWalletFactory.sol";
 import {ESIMWalletFactory} from "./esim-wallet/ESIMWalletFactory.sol";
+import {P256Verifier} from "./P256Verifier.sol";
 
-import "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
+import "account-abstraction/contracts/interfaces/IEntryPoint.sol";
 
 error OnlyDeviceWallet();
 error OnlyDeviceWalletFactory();
@@ -31,14 +32,8 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
     /// @notice Address (owned/controlled by eSIM wallet project) that can upgrade contracts
     address public upgradeManager;
 
-    /// @notice Device wallet factory instance
-    DeviceWalletFactory public deviceWalletFactory;
-
-    /// @notice eSIM wallet factory instance
-    ESIMWalletFactory public eSIMWalletFactory;
-
     modifier onlyDeviceWallet() {
-        if(isDeviceWalletValid[msg.sender] == address(0)) revert OnlyDeviceWallet();
+        if(isDeviceWalletValid[msg.sender] != true) revert OnlyDeviceWallet();
         _;
     }
 
@@ -63,7 +58,12 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
     /// @param _eSIMWalletAdmin Admin address of the eSIM wallet project
     /// @param _vault Address of the vault that receives payments for the data bundles
     /// @param _upgradeManager Admin address responsible for upgrading contracts
-    function initialize(address _eSIMWalletAdmin, address _vault, address _upgradeManager) external initializer {
+    function initialize(
+        address _eSIMWalletAdmin,
+        address _vault,
+        address _upgradeManager,
+        P256Verifier _verifier
+    ) external initializer {
         require(_eSIMWalletAdmin != address(0), "eSIM Admin address cannot be zero address");
         require(_vault != address(0), "Vault address cannot be zero address");
         require(_upgradeManager != address(0), "Upgrade Manager address cannot be zero address");
@@ -72,7 +72,7 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
         vault = _vault;
         upgradeManager = _upgradeManager;
 
-        address deviceWalletFactoryImplementation = address(new DeviceWalletFactory(entryPoint));
+        address deviceWalletFactoryImplementation = address(new DeviceWalletFactory(entryPoint, _verifier));
         ERC1967Proxy deviceWalletFactoryProxy = new ERC1967Proxy(
             deviceWalletFactoryImplementation,
             abi.encodeCall(
@@ -96,24 +96,37 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
         __Ownable_init(_upgradeManager);
     }
 
+    /// @notice Function to add or update the lazy wallet registry address
+    function addOrUpdateLazyWalletRegistryAddress(
+        address _lazyWalletRegistry
+    ) public onlyOwner returns (address) {
+        require(_lazyWalletRegistry != address(0), "Cannot be zero address");
+
+        lazyWalletRegistry = _lazyWalletRegistry;
+
+        emit UpdatedLazyWalletRegistryAddress(_lazyWalletRegistry);
+
+        return lazyWalletRegistry;
+    }
+
     /// Allow anyone to deploy a device wallet and an eSIM wallet for themselves
     /// @param _deviceUniqueIdentifier Unique device identifier associated with the device
     /// @return Return device wallet address and eSIM wallet address
     function deployWallet(
         string calldata _deviceUniqueIdentifier,
+        bytes32[2] memory _deviceWalletOwnerKey,
         uint256 _salt
     ) external returns (address, address) {
         require(bytes(_deviceUniqueIdentifier).length >= 1, "Device unique identifier cannot be empty");
-        require(ownerToDeviceWallet[msg.sender] == address(0), "User is already an owner of a device wallet");
         require(
             uniqueIdentifierToDeviceWallet[_deviceUniqueIdentifier] == address(0),
             "Device wallet already exists"
         );
 
-        address deviceWallet = deviceWalletFactory.deployDeviceWallet(_deviceUniqueIdentifier, msg.sender, _salt);
-        _updateDeviceWalletInfo(deviceWallet, _deviceUniqueIdentifier, msg.sender);
+        address deviceWallet = deviceWalletFactory.deployDeviceWallet(_deviceUniqueIdentifier, _deviceWalletOwnerKey, _salt);
+        _updateDeviceWalletInfo(deviceWallet, _deviceUniqueIdentifier, _deviceWalletOwnerKey);
 
-        address eSIMWallet = eSIMWalletFactory.deployESIMWallet(msg.sender, _salt);
+        address eSIMWallet = eSIMWalletFactory.deployESIMWallet(deviceWallet, _salt);
         _updateESIMInfo(eSIMWallet, deviceWallet);
 
         emit WalletDeployed(_deviceUniqueIdentifier, deviceWallet, eSIMWallet);
@@ -136,8 +149,8 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
     function updateDeviceWalletInfo(
         address _deviceWallet,
         string calldata _deviceUniqueIdentifier,
-        address _deviceWalletOwner
+        bytes32[2] memory _deviceWalletOwnerKey
     ) external onlyDeviceWalletFactory {
-        _updateDeviceWalletInfo(_deviceWallet, _deviceUniqueIdentifier, _deviceWalletOwner);
+        _updateDeviceWalletInfo(_deviceWallet, _deviceUniqueIdentifier, _deviceWalletOwnerKey);
     }
 }

@@ -2,9 +2,9 @@
 
 pragma solidity ^0.8.18;
 
-import "@openzeppelin/contracts/proxy/beacon/IBeacon.sol";
-import "@openzeppelin/contracts/utils/Address.sol";
-import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "openzeppelin-contracts/contracts/proxy/beacon/IBeacon.sol";
+import "openzeppelin-contracts/contracts/utils/Address.sol";
+import { OwnableUpgradeable } from "openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
 
 /// @title Beacon with upgradeable implementation
 /// @dev Beacon contract holds information about the implementation contract
