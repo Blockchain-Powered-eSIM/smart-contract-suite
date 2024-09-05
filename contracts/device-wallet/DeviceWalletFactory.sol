@@ -14,6 +14,7 @@ import {Registry} from "../Registry.sol";
 import {DeviceWallet} from "./DeviceWallet.sol";
 import {ESIMWalletFactory} from "../esim-wallet/ESIMWalletFactory.sol";
 import {UpgradeableBeacon} from "../UpgradableBeacon.sol";
+import {P256Verifier} from "../P256Verifier.sol";
 
 error OnlyAdmin();
 
@@ -44,6 +45,8 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
 
     IEntryPoint public immutable entryPoint;
 
+    P256Verifier public immutable verifier;
+
     /// @notice Admin address of the eSIM wallet project
     address public eSIMWalletAdmin;
 
@@ -69,9 +72,13 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
     }
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(IEntryPoint _entryPoint) initializer {
+    constructor(
+        IEntryPoint _entryPoint,
+        P256Verifier _verifier
+    ) initializer {
         entryPoint = _entryPoint;
-        
+        verifier = _verifier;
+
         // device wallet implementation (logic) contract
         deviceWalletImplementation = new DeviceWallet(_entryPoint);
         _disableInitializers();
@@ -94,7 +101,7 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
     ) external initializer {
         require(_eSIMWalletAdmin != address(0), "Admin cannot be zero address");
         require(_vault != address(0), "Vault address cannot be zero");
-        require(_upgradeManager != address(0), "Upgrade manager address cannot be zero");
+        require(_upgradeManager != address(0), "_upgradeManager cannot be zero");
 
         eSIMWalletAdmin = _eSIMWalletAdmin;
         vault = _vault;
@@ -145,19 +152,20 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
     /// @return Array of deployed device wallet address
     function deployDeviceWalletForUsers(
         string[] calldata _deviceUniqueIdentifiers,
-        address[] calldata _deviceWalletOwners,
+        bytes32[2][] calldata _deviceWalletOwnersKey,
         uint256[] calldata _salts
     ) public onlyAdmin returns (address[] memory) {
         uint256 numberOfDeviceWallets = _deviceUniqueIdentifiers.length;
         require(numberOfDeviceWallets != 0, "Array cannot be empty");
-        require(numberOfDeviceWallets == _deviceWalletOwners.length, "Array mismatch");
+        require(numberOfDeviceWallets == _deviceWalletOwnersKey.length, "Array mismatch");
+        require(numberOfDeviceWallets == _salts.length, "Array mismatch");
 
         address[] memory deviceWalletsDeployed = new address[](numberOfDeviceWallets);
 
         for (uint256 i = 0; i < numberOfDeviceWallets; ++i) {
             deviceWalletsDeployed[i] = deployDeviceWalletAsAdmin(
                 _deviceUniqueIdentifiers[i],
-                _deviceWalletOwners[i],
+                _deviceWalletOwnersKey[i],
                 _salts[i]
             );
         }
@@ -171,16 +179,16 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
     /// @return Deployed device wallet address
     function deployDeviceWalletAsAdmin(
         string calldata _deviceUniqueIdentifier,
-        address _deviceWalletOwner,
+        bytes32[2] memory _deviceWalletOwnerKey,
         uint256 _salt
     ) public onlyAdmin returns (address) {
         require(
-            registry.ownerToDeviceWallet(_deviceWalletOwner) == address(0),
-            "User already owns a device wallet"
+            registry.ownerToDeviceWallet(_deviceWalletOwnerKey) == address(0),
+            "User already owns device wallet"
         );
         require(
             bytes(_deviceUniqueIdentifier).length != 0, 
-            "Device unique identifier cannot be empty"
+            "DeviceIdentifier cannot be empty"
         );
         require(
             registry.uniqueIdentifierToDeviceWallet(_deviceUniqueIdentifier) == address(0),
@@ -191,15 +199,15 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
         address deviceWalletAddress = address(
             createAccount(
                 address(registry),
-                _deviceWalletOwner,
+                _deviceWalletOwnerKey,
                 _deviceUniqueIdentifier,
                 _salt
             )
         );
-        registry.updateDeviceWalletInfo(deviceWalletAddress, _deviceUniqueIdentifier, _deviceWalletOwner);
+        registry.updateDeviceWalletInfo(deviceWalletAddress, _deviceUniqueIdentifier, _deviceWalletOwnerKey);
 
         ESIMWalletFactory eSIMWalletFactory = registry.eSIMWalletFactory();
-        address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(_deviceWalletOwner, _salt);
+        address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(_deviceWalletOwnerKey, _salt);
         DeviceWallet(payable(deviceWalletAddress)).updateESIMInfo(
             eSIMWalletAddress,
             true,
@@ -210,7 +218,7 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
             deviceWalletAddress
         );
 
-        emit DeviceWalletDeployed(deviceWalletAddress, eSIMWalletAddress, _deviceWalletOwner);
+        emit DeviceWalletDeployed(deviceWalletAddress, eSIMWalletAddress, _deviceWalletOwnerKey);
 
         return deviceWalletAddress;
     }
@@ -221,17 +229,18 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
     /// @return Deployed device wallet address
     function deployDeviceWallet(
         string calldata _deviceUniqueIdentifier,
-        address _deviceWalletOwner,
+        bytes32[2] memory _deviceWalletOwnerKey,
         uint256 _salt
     ) public returns (address) {
         require(msg.sender == address(registry), "Only registry can call");
+        // TODO: Update this. Look for a way to fetch device wallet address from P256 keys
         require(
-            registry.ownerToDeviceWallet(_deviceWalletOwner) == address(0),
-            "User already owns a device wallet"
+            registry.ownerToDeviceWallet(_deviceWalletOwnerKey) == address(0),
+            "Device wallet already exists"
         );
         require(
             bytes(_deviceUniqueIdentifier).length != 0, 
-            "Device unique identifier cannot be empty"
+            "DeviceIdentifier cannot be empty"
         );
         require(
             registry.uniqueIdentifierToDeviceWallet(_deviceUniqueIdentifier) == address(0),
@@ -242,12 +251,12 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
         address deviceWalletAddress = address(
             createAccount(
                 address(registry),
-                _deviceWalletOwner,
+                _deviceWalletOwnerKey,
                 _deviceUniqueIdentifier,
                 _salt
             )
         );
-        registry.updateDeviceWalletInfo(deviceWalletAddress, _deviceUniqueIdentifier, _deviceWalletOwner);
+        registry.updateDeviceWalletInfo(deviceWalletAddress, _deviceUniqueIdentifier, _deviceWalletOwnerKey);
 
         return deviceWalletAddress;
     }
@@ -260,13 +269,13 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
      */
     function createAccount(
         address _registry,
-        address _deviceWalletOwner,
+        bytes32[2] memory _deviceWalletOwnerKey,
         string calldata _deviceUniqueIdentifier,
         uint256 _salt
     ) public payable returns (DeviceWallet ret) {
         address addr = getAddress(
             _registry,
-            _deviceWalletOwner,
+            _deviceWalletOwnerKey,
             _deviceUniqueIdentifier,
             _salt
         );
@@ -287,7 +296,7 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
                     address(deviceWalletImplementation),
                     abi.encodeCall(
                         DeviceWallet.init, 
-                        (_registry, _deviceWalletOwner, _deviceUniqueIdentifier)
+                        (_registry, _deviceWalletOwnerKey, _deviceUniqueIdentifier)
                     )
                 )
             )
@@ -299,7 +308,7 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
      */
     function getAddress(
         address _registry,
-        address _deviceWalletOwner,
+        bytes32[2] memory _deviceWalletOwnerKey,
         string calldata _deviceUniqueIdentifier,
         uint256 _salt
     ) public view returns (address) {
@@ -312,7 +321,7 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
                         address(deviceWalletImplementation),
                         abi.encodeCall(
                             DeviceWallet.init,
-                            (_registry, _deviceWalletOwner, _deviceUniqueIdentifier)
+                            (_registry, _deviceWalletOwnerKey, _deviceUniqueIdentifier)
                         )
                     )
                 )
