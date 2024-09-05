@@ -42,10 +42,6 @@ contract RegistryHelper {
     /// @notice eSIM wallet factory instance
     ESIMWalletFactory public eSIMWalletFactory;
 
-    /// @notice owner <> device wallet address
-    /// @dev There can only be one device wallet per user (ETH address)
-    mapping(address => address) public ownerToDeviceWallet;
-
     /// @notice device unique identifier <> device wallet address
     ///         Mapping for all the device wallets deployed by the registry
     /// @dev Use this to check if a device identifier has already been used or not
@@ -55,7 +51,7 @@ contract RegistryHelper {
     ///         Mapping of all the devce wallets deployed by the registry (or the device wallet factory)
     ///         to their respecitve owner.
     ///         Mapping returns address(0) if device wallet doesn't exist or if not deployed by the said contracts
-    mapping(address => address) public isDeviceWalletValid;
+    mapping(address => bytes32[2]) public isDeviceWalletValid;
 
     /// @notice eSIM wallet address <> device wallet address
     ///         All the eSIM wallets deployed using this registry are valid and set to true
@@ -77,13 +73,12 @@ contract RegistryHelper {
         string[] memory _eSIMUniqueIdentifiers,
         DataBundleDetails[][] memory _dataBundleDetails
     ) external onlyLazyWalletRegistry returns (address, address[] memory) {
-        require(ownerToDeviceWallet[_deviceOwner] == address(0), "User already owns device wallet");
         require(
             uniqueIdentifierToDeviceWallet[_deviceUniqueIdentifier] == address(0),
             "Device wallet already exists"
         );
 
-        address deviceWallet = deviceWalletFactory.deployDeviceWallet(_deviceUniqueIdentifier, _deviceOwner, _salt);
+        address deviceWallet = deviceWalletFactory.deployDeviceWallet(_deviceUniqueIdentifier, _deviceWalletOwnerKey, _salt);
         _updateDeviceWalletInfo(deviceWallet, _deviceUniqueIdentifier, _deviceWalletOwnerKey);
 
         address[] memory eSIMWallets;
@@ -112,12 +107,10 @@ contract RegistryHelper {
         string calldata _deviceUniqueIdentifier,
         bytes32[2] _deviceWalletOwnerKey
     ) internal {
-        //TODO: update mapping
-        ownerToDeviceWallet[_deviceWalletOwnerKey] = _deviceWallet;
         uniqueIdentifierToDeviceWallet[_deviceUniqueIdentifier] = _deviceWallet;
         isDeviceWalletValid[_deviceWallet] = _deviceWalletOwnerKey;
 
-        emit DeviceWalletInfoUpdated(_deviceWallet, _deviceUniqueIdentifier, _deviceWalletOwner);
+        emit DeviceWalletInfoUpdated(_deviceWallet, _deviceUniqueIdentifier, _deviceWalletOwnerKey);
     }
 
     function _updateESIMInfo(

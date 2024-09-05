@@ -77,7 +77,6 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
         address _eSIMWalletFactoryAddress,
         address _deviceWalletAddress
     ) external initializer {
-        require(_eSIMWalletOwner != address(0), "Owner cannot be address zero");
         require(_eSIMWalletFactoryAddress != address(0), "eSIM wallet factory address cannot be zero");
         require(_deviceWalletAddress != address(0), "Device wallet address cannot be zero");
 

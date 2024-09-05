@@ -33,7 +33,9 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
     address public upgradeManager;
 
     modifier onlyDeviceWallet() {
-        if(isDeviceWalletValid[msg.sender] == address(0)) revert OnlyDeviceWallet();
+        bytes32[2] storage walletOwner = isDeviceWalletValid[msg.sender];
+        // DeviceWallet is invalid (/doesn't exist) if P256 Public Key's (X, Y) is set to (0, 0)
+        if(walletOwner[0] == bytes32(0) && walletOwner[1] == bytes32(0)) revert OnlyDeviceWallet();
         _;
     }
 
@@ -118,8 +120,6 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
         uint256 _salt
     ) external returns (address, address) {
         require(bytes(_deviceUniqueIdentifier).length >= 1, "Device unique identifier cannot be empty");
-        // TODO: add a new way to map owner to device wallet
-        require(ownerToDeviceWallet[_deviceWalletOwnerKey] == address(0), "User is already an owner of a device wallet");
         require(
             uniqueIdentifierToDeviceWallet[_deviceUniqueIdentifier] == address(0),
             "Device wallet already exists"

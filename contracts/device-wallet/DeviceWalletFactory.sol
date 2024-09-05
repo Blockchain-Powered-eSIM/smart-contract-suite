@@ -183,10 +183,6 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
         uint256 _salt
     ) public onlyAdmin returns (address) {
         require(
-            registry.ownerToDeviceWallet(_deviceWalletOwnerKey) == address(0),
-            "User already owns device wallet"
-        );
-        require(
             bytes(_deviceUniqueIdentifier).length != 0, 
             "DeviceIdentifier cannot be empty"
         );
@@ -233,11 +229,6 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
         uint256 _salt
     ) public returns (address) {
         require(msg.sender == address(registry), "Only registry can call");
-        // TODO: Update this. Look for a way to fetch device wallet address from P256 keys
-        require(
-            registry.ownerToDeviceWallet(_deviceWalletOwnerKey) == address(0),
-            "Device wallet already exists"
-        );
         require(
             bytes(_deviceUniqueIdentifier).length != 0, 
             "DeviceIdentifier cannot be empty"
