@@ -13,6 +13,7 @@ import {DeviceWalletFactory} from "./DeviceWalletFactory.sol";
 import {ESIMWalletFactory} from "../esim-wallet/ESIMWalletFactory.sol";
 import {ESIMWallet} from "../esim-wallet/ESIMWallet.sol";
 import {Account4337} from "../aa-helper/Account4337.sol";
+import {P256Verifier} from "../P256Verifier.sol";
 
 error OnlyRegistryOrDeviceWalletFactoryOrOwner();
 error OnlyDeviceWalletOrOwner();
@@ -107,7 +108,10 @@ contract DeviceWallet is Initializable, Account4337 {
     }
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(IEntryPoint anEntryPoint) Account4337(anEntryPoint) initializer {
+    constructor(
+        IEntryPoint anEntryPoint,
+        P256Verifier _verifier
+    ) Account4337(anEntryPoint, _verifier) initializer {
         _disableInitializers();
     }
 

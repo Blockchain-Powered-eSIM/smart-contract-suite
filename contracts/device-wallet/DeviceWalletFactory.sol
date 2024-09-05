@@ -80,7 +80,7 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
         verifier = _verifier;
 
         // device wallet implementation (logic) contract
-        deviceWalletImplementation = new DeviceWallet(_entryPoint);
+        deviceWalletImplementation = new DeviceWallet(_entryPoint, _verifier);
         _disableInitializers();
     }
 
