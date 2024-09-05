@@ -37,7 +37,7 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
     event DeviceWalletDeployed(
         address indexed _deviceWalletAddress,
         address indexed _eSIMWalletAddress,
-        address indexed _deviceWalletOwner
+        bytes32[2] indexed _deviceWalletOwnerKey
     );
 
     /// @notice Emitted when the admin address is updated
