@@ -41,7 +41,7 @@ contract ESIMWalletFactory is Initializable, OwnableUpgradeable {
     mapping(address => bool) public isESIMWalletDeployed;
 
     modifier onlyRegistryOrDeviceWalletFactoryOrDeviceWallet() {
-        bytes32[2] storage walletOwner = registry.isDeviceWalletValid(msg.sender);
+        bytes32[2] memory walletOwner = registry.isDeviceWalletValid(msg.sender);
         // DeviceWallet is invalid (/doesn't exist) if P256 Public Key's (X, Y) is set to (0, 0)
         if(
             msg.sender != address(registry) &&

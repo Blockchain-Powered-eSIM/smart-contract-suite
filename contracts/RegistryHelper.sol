@@ -67,7 +67,7 @@ contract RegistryHelper {
     /// @param _deviceUniqueIdentifier Unique device identifier associated with the device
     /// @return Return device wallet address and list of addresses of all the eSIM wallets
     function deployLazyWallet(
-        bytes32[2] _deviceWalletOwnerKey,
+        bytes32[2] memory _deviceWalletOwnerKey,
         string calldata _deviceUniqueIdentifier,
         uint256 _salt,
         string[] memory _eSIMUniqueIdentifiers,
@@ -105,7 +105,7 @@ contract RegistryHelper {
     function _updateDeviceWalletInfo(
         address _deviceWallet,
         string calldata _deviceUniqueIdentifier,
-        bytes32[2] _deviceWalletOwnerKey
+        bytes32[2] memory _deviceWalletOwnerKey
     ) internal {
         uniqueIdentifierToDeviceWallet[_deviceUniqueIdentifier] = _deviceWallet;
         isDeviceWalletValid[_deviceWallet] = _deviceWalletOwnerKey;

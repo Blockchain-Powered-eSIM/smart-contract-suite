@@ -18,7 +18,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
     );
 
     event LazyWalletDeployed(
-        address _deviceOwner,
+        bytes32[2] _deviceOwnerPublicKey,
         address deviceWallet,
         string _deviceUniqueIdentifier,
         address[] eSIMWallets,
@@ -102,11 +102,11 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
 
     /// @notice Function to deploy a device wallet and eSIM wallets on behalf of a user, also setting the eSIM identifiers
     /// @dev _salt should never be near to max value of uint256, if it is, the function call fails
-    /// @param _deviceOwner Address of the device owner
+    /// @param _deviceOwnerPublicKey P256 public key of the device owner
     /// @param _deviceUniqueIdentifier Unique device identifier associated with the device
     /// @return Return device wallet address and list of eSIM wallet addresses
     function deployLazyWalletAndSetESIMIdentifier(
-        address _deviceOwner,
+        bytes32[2] memory _deviceOwnerPublicKey,
         string calldata _deviceUniqueIdentifier,
         uint256 _salt
     ) external onlyESIMWalletAdmin returns (address, address[] memory) {
@@ -127,7 +127,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         }
 
         (deviceWallet, eSIMWallets) = registry.deployLazyWallet(
-            _deviceOwner,
+            _deviceOwnerPublicKey,
             _deviceUniqueIdentifier,
             _salt,
             eSIMUniqueIdentifiers,
@@ -135,7 +135,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         );
 
         emit LazyWalletDeployed(
-            _deviceOwner,
+            _deviceOwnerPublicKey,
             deviceWallet,
             _deviceUniqueIdentifier,
             eSIMWallets,

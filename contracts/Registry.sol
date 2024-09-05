@@ -33,7 +33,7 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
     address public upgradeManager;
 
     modifier onlyDeviceWallet() {
-        bytes32[2] storage walletOwner = isDeviceWalletValid[msg.sender];
+        bytes32[2] memory walletOwner = isDeviceWalletValid[msg.sender];
         // DeviceWallet is invalid (/doesn't exist) if P256 Public Key's (X, Y) is set to (0, 0)
         if(walletOwner[0] == bytes32(0) && walletOwner[1] == bytes32(0)) revert OnlyDeviceWallet();
         _;
@@ -126,7 +126,7 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
         );
 
         address deviceWallet = deviceWalletFactory.deployDeviceWallet(_deviceUniqueIdentifier, _deviceWalletOwnerKey, _salt);
-        _updateDeviceWalletInfo(deviceWallet, _deviceUniqueIdentifier, msg.sender);
+        _updateDeviceWalletInfo(deviceWallet, _deviceUniqueIdentifier, _deviceWalletOwnerKey);
 
         address eSIMWallet = eSIMWalletFactory.deployESIMWallet(_deviceWalletOwnerKey, _salt);
         _updateESIMInfo(eSIMWallet, deviceWallet);
@@ -151,7 +151,7 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
     function updateDeviceWalletInfo(
         address _deviceWallet,
         string calldata _deviceUniqueIdentifier,
-        bytes32[2] _deviceWalletOwnerKey
+        bytes32[2] memory _deviceWalletOwnerKey
     ) external onlyDeviceWalletFactory {
         _updateDeviceWalletInfo(_deviceWallet, _deviceUniqueIdentifier, _deviceWalletOwnerKey);
     }
