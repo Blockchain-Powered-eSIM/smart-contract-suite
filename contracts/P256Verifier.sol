@@ -7,8 +7,6 @@ import "./WebAuthn.sol";
 // Source: https://github.com/daimo-eth/daimo/blob/master/packages/contract/src/DaimoVerifier.sol
 // Proxies a webAuthnSignature verification call to the Webauthn library.
 contract P256Verifier {
-    constructor() {
-    }
 
     function verifySignature(
         bytes memory message,
