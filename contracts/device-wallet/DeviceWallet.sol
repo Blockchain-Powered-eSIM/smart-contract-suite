@@ -114,17 +114,16 @@ contract DeviceWallet is Initializable, Account4337 {
     /// @notice Initialises the device wallet and deploys eSIM wallets for any already existing eSIMs
     function init(
         address _registry,
-        address _deviceWalletOwner,
+        bytes32[2] _deviceWalletOwnerKey,
         string calldata _deviceUniqueIdentifier
     ) external initializer {
-        require(_registry != address(0), "Registry contract cannot be zero address");
-        require(_deviceWalletOwner != address(0), "eSIM wallet owner cannot be zero address");
-        require(bytes(_deviceUniqueIdentifier).length != 0, "Device unique identifier cannot be zero");
+        require(_registry != address(0), "Registry contract cannot be zero");
+        require(bytes(_deviceUniqueIdentifier).length != 0, "Device identifier cannot be zero");
 
         registry = Registry(_registry);
         deviceUniqueIdentifier = _deviceUniqueIdentifier;
         
-        initialize(_deviceWalletOwner);
+        initialize(_deviceWalletOwnerKey);
     }
 
     /// @notice Allow device wallet owner to deploy new eSIM wallet
@@ -135,7 +134,8 @@ contract DeviceWallet is Initializable, Account4337 {
         uint256 _salt
     ) external onlyOwner returns (address) {
         ESIMWalletFactory eSIMWalletFactory = registry.eSIMWalletFactory();
-        address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(msg.sender, _salt);
+        // TODO: check if owner() is same as P256 public key
+        address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(owner(), _salt);
 
         _updateESIMInfo(eSIMWalletAddress, true, _hasAccessToETH);
         _updateDeviceWalletAssociatedWithESIMWallet(eSIMWalletAddress, address(this));
@@ -154,11 +154,11 @@ contract DeviceWallet is Initializable, Account4337 {
     ) public onlyESIMWalletAdminOrLazyWallet() returns (string memory) {
         require(
             registry.isESIMWalletValid(_eSIMWalletAddress) != address(0),
-            "Unknown eSIM wallet address provided"
+            "Unknown eSIM wallet address"
         );
         require(
             uniqueIdentifierToESIMWallet[_eSIMUniqueIdentifier] == address(0),
-            "eSIM unique identifier already set for the provided eSIM wallet"
+            "eSIM identifier already set"
         );
 
         ESIMWallet eSIMWallet = ESIMWallet(payable(_eSIMWalletAddress));
@@ -187,7 +187,7 @@ contract DeviceWallet is Initializable, Account4337 {
     /// @param _amount Amount of ETH to pull
     function pullETH(uint256 _amount) external onlyAssociatedESIMWallets returns (uint256) {
         require(_amount > 0, "Amount cannot be zero");
-        require(canPullETH[msg.sender] == true, "Cannot pull ETH. Access has been revoked");
+        require(canPullETH[msg.sender] == true, "Cannot pull ETH. Access revoked");
 
         _transferETH(msg.sender, _amount);
 
@@ -212,7 +212,7 @@ contract DeviceWallet is Initializable, Account4337 {
     }
 
     function _transferETH(address _recipient, uint256 _amount) internal virtual {
-        require(_amount <= address(this).balance, "Not enough ETH in the wallet. Please topup ETH into the wallet");
+        require(_amount <= address(this).balance, "Not enough ETH in wallet");
         require(_recipient != address(0), "Recipient cannot be zero address");
 
         if (_amount > 0) {
@@ -243,7 +243,7 @@ contract DeviceWallet is Initializable, Account4337 {
         address _eSIMWalletAddress,
         address _deviceWalletAddress
     ) external onlyDeviceWalletFactoryOrOwner {
-        require(_deviceWalletAddress != address(this), "Cannot update device wallet to same address");
+        require(_deviceWalletAddress != address(this), "Cannot update to same address");
         _updateDeviceWalletAssociatedWithESIMWallet(_eSIMWalletAddress, _deviceWalletAddress);
         isValidESIMWallet[_eSIMWalletAddress] = false;
     }
