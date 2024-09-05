@@ -167,7 +167,7 @@ contract Account4337 is IAccount, Initializable, UUPSUpgradeable, TokenCallbackH
         bytes memory message,
         bytes calldata signature
     ) private view returns (bool) {
-        WebAuthnSignature memory sig = abi.decode(signature, WebAuthnSignature);
+        WebAuthnSignature memory sig = abi.decode(signature, (WebAuthnSignature));
 
         return verifier.verifySignature({
             message: message,
