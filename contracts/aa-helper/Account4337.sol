@@ -12,6 +12,7 @@ import "openzeppelin-contracts/contracts/interfaces/IERC1271.sol";
 import "account-abstraction/contracts/interfaces/IAccount.sol";
 import "account-abstraction/contracts/core/Helpers.sol";
 import "account-abstraction/contracts/interfaces/IEntryPoint.sol";
+import "account-abstraction/contracts/core/UserOperationLib.sol";
 // To allow the smart wallet to handle ERC20 and ERC721 tokens
 import {TokenCallbackHandler} from "account-abstraction/contracts/samples/callback/TokenCallbackHandler.sol";
 import {P256Verifier} from "../P256Verifier.sol";
@@ -19,6 +20,7 @@ import {WebAuthn} from "../WebAuthn.sol";
 import "../CustomStructs.sol";
 
 contract Account4337 is IAccount, Initializable, UUPSUpgradeable, TokenCallbackHandler, IERC1271 {
+    using UserOperationLib for UserOperation;
     using MessageHashUtils for bytes32;
     using ECDSA for bytes32;
 
