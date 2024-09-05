@@ -20,7 +20,7 @@ import {WebAuthn} from "../WebAuthn.sol";
 import "../CustomStructs.sol";
 
 contract Account4337 is IAccount, Initializable, UUPSUpgradeable, TokenCallbackHandler, IERC1271 {
-    using UserOperationLib for UserOperation;
+    using UserOperationLib for PackedUserOperation;
     using MessageHashUtils for bytes32;
     using ECDSA for bytes32;
 
@@ -32,7 +32,7 @@ contract Account4337 is IAccount, Initializable, UUPSUpgradeable, TokenCallbackH
     /// Signature verifier contract
     P256Verifier public immutable verifier;
     
-    event Account4337Initialized(IEntryPoint indexed entryPoint, bytes32[2] indexed owner);
+    event Account4337Initialized(IEntryPoint indexed entryPoint, bytes32[2] owner);
 
     event AccountOwnershipTransferred(bytes32[2] newOwner);
 
@@ -43,6 +43,11 @@ contract Account4337 is IAccount, Initializable, UUPSUpgradeable, TokenCallbackH
 
     modifier onlyEntryPoint() {
         require(msg.sender == address(entryPoint), "Only entry point");
+        _;
+    }
+
+    modifier onlyOwnerOrEntryPoint() {
+        _requireFromEntryPointOrOwner();
         _;
     }
 
@@ -60,13 +65,13 @@ contract Account4337 is IAccount, Initializable, UUPSUpgradeable, TokenCallbackH
      * a new implementation of SimpleAccount must be deployed with the new EntryPoint address, then upgrading
      * the implementation by calling `upgradeTo()`
      */
-    function initialize(bytes32[2] anOwner) public virtual initializer {
+    function initialize(bytes32[2] memory anOwner) public virtual initializer {
         _initialize(anOwner);
     }
 
-    function _initialize(bytes32[2] anOwner) internal virtual {
+    function _initialize(bytes32[2] memory anOwner) internal virtual {
         owner = anOwner;
-        emit Account4337Initialized(_entryPoint, owner);
+        emit Account4337Initialized(entryPoint, owner);
     }
 
     function transferOwnership(bytes32[2] memory newOwner) onlySelf public returns (bytes32[2] memory) {
@@ -110,7 +115,7 @@ contract Account4337 is IAccount, Initializable, UUPSUpgradeable, TokenCallbackH
     }
 
     function validateUserOp(
-        UserOperation calldata userOp,
+        PackedUserOperation calldata userOp,
         bytes32 userOpHash,
         uint256 missingAccountFunds
     )
@@ -122,7 +127,7 @@ contract Account4337 is IAccount, Initializable, UUPSUpgradeable, TokenCallbackH
     }
 
     function _validateUserOpSignature(
-        UserOperation calldata userOp,
+        PackedUserOperation calldata userOp,
         bytes32 userOpHash
     ) private view returns (uint256 validationData) {
         bytes memory messageToVerify;
@@ -153,7 +158,7 @@ contract Account4337 is IAccount, Initializable, UUPSUpgradeable, TokenCallbackH
     // Require the function call went through EntryPoint or owner
     function _requireFromEntryPointOrOwner() internal view {
         require(
-            msg.sender == address(entryPoint()) || msg.sender == owner,
+            msg.sender == address(entryPoint) || msg.sender == address(this),
             "account: not Owner or EntryPoint"
         );
     }
@@ -200,14 +205,14 @@ contract Account4337 is IAccount, Initializable, UUPSUpgradeable, TokenCallbackH
      * check current account deposit in the entryPoint
      */
     function getDeposit() public view returns (uint256) {
-        return entryPoint().balanceOf(address(this));
+        return entryPoint.balanceOf(address(this));
     }
 
     /**
      * deposit more funds for this account in the entryPoint
      */
     function addDeposit() public payable {
-        entryPoint().depositTo{value: msg.value}(address(this));
+        entryPoint.depositTo{value: msg.value}(address(this));
     }
 
     /**
@@ -216,7 +221,7 @@ contract Account4337 is IAccount, Initializable, UUPSUpgradeable, TokenCallbackH
      * @param amount to withdraw
      */
     function withdrawDepositTo(address payable withdrawAddress, uint256 amount) public onlySelf {
-        entryPoint().withdrawTo(withdrawAddress, amount);
+        entryPoint.withdrawTo(withdrawAddress, amount);
     }
 
     /// UUPSUpsgradeable: only allow self-upgrade.

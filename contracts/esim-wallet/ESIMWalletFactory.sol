@@ -24,7 +24,7 @@ contract ESIMWalletFactory is Initializable, OwnableUpgradeable {
     /// @notice Emitted when a new eSIM wallet is deployed
     event ESIMWalletDeployed(
         address indexed _eSIMWalletAddress,
-        address indexed _owner,
+        bytes32[2] _owner,
         address indexed _deviceWalletAddress
     );
 
@@ -87,7 +87,7 @@ contract ESIMWalletFactory is Initializable, OwnableUpgradeable {
     /// @param _owner Owner of the eSIM wallet
     /// @return Address of the newly deployed eSIM wallet
     function deployESIMWallet(
-        address _owner,
+        bytes32[2] memory _owner,
         uint256 _salt
     ) external onlyRegistryOrDeviceWalletFactoryOrDeviceWallet returns (address) {
 

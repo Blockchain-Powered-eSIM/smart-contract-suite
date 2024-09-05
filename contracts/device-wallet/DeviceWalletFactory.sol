@@ -37,7 +37,7 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
     event DeviceWalletDeployed(
         address indexed _deviceWalletAddress,
         address indexed _eSIMWalletAddress,
-        bytes32[2] indexed _deviceWalletOwnerKey
+        bytes32[2] _deviceWalletOwnerKey
     );
 
     /// @notice Emitted when the admin address is updated
@@ -148,11 +148,11 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
 
     /// @notice To deploy multiple device wallets at once
     /// @param _deviceUniqueIdentifiers Array of unique device identifiers for each device wallet
-    /// @param _deviceWalletOwners Array of owner address of the respective device wallets
+    /// @param _deviceWalletOwnersKey Array of P256 public keys of owners of the respective device wallets
     /// @return Array of deployed device wallet address
     function deployDeviceWalletForUsers(
-        string[] calldata _deviceUniqueIdentifiers,
-        bytes32[2][] calldata _deviceWalletOwnersKey,
+        string[] memory _deviceUniqueIdentifiers,
+        bytes32[2][] memory _deviceWalletOwnersKey,
         uint256[] calldata _salts
     ) public onlyAdmin returns (address[] memory) {
         uint256 numberOfDeviceWallets = _deviceUniqueIdentifiers.length;
@@ -175,10 +175,10 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
 
     /// @dev Allow admin to deploy a device wallet (and an eSIM wallet) for given unique device identifiers
     /// @param _deviceUniqueIdentifier Unique device identifier for the device wallet
-    /// @param _deviceWalletOwner User's address (owner of the device wallet and respective eSIM wallets)
+    /// @param _deviceWalletOwnerKey User's P256 public key (owner of the device wallet and respective eSIM wallets)
     /// @return Deployed device wallet address
     function deployDeviceWalletAsAdmin(
-        string calldata _deviceUniqueIdentifier,
+        string memory _deviceUniqueIdentifier,
         bytes32[2] memory _deviceWalletOwnerKey,
         uint256 _salt
     ) public onlyAdmin returns (address) {
@@ -225,10 +225,10 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
 
     /// @dev Allow admin to deploy a device wallet (and an eSIM wallet) for given unique device identifiers
     /// @param _deviceUniqueIdentifier Unique device identifier for the device wallet
-    /// @param _deviceWalletOwner User's address (owner of the device wallet and respective eSIM wallets)
+    /// @param _deviceWalletOwnerKey User's P256 public key (owner of the device wallet and respective eSIM wallets)
     /// @return Deployed device wallet address
     function deployDeviceWallet(
-        string calldata _deviceUniqueIdentifier,
+        string memory _deviceUniqueIdentifier,
         bytes32[2] memory _deviceWalletOwnerKey,
         uint256 _salt
     ) public returns (address) {
@@ -270,7 +270,7 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
     function createAccount(
         address _registry,
         bytes32[2] memory _deviceWalletOwnerKey,
-        string calldata _deviceUniqueIdentifier,
+        string memory _deviceUniqueIdentifier,
         uint256 _salt
     ) public payable returns (DeviceWallet ret) {
         address addr = getAddress(
@@ -309,7 +309,7 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
     function getAddress(
         address _registry,
         bytes32[2] memory _deviceWalletOwnerKey,
-        string calldata _deviceUniqueIdentifier,
+        string memory _deviceUniqueIdentifier,
         uint256 _salt
     ) public view returns (address) {
         return Create2.computeAddress(

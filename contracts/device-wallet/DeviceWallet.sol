@@ -59,7 +59,7 @@ contract DeviceWallet is Initializable, Account4337 {
         if(
             msg.sender != address(registry) &&
             msg.sender != address(registry.deviceWalletFactory()) &&
-            msg.sender != owner
+            msg.sender != address(this)
         ) {
             revert OnlyRegistryOrDeviceWalletFactoryOrOwner();
         }
@@ -72,7 +72,7 @@ contract DeviceWallet is Initializable, Account4337 {
 
     function _onlyDeviceWalletFactoryOrOwner() private view {
         if(
-            msg.sender != owner &&
+            msg.sender != address(this) &&
             msg.sender != address(registry.deviceWalletFactory())
         ) {
             revert OnlyDeviceWalletOrOwner();
@@ -118,8 +118,8 @@ contract DeviceWallet is Initializable, Account4337 {
     /// @notice Initialises the device wallet and deploys eSIM wallets for any already existing eSIMs
     function init(
         address _registry,
-        bytes32[2] _deviceWalletOwnerKey,
-        string calldata _deviceUniqueIdentifier
+        bytes32[2] memory _deviceWalletOwnerKey,
+        string memory _deviceUniqueIdentifier
     ) external initializer {
         require(_registry != address(0), "Registry contract cannot be zero");
         require(bytes(_deviceUniqueIdentifier).length != 0, "Device identifier cannot be zero");
@@ -136,10 +136,9 @@ contract DeviceWallet is Initializable, Account4337 {
     function deployESIMWallet(
         bool _hasAccessToETH,
         uint256 _salt
-    ) external onlyOwner returns (address) {
+    ) external onlySelf returns (address) {
         ESIMWalletFactory eSIMWalletFactory = registry.eSIMWalletFactory();
-        // TODO: check if owner() is same as P256 public key
-        address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(owner(), _salt);
+        address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(owner, _salt);
 
         _updateESIMInfo(eSIMWalletAddress, true, _hasAccessToETH);
         _updateDeviceWalletAssociatedWithESIMWallet(eSIMWalletAddress, address(this));
@@ -207,7 +206,7 @@ contract DeviceWallet is Initializable, Account4337 {
     /// @notice Allow owner to revoke or give access to any associated eSIM wallet for pulling ETH
     /// @param _eSIMWalletAddress Address of the eSIM wallet to toggle ETH access for
     /// @param _hasAccessToETH Set to true to give access, false to revoke access
-    function toggleAccessToETH(address _eSIMWalletAddress, bool _hasAccessToETH) external onlyOwner {
+    function toggleAccessToETH(address _eSIMWalletAddress, bool _hasAccessToETH) external onlySelf {
         require(isValidESIMWallet[_eSIMWalletAddress], "Invalid eSIM wallet address");
 
         canPullETH[_eSIMWalletAddress] = _hasAccessToETH;

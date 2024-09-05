@@ -18,12 +18,16 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
 
     /// Emitted when the eSIM wallet is deployed
     event ESIMWalletDeployed(
-        address indexed _eSIMWalletAddress, address indexed _deviceWalletAddress, address indexed _owner
+        address indexed _eSIMWalletAddress,
+        address indexed _deviceWalletAddress,
+        address indexed _owner
     );
 
     /// Emitted when the payment for a data bundle is made
     event DataBundleBought(
-        string _dataBundleID, uint256 _dataBundlePrice, uint256 _ethFromUser
+        string _dataBundleID,
+        uint256 _dataBundlePrice,
+        uint256 _ethFromUser
     );
 
     /// @notice Emitted when the eSIM unique identifier is initialised
@@ -69,11 +73,9 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
     ///      If _eSIMUniqueIdentifier is non-empty, the eSIM wallet is being deployed after the eSIM has been bought by the user
     /// @param _eSIMWalletFactoryAddress eSIM wallet factory contract address
     /// @param _deviceWalletAddress Device wallet contract address (the contract that deploys this eSIM wallet)
-    /// @param _eSIMWalletOwner User's address
     function initialize(
         address _eSIMWalletFactoryAddress,
-        address _deviceWalletAddress,
-        address _eSIMWalletOwner
+        address _deviceWalletAddress
     ) external initializer {
         require(_eSIMWalletOwner != address(0), "Owner cannot be address zero");
         require(_eSIMWalletFactoryAddress != address(0), "eSIM wallet factory address cannot be zero");
@@ -82,9 +84,10 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
         eSIMWalletFactory = _eSIMWalletFactoryAddress;
         deviceWallet = DeviceWallet(payable(_deviceWalletAddress));
 
-        __Ownable_init(_eSIMWalletOwner);
+        // TODO: check if device wallet can perform all owner related tasks
+        __Ownable_init(_deviceWalletAddress);
 
-        emit ESIMWalletDeployed(address(this), _deviceWalletAddress, _eSIMWalletOwner);
+        emit ESIMWalletDeployed(address(this), _deviceWalletAddress, _deviceWalletAddress);
     }
 
     /// @notice Since buying the eSIM (along with data bundle) happens before the identifier is generated,
@@ -130,7 +133,7 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
     /// @notice Function to populate history for lazy wallets. Can only be called once, by lazy wallet registry
     /// @param _dataBundleDetails Array of all the data bundle purchase details before the wallet was deployed
     function populateHistory(DataBundleDetails[] memory _dataBundleDetails) external onlyRegistry returns (bool) {
-        require(transactionHistory.length == 0, "Cannot populate an already in-use wallet");
+        require(transactionHistory.length == 0, "Wallet already in use");
 
         // Using transactionHistory = _dataBundleDetails; would be gas efficient
         // but it is not yet supported for struct types, hence using the loop
@@ -152,6 +155,7 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
         return OwnableUpgradeable.owner();
     }
 
+    // TODO: check if the approval can be set by device wallet directly or does it happen via entry point
     /// @dev Transfers ownership from the current owner to another address
     /// @param newOwner The address that will be the new owner
     function transferOwnership(address newOwner) public override(IOwnableESIMWallet, OwnableUpgradeable) {
