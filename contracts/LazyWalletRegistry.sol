@@ -2,15 +2,15 @@ pragma solidity ^0.8.18;
 
 // SPDX-License-Identifier: MIT
 
-import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {Initializable} from "openzeppelin-contracts-upgradeable/contracts/proxy/utils/Initializable.sol";
+import {UUPSUpgradeable} from "openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
+import {OwnableUpgradeable} from "openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
 
 import {Registry} from "./Registry.sol";
 import "./CustomStructs.sol";
 
 /// @notice Contract for deploying the factory contracts and maintaining registry
-contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeable, RegistryHelper {
+contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeable{
 
     /// @notice Emitted when data related to a device is updated
     event DataUpdatedForDevice(
@@ -18,7 +18,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
     );
 
     event LazyWalletDeployed(
-        address _deviceOwner,
+        bytes32[2] _deviceOwnerPublicKey,
         address deviceWallet,
         string _deviceUniqueIdentifier,
         address[] eSIMWallets,
@@ -31,8 +31,8 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
     /// @notice Registry contract instance
     Registry public registry;
 
-    /// @notice Device identifier <> eSIM identifier <> ESIMDetails(purchase history)
-    mapping(string => mapping(string => ESIMDetails)) public deviceIdentifierToESIMDetails;
+    /// @notice Device identifier <> eSIM identifier <> DataBundleDetails[](list of purchase history)
+    mapping(string => mapping(string => DataBundleDetails[])) public deviceIdentifierToESIMDetails;
 
     /// @notice Mapping from eSIM unique identifier to device unique identifier
     /// @dev A device identifier can have multiple associated eSIM identifiers.
@@ -40,7 +40,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
     mapping(string => string) public eSIMIdentifierToDeviceIdentifier;
 
     /// @notice Device identifier <> List of associated eSIM identifiers
-    mapping(string => AssociatedESIMIdentifiers) public eSIMIdentifiersAssociatedWithDeviceIdentifier;
+    mapping(string => string[]) public eSIMIdentifiersAssociatedWithDeviceIdentifier;
 
     modifier onlyESIMWalletAdmin() {
         require(msg.sender == registry.admin(), "Only eSIM wallet admin");
@@ -74,7 +74,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
 
     /// @notice Function to check if a lazy wallet has been deployed or not
     /// @return Boolean. True if deployed, false otherwise
-    function isLazyWalletDeployed(string calldata _deviceUniqueIdentifier) public returns (bool) {
+    function isLazyWalletDeployed(string calldata _deviceUniqueIdentifier) public view returns (bool) {
         if(registry.uniqueIdentifierToDeviceWallet(_deviceUniqueIdentifier) != address(0)) {
             return true;
         }
@@ -102,32 +102,29 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
 
     /// @notice Function to deploy a device wallet and eSIM wallets on behalf of a user, also setting the eSIM identifiers
     /// @dev _salt should never be near to max value of uint256, if it is, the function call fails
-    /// @param _deviceOwner Address of the device owner
+    /// @param _deviceOwnerPublicKey P256 public key of the device owner
     /// @param _deviceUniqueIdentifier Unique device identifier associated with the device
     /// @return Return device wallet address and list of eSIM wallet addresses
     function deployLazyWalletAndSetESIMIdentifier(
-        address _deviceOwner,
+        bytes32[2] memory _deviceOwnerPublicKey,
         string calldata _deviceUniqueIdentifier,
         uint256 _salt
-    ) external onlyESIMWalletAdmin returns (address, address[]) {
+    ) external onlyESIMWalletAdmin returns (address, address[] memory) {
         require(isLazyWalletDeployed(_deviceUniqueIdentifier) == false, "Device identifier is already associated with a device wallet");
 
         address deviceWallet;
-        address[] eSIMWallets;
+        address[] memory eSIMWallets;
 
-        AssociatedESIMIdentifiers associatedESIMIdentifiers = eSIMIdentifiersAssociatedWithDeviceIdentifier[_deviceUniqueIdentifier];
-        string[] eSIMUniqueIdentifiers = associatedESIMIdentifiers.eSIMIdentifiers;
+        string[] memory eSIMUniqueIdentifiers = eSIMIdentifiersAssociatedWithDeviceIdentifier[_deviceUniqueIdentifier];
 
         DataBundleDetails[][] memory listOfDataBundleDetails;
 
         for(uint256 i=0; i<eSIMUniqueIdentifiers.length; ++i) {
-            ESIMDetails memory eSIMDetails = deviceIdentifierToESIMDetails[_deviceUniqueIdentifier][_eSIMUniqueIdentifier];
-            DataBundleDetails[] memory dataBundleDetails = eSIMDetails.history;
-            listOfDataBundleDetails.push(dataBundleDetails);
+            listOfDataBundleDetails[i] = deviceIdentifierToESIMDetails[_deviceUniqueIdentifier][eSIMUniqueIdentifiers[i]];
         }
 
         (deviceWallet, eSIMWallets) = registry.deployLazyWallet(
-            _deviceOwner,
+            _deviceOwnerPublicKey,
             _deviceUniqueIdentifier,
             _salt,
             eSIMUniqueIdentifiers,
@@ -135,7 +132,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         );
 
         emit LazyWalletDeployed(
-            _deviceOwner,
+            _deviceOwnerPublicKey,
             deviceWallet,
             _deviceUniqueIdentifier,
             eSIMWallets,
@@ -159,22 +156,22 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         require(len == _dataBundleDetails.length, "Unequal array provided");
 
         for(uint256 i=0; i<len; ++i) {
-            string eSIMUniqueIdentifier = _eSIMUniqueIdentifiers[i];
+            string calldata eSIMUniqueIdentifier = _eSIMUniqueIdentifiers[i];
             require(bytes(eSIMUniqueIdentifier).length >= 1, "eSIM unique identifier cannot be empty");
 
-            if(eSIMIdentifierToDeviceIdentifier[eSIMUniqueIdentifier].length == 0) {
+            if(bytes(eSIMIdentifierToDeviceIdentifier[eSIMUniqueIdentifier]).length == 0) {
                 eSIMIdentifierToDeviceIdentifier[eSIMUniqueIdentifier] = _deviceUniqueIdentifier;
 
-                AssociatedESIMIdentifiers storage associatedESIMIdentifiers = eSIMIdentifiersAssociatedWithDeviceIdentifier[_deviceUniqueIdentifier];
-                string[] storage listOfIdentifiers = associatedESIMIdentifiers.eSIMIdentifiers;
-                listOfIdentifiers.push(eSIMUniqueIdentifier);
-                associatedESIMIdentifiers.eSIMIdentifiers = listOfIdentifiers;
+                string[] storage associatedESIMIdentifiers = eSIMIdentifiersAssociatedWithDeviceIdentifier[_deviceUniqueIdentifier];
+                associatedESIMIdentifiers.push(eSIMUniqueIdentifier);
             }
 
-            ESIMDetails storage eSIMDetails = deviceIdentifierToESIMDetails[_deviceUniqueIdentifier][eSIMUniqueIdentifier];
-            DataBundleDetails[] storage details = eSIMDetails.history;
-            details.push(_dataBundleDetails[i]);
-            eSIMDetails.history = details;
+            DataBundleDetails[] storage dataBundleDetails = deviceIdentifierToESIMDetails[_deviceUniqueIdentifier][eSIMUniqueIdentifier];
+            // Manually add a new struct to history and then set its fields
+            dataBundleDetails.push();  // Increase the array length by one
+            DataBundleDetails storage newDataBundleDetail = dataBundleDetails[dataBundleDetails.length - 1];
+            newDataBundleDetail.dataBundleID = _dataBundleDetails[i].dataBundleID;
+            newDataBundleDetail.dataBundlePrice = _dataBundleDetails[i].dataBundlePrice;
         }
 
         emit DataUpdatedForDevice(_deviceUniqueIdentifier, _eSIMUniqueIdentifiers, _dataBundleDetails);
