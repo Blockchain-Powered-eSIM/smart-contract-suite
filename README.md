@@ -3,7 +3,8 @@
 
 ![](./resources/eSIMWallet-SCS.png)
 
-The eSIM Wallet smart contract suite consists of a group of smart contracts which work together to deploy, record and maintain eSIM related data and functionalities. Using the smart contracts, the user can pay for their data bundle subscriptions. There are multiple smart contracts that make this possible:  
+The eSIM Wallet smart contract suite consists of a group of smart contracts which work together to deploy, record and maintain eSIM related data and functionalities. Using the smart contracts, the user can pay for their data bundle subscriptions and can also use the smart wallet as their primary hot wallet. There are multiple smart contracts that make this possible:  
+
 * **Registry Contract** - Responsible for deploying both the factory contracts (Device Wallet Factory and ESIM Wallet Factory). It also acts as a registry for keeping note of all the Device Wallets and ESIM Wallets deployed and marks them as valid. Any Device Wallet or ESIM Wallet deployed outside the contract suite might be unknown to the Registry and will be considered invalid. Users can interact with the Registry contract to deploy their first Device and ESIM wallet.  
 
 * **Device Wallet Factory** - Responsible for deploying device wallet smart contracts and maintaining device wallet related data.  
@@ -52,10 +53,6 @@ d. The server securely generates a unique eSIM identifier based on the eSIM and 
 6. The user can also use the Device Wallet as their primary wallet and withdraw funds anytime.  
 
 
-## Future prospects:
-
-* **Better UX with Account Abstraction**: With the use of account abstraction, the user will be able to use their passkeys (google passkeys and iOS keychain) to sign transactions on-chain. This also significantly increases security and introdcues more recovery procedures.  
+## Future prospects: 
 
 * **Asset recovery**: As of now, the user owns all their smart wallets (device wallet and eSIM wallets) and can change the ownership to their other ETH address. In future, a secondary keystore will be assigned recovery related admin rights, where if the user looses their mobile device, they can transfer the ownership of the wallets to their other address.  
-
-* **Destructible eSIM wallets**: For travellers that need a temporary eSIM and need to switch their eSIMs and data bundles, the eSIM wallet can be destroyed when the eSIM expires.  
