@@ -24,6 +24,9 @@ For example, if a user has 3 eSIMs in his mobile device, then there will be 3 eS
 
 For the eSIM wallet and device wallet to perfectly map to a user's mobile device and eSIMs, a server in the backend securely generates unique identifiers. The device wallet and the eSIM wallets deployed by the master keystore (through the eSIM wallet app) store these unique identifiers, thus allowing the server to proceed with generating eSIM (in case of buying a new eSIM) or applying data bundle for the correct eSIM.
 
+* **P256 Verifier** - A proxy contract to verify web authentication signature (for user's passkeys). It proxies to the Webauthn library. This will be used as an internal P256 verifier for Kokio app.  
+
+* **Webauthn library** - A library for verifying WebAuthn Authentication Assertions, built off the work of Daimo. It attempts to use the RIP-7212 precompile for signature verification. If precompile verification fails, it falls back to FreshCryptoLib.  
 
 ## Contract Specs:
 
