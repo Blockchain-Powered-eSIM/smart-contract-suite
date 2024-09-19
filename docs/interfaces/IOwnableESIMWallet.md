@@ -13,7 +13,7 @@ event TransferApprovalChanged(address from, address to, bool status)
 ### initialize
 
 ```solidity
-function initialize(address eSIMWalletFactoryAddress, address deviceWalletAddress, address owner) external
+function initialize(address eSIMWalletFactoryAddress, address deviceWalletAddress) external
 ```
 
 ### setESIMUniqueIdentifier
