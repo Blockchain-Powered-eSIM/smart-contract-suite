@@ -6,3 +6,4 @@ out/
 forge-cache/
 lcov.info
 .env
+lib/

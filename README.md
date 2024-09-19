@@ -25,6 +25,10 @@ For the eSIM wallet and device wallet to perfectly map to a user's mobile device
 
 * [Registry Contract](./docs/Registry.md)
 
+* [Registry Helper](./docs/RegistryHelper.md)
+
+* [Lazy Wallet Registry](./docs/LazyWalletRegistry.md)
+
 * [Device Wallet Factory](./docs/device-wallet/DeviceWalletFactory.md)  
 
 * [Device Wallet](./docs/device-wallet/DeviceWallet.md)  
@@ -34,6 +38,10 @@ For the eSIM wallet and device wallet to perfectly map to a user's mobile device
 * [eSIM Wallet](./docs/esim-wallet/ESIMWallet.md)
 
 * [eSIM Wallet Interface](./docs/interfaces/IOwnableESIMWallet.md)
+
+* [P256Verifier](./docs/P256Verifier.md)
+
+* [Web Authentication contract](./docs/WebAuthn.md)
 
 ## Smart Contract Suite User Flow:
 
