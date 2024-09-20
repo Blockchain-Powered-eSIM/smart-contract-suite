@@ -12,10 +12,10 @@ error OnlyRegistryOrDeviceWalletFactoryOrOwner()
 error OnlyDeviceWalletOrOwner()
 ```
 
-## OnlyESIMWalletAdmin
+## OnlyESIMWalletAdminOrLazyWallet
 
 ```solidity
-error OnlyESIMWalletAdmin()
+error OnlyESIMWalletAdminOrLazyWallet()
 ```
 
 ## OnlyESIMWalletAdminOrDeviceWalletOwner
@@ -130,10 +130,10 @@ modifier onlyRegistryOrDeviceWalletFactoryOrOwner()
 modifier onlyDeviceWalletFactoryOrOwner()
 ```
 
-### onlyESIMWalletAdmin
+### onlyESIMWalletAdminOrLazyWallet
 
 ```solidity
-modifier onlyESIMWalletAdmin()
+modifier onlyESIMWalletAdminOrLazyWallet()
 ```
 
 ### onlyAssociatedESIMWallets
@@ -145,13 +145,13 @@ modifier onlyAssociatedESIMWallets()
 ### constructor
 
 ```solidity
-constructor(contract IEntryPoint anEntryPoint) public
+constructor(contract IEntryPoint anEntryPoint, contract P256Verifier _verifier) public
 ```
 
 ### init
 
 ```solidity
-function init(address _registry, address _deviceWalletOwner, string _deviceUniqueIdentifier) external
+function init(address _registry, bytes32[2] _deviceWalletOwnerKey, string _deviceUniqueIdentifier) external
 ```
 
 Initialises the device wallet and deploys eSIM wallets for any already existing eSIMs
@@ -184,6 +184,8 @@ function setESIMUniqueIdentifierForAnESIMWallet(address _eSIMWalletAddress, stri
 ```
 
 Allow wallet owner or admin to set unique identifier for their eSIM wallet
+
+_Allow lazy wallet registry to call the function for fiat users who later decided to get a smart wallet_
 
 #### Parameters
 

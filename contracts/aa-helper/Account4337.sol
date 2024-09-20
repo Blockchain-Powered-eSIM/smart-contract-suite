@@ -4,17 +4,17 @@ pragma solidity ^0.8.18;
 
 // import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
-import "openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol";
-import "openzeppelin-contracts/contracts/utils/cryptography/MessageHashUtils.sol";
-import "openzeppelin-contracts-upgradeable/contracts/proxy/utils/Initializable.sol";
-import "openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import "openzeppelin-contracts/contracts/interfaces/IERC1271.sol";
-import "account-abstraction/contracts/interfaces/IAccount.sol";
-import "account-abstraction/contracts/core/Helpers.sol";
-import "account-abstraction/contracts/interfaces/IEntryPoint.sol";
-import "account-abstraction/contracts/core/UserOperationLib.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts/interfaces/IERC1271.sol";
+import "@account-abstraction/contracts/interfaces/IAccount.sol";
+import "@account-abstraction/contracts/core/Helpers.sol";
+import "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
+import "@account-abstraction/contracts/core/UserOperationLib.sol";
 // To allow the smart wallet to handle ERC20 and ERC721 tokens
-import {TokenCallbackHandler} from "account-abstraction/contracts/samples/callback/TokenCallbackHandler.sol";
+import {TokenCallbackHandler} from "@account-abstraction/contracts/samples/callback/TokenCallbackHandler.sol";
 import {P256Verifier} from "../P256Verifier.sol";
 import {WebAuthn} from "../WebAuthn.sol";
 import "../CustomStructs.sol";
