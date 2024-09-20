@@ -21,7 +21,7 @@ Emitted when the eSIM wallet factory is deployed
 ### ESIMWalletDeployed
 
 ```solidity
-event ESIMWalletDeployed(address _eSIMWalletAddress, address _owner, address _deviceWalletAddress)
+event ESIMWalletDeployed(address _eSIMWalletAddress, address _deviceWalletAddress, address _caller)
 ```
 
 Emitted when a new eSIM wallet is deployed
@@ -94,7 +94,7 @@ function initialize(address _registryContractAddress, address _upgradeManager) e
 ### deployESIMWallet
 
 ```solidity
-function deployESIMWallet(address _owner, uint256 _salt) external returns (address)
+function deployESIMWallet(address _deviceWalletAddress, uint256 _salt) external returns (address)
 ```
 
 Function to deploy an eSIM wallet
@@ -105,7 +105,7 @@ _can only be called by the respective deviceWallet contract_
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| _owner | address | Owner of the eSIM wallet |
+| _deviceWalletAddress | address | Address of the associated device wallet |
 | _salt | uint256 |  |
 
 #### Return Values

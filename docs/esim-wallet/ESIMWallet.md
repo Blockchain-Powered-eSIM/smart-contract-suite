@@ -6,6 +6,12 @@
 error OnlyDeviceWallet()
 ```
 
+## OnlyRegistry
+
+```solidity
+error OnlyRegistry()
+```
+
 ## FailedToTransfer
 
 ```solidity
@@ -25,7 +31,7 @@ Emitted when the eSIM wallet is deployed
 ### DataBundleBought
 
 ```solidity
-event DataBundleBought(string _dataBundleID, uint256 _dataBundlePrice, uint256 _ethFromUser, uint256 _transactionCount)
+event DataBundleBought(string _dataBundleID, uint256 _dataBundlePrice, uint256 _ethFromUser)
 ```
 
 Emitted when the payment for a data bundle is made
@@ -37,6 +43,14 @@ event ESIMUniqueIdentifierInitialised(string _eSIMUniqueIdentifier)
 ```
 
 Emitted when the eSIM unique identifier is initialised
+
+### TransactionHistoryPopulated
+
+```solidity
+event TransactionHistoryPopulated(struct DataBundleDetails[] _dataBundleDetails)
+```
+
+Emitted when the lazy wallet registry populates history after wallet deployment
 
 ### ETHSent
 
@@ -70,30 +84,13 @@ contract DeviceWallet deviceWallet
 
 Device wallet contract instance associated with this eSIM wallet
 
-### lastTransactionCount
-
-```solidity
-uint256 lastTransactionCount
-```
-
-Total number of data bundle transactions made by user
-
-### DataBundleDetails
-
-```solidity
-struct DataBundleDetails {
-  string dataBundleID;
-  uint256 dataBundlePrice;
-}
-```
-
 ### transactionHistory
 
 ```solidity
-mapping(uint256 => struct ESIMWallet.DataBundleDetails) transactionHistory
+struct DataBundleDetails[] transactionHistory
 ```
 
-lastTransactionCount -> (data bundle ID, data bundle price)
+Array of all the data bundle purchase
 
 ### _isTransferApproved
 
@@ -110,6 +107,12 @@ _A map from owner and spender to transfer approval. Determines whether
 modifier onlyDeviceWallet()
 ```
 
+### onlyRegistry
+
+```solidity
+modifier onlyRegistry()
+```
+
 ### constructor
 
 ```solidity
@@ -119,7 +122,7 @@ constructor() public
 ### initialize
 
 ```solidity
-function initialize(address _eSIMWalletFactoryAddress, address _deviceWalletAddress, address _eSIMWalletOwner) external
+function initialize(address _eSIMWalletFactoryAddress, address _deviceWalletAddress) external
 ```
 
 ESIMWallet initialize function to initialise the contract
@@ -133,7 +136,6 @@ _If _eSIMUniqueIdentifier is empty, the eSIM wallet is being deployed before buy
 | ---- | ---- | ----------- |
 | _eSIMWalletFactoryAddress | address | eSIM wallet factory contract address |
 | _deviceWalletAddress | address | Device wallet contract address (the contract that deploys this eSIM wallet) |
-| _eSIMWalletOwner | address | User's address |
 
 ### setESIMUniqueIdentifier
 
@@ -155,7 +157,7 @@ _This function can only be called once_
 ### buyDataBundle
 
 ```solidity
-function buyDataBundle(string _dataBundleID, uint256 _dataBundlePrice) public payable returns (bool)
+function buyDataBundle(struct DataBundleDetails _dataBundleDetail) public payable returns (bool)
 ```
 
 Function to make payment for the data bundle
@@ -164,14 +166,27 @@ Function to make payment for the data bundle
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| _dataBundleID | string | string data bundle ID from the backend catalogue |
-| _dataBundlePrice | uint256 | uint256 price for the data bundle |
+| _dataBundleDetail | struct DataBundleDetails | Details of the data bundle being bought. (dataBundleID, dataBundlePrice) |
 
 #### Return Values
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
 | [0] | bool | True if the transaction is successful |
+
+### populateHistory
+
+```solidity
+function populateHistory(struct DataBundleDetails[] _dataBundleDetails) external returns (bool)
+```
+
+Function to populate history for lazy wallets. Can only be called once, by lazy wallet registry
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _dataBundleDetails | struct DataBundleDetails[] | Array of all the data bundle purchase details before the wallet was deployed |
 
 ### owner
 

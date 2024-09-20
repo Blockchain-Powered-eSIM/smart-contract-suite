@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 
 import {FCL_ecdsa} from "FreshCryptoLib/FCL_ecdsa.sol";
 import {FCL_Elliptic_ZZ} from "FreshCryptoLib/FCL_elliptic.sol";
-import {Base64} from "openzeppelin-contracts/contracts/utils/Base64.sol";
+import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
 import {LibString} from "solady/utils/LibString.sol";
 import "./CustomStructs.sol";
 
