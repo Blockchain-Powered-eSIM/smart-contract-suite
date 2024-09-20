@@ -8,8 +8,7 @@ interface IOwnableESIMWalletEvents {
 interface IOwnableESIMWallet is IOwnableESIMWalletEvents {
     function initialize(
         address eSIMWalletFactoryAddress,
-        address deviceWalletAddress,
-        address owner
+        address deviceWalletAddress
     ) external;
 
     function setESIMUniqueIdentifier(string calldata eSIMUniqueIdentifier) external;

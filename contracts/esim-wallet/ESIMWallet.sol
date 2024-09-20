@@ -18,19 +18,23 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
 
     /// Emitted when the eSIM wallet is deployed
     event ESIMWalletDeployed(
-        address indexed _eSIMWalletAddress, address indexed _deviceWalletAddress, address indexed _owner
+        address indexed _eSIMWalletAddress,
+        address indexed _deviceWalletAddress,
+        address indexed _owner
     );
 
     /// Emitted when the payment for a data bundle is made
     event DataBundleBought(
-        string _dataBundleID, uint256 _dataBundlePrice, uint256 _ethFromUser, uint256 _transactionCount
+        string _dataBundleID,
+        uint256 _dataBundlePrice,
+        uint256 _ethFromUser
     );
 
     /// @notice Emitted when the eSIM unique identifier is initialised
     event ESIMUniqueIdentifierInitialised(string _eSIMUniqueIdentifier);
 
     /// @notice Emitted when the lazy wallet registry populates history after wallet deployment
-    event TransactionHistoryPopulated(DataBundleDetails _dataBundleDetails);
+    event TransactionHistoryPopulated(DataBundleDetails[] _dataBundleDetails);
 
     /// @notice Emitted when ETH moves out of this contract
     event ETHSent(address indexed _recipient, uint256 _amount);
@@ -69,22 +73,20 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
     ///      If _eSIMUniqueIdentifier is non-empty, the eSIM wallet is being deployed after the eSIM has been bought by the user
     /// @param _eSIMWalletFactoryAddress eSIM wallet factory contract address
     /// @param _deviceWalletAddress Device wallet contract address (the contract that deploys this eSIM wallet)
-    /// @param _eSIMWalletOwner User's address
     function initialize(
         address _eSIMWalletFactoryAddress,
-        address _deviceWalletAddress,
-        address _eSIMWalletOwner
+        address _deviceWalletAddress
     ) external initializer {
-        require(_eSIMWalletOwner != address(0), "Owner cannot be address zero");
         require(_eSIMWalletFactoryAddress != address(0), "eSIM wallet factory address cannot be zero");
         require(_deviceWalletAddress != address(0), "Device wallet address cannot be zero");
 
         eSIMWalletFactory = _eSIMWalletFactoryAddress;
         deviceWallet = DeviceWallet(payable(_deviceWalletAddress));
 
-        __Ownable_init(_eSIMWalletOwner);
+        // TODO: check if device wallet can perform all owner related tasks
+        __Ownable_init(_deviceWalletAddress);
 
-        emit ESIMWalletDeployed(address(this), _deviceWalletAddress, _eSIMWalletOwner);
+        emit ESIMWalletDeployed(address(this), _deviceWalletAddress, _deviceWalletAddress);
     }
 
     /// @notice Since buying the eSIM (along with data bundle) happens before the identifier is generated,
@@ -122,7 +124,7 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
 
         transactionHistory.push(_dataBundleDetail);
 
-        emit DataBundleBought(_dataBundleDetail.dataBundleID, _dataBundleDetail.dataBundlePrice, msg.value, lastTransactionCount);
+        emit DataBundleBought(_dataBundleDetail.dataBundleID, _dataBundleDetail.dataBundlePrice, msg.value);
 
         return true;
     }
@@ -130,11 +132,17 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
     /// @notice Function to populate history for lazy wallets. Can only be called once, by lazy wallet registry
     /// @param _dataBundleDetails Array of all the data bundle purchase details before the wallet was deployed
     function populateHistory(DataBundleDetails[] memory _dataBundleDetails) external onlyRegistry returns (bool) {
-        require(transactionHistory.length == 0, "Cannot populate an already in-use wallet");
+        require(transactionHistory.length == 0, "Wallet already in use");
 
-        // push memory to storage
-        // more gas optimised compared to loop iteration for copying data
-        transactionHistory = _dataBundleDetails;
+        // Using transactionHistory = _dataBundleDetails; would be gas efficient
+        // but it is not yet supported for struct types, hence using the loop
+        for (uint256 i = 0; i < _dataBundleDetails.length; i++) {
+            // Create a temporary variable in storage
+            transactionHistory.push(); // Increase the length of transactionHistory by 1
+            DataBundleDetails storage newTransaction = transactionHistory[transactionHistory.length - 1];
+            newTransaction.dataBundleID = _dataBundleDetails[i].dataBundleID;
+            newTransaction.dataBundlePrice = _dataBundleDetails[i].dataBundlePrice;
+        }
 
         emit TransactionHistoryPopulated(_dataBundleDetails);
 
@@ -146,6 +154,7 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
         return OwnableUpgradeable.owner();
     }
 
+    // TODO: check if the approval can be set by device wallet directly or does it happen via entry point
     /// @dev Transfers ownership from the current owner to another address
     /// @param newOwner The address that will be the new owner
     function transferOwnership(address newOwner) public override(IOwnableESIMWallet, OwnableUpgradeable) {

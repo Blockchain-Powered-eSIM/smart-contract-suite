@@ -48,4 +48,4 @@ contract UpgradeableBeacon is IBeacon, OwnableUpgradeable {
     }
 }
 
-// Based on https://github.com/OpenZeppelin/openzeppelin-contracts/blob/0db76e98f90550f1ebbb3dea71c7d12d5c533b5c/contracts/proxy/UpgradeableBeacon.sol
+// Based on https://github.com/OpenZeppelin/@openzeppelin-contracts/blob/0db76e98f90550f1ebbb3dea71c7d12d5c533b5c/contracts/proxy/UpgradeableBeacon.sol

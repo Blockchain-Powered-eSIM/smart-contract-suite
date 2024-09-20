@@ -10,9 +10,6 @@
     "generate-doc": "hardhat docgen"
   },
   "dependencies": {
-    "@account-abstraction/contracts": "^0.7.0",
-    "@openzeppelin/contracts": "5.0.2",
-    "@openzeppelin/contracts-upgradeable": "5.0.2",
     "dotenv": "^16.4.5",
     "ethers": "^5.7.2",
     "lcov-filter": "^0.1.1",
