@@ -94,6 +94,15 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
         eSIMWalletFactory = ESIMWalletFactory(address(eSIMWalletFactoryProxy));
 
         __Ownable_init(_upgradeManager);
+
+        emit RegistryInitialized(
+            _eSIMWalletAdmin, 
+            _vault, 
+            _upgradeManager, 
+            address(deviceWalletFactory), 
+            address(eSIMWalletFactory),
+            address(_verifier)
+        );
     }
 
     /// @notice Function to add or update the lazy wallet registry address
