@@ -175,8 +175,8 @@ contract DeviceWallet is Initializable, Account4337 {
     ///      the eSIM wallet can directly request the device wallet to pay ETH for the data bundles
     /// @param _amount Amount of ETH to pull
     function payETHForDataBundles(uint256 _amount) external onlyAssociatedESIMWallets returns (uint256) {
-        require(_amount > 0, "Amount cannot be zero");
-        require(canPullETH[msg.sender] == true, "Cannot pull ETH. Access has been revoked");
+        require(_amount > 0, "_amount 0");
+        require(canPullETH[msg.sender] == true, "Access revoked");
 
         address vault = getVaultAddress();
         _transferETH(vault, _amount);
@@ -189,8 +189,8 @@ contract DeviceWallet is Initializable, Account4337 {
     /// @notice Allow the eSIM wallets associated with this device wallet to pull ETH (for data bundles)
     /// @param _amount Amount of ETH to pull
     function pullETH(uint256 _amount) external onlyAssociatedESIMWallets returns (uint256) {
-        require(_amount > 0, "Amount cannot be zero");
-        require(canPullETH[msg.sender] == true, "Cannot pull ETH. Access revoked");
+        require(_amount > 0, "_amount 0");
+        require(canPullETH[msg.sender] == true, "Access revoked");
 
         _transferETH(msg.sender, _amount);
 
@@ -207,7 +207,7 @@ contract DeviceWallet is Initializable, Account4337 {
     /// @param _eSIMWalletAddress Address of the eSIM wallet to toggle ETH access for
     /// @param _hasAccessToETH Set to true to give access, false to revoke access
     function toggleAccessToETH(address _eSIMWalletAddress, bool _hasAccessToETH) external onlySelf {
-        require(isValidESIMWallet[_eSIMWalletAddress], "Invalid eSIM wallet address");
+        require(isValidESIMWallet[_eSIMWalletAddress], "Unknown _eSIMWalletAddress");
 
         canPullETH[_eSIMWalletAddress] = _hasAccessToETH;
 
@@ -215,8 +215,8 @@ contract DeviceWallet is Initializable, Account4337 {
     }
 
     function _transferETH(address _recipient, uint256 _amount) internal virtual {
-        require(_amount <= address(this).balance, "Not enough ETH in wallet");
-        require(_recipient != address(0), "Recipient cannot be zero address");
+        require(_amount <= address(this).balance, "Not enough ETH");
+        require(_recipient != address(0), "_recipient 0");
 
         if (_amount > 0) {
             (bool success,) = _recipient.call{value: _amount}("");
