@@ -64,34 +64,17 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
         address _upgradeManager,
         P256Verifier _verifier
     ) external initializer {
-        require(_eSIMWalletAdmin != address(0), "eSIM Admin address cannot be zero address");
-        require(_vault != address(0), "Vault address cannot be zero address");
-        require(_upgradeManager != address(0), "Upgrade Manager address cannot be zero address");
+        require(_eSIMWalletAdmin != address(0), "Invalid _eSIMWalletAdmin address");
+        require(_vault != address(0), "Invalid _vault address");
+        require(_upgradeManager != address(0), "Invalid _upgradeManager address");
 
         admin = _eSIMWalletAdmin;
         vault = _vault;
         upgradeManager = _upgradeManager;
 
-        address deviceWalletFactoryImplementation = address(new DeviceWalletFactory(entryPoint, _verifier));
-        ERC1967Proxy deviceWalletFactoryProxy = new ERC1967Proxy(
-            deviceWalletFactoryImplementation,
-            abi.encodeCall(
-                DeviceWalletFactory(deviceWalletFactoryImplementation).initialize,
-                (address(this), _eSIMWalletAdmin, _vault, _upgradeManager)
-            )
-        );
-        deviceWalletFactory = DeviceWalletFactory(address(deviceWalletFactoryProxy));
+        _deployDeviceWalletFactory(entryPoint, _verifier, _eSIMWalletAdmin, _vault, _upgradeManager);
 
-        address eSIMWalletFactoryImplementation = address(new ESIMWalletFactory());
-        ERC1967Proxy eSIMWalletFactoryProxy = new ERC1967Proxy(
-            eSIMWalletFactoryImplementation,
-            abi.encodeCall(
-                ESIMWalletFactory(eSIMWalletFactoryImplementation).initialize,
-                (address(this), _upgradeManager)
-            )
-        );
-
-        eSIMWalletFactory = ESIMWalletFactory(address(eSIMWalletFactoryProxy));
+        _deployESIMWalletFactory(_upgradeManager);
 
         __Ownable_init(_upgradeManager);
 
