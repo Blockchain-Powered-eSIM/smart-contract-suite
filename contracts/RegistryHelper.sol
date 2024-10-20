@@ -33,6 +33,15 @@ contract RegistryHelper {
         address indexed _lazyWalletRegistry
     );
 
+    event RegistryInitialized(
+        address _eSIMWalletAdmin, 
+        address _vault, 
+        address indexed _upgradeManager, 
+        address indexed _deviceWalletFactory, 
+        address indexed _eSIMWalletFactory,
+        address _verifier
+    );
+
     /// @notice Address of the Lazy wallet registry
     address public lazyWalletRegistry;
 
