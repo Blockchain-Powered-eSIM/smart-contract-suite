@@ -2,10 +2,13 @@ pragma solidity ^0.8.18;
 
 // SPDX-License-Identifier: MIT
 
+import "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {DeviceWalletFactory} from "./device-wallet/DeviceWalletFactory.sol";
 import {ESIMWalletFactory} from "./esim-wallet/ESIMWalletFactory.sol";
 import {DeviceWallet} from "./device-wallet/DeviceWallet.sol";
 import {ESIMWallet} from "./esim-wallet/ESIMWallet.sol";
+import {P256Verifier} from "./P256Verifier.sol";
 import "./CustomStructs.sol";
 
 error OnlyLazyWalletRegistry();
@@ -137,5 +140,37 @@ contract RegistryHelper {
         );
 
         isESIMWalletValid[_eSIMWalletAddress] = _deviceWalletAddress;
+    }
+
+    function _deployDeviceWalletFactory(
+        IEntryPoint entryPoint,
+        P256Verifier _verifier,
+        address _eSIMWalletAdmin,
+        address _vault,
+        address _upgradeManager
+    ) internal {
+        address deviceWalletFactoryImplementation = address(new DeviceWalletFactory(entryPoint, _verifier));
+        ERC1967Proxy deviceWalletFactoryProxy = new ERC1967Proxy(
+            deviceWalletFactoryImplementation,
+            abi.encodeCall(
+                DeviceWalletFactory(deviceWalletFactoryImplementation).initialize,
+                (address(this), _eSIMWalletAdmin, _vault, _upgradeManager)
+            )
+        );
+        deviceWalletFactory = DeviceWalletFactory(address(deviceWalletFactoryProxy));
+    }
+
+    function _deployESIMWalletFactory(
+        address _upgradeManager
+    ) internal {
+        address eSIMWalletFactoryImplementation = address(new ESIMWalletFactory());
+        ERC1967Proxy eSIMWalletFactoryProxy = new ERC1967Proxy(
+            eSIMWalletFactoryImplementation,
+            abi.encodeCall(
+                ESIMWalletFactory(eSIMWalletFactoryImplementation).initialize,
+                (address(this), _upgradeManager)
+            )
+        );
+        eSIMWalletFactory = ESIMWalletFactory(address(eSIMWalletFactoryProxy));
     }
 }
