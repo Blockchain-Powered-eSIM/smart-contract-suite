@@ -75,6 +75,7 @@ contract RegistryHelper {
         string[] memory _eSIMUniqueIdentifiers,
         DataBundleDetails[][] memory _dataBundleDetails
     ) external onlyLazyWalletRegistry returns (address, address[] memory) {
+        require(_eSIMUniqueIdentifiers.length + _salt < type(uint256).max, "Salt value too high");
         require(
             uniqueIdentifierToDeviceWallet[_deviceUniqueIdentifier] == address(0),
             "Device wallet already exists"
