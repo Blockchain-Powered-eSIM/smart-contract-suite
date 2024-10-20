@@ -64,9 +64,9 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
         address _upgradeManager,
         P256Verifier _verifier
     ) external initializer {
-        require(_eSIMWalletAdmin != address(0), "Invalid _eSIMWalletAdmin address");
-        require(_vault != address(0), "Invalid _vault address");
-        require(_upgradeManager != address(0), "Invalid _upgradeManager address");
+        require(_eSIMWalletAdmin != address(0), "_eSIMWalletAdmin 0");
+        require(_vault != address(0), "_vault 0");
+        require(_upgradeManager != address(0), "_upgradeManager 0");
 
         admin = _eSIMWalletAdmin;
         vault = _vault;
@@ -92,7 +92,7 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
     function addOrUpdateLazyWalletRegistryAddress(
         address _lazyWalletRegistry
     ) public onlyOwner returns (address) {
-        require(_lazyWalletRegistry != address(0), "Cannot be zero address");
+        require(_lazyWalletRegistry != address(0), "_lazyWalletRegistry 0");
 
         lazyWalletRegistry = _lazyWalletRegistry;
 
@@ -109,14 +109,13 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
         bytes32[2] memory _deviceWalletOwnerKey,
         uint256 _salt
     ) external returns (address, address) {
-        require(bytes(_deviceUniqueIdentifier).length >= 1, "Device unique identifier cannot be empty");
+        require(bytes(_deviceUniqueIdentifier).length >= 1, "Device identifier 0");
         require(
             uniqueIdentifierToDeviceWallet[_deviceUniqueIdentifier] == address(0),
             "Device wallet already exists"
         );
 
         address deviceWallet = deviceWalletFactory.deployDeviceWallet(_deviceUniqueIdentifier, _deviceWalletOwnerKey, _salt);
-        _updateDeviceWalletInfo(deviceWallet, _deviceUniqueIdentifier, _deviceWalletOwnerKey);
 
         address eSIMWallet = eSIMWalletFactory.deployESIMWallet(deviceWallet, _salt);
         _updateESIMInfo(eSIMWallet, deviceWallet);
