@@ -271,14 +271,14 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
             _salt
         );
 
-        // Prefund the account with msg.value
-        if (msg.value > 0) {
-            entryPoint.depositTo{value: msg.value}(addr);
-        }
-
         uint256 codeSize = addr.code.length;
         if (codeSize > 0) {
             return DeviceWallet(payable(addr));
+        }
+
+        // Prefund the account with msg.value
+        if (msg.value > 0) {
+            entryPoint.depositTo{value: msg.value}(addr);
         }
 
         ret = DeviceWallet(
