@@ -227,7 +227,7 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
         string memory _deviceUniqueIdentifier,
         bytes32[2] memory _deviceWalletOwnerKey,
         uint256 _salt
-    ) public returns (address) {
+    ) public payable returns (address) {
         require(msg.sender == address(registry), "Only registry can call");
         require(
             bytes(_deviceUniqueIdentifier).length != 0, 
