@@ -93,7 +93,7 @@ contract RegistryHelper {
             "Device wallet already exists"
         );
 
-        address deviceWallet = deviceWalletFactory.deployDeviceWallet(_deviceUniqueIdentifier, _deviceWalletOwnerKey, _salt);
+        address deviceWallet = address(deviceWalletFactory.createAccount(_deviceUniqueIdentifier, _deviceWalletOwnerKey, _salt));
 
         address[] memory eSIMWallets;
 

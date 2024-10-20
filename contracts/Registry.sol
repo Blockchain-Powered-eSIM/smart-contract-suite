@@ -101,30 +101,6 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
         return lazyWalletRegistry;
     }
 
-    /// Allow anyone to deploy a device wallet and an eSIM wallet for themselves
-    /// @param _deviceUniqueIdentifier Unique device identifier associated with the device
-    /// @return Return device wallet address and eSIM wallet address
-    function deployWallet(
-        string calldata _deviceUniqueIdentifier,
-        bytes32[2] memory _deviceWalletOwnerKey,
-        uint256 _salt
-    ) external returns (address, address) {
-        require(bytes(_deviceUniqueIdentifier).length >= 1, "Device identifier 0");
-        require(
-            uniqueIdentifierToDeviceWallet[_deviceUniqueIdentifier] == address(0),
-            "Device wallet already exists"
-        );
-
-        address deviceWallet = deviceWalletFactory.deployDeviceWallet(_deviceUniqueIdentifier, _deviceWalletOwnerKey, _salt);
-
-        address eSIMWallet = eSIMWalletFactory.deployESIMWallet(deviceWallet, _salt);
-        _updateESIMInfo(eSIMWallet, deviceWallet);
-
-        emit WalletDeployed(_deviceUniqueIdentifier, deviceWallet, eSIMWallet);
-
-        return (deviceWallet, eSIMWallet);
-    }
-
     function updateDeviceWalletAssociatedWithESIMWallet(
         address _eSIMWalletAddress,
         address _deviceWalletAddress
