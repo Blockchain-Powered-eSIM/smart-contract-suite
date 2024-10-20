@@ -63,8 +63,8 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         address _registry,
         address _upgradeManager
     ) external initializer {
-        require(_registry != address(0), "Registry contract address cannot be zero");
-        require(_upgradeManager != address(0), "Upgrade Manager address cannot be zero address");
+        require(_registry != address(0), "Registry 0");
+        require(_upgradeManager != address(0), "Manager 0");
         
         registry = Registry(_registry);
         upgradeManager = _upgradeManager;
@@ -90,7 +90,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         string[] calldata _deviceUniqueIdentifiers,
         string[][] calldata _eSIMUniqueIdentifiers,
         DataBundleDetails[][] calldata _dataBundleDetails
-    ) external {
+    ) external onlyESIMWalletAdmin {
         uint256 len = _deviceUniqueIdentifiers.length;
         require(len == _eSIMUniqueIdentifiers.length, "Unequal array provided");
         require(len == _dataBundleDetails.length, "Unequal array provided");
@@ -110,7 +110,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         string calldata _deviceUniqueIdentifier,
         uint256 _salt
     ) external onlyESIMWalletAdmin returns (address, address[] memory) {
-        require(isLazyWalletDeployed(_deviceUniqueIdentifier) == false, "Device identifier is already associated with a device wallet");
+        require(isLazyWalletDeployed(_deviceUniqueIdentifier) == false, "Already deployed");
 
         address deviceWallet;
         address[] memory eSIMWallets;
@@ -149,15 +149,15 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         string[] calldata _eSIMUniqueIdentifiers,
         DataBundleDetails[] calldata _dataBundleDetails
     ) internal {
-        require(bytes(_deviceUniqueIdentifier).length >= 1, "Device unique identifier cannot be empty");
-        require(isLazyWalletDeployed(_deviceUniqueIdentifier) == false, "Device identifier is already associated with a device wallet");
+        require(bytes(_deviceUniqueIdentifier).length >= 1, "Device identifier 0");
+        require(isLazyWalletDeployed(_deviceUniqueIdentifier) == false, "Already deployed");
         
         uint256 len = _eSIMUniqueIdentifiers.length;
         require(len == _dataBundleDetails.length, "Unequal array provided");
 
         for(uint256 i=0; i<len; ++i) {
             string calldata eSIMUniqueIdentifier = _eSIMUniqueIdentifiers[i];
-            require(bytes(eSIMUniqueIdentifier).length >= 1, "eSIM unique identifier cannot be empty");
+            require(bytes(eSIMUniqueIdentifier).length >= 1, "eSIM identifier 0");
 
             if(bytes(eSIMIdentifierToDeviceIdentifier[eSIMUniqueIdentifier]).length == 0) {
                 eSIMIdentifierToDeviceIdentifier[eSIMUniqueIdentifier] = _deviceUniqueIdentifier;
