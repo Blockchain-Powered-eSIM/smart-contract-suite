@@ -94,7 +94,6 @@ contract RegistryHelper {
         );
 
         address deviceWallet = deviceWalletFactory.deployDeviceWallet(_deviceUniqueIdentifier, _deviceWalletOwnerKey, _salt);
-        _updateDeviceWalletInfo(deviceWallet, _deviceUniqueIdentifier, _deviceWalletOwnerKey);
 
         address[] memory eSIMWallets;
 
