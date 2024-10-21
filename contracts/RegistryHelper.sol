@@ -93,6 +93,8 @@ contract RegistryHelper {
             "Device wallet already exists"
         );
 
+        // Deploys device smart wallet
+        // Updates device wallet info via Registry
         address deviceWallet = address(deviceWalletFactory.createAccount(_deviceUniqueIdentifier, _deviceWalletOwnerKey, _salt));
 
         address[] memory eSIMWallets;
