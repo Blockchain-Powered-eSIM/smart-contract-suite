@@ -96,8 +96,9 @@ contract RegistryHelper {
         string calldata _deviceUniqueIdentifier,
         uint256 _salt,
         string[] memory _eSIMUniqueIdentifiers,
-        DataBundleDetails[][] memory _dataBundleDetails
-    ) external onlyLazyWalletRegistry returns (address, address[] memory) {
+        DataBundleDetails[][] memory _dataBundleDetails,
+        uint256 _depositAmount
+    ) external payable onlyLazyWalletRegistry returns (address, address[] memory) {
         require(_eSIMUniqueIdentifiers.length + _salt < type(uint256).max, "Salt value too high");
         require(
             uniqueIdentifierToDeviceWallet[_deviceUniqueIdentifier] == address(0),
@@ -106,7 +107,7 @@ contract RegistryHelper {
 
         // Deploys device smart wallet
         // Updates device wallet info via Registry
-        address deviceWallet = address(deviceWalletFactory.createAccount(_deviceUniqueIdentifier, _deviceWalletOwnerKey, _salt));
+        address deviceWallet = address(deviceWalletFactory.createAccount(_deviceUniqueIdentifier, _deviceWalletOwnerKey, _salt, _depositAmount));
 
         address[] memory eSIMWallets;
 
