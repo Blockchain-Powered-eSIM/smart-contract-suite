@@ -15,10 +15,11 @@ error OnlyLazyWalletRegistry();
 
 contract RegistryHelper {
 
-    event WalletDeployed(
-        string _deviceUniqueIdentifier,
-        address indexed _deviceWallet,
-        address indexed _eSIMWallet
+    event LazyWalletDeployed(
+        address indexed _deviceWallet, 
+        string _deviceUniqueIdentifier, 
+        address indexed _eSIMWallet, 
+        string _eSIMUniqueIdentifier
     );
 
     event DeviceWalletInfoUpdated(
@@ -112,7 +113,6 @@ contract RegistryHelper {
         for(uint256 i=0; i<_eSIMUniqueIdentifiers.length; ++i) {
             // increase salt for subsequent eSIM wallet deployments
             address eSIMWallet = eSIMWalletFactory.deployESIMWallet(deviceWallet, (_salt + i));
-            emit WalletDeployed(_deviceUniqueIdentifier, deviceWallet, eSIMWallet);
 
             // Updates the Device wallet storage variables as well as for the registry
             DeviceWallet(payable(deviceWallet)).addESIMWallet(eSIMWallet, deviceWallet, true);
@@ -125,6 +125,8 @@ contract RegistryHelper {
             ESIMWallet(payable(eSIMWallet)).populateHistory(_dataBundleDetails[i]);
 
             eSIMWallets[i] = eSIMWallet;
+
+            emit LazyWalletDeployed(deviceWallet, _deviceUniqueIdentifier, eSIMWallet, _eSIMUniqueIdentifiers[i]);
         }
 
         return (deviceWallet, eSIMWallets);
