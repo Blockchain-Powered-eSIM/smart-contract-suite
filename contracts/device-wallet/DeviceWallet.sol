@@ -37,11 +37,17 @@ contract DeviceWallet is Initializable, Account4337 {
     /// @dev mostly when an eSIM wallet pulls ETH from this contract
     event ETHSent(address indexed _eSIMWalletAddress, uint256 _amount);
 
-    /// @notice Emitted when eSIM wallet is deployed
-    event ESIMWalletDeployed(address indexed _eSIMWalletAddress, bool _hasAccessToETH);
+    /// @notice Emitted when eSIM wallet is added to this Device Wallet
+    event ESIMWalletAdded(address indexed _eSIMWalletAddress, bool _hasAccessToETH, address indexed _caller);
+
+    /// @notice EMitted when the eSIM wallet is removed from this Device Wallet
+    event ESIMWalletRemoved(address indexed _eSIMWalletAddress, address indexed _deviceWalletAddress, address indexed _caller);
 
     /// @notice Registry contract instance
     Registry public registry;
+
+    /// @notice eSIM wallet factory address
+    ESIMWalletFactory public eSIMWalletFactory;
 
     /// @notice String identifier to uniquely identify user's device
     string public deviceUniqueIdentifier;
@@ -126,6 +132,7 @@ contract DeviceWallet is Initializable, Account4337 {
 
         registry = Registry(_registry);
         deviceUniqueIdentifier = _deviceUniqueIdentifier;
+        eSIMWalletFactory = registry.eSIMWalletFactory();
         
         initialize(_deviceWalletOwnerKey);
     }
@@ -137,12 +144,9 @@ contract DeviceWallet is Initializable, Account4337 {
         bool _hasAccessToETH,
         uint256 _salt
     ) external onlySelf returns (address) {
-        ESIMWalletFactory eSIMWalletFactory = registry.eSIMWalletFactory();
         address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(address(this), _salt);
 
-        _updateESIMInfo(eSIMWalletAddress, true, _hasAccessToETH);
-        _updateDeviceWalletAssociatedWithESIMWallet(eSIMWalletAddress, address(this));
-        emit ESIMWalletDeployed(eSIMWalletAddress, _hasAccessToETH);
+        addESIMWallet(eSIMWalletAddress, address(this), _hasAccessToETH);
 
         return eSIMWalletAddress;
     }
@@ -175,8 +179,8 @@ contract DeviceWallet is Initializable, Account4337 {
     ///      the eSIM wallet can directly request the device wallet to pay ETH for the data bundles
     /// @param _amount Amount of ETH to pull
     function payETHForDataBundles(uint256 _amount) external onlyAssociatedESIMWallets returns (uint256) {
-        require(_amount > 0, "Amount cannot be zero");
-        require(canPullETH[msg.sender] == true, "Cannot pull ETH. Access has been revoked");
+        require(_amount > 0, "_amount 0");
+        require(canPullETH[msg.sender] == true, "Access revoked");
 
         address vault = getVaultAddress();
         _transferETH(vault, _amount);
@@ -189,8 +193,8 @@ contract DeviceWallet is Initializable, Account4337 {
     /// @notice Allow the eSIM wallets associated with this device wallet to pull ETH (for data bundles)
     /// @param _amount Amount of ETH to pull
     function pullETH(uint256 _amount) external onlyAssociatedESIMWallets returns (uint256) {
-        require(_amount > 0, "Amount cannot be zero");
-        require(canPullETH[msg.sender] == true, "Cannot pull ETH. Access revoked");
+        require(_amount > 0, "_amount 0");
+        require(canPullETH[msg.sender] == true, "Access revoked");
 
         _transferETH(msg.sender, _amount);
 
@@ -206,8 +210,8 @@ contract DeviceWallet is Initializable, Account4337 {
     /// @notice Allow owner to revoke or give access to any associated eSIM wallet for pulling ETH
     /// @param _eSIMWalletAddress Address of the eSIM wallet to toggle ETH access for
     /// @param _hasAccessToETH Set to true to give access, false to revoke access
-    function toggleAccessToETH(address _eSIMWalletAddress, bool _hasAccessToETH) external onlySelf {
-        require(isValidESIMWallet[_eSIMWalletAddress], "Invalid eSIM wallet address");
+    function toggleAccessToETH(address _eSIMWalletAddress, bool _hasAccessToETH) public onlySelf {
+        require(isValidESIMWallet[_eSIMWalletAddress], "Unknown _eSIMWalletAddress");
 
         canPullETH[_eSIMWalletAddress] = _hasAccessToETH;
 
@@ -215,8 +219,8 @@ contract DeviceWallet is Initializable, Account4337 {
     }
 
     function _transferETH(address _recipient, uint256 _amount) internal virtual {
-        require(_amount <= address(this).balance, "Not enough ETH in wallet");
-        require(_recipient != address(0), "Recipient cannot be zero address");
+        require(_amount <= address(this).balance, "Not enough ETH");
+        require(_recipient != address(0), "_recipient 0");
 
         if (_amount > 0) {
             (bool success,) = _recipient.call{value: _amount}("");
@@ -225,37 +229,48 @@ contract DeviceWallet is Initializable, Account4337 {
         }
     }
 
-    function updateESIMInfo(
+    /// @notice Allow the device wallet factory or the wallet owner to add new eSIM wallet to this device wallet
+    /// @param _eSIMWalletAddress Address of the eSIM wallet to be added
+    /// @param _deviceWalletAddress Address of the device wallet to add the eSIM wallet to
+    function addESIMWallet(
         address _eSIMWalletAddress,
-        bool _isESIMWalletValid,
+        address _deviceWalletAddress,
         bool _hasAccessToETH
-    ) external onlyRegistryOrDeviceWalletFactoryOrOwner {
-        _updateESIMInfo(_eSIMWalletAddress, _isESIMWalletValid, _hasAccessToETH);
-    }
-
-    function _updateESIMInfo(
-        address _eSIMWalletAddress,
-        bool _isESIMWalletValid,
-        bool _hasAccessToETH
-    ) internal {
-        isValidESIMWallet[_eSIMWalletAddress] = _isESIMWalletValid;
-        canPullETH[_eSIMWalletAddress] = _hasAccessToETH;
-    }
-
-    function updateDeviceWalletAssociatedWithESIMWallet(
-        address _eSIMWalletAddress,
-        address _deviceWalletAddress
-    ) external onlyDeviceWalletFactoryOrOwner {
+    ) public onlyRegistryOrDeviceWalletFactoryOrOwner {
         require(_deviceWalletAddress != address(this), "Cannot update to same address");
-        _updateDeviceWalletAssociatedWithESIMWallet(_eSIMWalletAddress, _deviceWalletAddress);
-        isValidESIMWallet[_eSIMWalletAddress] = false;
+        require(registry.isESIMWalletValid(_eSIMWalletAddress) == address(0), "Already has device wallet");
+        
+        isValidESIMWallet[_eSIMWalletAddress] = true;
+        canPullETH[_eSIMWalletAddress] = _hasAccessToETH;
+
+        // Inform and update the registry about the newly added eSIM wallet to this device wallet
+        registry.updateDeviceWalletAssociatedWithESIMWallet(_eSIMWalletAddress, _deviceWalletAddress);
+        // Since the eSIM wallet now has a device wallet, remove it from standby
+        if(registry.isESIMWalletOnStandby(_eSIMWalletAddress)) {
+            registry.toggleESIMWalletStandbyStatus(_eSIMWalletAddress, false);
+        }
+
+        emit ESIMWalletAdded(_eSIMWalletAddress, _hasAccessToETH, msg.sender);
     }
 
-    function _updateDeviceWalletAssociatedWithESIMWallet(
+    /// @notice Allow device wallet factory or the wallet owner to remove any eSIM wallet bound with this device wallet
+    /// @param _eSIMWalletAddress Address of the eSIM wallet to be removed
+    /// @param _deviceWalletAddress Address of the device wallet to remove the eSIM wallet from
+    function removeESIMWallet(
         address _eSIMWalletAddress,
         address _deviceWalletAddress
-    ) internal {
-        registry.updateDeviceWalletAssociatedWithESIMWallet(_eSIMWalletAddress, _deviceWalletAddress);
+    ) public onlyDeviceWalletFactoryOrOwner {
+        require(_deviceWalletAddress == address(this), "Unknown device wallet");
+        require(isValidESIMWallet[_eSIMWalletAddress] == true, "Unknown eSIM wallet");
+
+        isValidESIMWallet[_eSIMWalletAddress] = false;
+        canPullETH[_eSIMWalletAddress] = false;
+
+        // Inform and update the registry about the newly added eSIM wallet to this device wallet
+        registry.updateDeviceWalletAssociatedWithESIMWallet(_eSIMWalletAddress, address(0));
+        registry.toggleESIMWalletStandbyStatus(_eSIMWalletAddress, true);
+
+        emit ESIMWalletRemoved(_eSIMWalletAddress, _deviceWalletAddress, msg.sender);
     }
 
     // receive function already exists in the Account4337.sol
