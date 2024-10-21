@@ -107,12 +107,15 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
     /// @dev _salt should never be near to max value of uint256, if it is, the function call fails
     /// @param _deviceOwnerPublicKey P256 public key of the device owner
     /// @param _deviceUniqueIdentifier Unique device identifier associated with the device
+    /// @param _depositAmount Amount of ETH to  be deposite in the device wallet
     /// @return Return device wallet address and list of eSIM wallet addresses
     function deployLazyWalletAndSetESIMIdentifier(
         bytes32[2] memory _deviceOwnerPublicKey,
         string calldata _deviceUniqueIdentifier,
-        uint256 _salt
-    ) external onlyESIMWalletAdmin returns (address, address[] memory) {
+        uint256 _salt,
+        uint256 _depositAmount
+    ) external payable onlyESIMWalletAdmin returns (address, address[] memory) {
+        require(_depositAmount == msg.value, "Incorrect ETH");
         require(isLazyWalletDeployed(_deviceUniqueIdentifier) == false, "Already deployed");
 
         address deviceWallet;
@@ -131,7 +134,8 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
             _deviceUniqueIdentifier,
             _salt,
             eSIMUniqueIdentifiers,
-            listOfDataBundleDetails
+            listOfDataBundleDetails,
+            _depositAmount
         );
 
         emit LazyWalletDeployed(

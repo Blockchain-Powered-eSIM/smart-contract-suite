@@ -172,25 +172,35 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
     /// @notice To deploy multiple device wallets at once
     /// @param _deviceUniqueIdentifiers Array of unique device identifiers for each device wallet
     /// @param _deviceWalletOwnersKey Array of P256 public keys of owners of the respective device wallets
+    /// @param _depositAmounts Array of all the ETH to be deposited into each of the device wallets 
     /// @return Array of deployed device wallet address
     function deployDeviceWalletForUsers(
         string[] memory _deviceUniqueIdentifiers,
         bytes32[2][] memory _deviceWalletOwnersKey,
-        uint256[] calldata _salts
-    ) public payable onlyAdmin returns (address[] memory) {
+        uint256[] calldata _salts,
+        uint256[] calldata _depositAmounts
+    ) external payable onlyAdmin returns (address[] memory) {
         uint256 numberOfDeviceWallets = _deviceUniqueIdentifiers.length;
         require(numberOfDeviceWallets != 0, "Array cannot be empty");
         require(numberOfDeviceWallets == _deviceWalletOwnersKey.length, "Array mismatch");
         require(numberOfDeviceWallets == _salts.length, "Array mismatch");
+        require(numberOfDeviceWallets == _depositAmounts.length, "Array mismatch");
 
+        // Track the available ETH to spend
+        uint256 availableETH = msg.value;
         address[] memory deviceWalletsDeployed = new address[](numberOfDeviceWallets);
 
         for (uint256 i = 0; i < numberOfDeviceWallets; ++i) {
+            require(_depositAmounts[i] <= availableETH, "Out of ETH");
+            
             deviceWalletsDeployed[i] = deployDeviceWalletAsAdmin(
                 _deviceUniqueIdentifiers[i],
                 _deviceWalletOwnersKey[i],
-                _salts[i]
+                _salts[i],
+                _depositAmounts[i]
             );
+
+            availableETH -= _depositAmounts[i];
         }
 
         return deviceWalletsDeployed;
@@ -199,17 +209,20 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
     /// @dev Allow admin to deploy a device wallet (and an eSIM wallet) for given unique device identifiers
     /// @param _deviceUniqueIdentifier Unique device identifier for the device wallet
     /// @param _deviceWalletOwnerKey User's P256 public key (owner of the device wallet and respective eSIM wallets)
+    /// @param _depositAmount Amount of ETH to be deposited into the device wallet
     /// @return Deployed device wallet address
     function deployDeviceWalletAsAdmin(
         string memory _deviceUniqueIdentifier,
         bytes32[2] memory _deviceWalletOwnerKey,
-        uint256 _salt
+        uint256 _salt,
+        uint256 _depositAmount
     ) public payable onlyAdmin returns (address) {
         address deviceWalletAddress = address(
             createAccount(
                 _deviceUniqueIdentifier,
                 _deviceWalletOwnerKey,
-                _salt
+                _salt,
+                _depositAmount
             )
         );
 
@@ -235,7 +248,8 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
     function createAccount(
         string memory _deviceUniqueIdentifier,
         bytes32[2] memory _deviceWalletOwnerKey,
-        uint256 _salt
+        uint256 _salt,
+        uint256 _depositAmount
     ) public payable returns (DeviceWallet deviceWallet) {
         require(
             bytes(_deviceUniqueIdentifier).length != 0, 
@@ -260,8 +274,8 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
         }
 
         // Prefund the account with msg.value
-        if (msg.value > 0) {
-            entryPoint.depositTo{value: msg.value}(addr);
+        if (msg.value > 0 && _depositAmount == msg.value) {
+            entryPoint.depositTo{value: _depositAmount}(addr);
         }
 
         deviceWallet = DeviceWallet(
