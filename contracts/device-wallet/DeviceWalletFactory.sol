@@ -40,7 +40,10 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
         bytes32[2] _deviceWalletOwnerKey
     );
 
-    /// @notice Emitted when the admin address is updated
+    /// @notice Emitted when the current admin requests to transfer admin role to a new address
+    event AdminUpdateRequested(address indexed eSIMWalletAdmin, address indexed _newAdmin);
+
+    /// @notice Emitted when the newly requested admin accepts the role
     event AdminUpdated(address indexed _newAdmin);
 
     IEntryPoint public immutable entryPoint;
@@ -61,6 +64,11 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
 
     ///@notice Registry contract instance
     Registry public registry;
+
+    /// @notice Address of the admin to be appointed
+    /// @dev Only the current admin can send the request to transfer admin role
+    ///      The new admin should accept the role, once accepted, this variable should be reset
+    address public newRequestedAdmin;
 
     function _onlyAdmin() private view {
         if (msg.sender != eSIMWalletAdmin) revert OnlyAdmin();
@@ -134,14 +142,29 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
         return vault;
     }
 
-    /// @notice Function to update admin address
-    /// @param _newAdmin New admin address
-    function updateAdmin(address _newAdmin) public onlyAdmin returns (address) {
-        require(eSIMWalletAdmin != _newAdmin, "Cannot update to same address");
+    /// @notice 2-step admin update function. Current admin sends request to for the new admin to accept the role
+    /// @dev The function deliberately doesn't check for any existing requests
+    ///      In case the current admin sends request to an unintended address, the admin can override 
+    ///      the request to a new (intended) address by calling this function again.
+    /// @param _newAdmin Address of the recipient to recieve the admin role
+    function requestAdminUpdate(address _newAdmin) external onlyAdmin {
+        require(msg.sender != _newAdmin, "Cannot update to same address");
         require(_newAdmin != address(0), "Admin address cannot be zero");
 
-        eSIMWalletAdmin = _newAdmin;
-        emit AdminUpdated(eSIMWalletAdmin);
+        newRequestedAdmin = _newAdmin;
+        emit AdminUpdateRequested(eSIMWalletAdmin, _newAdmin);
+    }
+
+    /// @notice Function to update admin address
+    /// @return Address of the new admin
+    function acceptAdminUpdate() external returns (address) {
+        require(msg.sender == newRequestedAdmin, "Unauthorised");
+
+        eSIMWalletAdmin = msg.sender;
+        emit AdminUpdated(msg.sender);
+
+        // Reset the requested admin to address(0) for further role transfer
+        newRequestedAdmin = address(0);
 
         return eSIMWalletAdmin;
     }
