@@ -124,7 +124,7 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
     /// @notice Update eSIM standby status when being moved from one device wallet to another
     /// @param _eSIMWalletAddress Address of the eSIM wallet
     /// @param _isOnStandby Set to true when no device wallet is associated, false otherwise
-    function setESIMWalletToStandby(
+    function toggleESIMWalletStandbyStatus(
         address _eSIMWalletAddress,
         bool _isOnStandby
     ) public onlyDeviceWallet {

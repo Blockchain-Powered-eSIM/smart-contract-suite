@@ -247,7 +247,7 @@ contract DeviceWallet is Initializable, Account4337 {
         registry.updateDeviceWalletAssociatedWithESIMWallet(_eSIMWalletAddress, _deviceWalletAddress);
         // Since the eSIM wallet now has a device wallet, remove it from standby
         if(registry.isESIMWalletOnStandby(_eSIMWalletAddress)) {
-            registry.setESIMWalletToStandby(_eSIMWalletAddress, false);
+            registry.toggleESIMWalletStandbyStatus(_eSIMWalletAddress, false);
         }
 
         emit ESIMWalletAdded(_eSIMWalletAddress, _hasAccessToETH, msg.sender);
@@ -268,7 +268,7 @@ contract DeviceWallet is Initializable, Account4337 {
 
         // Inform and update the registry about the newly added eSIM wallet to this device wallet
         registry.updateDeviceWalletAssociatedWithESIMWallet(_eSIMWalletAddress, address(0));
-        registry.setESIMWalletToStandby(_eSIMWalletAddress, true);
+        registry.toggleESIMWalletStandbyStatus(_eSIMWalletAddress, true);
 
         emit ESIMWalletRemoved(_eSIMWalletAddress, _deviceWalletAddress, msg.sender);
     }
