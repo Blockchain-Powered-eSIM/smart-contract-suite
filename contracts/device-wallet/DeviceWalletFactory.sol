@@ -40,9 +40,6 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
         bytes32[2] _deviceWalletOwnerKey
     );
 
-    /// @notice Emitted when the admin address is updated
-    event AdminUpdated(address indexed _newAdmin);
-
     /// @notice Emitted when the current admin requests to transfer admin role to a new address
     event AdminUpdateRequested(address indexed eSIMWalletAdmin, address indexed _newAdmin);
 
