@@ -226,6 +226,11 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
             _salt
         );
 
+        address memory wallet = registry.uniqueIdentifierToDeviceWallet(_deviceUniqueIdentifier);
+        if(wallet != address(0)) {
+            return wallet;
+        }
+
         uint256 codeSize = addr.code.length;
         if (codeSize > 0) {
             return DeviceWallet(payable(addr));
