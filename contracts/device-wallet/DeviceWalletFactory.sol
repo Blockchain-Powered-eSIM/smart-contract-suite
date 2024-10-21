@@ -148,7 +148,7 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
     ///      the request to a new (intended) address by calling this function again.
     /// @param _newAdmin Address of the recipient to recieve the admin role
     function requestAdminUpdate(address _newAdmin) external onlyAdmin {
-        require(eSIMWalletAdmin != _newAdmin, "Cannot update to same address");
+        require(msg.sender != _newAdmin, "Cannot update to same address");
         require(_newAdmin != address(0), "Admin address cannot be zero");
 
         newRequestedAdmin = _newAdmin;
@@ -156,11 +156,9 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
     }
 
     /// @notice Function to update admin address
-    /// @param _newAdmin New admin address
     /// @return Address of the new admin
     function acceptAdminUpdate() external returns (address) {
         require(msg.sender == newRequestedAdmin, "Unauthorised");
-        require(eSIMWalletAdmin != _newAdmin, "Cannot update to same address");
 
         eSIMWalletAdmin = msg.sender;
         emit AdminUpdated(msg.sender);
