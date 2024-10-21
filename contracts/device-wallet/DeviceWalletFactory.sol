@@ -154,7 +154,7 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
         string[] memory _deviceUniqueIdentifiers,
         bytes32[2][] memory _deviceWalletOwnersKey,
         uint256[] calldata _salts
-    ) public onlyAdmin returns (address[] memory) {
+    ) public payable onlyAdmin returns (address[] memory) {
         uint256 numberOfDeviceWallets = _deviceUniqueIdentifiers.length;
         require(numberOfDeviceWallets != 0, "Array cannot be empty");
         require(numberOfDeviceWallets == _deviceWalletOwnersKey.length, "Array mismatch");
@@ -181,7 +181,7 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
         string memory _deviceUniqueIdentifier,
         bytes32[2] memory _deviceWalletOwnerKey,
         uint256 _salt
-    ) public onlyAdmin returns (address) {
+    ) public payable onlyAdmin returns (address) {
         address deviceWalletAddress = address(
             createAccount(
                 _deviceUniqueIdentifier,
