@@ -142,6 +142,7 @@ contract RegistryHelper {
         emit DeviceWalletInfoUpdated(_deviceWallet, _deviceUniqueIdentifier, _deviceWalletOwnerKey);
     }
 
+    /// @dev Internal function to deploy Device wallet factory during Registry initialisation
     function _deployDeviceWalletFactory(
         IEntryPoint entryPoint,
         P256Verifier _verifier,
@@ -160,6 +161,7 @@ contract RegistryHelper {
         deviceWalletFactory = DeviceWalletFactory(address(deviceWalletFactoryProxy));
     }
 
+    /// @dev Internal function to deploy eSIM wallet factory during Registry initialisation
     function _deployESIMWalletFactory(
         address _upgradeManager
     ) internal {
