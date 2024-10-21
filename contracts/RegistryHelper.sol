@@ -45,6 +45,12 @@ contract RegistryHelper {
         address _verifier
     );
 
+    event ESIMWalletSetOnStandby(
+        address indexed _eSIMWalletAddress,
+        bool _isOnStandby,
+        address indexed _deviceWalletAddress
+    );
+
     /// @notice Address of the Lazy wallet registry
     address public lazyWalletRegistry;
 
@@ -70,6 +76,10 @@ contract RegistryHelper {
     /// @notice eSIM wallet address <> device wallet address
     ///         All the eSIM wallets deployed using this registry are valid and set to true
     mapping(address => address) public isESIMWalletValid;
+
+    /// @notice If an existing eSIM wallet is in the process of being transferred from one device wallet to another
+    ///         If bool is `true`, it means that the eSIM wallet has no device wallet associated to it yet
+    mapping(address => bool) public isESIMWalletOnStandby;
 
     modifier onlyLazyWalletRegistry() {
         if(msg.sender != lazyWalletRegistry) revert OnlyLazyWalletRegistry();
@@ -103,7 +113,9 @@ contract RegistryHelper {
             // increase salt for subsequent eSIM wallet deployments
             address eSIMWallet = eSIMWalletFactory.deployESIMWallet(deviceWallet, (_salt + i));
             emit WalletDeployed(_deviceUniqueIdentifier, deviceWallet, eSIMWallet);
-            _updateESIMInfo(eSIMWallet, deviceWallet);
+
+            // Updates the Device wallet storage variables as well as for the registry
+            DeviceWallet(payable(deviceWallet)).addESIMWallet(eSIMWallet, deviceWallet, true);
 
             // Since the eSIM unique identifier is already known in this scenario
             // We can execute the setESIMUniqueIdentifierForAnESIMWallet function in same transaction as deploying the smart wallet
@@ -128,19 +140,6 @@ contract RegistryHelper {
         deviceWalletToOwner[_deviceWallet] = _deviceWalletOwnerKey;
 
         emit DeviceWalletInfoUpdated(_deviceWallet, _deviceUniqueIdentifier, _deviceWalletOwnerKey);
-    }
-
-    function _updateESIMInfo(
-        address _eSIMWalletAddress,
-        address _deviceWalletAddress
-    ) internal {
-        DeviceWallet(payable(_deviceWalletAddress)).updateESIMInfo(_eSIMWalletAddress, true, true);
-        DeviceWallet(payable(_deviceWalletAddress)).updateDeviceWalletAssociatedWithESIMWallet(
-            _eSIMWalletAddress,
-            _deviceWalletAddress
-        );
-
-        isESIMWalletValid[_eSIMWalletAddress] = _deviceWalletAddress;
     }
 
     function _deployDeviceWalletFactory(

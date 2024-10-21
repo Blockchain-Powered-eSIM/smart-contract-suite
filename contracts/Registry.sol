@@ -120,4 +120,17 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
     ) external onlyDeviceWalletFactory {
         _updateDeviceWalletInfo(_deviceWallet, _deviceUniqueIdentifier, _deviceWalletOwnerKey);
     }
+
+    /// @notice Update eSIM standby status when being moved from one device wallet to another
+    /// @param _eSIMWalletAddress Address of the eSIM wallet
+    /// @param _isOnStandby Set to true when no device wallet is associated, false otherwise
+    function setESIMWalletToStandby(
+        address _eSIMWalletAddress,
+        bool _isOnStandby
+    ) public onlyDeviceWallet {
+        require(isESIMWalletValid[_eSIMWalletAddress] == msg.sender, "Unauthorised caller");
+
+        isESIMWalletOnStandby[_eSIMWalletAddress] = _isOnStandby;
+        emit ESIMWalletSetOnStandby(_eSIMWalletAddress, _isOnStandby, msg.sender);
+    }
 }
