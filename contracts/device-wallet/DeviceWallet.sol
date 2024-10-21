@@ -238,17 +238,17 @@ contract DeviceWallet is Initializable, Account4337 {
         bool _hasAccessToETH
     ) public onlyRegistryOrDeviceWalletFactoryOrOwner {
         require(_deviceWalletAddress != address(this), "Cannot update to same address");
-        require(
-            registry.isESIMWalletOnStandby(_eSIMWalletAddress) == true,
-            "Must be on standby"
-        );
+        require(registry.isESIMWalletValid(_eSIMWalletAddress) == address(0), "Already has device wallet");
+        
         isValidESIMWallet[_eSIMWalletAddress] = true;
         canPullETH[_eSIMWalletAddress] = _hasAccessToETH;
 
         // Inform and update the registry about the newly added eSIM wallet to this device wallet
         registry.updateDeviceWalletAssociatedWithESIMWallet(_eSIMWalletAddress, _deviceWalletAddress);
         // Since the eSIM wallet now has a device wallet, remove it from standby
-        registry.setESIMWalletToStandby(_eSIMWalletAddress, false);
+        if(registry.isESIMWalletOnStandby(_eSIMWalletAddress)) {
+            registry.setESIMWalletToStandby(_eSIMWalletAddress, false);
+        }
 
         emit ESIMWalletAdded(_eSIMWalletAddress, _hasAccessToETH, msg.sender);
     }
