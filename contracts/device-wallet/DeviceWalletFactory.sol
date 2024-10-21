@@ -218,10 +218,6 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
             bytes(_deviceUniqueIdentifier).length != 0, 
             "DeviceIdentifier cannot be empty"
         );
-        require(
-            registry.uniqueIdentifierToDeviceWallet(_deviceUniqueIdentifier) == address(0),
-            "DeviceIdentifier already in use"
-        );
 
         address addr = getAddress(
             address(registry),
