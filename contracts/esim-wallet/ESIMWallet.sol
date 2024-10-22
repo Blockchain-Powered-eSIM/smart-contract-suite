@@ -78,8 +78,8 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable, Re
         address _eSIMWalletFactoryAddress,
         address _deviceWalletAddress
     ) external initializer {
-        require(_eSIMWalletFactoryAddress != address(0), "eSIM wallet factory address cannot be zero");
-        require(_deviceWalletAddress != address(0), "Device wallet address cannot be zero");
+        require(_eSIMWalletFactoryAddress != address(0), "_eSIMWalletFactoryAddress 0");
+        require(_deviceWalletAddress != address(0), "_deviceWalletAddress 0");
 
         eSIMWalletFactory = _eSIMWalletFactoryAddress;
         deviceWallet = DeviceWallet(payable(_deviceWalletAddress));
@@ -96,8 +96,8 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable, Re
     /// @dev This function can only be called once
     /// @param _eSIMUniqueIdentifier String that uniquely identifies eSIM wallet
     function setESIMUniqueIdentifier(string calldata _eSIMUniqueIdentifier) external onlyDeviceWallet {
-        require(bytes(eSIMUniqueIdentifier).length == 0, "eSIM unique identifier already initialised");
-        require(bytes(_eSIMUniqueIdentifier).length != 0, "eSIM unique identifier cannot be zero");
+        require(bytes(eSIMUniqueIdentifier).length == 0, "Already initialised");
+        require(bytes(_eSIMUniqueIdentifier).length != 0, "_eSIMUniqueIdentifier 0");
 
         eSIMUniqueIdentifier = _eSIMUniqueIdentifier;
 
@@ -161,7 +161,7 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable, Re
     /// @param newOwner The address that will be the new owner
     function transferOwnership(address newOwner) public override(IOwnableESIMWallet, OwnableUpgradeable) {
         // Only the admin of deviceWalletFactory contract can transfer ownership
-        require(isTransferApproved(owner(), msg.sender), "OwnableSmartWallet: Transfer is not allowed");
+        require(isTransferApproved(owner(), msg.sender), "Transfer not allowed");
 
         // Approval is revoked, in order to avoid unintended transfer allowance
         // if this wallet ever returns to the previous owner
@@ -184,7 +184,7 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable, Re
     /// @param to Address to change allowance status for
     /// @param status The new approval status
     function setApproval(address to, bool status) external override onlyOwner {
-        require(to != address(0), "OwnableSmartWallet: Approval cannot be set for zero address");
+        require(to != address(0), "to cannot be 0");
         _setApproval(msg.sender, to, status);
     }
 
@@ -201,8 +201,8 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable, Re
 
     /// @dev Internal function to send ETH from this contract
     function _transferETH(address _recipient, uint256 _amount) internal virtual {
-        require(address(this).balance >= _amount, "Not enough ETH in the wallet. Please topup ETH into the wallet");
-        require(_recipient != address(0), "Recipient cannot be zero address");
+        require(address(this).balance >= _amount, "Not enough ETH");
+        require(_recipient != address(0), "_recipient 0");
 
         if (_amount > 0) {
             (bool success,) = _recipient.call{value: _amount}("");
