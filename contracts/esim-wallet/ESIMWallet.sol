@@ -14,7 +14,7 @@ error OnlyDeviceWallet();
 error OnlyRegistry();
 error FailedToTransfer();
 
-contract ESIMWallet is IOwnableESIMWallet, ReentrancyGuardUpgradeable, Initializable, OwnableUpgradeable {
+contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable {
     using Address for address;
 
     /// Emitted when the eSIM wallet is deployed

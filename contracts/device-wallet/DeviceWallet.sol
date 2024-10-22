@@ -178,7 +178,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     /// @notice Allow the eSIM wallets associated with this device wallet to pay ETH for data bundles
     /// @dev Instead of pulling the ETH into the eSIM wallet and then sending to the vault,
     ///      the eSIM wallet can directly request the device wallet to pay ETH for the data bundles
-    /// @note This function is not yet being used by the eSIM wallet. If not needed, this might be removed in future
+    /// NOTE This function is not yet being used by the eSIM wallet. If not needed, this might be removed in future
     /// @param _amount Amount of ETH to pull
     function payETHForDataBundles(uint256 _amount) external onlyAssociatedESIMWallets nonReentrant returns (uint256) {
         require(_amount > 0, "_amount 0");
