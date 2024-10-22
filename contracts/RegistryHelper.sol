@@ -109,7 +109,7 @@ contract RegistryHelper {
         // Updates device wallet info via Registry
         address deviceWallet = address(deviceWalletFactory.createAccount(_deviceUniqueIdentifier, _deviceWalletOwnerKey, _salt, _depositAmount));
 
-        address[] memory eSIMWallets;
+        address[] memory eSIMWallets = new address[](_eSIMUniqueIdentifiers.length);
 
         for(uint256 i=0; i<_eSIMUniqueIdentifiers.length; ++i) {
             // increase salt for subsequent eSIM wallet deployments
