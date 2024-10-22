@@ -4,6 +4,7 @@ pragma solidity ^0.8.18;
 
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 
 import "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
@@ -23,8 +24,7 @@ error OnlyESIMWalletAdminOrDeviceWalletFactory();
 error OnlyAssociatedESIMWallets();
 error FailedToTransfer();
 
-// TODO: Add ReentrancyGuard
-contract DeviceWallet is Initializable, Account4337 {
+contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 {
     using Address for address;
 
     /// @notice Emitted when the contract pays ETH for data bundle
@@ -135,6 +135,7 @@ contract DeviceWallet is Initializable, Account4337 {
         eSIMWalletFactory = registry.eSIMWalletFactory();
         
         initialize(_deviceWalletOwnerKey);
+        __ReentrancyGuard_init();
     }
 
     /// @notice Allow device wallet owner to deploy new eSIM wallet
@@ -177,8 +178,9 @@ contract DeviceWallet is Initializable, Account4337 {
     /// @notice Allow the eSIM wallets associated with this device wallet to pay ETH for data bundles
     /// @dev Instead of pulling the ETH into the eSIM wallet and then sending to the vault,
     ///      the eSIM wallet can directly request the device wallet to pay ETH for the data bundles
+    /// @note This function is not yet being used by the eSIM wallet. If not needed, this might be removed in future
     /// @param _amount Amount of ETH to pull
-    function payETHForDataBundles(uint256 _amount) external onlyAssociatedESIMWallets returns (uint256) {
+    function payETHForDataBundles(uint256 _amount) external onlyAssociatedESIMWallets nonReentrant returns (uint256) {
         require(_amount > 0, "_amount 0");
         require(canPullETH[msg.sender] == true, "Access revoked");
 
@@ -192,7 +194,7 @@ contract DeviceWallet is Initializable, Account4337 {
 
     /// @notice Allow the eSIM wallets associated with this device wallet to pull ETH (for data bundles)
     /// @param _amount Amount of ETH to pull
-    function pullETH(uint256 _amount) external onlyAssociatedESIMWallets returns (uint256) {
+    function pullETH(uint256 _amount) external onlyAssociatedESIMWallets nonReentrant returns (uint256) {
         require(_amount > 0, "_amount 0");
         require(canPullETH[msg.sender] == true, "Access revoked");
 
