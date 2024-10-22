@@ -4,6 +4,7 @@ pragma solidity ^0.8.18;
 
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {IOwnableESIMWallet} from "../interfaces/IOwnableESIMWallet.sol";
 import {DeviceWallet} from "../device-wallet/DeviceWallet.sol";
@@ -13,7 +14,7 @@ error OnlyDeviceWallet();
 error OnlyRegistry();
 error FailedToTransfer();
 
-contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
+contract ESIMWallet is IOwnableESIMWallet, ReentrancyGuardUpgradeable, Initializable, OwnableUpgradeable {
     using Address for address;
 
     /// Emitted when the eSIM wallet is deployed
@@ -85,6 +86,7 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
 
         // TODO: check if device wallet can perform all owner related tasks
         __Ownable_init(_deviceWalletAddress);
+        __ReentrancyGuard_init();
 
         emit ESIMWalletDeployed(address(this), _deviceWalletAddress, _deviceWalletAddress);
     }
@@ -105,7 +107,7 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
     /// @notice Function to make payment for the data bundle
     /// @param _dataBundleDetail Details of the data bundle being bought. (dataBundleID, dataBundlePrice)
     /// @return True if the transaction is successful
-    function buyDataBundle(DataBundleDetails memory _dataBundleDetail) public payable returns (bool) {
+    function buyDataBundle(DataBundleDetails memory _dataBundleDetail) public payable nonReentrant returns (bool) {
         require(bytes(_dataBundleDetail.dataBundleID).length > 0, "Data bundle ID cannot be empty");
         require(_dataBundleDetail.dataBundlePrice > 0, "Price cannot be zero");
 
