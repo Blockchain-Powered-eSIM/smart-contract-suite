@@ -46,7 +46,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
     mapping(string => string[]) public eSIMIdentifiersAssociatedWithDeviceIdentifier;
 
     modifier onlyESIMWalletAdmin() {
-        require(msg.sender == registry.admin(), "Only eSIM wallet admin");
+        require(msg.sender == registry.eSIMWalletAdmin(), "Only eSIM wallet admin");
         _;
     }
 

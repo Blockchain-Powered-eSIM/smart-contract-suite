@@ -24,7 +24,7 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
     IEntryPoint public immutable entryPoint;
 
     ///@notice eSIM wallet project admin address
-    address public admin;
+    address public eSIMWalletAdmin;
 
     /// @notice Address of the vault that receives payments for the eSIM data bundles
     address public vault;
@@ -68,7 +68,7 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
         require(_vault != address(0), "_vault 0");
         require(_upgradeManager != address(0), "_upgradeManager 0");
 
-        admin = _eSIMWalletAdmin;
+        eSIMWalletAdmin = _eSIMWalletAdmin;
         vault = _vault;
         upgradeManager = _upgradeManager;
 

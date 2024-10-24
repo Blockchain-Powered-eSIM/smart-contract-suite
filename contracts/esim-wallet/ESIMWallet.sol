@@ -7,6 +7,7 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {IOwnableESIMWallet} from "../interfaces/IOwnableESIMWallet.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {DeviceWallet} from "../device-wallet/DeviceWallet.sol";
 import {Registry} from "../Registry.sol";
 import "../CustomStructs.sol";
@@ -14,8 +15,9 @@ import "../CustomStructs.sol";
 error OnlyDeviceWallet();
 error OnlyRegistry();
 error FailedToTransfer();
+error OnlyESIMWalletAdminOrESIMWalletfactoryOrDeviceWallet();
 
-contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable {
+contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuardUpgradeable {
     using Address for address;
 
     /// Emitted when the eSIM wallet is deployed
@@ -64,6 +66,21 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable, Re
 
     modifier onlyRegistry() {
         if(msg.sender != address(deviceWallet.registry())) revert OnlyRegistry();
+        _;
+    }
+
+    function _onlyESIMWalletAdminOrESIMWalletfactoryOrDeviceWallet() private view {
+        if (
+            msg.sender != eSIMWalletFactory &&
+            msg.sender != deviceWallet.registry().eSIMWalletAdmin() &&
+            msg.sender != address(deviceWallet)
+        ) {
+            revert OnlyESIMWalletAdminOrESIMWalletfactoryOrDeviceWallet();
+        }
+    }
+
+    modifier onlyESIMWalletAdminOrESIMWalletfactoryOrDeviceWallet() {
+        _onlyESIMWalletAdminOrESIMWalletfactoryOrDeviceWallet();
         _;
     }
 
@@ -211,6 +228,11 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable, Re
             if (!success) revert FailedToTransfer();
             else emit ETHSent(_recipient, _amount);
         }
+    }
+
+    /// UUPSUpsgradeable: only allow self-upgrade.
+    function _authorizeUpgrade(address newImplementation) internal view override onlyESIMWalletAdminOrESIMWalletfactoryOrDeviceWallet {
+        (newImplementation); // No-op; silence unused parameter warning
     }
 
     receive() external payable {
