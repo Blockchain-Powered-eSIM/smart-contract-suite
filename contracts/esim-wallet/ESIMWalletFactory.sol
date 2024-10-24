@@ -7,6 +7,7 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {BeaconProxy} from "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
 import {UpgradeableBeacon} from "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 import {ESIMWallet} from "./ESIMWallet.sol";
 import {Registry} from "../Registry.sol";
@@ -14,7 +15,7 @@ import {Registry} from "../Registry.sol";
 error OnlyRegistryOrDeviceWalletFactoryOrDeviceWallet();
 
 /// @notice Contract for deploying a new eSIM wallet
-contract ESIMWalletFactory is Initializable, OwnableUpgradeable {
+contract ESIMWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @notice Emitted when the eSIM wallet factory is deployed
     event ESIMWalletFactorydeployed(
         address indexed _upgradeManager,
@@ -67,7 +68,7 @@ contract ESIMWalletFactory is Initializable, OwnableUpgradeable {
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() initializer {}
 
-    /// @dev Owner based upgrades
+    /// @dev Owner based upgrades for UUPS eSIM wallet factory
     function _authorizeUpgrade(address newImplementation)
     internal
     onlyOwner
@@ -96,6 +97,7 @@ contract ESIMWalletFactory is Initializable, OwnableUpgradeable {
         );
 
         __Ownable_init(_upgradeManager);
+        __UUPSUpgradeable_init();
     }
 
     /// Function to deploy an eSIM wallet
