@@ -60,7 +60,7 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
     address public vault;
 
     /// @notice Implementation (logic) contract address of the device wallet
-    DeviceWallet public deviceWalletImplementation;
+    address public deviceWalletImplementation;
 
     /// @notice Beacon contract address for this contract
     address public beacon;
@@ -91,7 +91,7 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
         verifier = _verifier;
 
         // device wallet implementation (logic) contract
-        deviceWalletImplementation = new DeviceWallet(_entryPoint, _verifier);
+        deviceWalletImplementation = address(new DeviceWallet(_entryPoint, _verifier));
         _disableInitializers();
     }
 
@@ -119,13 +119,13 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
         registry = Registry(_registryContractAddress);
 
         // Upgradable beacon for device wallet implementation contract
-        beacon = address(new UpgradeableBeacon(address(deviceWalletImplementation), _upgradeManager));
+        beacon = address(new UpgradeableBeacon(deviceWalletImplementation, _upgradeManager));
 
         emit DeviceWalletFactoryDeployed(
             _eSIMWalletAdmin,
             _vault,
             _upgradeManager,
-            address(deviceWalletImplementation),
+            deviceWalletImplementation,
             beacon
         );
         
@@ -299,7 +299,7 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
         deviceWallet = DeviceWallet(
             payable(
                 new ERC1967Proxy{salt : bytes32(_salt)}(
-                    address(deviceWalletImplementation),
+                    deviceWalletImplementation,
                     abi.encodeCall(
                         DeviceWallet.init, 
                         (address(registry), _deviceWalletOwnerKey, _deviceUniqueIdentifier)
@@ -326,7 +326,7 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
                 abi.encodePacked(
                     type(ERC1967Proxy).creationCode,
                     abi.encode(
-                        address(deviceWalletImplementation),
+                        deviceWalletImplementation,
                         abi.encodeCall(
                             DeviceWallet.init,
                             (_registry, _deviceWalletOwnerKey, _deviceUniqueIdentifier)
