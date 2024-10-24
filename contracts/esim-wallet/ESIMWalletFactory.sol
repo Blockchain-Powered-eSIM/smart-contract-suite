@@ -49,7 +49,7 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeable
                                         |
         eSIM wallet beacon proxy -------    
     */
-    UpgradeableBeacon immutable beacon;
+    UpgradeableBeacon public beacon;
 
     /// @notice Set to true if eSIM wallet address is deployed using the factory, false otherwise
     mapping(address => bool) public isESIMWalletDeployed;
@@ -71,6 +71,7 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeable
     /// @dev Owner based upgrades for UUPS eSIM wallet factory
     function _authorizeUpgrade(address newImplementation)
     internal
+    override
     onlyOwner
     {}
 
@@ -93,7 +94,7 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeable
         emit ESIMWalletFactorydeployed(
             _upgradeManager,
             eSIMWalletImplementation,
-            beacon
+            address(beacon)
         );
 
         __Ownable_init(_upgradeManager);
