@@ -1,12 +1,13 @@
 pragma solidity ^0.8.18;
 
 import {Upgrades} from "openzeppelin-foundry-upgrades/Upgrades.sol";
+import {Script} from "forge-std/Script.sol";
 
 import {P256Verifier} from "../contracts/P256Verifier.sol";
 
 // SPDX-License-Identifier: MIT
 
-contract Deployer {
+contract Deployer is Script {
 
     event AdminAdded(address indexed _admin);
 
