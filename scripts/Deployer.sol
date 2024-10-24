@@ -1,6 +1,8 @@
 pragma solidity ^0.8.18;
 
-import {P256Verifier} from "./P256Verifier.sol";
+import {Upgrades} from "openzeppelin-foundry-upgrades/Upgrades.sol";
+
+import {P256Verifier} from "../contracts/P256Verifier.sol";
 
 // SPDX-License-Identifier: MIT
 
