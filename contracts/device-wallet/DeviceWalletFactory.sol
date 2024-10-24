@@ -46,6 +46,9 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
     /// @notice Emitted when the newly requested admin accepts the role
     event AdminUpdated(address indexed _newAdmin);
 
+    /// @notice Emitted when the device wallet implementation is updated
+    event DeviceWalletImplementationUpdated(address indexed _newDeviceImplementation);
+
     IEntryPoint public immutable entryPoint;
 
     P256Verifier public immutable verifier;
@@ -167,6 +170,21 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
         newRequestedAdmin = address(0);
 
         return eSIMWalletAdmin;
+    }
+
+    /// @notice Function to update the device wallet implementation
+    /// @param _newDeviceImpl Address of the new device implementation contract
+    function updateDeviceWalletImplementation(
+        address _newDeviceImpl
+    ) external onlyAdmin returns (address) {
+        require(_newDeviceImpl != address(0), "_newDeviceImpl 0");
+        require(_newDeviceImpl != deviceWalletImplementation, "Existing implementation");
+
+        deviceWalletImplementation = _newDeviceImpl;
+
+        emit DeviceWalletImplementationUpdated(deviceWalletImplementation);
+
+        return deviceWalletImplementation;
     }
 
     /// @notice To deploy multiple device wallets at once

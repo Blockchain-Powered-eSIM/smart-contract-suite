@@ -11,6 +11,8 @@ contract Deployer is Script {
 
     event AdminAdded(address indexed _admin);
 
+    event P256VerifierDeployed(address indexed p256Verifier);
+
     address public admin;
 
     P256Verifier public p256Verifier;
@@ -26,8 +28,19 @@ contract Deployer is Script {
         emit AdminAdded(_admin);
     }
 
+    function run() external {
+        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        vm.startBroadcast(deployerPrivateKey);
+
+        // NFT nft = new NFT("NFT_tutorial", "TUT", "baseUri");
+
+        vm.stopBroadcast();
+    }
+
     function deployP256verifier() onlyAdmin external returns (address) {
-        p256Verifier = 
+        p256Verifier = new P256Verifier();
+
+        emit P256VerifierDeployed(address(p256Verifier));
     }
 
     function deployDeviceWalletImpl() onlyAdmin external returns (address) {
