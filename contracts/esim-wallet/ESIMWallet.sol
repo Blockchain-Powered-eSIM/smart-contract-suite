@@ -8,6 +8,7 @@ import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/ut
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {IOwnableESIMWallet} from "../interfaces/IOwnableESIMWallet.sol";
 import {DeviceWallet} from "../device-wallet/DeviceWallet.sol";
+import {Registry} from "../Registry.sol";
 import "../CustomStructs.sol";
 
 error OnlyDeviceWallet();
@@ -84,7 +85,6 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable, Re
         eSIMWalletFactory = _eSIMWalletFactoryAddress;
         deviceWallet = DeviceWallet(payable(_deviceWalletAddress));
 
-        // TODO: check if device wallet can perform all owner related tasks
         __Ownable_init(_deviceWalletAddress);
         __ReentrancyGuard_init();
 
@@ -156,7 +156,6 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable, Re
         return OwnableUpgradeable.owner();
     }
 
-    // TODO: check if the approval can be set by device wallet directly or does it happen via entry point
     /// @dev Transfers ownership from the current owner to another address
     /// @param newOwner The address that will be the new owner
     function transferOwnership(address newOwner) public override(IOwnableESIMWallet, OwnableUpgradeable) {
@@ -192,6 +191,9 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable, Re
     /// @param to The spender address
     /// @param status Status of approval
     function _setApproval(address from, address to, bool status) internal {
+        Registry registry = deviceWallet.registry();
+        require(registry.isDeviceWalletValid(to), "Invalid to");
+
         bool statusChanged = _isTransferApproved[from][to] != status;
         _isTransferApproved[from][to] = status;
         if (statusChanged) {
