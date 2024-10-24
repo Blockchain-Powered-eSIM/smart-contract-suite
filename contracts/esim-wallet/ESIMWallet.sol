@@ -7,7 +7,6 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {IOwnableESIMWallet} from "../interfaces/IOwnableESIMWallet.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {DeviceWallet} from "../device-wallet/DeviceWallet.sol";
 import {Registry} from "../Registry.sol";
 import "../CustomStructs.sol";
@@ -17,7 +16,7 @@ error OnlyRegistry();
 error FailedToTransfer();
 error OnlyESIMWalletAdminOrESIMWalletfactoryOrDeviceWallet();
 
-contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuardUpgradeable {
+contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable {
     using Address for address;
 
     /// Emitted when the eSIM wallet is deployed
@@ -228,11 +227,6 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable, UU
             if (!success) revert FailedToTransfer();
             else emit ETHSent(_recipient, _amount);
         }
-    }
-
-    /// UUPSUpsgradeable: only allow self-upgrade.
-    function _authorizeUpgrade(address newImplementation) internal view override onlyESIMWalletAdminOrESIMWalletfactoryOrDeviceWallet {
-        (newImplementation); // No-op; silence unused parameter warning
     }
 
     receive() external payable {
