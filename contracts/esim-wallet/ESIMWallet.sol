@@ -6,7 +6,6 @@ import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Own
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
-import {IOwnableESIMWallet} from "../interfaces/IOwnableESIMWallet.sol";
 import {DeviceWallet} from "../device-wallet/DeviceWallet.sol";
 import {Registry} from "../Registry.sol";
 import "../CustomStructs.sol";
@@ -16,7 +15,7 @@ error OnlyRegistry();
 error FailedToTransfer();
 error OnlyESIMWalletAdminOrESIMWalletfactoryOrDeviceWallet();
 
-contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable {
+contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable {
     using Address for address;
 
     /// Emitted when the eSIM wallet is deployed
@@ -42,6 +41,12 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable, Re
     /// @notice Emitted when ETH moves out of this contract
     event ETHSent(address indexed _recipient, uint256 _amount);
 
+    /// @notice Emitted when the current owner wants to transfer the ownership to a new device wallet
+    event OwnershipTransferRequested(address indexed _currentOwner, address indexed _newOwner);
+
+    /// @notice Emitted when the current owner revoked the ownership transfer request
+    event OwnershipTransferRevoked(address indexed _currentOwner, address indexed _revokedOwner);
+
     /// @notice Address of the eSIM wallet factory contract
     address public eSIMWalletFactory;
 
@@ -54,9 +59,12 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable, Re
     /// @notice Array of all the data bundle purchase
     DataBundleDetails[] public transactionHistory;
 
+    /// @notice Address of the owner (device wallet) that becomes the new owner
+    address public newRequestedOwner;
+
     /// @dev A map from owner and spender to transfer approval. Determines whether
     ///      the spender can transfer this wallet from the owner.
-    mapping(address => mapping(address => bool)) internal _isTransferApproved;
+    // mapping(address => mapping(address => bool)) internal _isTransferApproved;
 
     modifier onlyDeviceWallet() {
         if (msg.sender != address(deviceWallet)) revert OnlyDeviceWallet();
@@ -168,53 +176,59 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable, Re
     }
 
     /// @dev Returns the current owner of the wallet
-    function owner() public view override(IOwnableESIMWallet, OwnableUpgradeable) returns (address) {
+    function owner() public view override returns (address) {
         return OwnableUpgradeable.owner();
     }
 
-    /// @dev Transfers ownership from the current owner to another address
-    /// @param newOwner The address that will be the new owner
-    function transferOwnership(address newOwner) public override(IOwnableESIMWallet, OwnableUpgradeable) {
-        // Only the admin of deviceWalletFactory contract can transfer ownership
-        require(isTransferApproved(owner(), msg.sender), "Transfer not allowed");
-
-        // Approval is revoked, in order to avoid unintended transfer allowance
-        // if this wallet ever returns to the previous owner
-        if (msg.sender != owner()) {
-            _setApproval(owner(), msg.sender, false);
-        }
-        _transferOwnership(newOwner);
-    }
-
-    /// @dev Returns whether the address 'to' can transfer a wallet from address 'from'
-    /// @param from The owner address
-    /// @param to The spender address
-    /// @notice The owner can always transfer the wallet to someone, i.e.,
-    ///         approval from an address to itself is always 'true'
-    function isTransferApproved(address from, address to) public view override returns (bool) {
-        return from == to ? true : _isTransferApproved[from][to];
-    }
-
-    /// @dev Changes authorization status for transfer approval from msg.sender to an address
-    /// @param to Address to change allowance status for
-    /// @param status The new approval status
-    function setApproval(address to, bool status) external override onlyOwner {
-        require(to != address(0), "to cannot be 0");
-        _setApproval(msg.sender, to, status);
-    }
-
-    /// @param from The owner address
-    /// @param to The spender address
-    /// @param status Status of approval
-    function _setApproval(address from, address to, bool status) internal {
+    /// @notice Function to request transfer of ownership (a 2-step transfer) to a new device wallet
+    /// @param _newOwner Address of the new device wallet to transfer ownership of this wallet
+    /** 
+    *   @dev newRequestedOwner is deliberately not checked for address(0).
+    *   This helps in scenario where the owner sends ownership request to a wrong address
+    *   The owner (device wallet) can simply call this function to overwrite the request
+    */
+    function requestTransferOwnership(address _newOwner) external onlyDeviceWallet {
         Registry registry = deviceWallet.registry();
-        require(registry.isDeviceWalletValid(to), "Invalid to");
+        require(registry.isDeviceWalletValid(_newOwner), "Invalid _newOwner");
 
-        bool statusChanged = _isTransferApproved[from][to] != status;
-        _isTransferApproved[from][to] = status;
-        if (statusChanged) {
-            emit TransferApprovalChanged(from, to, status);
+        // If the owner wants to retain the ownership of the contract, 
+        // they simply revoke the request by requesting a transfer to themselves
+        if(_newOwner == owner()) {
+            address revokedAddress = newRequestedOwner;
+            newRequestedOwner = address(0);
+            emit OwnershipTransferRevoked(owner(), revokedAddress);
+            return;
         }
+
+        newRequestedOwner = _newOwner;
+
+        emit OwnershipTransferRequested(owner(), newRequestedOwner);
+    }
+
+    /// @notice Function to be called by the new owner to accept the ownership
+    function acceptOwnershipTransfer() external {
+        require(msg.sender == newRequestedOwner, "Not approved");
+
+        _secureTransferOwnership();
+    }
+
+    /// @notice Do not allow owner to directly call OwnableUpgradeable's transferOwnership function
+    /// The owner should first call requestTransferOwnership, the recipient o
+    function transferOwnership(address) public pure override {
+        require(false, "Use acceptOwnershipTransfer instead.");
+    }
+
+    /// @notice Instead of using transferOwnership, the contract uses secureTransferOwnership
+    function _secureTransferOwnership() internal {
+        require(msg.sender == address(this), "Cannot call directly");
+
+        address newOwner = newRequestedOwner;
+        address previousOwner = owner();
+        // Reset ownership transfer address
+        newRequestedOwner = address(0);
+        // Transfer ownership to the request address
+        _transferOwnership(newOwner);
+        emit OwnershipTransferred(previousOwner, owner());
     }
 
     /// @dev Internal function to send ETH from this contract
