@@ -5,6 +5,7 @@ pragma solidity ^0.8.18;
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 import "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 import "@openzeppelin/contracts/utils/Create2.sol";
@@ -19,7 +20,7 @@ import {P256Verifier} from "../P256Verifier.sol";
 error OnlyAdmin();
 
 /// @notice Contract for deploying a new eSIM wallet
-contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
+contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     /// @notice Emitted when factory is deployed and admin is set
     event DeviceWalletFactoryDeployed(
@@ -98,6 +99,7 @@ contract DeviceWalletFactory is Initializable, OwnableUpgradeable {
     /// @dev Owner based upgrades
     function _authorizeUpgrade(address newImplementation)
     internal
+    override
     onlyOwner
     {}
 
