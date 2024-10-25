@@ -132,6 +132,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
         );
         
         __Ownable_init(_upgradeManager);
+        __UUPSUpgradeable_init();
     }
 
     /// @notice Function to update vault address.
