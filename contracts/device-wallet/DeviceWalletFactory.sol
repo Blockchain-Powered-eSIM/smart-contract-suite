@@ -6,6 +6,8 @@ import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {BeaconProxy} from "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
+import {UpgradeableBeacon} from "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
 
 import "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 import "@openzeppelin/contracts/utils/Create2.sol";
@@ -14,7 +16,6 @@ import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {Registry} from "../Registry.sol";
 import {DeviceWallet} from "./DeviceWallet.sol";
 import {ESIMWalletFactory} from "../esim-wallet/ESIMWalletFactory.sol";
-import {UpgradeableBeacon} from "../UpgradableBeacon.sol";
 import {P256Verifier} from "../P256Verifier.sol";
 
 error OnlyAdmin();
@@ -60,11 +61,10 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
     /// @notice Vault address that receives payments for eSIM data bundles
     address public vault;
 
-    /// @notice Implementation (logic) contract address of the device wallet
-    address public deviceWalletImplementation;
-
-    /// @notice Beacon contract address for this contract
-    address public beacon;
+    /// @notice Upgradeable beacon that points to correct Device wallet implementation
+    /// @dev    Just updating the device wallet implementation address in this contract resolves
+    ///         the issue of manually updating each device wallet proxy with a new implementation
+    UpgradeableBeacon public beacon;
 
     ///@notice Registry contract instance
     Registry public registry;
@@ -116,18 +116,17 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
         vault = _vault;
         entryPoint = _entryPoint;
         verifier = _verifier;
-        deviceWalletImplementation = _deviceWalletImplementation;
         registry = Registry(_registryContractAddress);
 
         // Upgradable beacon for device wallet implementation contract
-        beacon = address(new UpgradeableBeacon(_deviceWalletImplementation, _upgradeManager));
+        beacon = new UpgradeableBeacon(_deviceWalletImplementation, address(this));
 
         emit DeviceWalletFactoryDeployed(
             _eSIMWalletAdmin,
             _vault,
             _upgradeManager,
-            deviceWalletImplementation,
-            beacon
+            getCurrentDeviceWalletImplementation(),
+            address(beacon)
         );
         
         __Ownable_init(_upgradeManager);
@@ -178,13 +177,13 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
     /// @param _newDeviceImpl Address of the new device implementation contract
     function updateDeviceWalletImplementation(
         address _newDeviceImpl
-    ) external onlyAdmin returns (address) {
+    ) external onlyOwner returns (address) {
         require(_newDeviceImpl != address(0), "_newDeviceImpl 0");
         require(_newDeviceImpl != deviceWalletImplementation, "Existing implementation");
 
-        deviceWalletImplementation = _newDeviceImpl;
+        beacon.upgradeTo(_newDeviceImpl);
 
-        emit DeviceWalletImplementationUpdated(deviceWalletImplementation);
+        emit DeviceWalletImplementationUpdated(getCurrentDeviceWalletImplementation());
 
         return deviceWalletImplementation;
     }
@@ -300,8 +299,8 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
 
         deviceWallet = DeviceWallet(
             payable(
-                new ERC1967Proxy{salt : bytes32(_salt)}(
-                    deviceWalletImplementation,
+                new BeaconProxy{salt : bytes32(_salt)}(
+                    address(beacon),
                     abi.encodeCall(
                         DeviceWallet.init, 
                         (address(registry), _deviceWalletOwnerKey, _deviceUniqueIdentifier)
@@ -326,9 +325,9 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
             bytes32(_salt),
             keccak256(
                 abi.encodePacked(
-                    type(ERC1967Proxy).creationCode,
+                    type(BeaconProxy).creationCode,
                     abi.encode(
-                        deviceWalletImplementation,
+                        getCurrentESIMWalletImplementation(),
                         abi.encodeCall(
                             DeviceWallet.init,
                             (_registry, _deviceWalletOwnerKey, _deviceUniqueIdentifier)
@@ -337,5 +336,10 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
                 )
             )
         );
+    }
+
+    /// @notice Public function to get the current device wallet implementation (logic) contract
+    function getCurrentDeviceWalletImplementation() public view returns (address) {
+        return beacon.implementation();
     }
 }
