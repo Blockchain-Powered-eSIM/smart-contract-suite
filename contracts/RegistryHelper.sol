@@ -144,38 +144,4 @@ contract RegistryHelper {
 
         emit DeviceWalletInfoUpdated(_deviceWallet, _deviceUniqueIdentifier, _deviceWalletOwnerKey);
     }
-
-    /// @dev Internal function to deploy Device wallet factory during Registry initialisation
-    function _deployDeviceWalletFactory(
-        IEntryPoint entryPoint,
-        P256Verifier _verifier,
-        address _eSIMWalletAdmin,
-        address _vault,
-        address _upgradeManager
-    ) internal {
-        address deviceWalletFactoryImplementation = address(new DeviceWalletFactory(entryPoint, _verifier));
-        ERC1967Proxy deviceWalletFactoryProxy = new ERC1967Proxy(
-            deviceWalletFactoryImplementation,
-            abi.encodeCall(
-                DeviceWalletFactory(deviceWalletFactoryImplementation).initialize,
-                (address(this), _eSIMWalletAdmin, _vault, _upgradeManager)
-            )
-        );
-        deviceWalletFactory = DeviceWalletFactory(address(deviceWalletFactoryProxy));
-    }
-
-    /// @dev Internal function to deploy eSIM wallet factory during Registry initialisation
-    function _deployESIMWalletFactory(
-        address _upgradeManager
-    ) internal {
-        address eSIMWalletFactoryImplementation = address(new ESIMWalletFactory());
-        ERC1967Proxy eSIMWalletFactoryProxy = new ERC1967Proxy(
-            eSIMWalletFactoryImplementation,
-            abi.encodeCall(
-                ESIMWalletFactory(eSIMWalletFactoryImplementation).initialize,
-                (address(this), _upgradeManager)
-            )
-        );
-        eSIMWalletFactory = ESIMWalletFactory(address(eSIMWalletFactoryProxy));
-    }
 }

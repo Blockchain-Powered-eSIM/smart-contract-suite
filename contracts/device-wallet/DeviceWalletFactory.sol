@@ -50,9 +50,9 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
     /// @notice Emitted when the device wallet implementation is updated
     event DeviceWalletImplementationUpdated(address indexed _newDeviceImplementation);
 
-    IEntryPoint public immutable entryPoint;
+    IEntryPoint public entryPoint;
 
-    P256Verifier public immutable verifier;
+    P256Verifier public verifier;
 
     /// @notice Admin address of the eSIM wallet project
     address public eSIMWalletAdmin;
@@ -85,14 +85,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(
-        IEntryPoint _entryPoint,
-        P256Verifier _verifier
     ) initializer {
-        entryPoint = _entryPoint;
-        verifier = _verifier;
-
-        // device wallet implementation (logic) contract
-        deviceWalletImplementation = address(new DeviceWallet(_entryPoint, _verifier));
         _disableInitializers();
     }
 
@@ -108,9 +101,12 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
     /// @param _upgradeManager Admin address responsible for upgrading contracts
     function initialize(
         address _registryContractAddress,
+        address _deviceWalletImplementation,
         address _eSIMWalletAdmin,
         address _vault,
-        address _upgradeManager
+        address _upgradeManager,
+        IEntryPoint _entryPoint,
+        P256Verifier _verifier
     ) external initializer {
         require(_eSIMWalletAdmin != address(0), "Admin cannot be zero address");
         require(_vault != address(0), "Vault address cannot be zero");
@@ -118,10 +114,13 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
 
         eSIMWalletAdmin = _eSIMWalletAdmin;
         vault = _vault;
+        entryPoint = _entryPoint;
+        verifier = _verifier;
+        deviceWalletImplementation = _deviceWalletImplementation;
         registry = Registry(_registryContractAddress);
 
         // Upgradable beacon for device wallet implementation contract
-        beacon = address(new UpgradeableBeacon(deviceWalletImplementation, _upgradeManager));
+        beacon = address(new UpgradeableBeacon(_deviceWalletImplementation, _upgradeManager));
 
         emit DeviceWalletFactoryDeployed(
             _eSIMWalletAdmin,
