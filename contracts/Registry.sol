@@ -21,10 +21,10 @@ error OnlyDeviceWalletFactory();
 contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, RegistryHelper {
 
     /// @notice Entry point contract address (one entryPoint per chain)
-    IEntryPoint public immutable entryPoint;
+    IEntryPoint public entryPoint;
 
     ///@notice eSIM wallet project admin address
-    address public admin;
+    address public eSIMWalletAdmin;
 
     /// @notice Address of the vault that receives payments for the eSIM data bundles
     address public vault;
@@ -43,8 +43,7 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
     }
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(IEntryPoint _entryPoint) initializer {
-        entryPoint = _entryPoint;
+    constructor() initializer {
         _disableInitializers();
     }
 
@@ -62,19 +61,22 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
         address _eSIMWalletAdmin,
         address _vault,
         address _upgradeManager,
+        address _deviceWalletFactory,
+        address _eSIMWalletFactory,
+        IEntryPoint _entryPoint,
         P256Verifier _verifier
     ) external initializer {
         require(_eSIMWalletAdmin != address(0), "_eSIMWalletAdmin 0");
         require(_vault != address(0), "_vault 0");
         require(_upgradeManager != address(0), "_upgradeManager 0");
 
-        admin = _eSIMWalletAdmin;
+        entryPoint = _entryPoint;
+        eSIMWalletAdmin = _eSIMWalletAdmin;
         vault = _vault;
         upgradeManager = _upgradeManager;
 
-        _deployDeviceWalletFactory(entryPoint, _verifier, _eSIMWalletAdmin, _vault, _upgradeManager);
-
-        _deployESIMWalletFactory(_upgradeManager);
+        deviceWalletFactory = DeviceWalletFactory(_deviceWalletFactory);
+        eSIMWalletFactory = ESIMWalletFactory(_eSIMWalletFactory);
 
         __Ownable_init(_upgradeManager);
 
