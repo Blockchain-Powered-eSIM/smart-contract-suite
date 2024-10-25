@@ -179,13 +179,13 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
         address _newDeviceImpl
     ) external onlyOwner returns (address) {
         require(_newDeviceImpl != address(0), "_newDeviceImpl 0");
-        require(_newDeviceImpl != deviceWalletImplementation, "Existing implementation");
+        require(_newDeviceImpl != getCurrentDeviceWalletImplementation(), "Existing implementation");
 
         beacon.upgradeTo(_newDeviceImpl);
 
         emit DeviceWalletImplementationUpdated(getCurrentDeviceWalletImplementation());
 
-        return deviceWalletImplementation;
+        return getCurrentDeviceWalletImplementation();
     }
 
     /// @notice To deploy multiple device wallets at once
@@ -327,7 +327,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
                 abi.encodePacked(
                     type(BeaconProxy).creationCode,
                     abi.encode(
-                        getCurrentESIMWalletImplementation(),
+                        getCurrentDeviceWalletImplementation(),
                         abi.encodeCall(
                             DeviceWallet.init,
                             (_registry, _deviceWalletOwnerKey, _deviceUniqueIdentifier)
