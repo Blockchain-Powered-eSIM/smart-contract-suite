@@ -48,6 +48,9 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
     /// @notice Emitted when the newly requested admin accepts the role
     event AdminUpdated(address indexed _newAdmin);
 
+    /// @notice Emitted when the current admin revokes the transfer of ownership
+    event AdminUpdateRevoked(address indexed _currentAdmin, address indexed _revokedAddress);
+
     /// @notice Emitted when the device wallet implementation is updated
     event DeviceWalletImplementationUpdated(address indexed _newDeviceImplementation);
 
@@ -152,8 +155,13 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
     ///      the request to a new (intended) address by calling this function again.
     /// @param _newAdmin Address of the recipient to recieve the admin role
     function requestAdminUpdate(address _newAdmin) external onlyAdmin {
-        require(msg.sender != _newAdmin, "Cannot update to same address");
         require(_newAdmin != address(0), "Admin address cannot be zero");
+
+        if(_newAdmin == eSIMWalletAdmin) {
+            address revokedAdmin = newRequestedAdmin;
+            newRequestedAdmin = address(0);
+            emit AdminUpdateRevoked(msg.sender, revokedAdmin);
+        }
 
         newRequestedAdmin = _newAdmin;
         emit AdminUpdateRequested(eSIMWalletAdmin, _newAdmin);
