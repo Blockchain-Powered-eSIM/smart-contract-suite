@@ -20,12 +20,20 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
     /// @notice Emitted when an eSIM identifier is associated with a device identifier
     event ESIMBindedWithDevice(string _eSIMUniqueIdentifier, string _deviceUniqueIdentifier);
 
+    /// @notice Emitted when the Lazy wallet is deployed
     event LazyWalletDeployed(
         bytes32[2] _deviceOwnerPublicKey,
         address deviceWallet,
         string _deviceUniqueIdentifier,
         address[] eSIMWallets,
         string[] _eSIMUniqueIdentifiers
+    );
+
+    /// @notice Emitted when the user switches eSIM to a new device
+    event ESIMIdentifierSwitchedToNewDeviceIdentifier(
+        string _eSIMIdentifier,
+        string _oldDeviceIdentifier,
+        string currentDeviceIdentifier
     );
 
     /// @notice Address (owned/controlled by eSIM wallet project) that can upgrade contracts
@@ -189,5 +197,81 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         }
 
         emit DataUpdatedForDevice(_deviceUniqueIdentifier, _eSIMUniqueIdentifiers, _dataBundleDetails);
+    }
+
+    /// @notice This function should be called when the fiat user wants to switch their eSIM to a new device
+    /// @param _eSIMIdentifier unique eSIM identifier that needs to be switched to a new device
+    /// @param _oldDeviceIdentifier device identifier that the eSIM is currently associated with
+    /// @param _newDeviceIdentifier new device identifier that the eSIM needs to be switched to
+    /// @param bool Returns `true` if the switching of eSIM was successful
+    function switchESIMIdentifierToNewDeviceIdentifier(
+        string calldata _eSIMIdentifier,
+        string calldata _oldDeviceIdentifier,
+        string calldata _newDeviceIdentifier
+    ) external onlyESIMWalletAdmin returns (bool) {
+        require(bytes( _eSIMIdentifier).length > 0, "_eSIMIdentifier 0");
+        require(bytes( _newDeviceIdentifier).length > 0, "_newDeviceIdentifier 0");
+
+        string storage currentDeviceIdentifier = eSIMIdentifierToDeviceIdentifier[_eSIMIdentifier];
+        require(bytes(currentDeviceIdentifier).length > 0, "Unknown _eSIMIdentifier");
+        
+        require(
+            bytes(currentDeviceIdentifier).length == bytes(_oldDeviceIdentifier).length,
+            "Incorrect device identifier"
+        );
+        require(
+            keccak256(currentDeviceIdentifier) == keccak256(_oldDeviceIdentifier),
+            "Incorrect device identifier"
+        );
+        require(
+            keccak256(_newDeviceIdentifier) != keccak256(currentDeviceIdentifier),
+            "Cannot switch to same device"
+        );
+
+        currentDeviceIdentifier = _newDeviceIdentifier;
+
+        _updateDeviceIdentifierToESIMDetails(_eSIMIdentifier, _oldDeviceIdentifier, _newDeviceIdentifier);
+        _updateESIMIdentifiersAssociatedWithDeviceIdentifier(_eSIMIdentifier, _oldDeviceIdentifier, _newDeviceIdentifier);
+
+        emit ESIMIdentifierSwitchedToNewDeviceIdentifier(_eSIMIdentifier, _oldDeviceIdentifier, currentDeviceIdentifier);
+    }
+
+    /// @dev Internal function to update the eSIM related details when switching to a new device identifier
+    function _updateDeviceIdentifierToESIMDetails(
+        string calldata _eSIMIdentifier,
+        string calldata _oldDeviceIdentifier,
+        string calldata _newDeviceIdentifier
+    ) internal {
+        // TODO: remove from previous device
+        // deviceIdentifierToESIMDetails
+        // mapping(string => mapping(string => DataBundleDetails[])) public deviceIdentifierToESIMDetails;
+        // DataBundleDetails[] storage dataBundleDetails = deviceIdentifierToESIMDetails[_oldDeviceIdentifier][_eSIMIdentifier];
+
+
+
+        // TODO: add to new device
+    }
+
+    /// @dev Internal function to update the eSIM identifiers related to the device when switching
+    function _updateESIMIdentifiersAssociatedWithDeviceIdentifier(
+        string calldata _eSIMIdentifier,
+        string calldata _oldDeviceIdentifier,
+        string calldata _newDeviceIdentifier
+    ) internal {
+        // Remove eSIM identifier from previous device identifier
+        string[] storage eSIMIdentifierOfOldDevice = eSIMIdentifiersAssociatedWithDeviceIdentifier[_oldDeviceIdentifier];
+        for(uint256 i=0; i<eSIMIdentifierOfOldDevice.length; ++i) {
+            if(
+                bytes(eSIMIdentifierOfOldDevice[i]).length == bytes(_eSIMIdentifier).length &&
+                keccak256(eSIMIdentifierOfOldDevice[i]) == keccak256(_eSIMIdentifier) 
+            ) {
+                delete eSIMIdentifierOfOldDevice[i];
+                break;
+            }
+        }
+
+        // Add eSIM identifier to new device identifier
+        string[] storage eSIMIdentifierOfNewDevice = eSIMIdentifiersAssociatedWithDeviceIdentifier[_newDeviceIdentifier];
+        eSIMIdentifierOfNewDevice.push(_eSIMIdentifier);
     }
 }
