@@ -36,6 +36,12 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         string currentDeviceIdentifier
     );
 
+    /// @notice Emitted when the device identifier associated with an eSIM identifier is updated
+    event NewDeviceIdentifierAssociatedWithESIMIdentifier(
+        string _eSIMIdentifier,
+        string _oldDeviceIdentifier,
+        string _newDeviceIdentifier);
+
     /// @notice Emitted when the Data bundle related details of an eSIM are transferred to a new device identifier
     event DataBundleDetailsTransferredToNewDeviceIdentifier(
         string _newDeviceIdentifier,
@@ -255,6 +261,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         );
 
         eSIMIdentifierToDeviceIdentifier[_eSIMIdentifier] = _newDeviceIdentifier;
+        emit NewDeviceIdentifierAssociatedWithESIMIdentifier(_eSIMIdentifier, currentDeviceIdentifier, _newDeviceIdentifier);
 
         _updateDeviceIdentifierToESIMDetails(_eSIMIdentifier, _oldDeviceIdentifier, _newDeviceIdentifier);
         _updateESIMIdentifiersAssociatedWithDeviceIdentifier(_eSIMIdentifier, _oldDeviceIdentifier, _newDeviceIdentifier);
