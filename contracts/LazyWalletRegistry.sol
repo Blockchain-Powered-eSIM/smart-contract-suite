@@ -185,7 +185,8 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
                 emit ESIMBindedWithDevice(eSIMUniqueIdentifier, _deviceUniqueIdentifier);
             }
             else {
-                require(deviceUniqueIdentifier == _deviceUniqueIdentifier, "Invalid _deviceUniqueIdentifier");
+                require(bytes(deviceUniqueIdentifier).length == bytes(_deviceUniqueIdentifier).length, "Invalid _deviceUniqueIdentifier");
+                require(keccak256(bytes(deviceUniqueIdentifier)) == keccak256(bytes(_deviceUniqueIdentifier)), "Invalid _deviceUniqueIdentifier");
             }
 
             DataBundleDetails[] storage dataBundleDetails = deviceIdentifierToESIMDetails[_deviceUniqueIdentifier][eSIMUniqueIdentifier];
@@ -203,7 +204,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
     /// @param _eSIMIdentifier unique eSIM identifier that needs to be switched to a new device
     /// @param _oldDeviceIdentifier device identifier that the eSIM is currently associated with
     /// @param _newDeviceIdentifier new device identifier that the eSIM needs to be switched to
-    /// @param bool Returns `true` if the switching of eSIM was successful
+    /// @return bool Returns `true` if the switching of eSIM was successful
     function switchESIMIdentifierToNewDeviceIdentifier(
         string calldata _eSIMIdentifier,
         string calldata _oldDeviceIdentifier,
@@ -212,7 +213,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         require(bytes( _eSIMIdentifier).length > 0, "_eSIMIdentifier 0");
         require(bytes( _newDeviceIdentifier).length > 0, "_newDeviceIdentifier 0");
 
-        string storage currentDeviceIdentifier = eSIMIdentifierToDeviceIdentifier[_eSIMIdentifier];
+        string memory currentDeviceIdentifier = eSIMIdentifierToDeviceIdentifier[_eSIMIdentifier];
         require(bytes(currentDeviceIdentifier).length > 0, "Unknown _eSIMIdentifier");
         
         require(
@@ -220,20 +221,22 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
             "Incorrect device identifier"
         );
         require(
-            keccak256(currentDeviceIdentifier) == keccak256(_oldDeviceIdentifier),
+            keccak256(bytes(currentDeviceIdentifier)) == keccak256(bytes(_oldDeviceIdentifier)),
             "Incorrect device identifier"
         );
         require(
-            keccak256(_newDeviceIdentifier) != keccak256(currentDeviceIdentifier),
+            keccak256(bytes(_newDeviceIdentifier)) != keccak256(bytes(currentDeviceIdentifier)),
             "Cannot switch to same device"
         );
 
-        currentDeviceIdentifier = _newDeviceIdentifier;
+        eSIMIdentifierToDeviceIdentifier[_eSIMIdentifier] = _newDeviceIdentifier;
 
         _updateDeviceIdentifierToESIMDetails(_eSIMIdentifier, _oldDeviceIdentifier, _newDeviceIdentifier);
         _updateESIMIdentifiersAssociatedWithDeviceIdentifier(_eSIMIdentifier, _oldDeviceIdentifier, _newDeviceIdentifier);
 
         emit ESIMIdentifierSwitchedToNewDeviceIdentifier(_eSIMIdentifier, _oldDeviceIdentifier, currentDeviceIdentifier);
+
+        return true;
     }
 
     /// @dev Internal function to update the eSIM related details when switching to a new device identifier
@@ -263,7 +266,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         for(uint256 i=0; i<eSIMIdentifierOfOldDevice.length; ++i) {
             if(
                 bytes(eSIMIdentifierOfOldDevice[i]).length == bytes(_eSIMIdentifier).length &&
-                keccak256(eSIMIdentifierOfOldDevice[i]) == keccak256(_eSIMIdentifier) 
+                keccak256(bytes(eSIMIdentifierOfOldDevice[i])) == keccak256(bytes(_eSIMIdentifier)) 
             ) {
                 delete eSIMIdentifierOfOldDevice[i];
                 break;
