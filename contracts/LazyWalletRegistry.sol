@@ -245,14 +245,14 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         string calldata _oldDeviceIdentifier,
         string calldata _newDeviceIdentifier
     ) internal {
-        // TODO: remove from previous device
-        // deviceIdentifierToESIMDetails
-        // mapping(string => mapping(string => DataBundleDetails[])) public deviceIdentifierToESIMDetails;
-        // DataBundleDetails[] storage dataBundleDetails = deviceIdentifierToESIMDetails[_oldDeviceIdentifier][_eSIMIdentifier];
+        DataBundleDetails[] storage dataBundleDetails = deviceIdentifierToESIMDetails[_oldDeviceIdentifier][_eSIMIdentifier];
+        // Transfer history of the eSIM identifier to the new device identifier
+        for(uint256 i=0; i<dataBundleDetails.length; ++i) {
+            deviceIdentifierToESIMDetails[_newDeviceIdentifier][_eSIMIdentifier].push(dataBundleDetails[i]);
+        }
 
-
-
-        // TODO: add to new device
+        // delete any reference of eSIM identifier from previous device identifier
+        delete deviceIdentifierToESIMDetails[_oldDeviceIdentifier][_eSIMIdentifier];
     }
 
     /// @dev Internal function to update the eSIM identifiers related to the device when switching
