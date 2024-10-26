@@ -36,6 +36,32 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         string currentDeviceIdentifier
     );
 
+    /// @notice Emitted when the Data bundle related details of an eSIM are transferred to a new device identifier
+    event DataBundleDetailsTransferredToNewDeviceIdentifier(
+        string _newDeviceIdentifier,
+        DataBundleDetails[] _newDataBundleDetails
+    );
+
+    /// @notice Emitted when teh Data bundle related details are deleted from the old device identifer
+    event DataBundleDetailsDeletedFromOldDeviceIdentifier(
+        string _oldDeviceIdentifier,
+        string _eSIMIdentifier
+    );
+
+    /// @notice Emitted when an eSIM identifier is removed from a device identifier's list
+    event ESIMIdentifierRemovedFromOldDeviceIdentifier(
+        string _oldDeviceIdentifier, 
+        string _eSIMIdentifier, 
+        string[] _eSIMIdentifierOfOldDevice
+    );
+
+    /// @notice Emitted when an eSIM identifier is added to a new device identifier's list
+    event ESIMIdentifierAddedToNewDeviceIdentifier(
+        string _newDeviceIdentifier,
+        string _eSIMIdentifier,
+        string[] _eSIMIdentifierOfNewDevice
+    );
+
     /// @notice Address (owned/controlled by eSIM wallet project) that can upgrade contracts
     address public upgradeManager;
 
@@ -215,7 +241,6 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
 
         string memory currentDeviceIdentifier = eSIMIdentifierToDeviceIdentifier[_eSIMIdentifier];
         require(bytes(currentDeviceIdentifier).length > 0, "Unknown _eSIMIdentifier");
-        
         require(
             bytes(currentDeviceIdentifier).length == bytes(_oldDeviceIdentifier).length,
             "Incorrect device identifier"
@@ -247,12 +272,15 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
     ) internal {
         DataBundleDetails[] storage dataBundleDetails = deviceIdentifierToESIMDetails[_oldDeviceIdentifier][_eSIMIdentifier];
         // Transfer history of the eSIM identifier to the new device identifier
+        DataBundleDetails[] storage newDataBundleDetails = deviceIdentifierToESIMDetails[_newDeviceIdentifier][_eSIMIdentifier];
         for(uint256 i=0; i<dataBundleDetails.length; ++i) {
-            deviceIdentifierToESIMDetails[_newDeviceIdentifier][_eSIMIdentifier].push(dataBundleDetails[i]);
+            newDataBundleDetails.push(dataBundleDetails[i]);
         }
+        emit DataBundleDetailsTransferredToNewDeviceIdentifier(_newDeviceIdentifier, newDataBundleDetails);
 
         // delete any reference of eSIM identifier from previous device identifier
         delete deviceIdentifierToESIMDetails[_oldDeviceIdentifier][_eSIMIdentifier];
+        emit DataBundleDetailsDeletedFromOldDeviceIdentifier(_oldDeviceIdentifier, _eSIMIdentifier);
     }
 
     /// @dev Internal function to update the eSIM identifiers related to the device when switching
@@ -269,6 +297,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
                 keccak256(bytes(eSIMIdentifierOfOldDevice[i])) == keccak256(bytes(_eSIMIdentifier)) 
             ) {
                 delete eSIMIdentifierOfOldDevice[i];
+                emit ESIMIdentifierRemovedFromOldDeviceIdentifier(_oldDeviceIdentifier, _eSIMIdentifier, eSIMIdentifierOfOldDevice);
                 break;
             }
         }
@@ -276,5 +305,6 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         // Add eSIM identifier to new device identifier
         string[] storage eSIMIdentifierOfNewDevice = eSIMIdentifiersAssociatedWithDeviceIdentifier[_newDeviceIdentifier];
         eSIMIdentifierOfNewDevice.push(_eSIMIdentifier);
+        emit ESIMIdentifierAddedToNewDeviceIdentifier(_newDeviceIdentifier, _eSIMIdentifier, eSIMIdentifierOfNewDevice);
     }
 }
