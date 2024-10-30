@@ -307,7 +307,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
         }
 
         // Prefund the account with msg.value
-        if (msg.value > 0 && _depositAmount == msg.value) {
+        if (msg.value > 0 && _depositAmount <= msg.value) {
             entryPoint.depositTo{value: _depositAmount}(addr);
         }
 
