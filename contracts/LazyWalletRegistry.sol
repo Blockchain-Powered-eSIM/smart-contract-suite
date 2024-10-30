@@ -217,7 +217,6 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
                 emit ESIMBindedWithDevice(eSIMUniqueIdentifier, _deviceUniqueIdentifier);
             }
             else {
-                require(bytes(deviceUniqueIdentifier).length == bytes(_deviceUniqueIdentifier).length, "Invalid _deviceUniqueIdentifier");
                 require(keccak256(bytes(deviceUniqueIdentifier)) == keccak256(bytes(_deviceUniqueIdentifier)), "Invalid _deviceUniqueIdentifier");
             }
 
@@ -300,7 +299,6 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         string[] storage eSIMIdentifierOfOldDevice = eSIMIdentifiersAssociatedWithDeviceIdentifier[_oldDeviceIdentifier];
         for(uint256 i=0; i<eSIMIdentifierOfOldDevice.length; ++i) {
             if(
-                bytes(eSIMIdentifierOfOldDevice[i]).length == bytes(_eSIMIdentifier).length &&
                 keccak256(bytes(eSIMIdentifierOfOldDevice[i])) == keccak256(bytes(_eSIMIdentifier)) 
             ) {
                 delete eSIMIdentifierOfOldDevice[i];
