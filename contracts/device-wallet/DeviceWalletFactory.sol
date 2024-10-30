@@ -162,9 +162,10 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
             newRequestedAdmin = address(0);
             emit AdminUpdateRevoked(msg.sender, revokedAdmin);
         }
-
-        newRequestedAdmin = _newAdmin;
-        emit AdminUpdateRequested(eSIMWalletAdmin, _newAdmin);
+        else {
+            newRequestedAdmin = _newAdmin;
+            emit AdminUpdateRequested(eSIMWalletAdmin, _newAdmin);
+        }
     }
 
     /// @notice Function to update admin address
