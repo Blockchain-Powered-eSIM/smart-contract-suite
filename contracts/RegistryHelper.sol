@@ -116,7 +116,7 @@ contract RegistryHelper {
             address eSIMWallet = eSIMWalletFactory.deployESIMWallet(deviceWallet, (_salt + i));
 
             // Updates the Device wallet storage variables as well as for the registry
-            DeviceWallet(payable(deviceWallet)).addESIMWallet(eSIMWallet, deviceWallet, true);
+            DeviceWallet(payable(deviceWallet)).addESIMWallet(eSIMWallet, true);
 
             // Since the eSIM unique identifier is already known in this scenario
             // We can execute the setESIMUniqueIdentifierForAnESIMWallet function in same transaction as deploying the smart wallet
