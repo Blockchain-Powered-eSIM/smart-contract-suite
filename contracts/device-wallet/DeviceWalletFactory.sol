@@ -341,7 +341,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
                 abi.encodePacked(
                     type(BeaconProxy).creationCode,
                     abi.encode(
-                        getCurrentDeviceWalletImplementation(),
+                        address(beacon),
                         abi.encodeCall(
                             DeviceWallet.init,
                             (_registry, _deviceWalletOwnerKey, _deviceUniqueIdentifier)
