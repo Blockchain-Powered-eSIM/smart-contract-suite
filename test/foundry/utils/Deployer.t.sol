@@ -19,15 +19,6 @@ import "test/foundry/utils/mocks/MockEntryPoint.sol";
 
 contract Deployer is Test {
 
-    event RegistryInitialized(
-        address eSIMWalletAdmin,
-        address vault,
-        address indexed upgradeManager,
-        address indexed deviceWalletFactory,
-        address indexed eSIMWalletFactory,
-        address verifier
-    );
-
     address eSIMWalletAdmin = address(0x4B20993Bc481177ec7E8f571ceCaE8A9e22C02db);
     address upgradeManager = address(0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2);
     address vault = address(0x78731D3Ca6b7E34aC0F824c42a7cC18A495cabaB);
