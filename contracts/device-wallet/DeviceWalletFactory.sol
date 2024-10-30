@@ -231,6 +231,12 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
             availableETH -= _depositAmounts[i];
         }
 
+        // return unused ETH
+        if(availableETH > 0) {
+            (bool success,) = msg.sender.call{value: availableETH}("");
+            require(success, "ETH return failed");
+        }
+
         return deviceWalletsDeployed;
     }
 
