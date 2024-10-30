@@ -258,7 +258,6 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
         address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(deviceWalletAddress, _salt);
         DeviceWallet(payable(deviceWalletAddress)).addESIMWallet(
             eSIMWalletAddress,
-            deviceWalletAddress,
             true
         );
 

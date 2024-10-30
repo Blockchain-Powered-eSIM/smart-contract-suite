@@ -155,7 +155,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     ) external onlyESIMWalletAdmin returns (address) {
         address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(address(this), _salt);
 
-        addESIMWallet(eSIMWalletAddress, address(this), _hasAccessToETH);
+        addESIMWallet(eSIMWalletAddress, _hasAccessToETH);
 
         return eSIMWalletAddress;
     }
@@ -237,20 +237,17 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
 
     /// @notice Allow the device wallet factory or the wallet owner to add new eSIM wallet to this device wallet
     /// @param _eSIMWalletAddress Address of the eSIM wallet to be added
-    /// @param _deviceWalletAddress Address of the device wallet to add the eSIM wallet to
     function addESIMWallet(
         address _eSIMWalletAddress,
-        address _deviceWalletAddress,
         bool _hasAccessToETH
     ) public onlyRegistryOrDeviceWalletFactoryOrOwner {
-        require(_deviceWalletAddress != address(this), "Cannot update to same address");
         require(registry.isESIMWalletValid(_eSIMWalletAddress) == address(0), "Already has device wallet");
         
         isValidESIMWallet[_eSIMWalletAddress] = true;
         canPullETH[_eSIMWalletAddress] = _hasAccessToETH;
 
         // Inform and update the registry about the newly added eSIM wallet to this device wallet
-        registry.updateDeviceWalletAssociatedWithESIMWallet(_eSIMWalletAddress, _deviceWalletAddress);
+        registry.updateDeviceWalletAssociatedWithESIMWallet(_eSIMWalletAddress, address(this));
         // Since the eSIM wallet now has a device wallet, remove it from standby
         if(registry.isESIMWalletOnStandby(_eSIMWalletAddress)) {
             registry.toggleESIMWalletStandbyStatus(_eSIMWalletAddress, false);
@@ -261,12 +258,9 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
 
     /// @notice Allow device wallet factory or the wallet owner to remove any eSIM wallet bound with this device wallet
     /// @param _eSIMWalletAddress Address of the eSIM wallet to be removed
-    /// @param _deviceWalletAddress Address of the device wallet to remove the eSIM wallet from
     function removeESIMWallet(
-        address _eSIMWalletAddress,
-        address _deviceWalletAddress
+        address _eSIMWalletAddress
     ) public onlyDeviceWalletFactoryOrOwner {
-        require(_deviceWalletAddress == address(this), "Unknown device wallet");
         require(isValidESIMWallet[_eSIMWalletAddress] == true, "Unknown eSIM wallet");
 
         isValidESIMWallet[_eSIMWalletAddress] = false;
@@ -276,7 +270,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         registry.updateDeviceWalletAssociatedWithESIMWallet(_eSIMWalletAddress, address(0));
         registry.toggleESIMWalletStandbyStatus(_eSIMWalletAddress, true);
 
-        emit ESIMWalletRemoved(_eSIMWalletAddress, _deviceWalletAddress, msg.sender);
+        emit ESIMWalletRemoved(_eSIMWalletAddress, address(this), msg.sender);
     }
 
     // receive function already exists in the Account4337.sol
