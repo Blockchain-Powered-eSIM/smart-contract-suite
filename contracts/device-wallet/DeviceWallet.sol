@@ -23,6 +23,7 @@ error OnlyESIMWalletAdminOrDeviceWalletOwner();
 error OnlyESIMWalletAdminOrDeviceWalletFactory();
 error OnlyAssociatedESIMWallets();
 error FailedToTransfer();
+error OnlyESIMWalletAdmin();
 
 contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 {
     using Address for address;
@@ -51,9 +52,6 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
 
     /// @notice String identifier to uniquely identify user's device
     string public deviceUniqueIdentifier;
-
-    /// @notice Mapping from eSIMUniqueIdentifier to the respective eSIM wallet address
-    mapping(string => address) public uniqueIdentifierToESIMWallet;
 
     /// @notice Set to true if the eSIM wallet belongs to this device wallet
     mapping(address => bool) public isValidESIMWallet;
@@ -113,6 +111,15 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         _;
     }
 
+    modifier onlyESIMWalletAdmin() {
+        if(
+            msg.sender != registry.deviceWalletFactory().eSIMWalletAdmin()
+        ) {
+            revert OnlyESIMWalletAdmin();
+        }
+        _;
+    }
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(
         IEntryPoint anEntryPoint,
@@ -139,12 +146,13 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     }
 
     /// @notice Allow device wallet owner to deploy new eSIM wallet
+    /// @dev Don't forget to call setESIMUniqueIdentifierForAnESIMWallet function after deploying eSIM wallet
     /// @param _hasAccessToETH Set to true if the eSIM wallet is allowed to pull ETH from this wallet.
     /// @return eSIM wallet address
     function deployESIMWallet(
         bool _hasAccessToETH,
         uint256 _salt
-    ) external onlySelf returns (address) {
+    ) external onlyESIMWalletAdmin returns (address) {
         address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(address(this), _salt);
 
         addESIMWallet(eSIMWalletAddress, address(this), _hasAccessToETH);
@@ -159,14 +167,10 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     function setESIMUniqueIdentifierForAnESIMWallet(
         address _eSIMWalletAddress,
         string calldata _eSIMUniqueIdentifier
-    ) public onlyESIMWalletAdminOrLazyWallet() returns (string memory) {
+    ) public onlyESIMWalletAdminOrLazyWallet returns (string memory) {
         require(
             registry.isESIMWalletValid(_eSIMWalletAddress) != address(0),
             "Unknown eSIM wallet address"
-        );
-        require(
-            uniqueIdentifierToESIMWallet[_eSIMUniqueIdentifier] == address(0),
-            "eSIM identifier already set"
         );
 
         ESIMWallet eSIMWallet = ESIMWallet(payable(_eSIMWalletAddress));
