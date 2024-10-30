@@ -124,9 +124,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     constructor(
         IEntryPoint anEntryPoint,
         P256Verifier _verifier
-    ) Account4337(anEntryPoint, _verifier) initializer {
-        _disableInitializers();
-    }
+    ) Account4337(anEntryPoint, _verifier) {}
 
     /// @notice Initialises the device wallet and deploys eSIM wallets for any already existing eSIMs
     function init(

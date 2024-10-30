@@ -35,6 +35,9 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeable
         address indexed _newImplementation
     );
 
+    /// @notice Emitted when the registry is added to the factory contract
+    event AddedRegistry(address indexed registry);
+
     /// @notice Address of the registry contract
     Registry public registry;
 
@@ -66,9 +69,7 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeable
     }
     
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() initializer {
-        _disableInitializers();
-    }
+    constructor() initializer {}
 
     /// @dev Owner based upgrades for UUPS eSIM wallet factory
     function _authorizeUpgrade(address newImplementation)
@@ -77,13 +78,10 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeable
     onlyOwner
     {}
 
-    /// @param _registryContractAddress Address of the registry contract
+    // / @param _registryContractAddress Address of the registry contract
     /// @param _upgradeManager Admin address responsible for upgrading contracts
-    function initialize (address _registryContractAddress, address _upgradeManager) external initializer {
-        require(_registryContractAddress != address(0), "Address cannot be zero");
+    function initialize (address _upgradeManager) external initializer {
         require(_upgradeManager != address(0), "Address cannot be zero");
-
-        registry = Registry(_registryContractAddress);
 
         // eSIM wallet implementation (logic) contract during deployment
         address eSIMWalletImplementation = address(new ESIMWallet());
@@ -101,6 +99,20 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeable
 
         __Ownable_init(_upgradeManager);
         __UUPSUpgradeable_init();
+    }
+
+    /// @notice Allow owner to add registry contract after it's been deployed
+    function addRegistryAddress(
+        address _registryContractAddress
+    ) external returns (address) {
+        require(msg.sender == owner(), "Only Owner");
+        require(_registryContractAddress != address(0));
+        require(address(registry) == address(0));
+
+        registry = Registry(_registryContractAddress);
+        emit AddedRegistry(address(registry));
+
+        return address(registry);
     }
 
     /// Function to deploy an eSIM wallet

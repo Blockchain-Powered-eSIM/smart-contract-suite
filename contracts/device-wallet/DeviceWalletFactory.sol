@@ -54,6 +54,9 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
     /// @notice Emitted when the device wallet implementation is updated
     event DeviceWalletImplementationUpdated(address indexed _newDeviceImplementation);
 
+    /// @notice Emitted when the registry is added to the factory contract
+    event AddedRegistry(address indexed registry);
+
     IEntryPoint public entryPoint;
 
     P256Verifier public verifier;
@@ -87,10 +90,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
     }
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(
-    ) initializer {
-        _disableInitializers();
-    }
+    constructor() initializer {}
 
     /// @dev Owner based upgrades
     function _authorizeUpgrade(address newImplementation)
@@ -103,7 +103,6 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
     /// @param _vault Address of the vault that receives payments for the data bundles
     /// @param _upgradeManager Admin address responsible for upgrading contracts
     function initialize(
-        address _registryContractAddress,
         address _deviceWalletImplementation,
         address _eSIMWalletAdmin,
         address _vault,
@@ -119,7 +118,6 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
         vault = _vault;
         entryPoint = _entryPoint;
         verifier = _verifier;
-        registry = Registry(_registryContractAddress);
 
         // Upgradable beacon for device wallet implementation contract
         beacon = new UpgradeableBeacon(_deviceWalletImplementation, address(this));
@@ -134,6 +132,19 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
         
         __Ownable_init(_upgradeManager);
         __UUPSUpgradeable_init();
+    }
+
+    /// @notice Allow admin to add registry contract after it has been deployed
+    function addRegistryAddress(
+        address _registryContractAddress
+    ) external onlyAdmin returns (address) {
+        require(_registryContractAddress != address(0));
+        require(address(registry) == address(0));
+
+        registry = Registry(_registryContractAddress);
+        emit AddedRegistry(address(registry));
+
+        return address(registry);
     }
 
     /// @notice Function to update vault address.

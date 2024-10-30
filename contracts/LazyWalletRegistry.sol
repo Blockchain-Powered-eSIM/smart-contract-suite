@@ -91,9 +91,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
     }
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() initializer {
-        _disableInitializers();
-    }
+    constructor() initializer {}
 
     /// @dev Owner based upgrades
     function _authorizeUpgrade(address newImplementation)
