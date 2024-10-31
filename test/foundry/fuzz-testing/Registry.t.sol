@@ -5,4 +5,5 @@ import "forge-std/Test.sol";
 import "contracts/Registry.sol";
 
 contract RegistryTest is Test {
+
 }

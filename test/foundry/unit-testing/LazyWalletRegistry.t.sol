@@ -7,8 +7,6 @@ import "forge-std/console.sol";
 
 import "contracts/LazyWalletRegistry.sol";
 import "contracts/CustomStructs.sol";
-import "contracts/device-wallet/DeviceWallet.sol";
-// import "contracts/esim-wallet/ESIMWallet.sol";
 
 import "test/utils/DeployerBase.sol";
 import "test/utils/mocks/MockLazyWalletRegistry.sol";

@@ -78,7 +78,6 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeable
     onlyOwner
     {}
 
-    // / @param _registryContractAddress Address of the registry contract
     /// @param _upgradeManager Admin address responsible for upgrading contracts
     function initialize (address _upgradeManager) external initializer {
         require(_upgradeManager != address(0), "Address cannot be zero");
