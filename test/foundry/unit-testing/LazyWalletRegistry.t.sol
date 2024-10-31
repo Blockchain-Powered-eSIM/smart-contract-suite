@@ -7,9 +7,12 @@ import "forge-std/console.sol";
 
 import "contracts/LazyWalletRegistry.sol";
 import "contracts/CustomStructs.sol";
+import "contracts/device-wallet/DeviceWallet.sol";
+// import "contracts/esim-wallet/ESIMWallet.sol";
 
 import "test/utils/DeployerBase.sol";
 import "test/utils/mocks/MockLazyWalletRegistry.sol";
+import "test/utils/mocks/MockDeviceWallet.sol";
 
 contract LazyWalletRegistryTest is DeployerBase {
 
@@ -157,5 +160,72 @@ contract LazyWalletRegistryTest is DeployerBase {
             }
         }
         assertEq(occurrence, 1, "eSIM identifier should have added once");
+    }
+
+    /**
+        function deployLazyWalletAndSetESIMIdentifier(
+            bytes32[2] memory _deviceOwnerPublicKey,
+            string calldata _deviceUniqueIdentifier,
+            uint256 _salt,
+            uint256 _depositAmount
+        ) external payable onlyESIMWalletAdmin returns (address, address[] memory) {
+     */
+    function test_deployLazyWalletAndSetESIMIdentifier_withoutAdmin() public {
+        vm.startPrank(user1);
+        vm.expectRevert("Only eSIM wallet admin");
+        lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(
+            pubKey1,
+            customDeviceUniqueIdentifiers[0],
+            999,
+            0
+        );
+        vm.stopPrank();
+    }
+
+    function test_deployLazyWalletAndSetESIMIdentifier_withoutESIMIdentifier() public {
+        vm.startPrank(eSIMWalletAdmin);
+        vm.expectRevert("No eSIM identifier found");
+        lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(
+            pubKey1,
+            customDeviceUniqueIdentifiers[0],
+            999,
+            0
+        );
+        vm.stopPrank();
+    }
+
+    function test_deployLazyWalletAndSetESIMIdentifier() public {
+        test_batchPopulateHistory();
+
+        string memory deviceIdentifier = customDeviceUniqueIdentifiers[0];
+
+        vm.startPrank(eSIMWalletAdmin);
+        (address deviceWallet, address[] memory eSIMWallets) = lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(
+            pubKey1,
+            deviceIdentifier,
+            999,
+            0
+        );
+        vm.stopPrank();
+
+        bool isValid = registry.isDeviceWalletValid(deviceWallet);
+        assertEq(isValid, true, "Device wallet should have been deployed");
+
+        address storedDeviceWallet = registry.uniqueIdentifierToDeviceWallet(deviceIdentifier);
+        assertEq(storedDeviceWallet, deviceWallet);
+
+        bytes32[2] memory storedKey = registry.getDeviceWalletToOwner(deviceWallet);
+        assertEq(storedKey[0], pubKey1[0], "X co-ordinate should match");
+        assertEq(storedKey[1], pubKey1[1], "Y co-ordinate should match");
+
+        for(uint256 i=0; i<eSIMWallets.length; ++i) {
+            assertEq(registry.isESIMWalletValid(eSIMWallets[i]), deviceWallet, "Device wallet not associated correctly");
+            assertEq(registry.isESIMWalletOnStandby(eSIMWallets[i]), false, "ESIM wallet should not be set to standby");
+            assertEq(ESIMWallet(payable(eSIMWallets[i])).owner(), deviceWallet, "Device wallet should be owner of the eSIM wallet");
+        }
+
+        bytes32[2] memory ownerKey = MockDeviceWallet(payable(deviceWallet)).getOwner();
+        assertEq(ownerKey[0], pubKey1[0], "X co-ordinate doesn't match");
+        assertEq(ownerKey[1], pubKey1[1], "Y co-ordinate doesn't match");
     }
 }

@@ -159,6 +159,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         address deviceWallet;
 
         string[] memory eSIMUniqueIdentifiers = eSIMIdentifiersAssociatedWithDeviceIdentifier[_deviceUniqueIdentifier];
+        require(eSIMUniqueIdentifiers.length > 0, "No eSIM identifier found");
 
         address[] memory eSIMWallets = new address[](eSIMUniqueIdentifiers.length);
         DataBundleDetails[][] memory listOfDataBundleDetails = new DataBundleDetails[][](eSIMUniqueIdentifiers.length);

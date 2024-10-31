@@ -18,7 +18,7 @@ import {P256Verifier} from "../P256Verifier.sol";
 
 error OnlyRegistryOrDeviceWalletFactoryOrOwner();
 error OnlyDeviceWalletOrOwner();
-error OnlyESIMWalletAdminOrLazyWallet();
+error OnlyESIMWalletAdminOrRegistry();
 error OnlyESIMWalletAdminOrDeviceWalletOwner();
 error OnlyESIMWalletAdminOrDeviceWalletFactory();
 error OnlyAssociatedESIMWallets();
@@ -88,17 +88,17 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         _;
     }
 
-    function _onlyESIMWalletAdminOrLazyWallet() private view {
+    function _onlyESIMWalletAdminOrRegistry() private view {
         if (
             msg.sender != registry.deviceWalletFactory().eSIMWalletAdmin() &&
-            msg.sender != registry.lazyWalletRegistry()
+            msg.sender != address(registry)
         ) {
-            revert OnlyESIMWalletAdminOrLazyWallet();
+            revert OnlyESIMWalletAdminOrRegistry();
         }
     }
 
-    modifier onlyESIMWalletAdminOrLazyWallet() {
-        _onlyESIMWalletAdminOrLazyWallet();
+    modifier onlyESIMWalletAdminOrRegistry() {
+        _onlyESIMWalletAdminOrRegistry();
         _;
     }
 
@@ -165,7 +165,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     function setESIMUniqueIdentifierForAnESIMWallet(
         address _eSIMWalletAddress,
         string calldata _eSIMUniqueIdentifier
-    ) public onlyESIMWalletAdminOrLazyWallet returns (string memory) {
+    ) public onlyESIMWalletAdminOrRegistry returns (string memory) {
         require(
             registry.isESIMWalletValid(_eSIMWalletAddress) != address(0),
             "Unknown eSIM wallet address"

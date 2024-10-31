@@ -9,13 +9,13 @@ import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 
 import "contracts/P256Verifier.sol";
-import "contracts/Registry.sol";
 import "contracts/device-wallet/DeviceWalletFactory.sol";
-import "contracts/device-wallet/DeviceWallet.sol";
 import "contracts/esim-wallet/ESIMWalletFactory.sol";
 
 import "test/utils/mocks/MockEntryPoint.sol";
 import "test/utils/mocks/MockLazyWalletRegistry.sol";
+import "test/utils/mocks/MockRegistry.sol";
+import "test/utils/mocks/MockDeviceWallet.sol";
 
 contract DeployerBase is Test {
 
@@ -24,6 +24,27 @@ contract DeployerBase is Test {
     address user3 = address(0x1aE0EA34a72D944a8C7603FfB3eC30a6669E454C);
     address user4 = address(0x0A098Eda01Ce92ff4A4CCb7A4fFFb5A43EBC70DC);
     address user5 = address(0xCA35b7d915458EF540aDe6068dFe2F44E8fa733c);
+
+    bytes32[2] public pubKey1 = [
+        bytes32(0x6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296),
+        bytes32(0x4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5)
+    ];
+    bytes32[2] public pubKey2 = [
+        bytes32(0x7CF27B188D034F7E8A52380304B51AC3C08969E277F21B35A60B48FC47669978),
+        bytes32(0x07775510DB8ED040293D9AC69F7430DBBA7DADE63CE982299E04B79D227873D1)
+    ];
+    bytes32[2] public pubKey3 = [
+        bytes32(0x5ECBE4D1A6330A44C8F7EF951D4BF165E6C6B721EFADA985FB41661BC6E7FD6C),
+        bytes32(0x8734640C4998FF7E374B06CE1A64A2ECD82AB036384FB83D9A79B127A27D5032)
+    ];
+    bytes32[2] public pubKey4 = [
+        bytes32(0xE2534A3532D08FBBA02DDE659EE62BD0031FE2DB785596EF509302446B030852),
+        bytes32(0xE0F1575A4C633CC719DFEE5FDA862D764EFC96C3F30EE0055C42C23F184ED8C6)
+    ];
+    bytes32[2] public pubKey5 = [
+        bytes32(0x51590B7A515140D2D784C85608668FDFEF8C82FD1F5BE52421554A0DC3D033ED),
+        bytes32(0xE0C17DA8904A727D8AE1BF36BF8A79260D012F00D4D80888D1D0BB44FDA16DA4)
+    ];
 
     string[] public customDeviceUniqueIdentifiers = [ "Device_1", "Device_2", "Device_3", "Device_4", "Device_5" ];
     string[][] public customESIMUniqueIdentifiers;
@@ -40,10 +61,10 @@ contract DeployerBase is Test {
 
     MockEntryPoint entryPoint;
     P256Verifier p256Verifier;
-    DeviceWallet deviceWalletImpl;
+    MockDeviceWallet deviceWalletImpl;
     DeviceWalletFactory deviceWalletFactory;
     ESIMWalletFactory eSIMWalletFactory;
-    Registry registry;
+    MockRegistry registry;
     MockLazyWalletRegistry lazyWalletRegistry;
 
     function setUp() public {
@@ -58,7 +79,7 @@ contract DeployerBase is Test {
         console.log("p256Verifier: ", address(p256Verifier));
 
         // 3. Deploy Device Wallet implementation
-        deviceWalletImpl = new DeviceWallet(
+        deviceWalletImpl = new MockDeviceWallet(
             typeCastEntryPoint,
             p256Verifier
         );
@@ -93,7 +114,7 @@ contract DeployerBase is Test {
         console.log("eSIMWalletFactory: ", address(eSIMWalletFactory));
 
         // 6.a. Deploy Registry Implementation (Logic) contract
-        Registry registryImpl = new Registry();
+        MockRegistry registryImpl = new MockRegistry();
         console.log("registryImpl: ", address(registryImpl));
         // 6.b. Deploy Registry Proxy contract
         ERC1967Proxy registryProxy = new ERC1967Proxy(
@@ -103,7 +124,7 @@ contract DeployerBase is Test {
                 (eSIMWalletAdmin, vault, upgradeManager, address(deviceWalletFactory), address(eSIMWalletFactory), typeCastEntryPoint, p256Verifier)
             )
         );
-        registry = Registry(address(registryProxy));
+        registry = MockRegistry(address(registryProxy));
         console.log("registry: ", address(registry));
 
         // 7.a. Deploy Lazy Wallet Registry Implementation (Logic) contract
