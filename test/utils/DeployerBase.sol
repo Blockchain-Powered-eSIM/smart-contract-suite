@@ -29,6 +29,11 @@ contract DeployerBase is Test {
     string[][] public customESIMUniqueIdentifiers;
     DataBundleDetails[][] public customDataBundleDetails;
 
+    // Interchanged params to test if the code correctly reverts
+    string[] public modifiedDeviceUniqueIdentifiers = [ "Device_1", "Device_2" ];
+    string[][] public modifiedESIMUniqueIdentifiers;
+    DataBundleDetails[][] public modifiedDataBundleDetails;
+
     address eSIMWalletAdmin = address(0x4B20993Bc481177ec7E8f571ceCaE8A9e22C02db);
     address upgradeManager = address(0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2);
     address vault = address(0x78731D3Ca6b7E34aC0F824c42a7cC18A495cabaB);
@@ -130,6 +135,7 @@ contract DeployerBase is Test {
 
         initializeCustomESIMUniqueIdentifiers();
         initializeCustomDataBundleDetails();
+        initializeIncorrectParams();
     }
 
     function initializeCustomESIMUniqueIdentifiers() public {
@@ -178,5 +184,22 @@ contract DeployerBase is Test {
         customDataBundleDetails.push();
         customDataBundleDetails[4].push(DataBundleDetails("DB_ID_1", 11));
         customDataBundleDetails[4].push(DataBundleDetails("DB_ID_1", 11));
+    }
+
+    function initializeIncorrectParams() public {
+        modifiedESIMUniqueIdentifiers.push(["eSIM_4_1", "eSIM_4_2", "eSIM_4_3", "eSIM_4_4", "eSIM_4_5", "eSIM_4_6"]);
+        modifiedESIMUniqueIdentifiers.push(["eSIM_5_1", "eSIM_5_2"]);
+
+        modifiedDataBundleDetails.push();
+        modifiedDataBundleDetails[0].push(DataBundleDetails("DB_ID_5", 51));
+        modifiedDataBundleDetails[0].push(DataBundleDetails("DB_ID_5", 51));
+        modifiedDataBundleDetails[0].push(DataBundleDetails("DB_ID_6", 61));
+        modifiedDataBundleDetails[0].push(DataBundleDetails("DB_ID_6", 61));
+        modifiedDataBundleDetails[0].push(DataBundleDetails("DB_ID_6", 61));
+        modifiedDataBundleDetails[0].push(DataBundleDetails("DB_ID_5", 51));
+
+        modifiedDataBundleDetails.push();
+        modifiedDataBundleDetails[1].push(DataBundleDetails("DB_ID_1", 11));
+        modifiedDataBundleDetails[1].push(DataBundleDetails("DB_ID_1", 11));
     }
 }

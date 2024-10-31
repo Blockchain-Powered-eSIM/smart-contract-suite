@@ -60,6 +60,21 @@ contract LazyWalletRegistryTest is DeployerBase {
         assertEq(storedData[1].dataBundlePrice, 21);
     }
 
+    // Providing eSIM identifiers that have been associated with a different device identifier
+    function test_batchPopulateHistory_incorrectIdentifier() public {
+        // First populate the history
+        test_batchPopulateHistory();
+
+        vm.startPrank(eSIMWalletAdmin);
+        vm.expectRevert();
+        lazyWalletRegistry.batchPopulateHistory(
+            modifiedDeviceUniqueIdentifiers,
+            modifiedESIMUniqueIdentifiers,
+            modifiedDataBundleDetails
+        );
+        vm.stopPrank();
+    }
+
     function test_isLazyWalletDeployed() public view {
         bool isDeployed = lazyWalletRegistry.isLazyWalletDeployed(customDeviceUniqueIdentifiers[0]);
         assertEq(isDeployed, false);
