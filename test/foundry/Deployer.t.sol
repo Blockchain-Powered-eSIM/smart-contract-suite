@@ -15,7 +15,7 @@ import "contracts/device-wallet/DeviceWalletFactory.sol";
 import "contracts/device-wallet/DeviceWallet.sol";
 import "contracts/esim-wallet/ESIMWalletFactory.sol";
 
-import "test/foundry/utils/mocks/MockEntryPoint.sol";
+import "test/utils/mocks/MockEntryPoint.sol";
 
 contract Deployer is Test {
 
@@ -25,6 +25,7 @@ contract Deployer is Test {
 
     MockEntryPoint entryPoint;
     P256Verifier p256Verifier;
+    DeviceWallet deviceWalletImpl;
     DeviceWalletFactory deviceWalletFactory;
     ESIMWalletFactory eSIMWalletFactory;
     Registry registry;
@@ -42,7 +43,7 @@ contract Deployer is Test {
         console.log("p256Verifier: ", address(p256Verifier));
 
         // 3. Deploy Device Wallet implementation
-        DeviceWallet deviceWalletImpl = new DeviceWallet(
+        deviceWalletImpl = new DeviceWallet(
             typeCastEntryPoint,
             p256Verifier
         );
@@ -116,5 +117,33 @@ contract Deployer is Test {
         vm.startPrank(upgradeManager);
         eSIMWalletFactory.addRegistryAddress(address(registry));
         vm.stopPrank();
+    }
+
+    function test_registry_setUp() public view {
+        assertEq(registry.owner(), upgradeManager);
+        assertEq(address(registry.entryPoint()), address(entryPoint));
+        assertEq(registry.eSIMWalletAdmin(), eSIMWalletAdmin);
+        assertEq(registry.vault(), vault);
+        assertEq(registry.upgradeManager(), upgradeManager);
+        assertEq(registry.lazyWalletRegistry(), address(lazyWalletRegistry));
+        assertEq(address(registry.deviceWalletFactory()), address(deviceWalletFactory));
+        assertEq(address(registry.eSIMWalletFactory()), address(eSIMWalletFactory));
+    }
+
+    function test_lazyWalletRegistry_setUp() public view {
+        assertEq(lazyWalletRegistry.upgradeManager(), upgradeManager);
+        assertEq(address(lazyWalletRegistry.registry()), address(registry));
+    }
+
+    function test_deviceWalletFactory_setUp() public view {
+        assertEq(address(deviceWalletFactory.entryPoint()), address(entryPoint));
+        assertEq(address(deviceWalletFactory.verifier()), address(p256Verifier));
+        assertEq(address(deviceWalletFactory.eSIMWalletAdmin()), eSIMWalletAdmin);
+        assertEq(address(deviceWalletFactory.vault()), vault);
+        assertEq(address(deviceWalletFactory.registry()), address(registry));
+        assertEq(address(deviceWalletFactory.newRequestedAdmin()), address(0));
+        assertNotEq(address(deviceWalletFactory.beacon()), address(0));
+
+        assertEq(deviceWalletFactory.getCurrentDeviceWalletImplementation(), address(deviceWalletImpl));
     }
 }
