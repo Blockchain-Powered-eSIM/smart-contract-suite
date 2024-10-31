@@ -18,4 +18,10 @@ contract MockLazyWalletRegistry is LazyWalletRegistry {
     ) public view returns (DataBundleDetails[] memory) {
         return deviceIdentifierToESIMDetails[_deviceIdentifier][_eSIMIdentifier];
     }
+
+    function getESIMIdentifiersAssociatedWithDeviceIdentifier(
+        string calldata _deviceUniqueIdentifier
+    ) public view returns (string[] memory) {
+        return eSIMIdentifiersAssociatedWithDeviceIdentifier[_deviceUniqueIdentifier];
+    }
 }
