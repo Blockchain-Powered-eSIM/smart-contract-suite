@@ -84,13 +84,6 @@ contract LazyWalletRegistryTest is DeployerBase {
         assertEq(isDeployed, false);
     }
 
-    /**
-        function switchESIMIdentifierToNewDeviceIdentifier(
-            string calldata _eSIMIdentifier,
-            string calldata _oldDeviceIdentifier,
-            string calldata _newDeviceIdentifier
-        ) external onlyESIMWalletAdmin returns (bool) {
-     */
     function test_switchESIMIdentifierToNewDeviceIdentifier_withoutAdmin() public {
         vm.startPrank(user1);
         vm.expectRevert("Only eSIM wallet admin");
