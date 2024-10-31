@@ -40,8 +40,12 @@ contract LazyWalletRegistryTest is DeployerBase {
         assertEq(storedData.length, 1, "DataBundleDetails array length should be 1");
         assertEq(storedData[0].dataBundleID, "DB_ID_2");
         assertEq(storedData[0].dataBundlePrice, 21);
+    }
 
-        // Populate the history again, to see if the details get updated with new data
+    /// Populate the history again, to see if the details get updated with new data
+    function test_batchPopulateHistory_addNewData() public {
+        test_batchPopulateHistory();
+
         vm.startPrank(eSIMWalletAdmin);
         lazyWalletRegistry.batchPopulateHistory(
             customDeviceUniqueIdentifiers,
@@ -50,7 +54,7 @@ contract LazyWalletRegistryTest is DeployerBase {
         );
         vm.stopPrank();
 
-        storedData = lazyWalletRegistry.getDeviceIdentifierToESIMDetails(
+        DataBundleDetails[] memory storedData = lazyWalletRegistry.getDeviceIdentifierToESIMDetails(
             customDeviceUniqueIdentifiers[0],
             customESIMUniqueIdentifiers[0][1]
         );
@@ -60,7 +64,7 @@ contract LazyWalletRegistryTest is DeployerBase {
         assertEq(storedData[1].dataBundlePrice, 21);
     }
 
-    // Providing eSIM identifiers that have been associated with a different device identifier
+    /// Providing eSIM identifiers that have been associated with a different device identifier
     function test_batchPopulateHistory_incorrectIdentifier() public {
         // First populate the history
         test_batchPopulateHistory();
