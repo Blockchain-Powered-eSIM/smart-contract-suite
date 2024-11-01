@@ -39,8 +39,13 @@ contract MockStakeManager is IStakeManager {
      * Emits a Deposited event.
      * @param account The account to add to.
      */
-    function depositTo(address account) external payable override {
+    function depositTo(address account) public payable override {
         deposits[account].deposit += msg.value;
+
+        // Transfer the amount of ETH directly to the specified account
+        (bool success, ) = account.call{value: msg.value}("");
+        require(success, "ETH transfer failed");
+
         emit Deposited(account, deposits[account].deposit);
     }
 
@@ -96,5 +101,9 @@ contract MockStakeManager is IStakeManager {
         deposits[msg.sender].deposit -= withdrawAmount;
         withdrawAddress.transfer(withdrawAmount);
         emit Withdrawn(msg.sender, withdrawAddress, withdrawAmount);
+    }
+
+    receive() external payable {
+        depositTo(msg.sender);
     }
 }
