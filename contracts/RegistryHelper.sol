@@ -9,9 +9,8 @@ import {ESIMWalletFactory} from "./esim-wallet/ESIMWalletFactory.sol";
 import {DeviceWallet} from "./device-wallet/DeviceWallet.sol";
 import {ESIMWallet} from "./esim-wallet/ESIMWallet.sol";
 import {P256Verifier} from "./P256Verifier.sol";
+import {Errors} from "./Errors.sol";
 import "./CustomStructs.sol";
-
-error OnlyLazyWalletRegistry();
 
 contract RegistryHelper {
 
@@ -83,7 +82,7 @@ contract RegistryHelper {
     mapping(address => bool) public isESIMWalletOnStandby;
 
     modifier onlyLazyWalletRegistry() {
-        if(msg.sender != lazyWalletRegistry) revert OnlyLazyWalletRegistry();
+        if(msg.sender != lazyWalletRegistry) revert Errors.OnlyLazyWalletRegistry();
         _;
     }
 

@@ -15,15 +15,7 @@ import {ESIMWalletFactory} from "../esim-wallet/ESIMWalletFactory.sol";
 import {ESIMWallet} from "../esim-wallet/ESIMWallet.sol";
 import {Account4337} from "../aa-helper/Account4337.sol";
 import {P256Verifier} from "../P256Verifier.sol";
-
-error OnlyRegistryOrDeviceWalletFactoryOrOwner();
-error OnlyDeviceWalletOrOwner();
-error OnlyESIMWalletAdminOrRegistry();
-error OnlyESIMWalletAdminOrDeviceWalletOwner();
-error OnlyESIMWalletAdminOrDeviceWalletFactory();
-error OnlyAssociatedESIMWallets();
-error FailedToTransfer();
-error OnlyESIMWalletAdmin();
+import {Errors} from "../Errors.sol";
 
 contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 {
     using Address for address;
@@ -65,7 +57,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
             msg.sender != address(registry.deviceWalletFactory()) &&
             msg.sender != address(this)
         ) {
-            revert OnlyRegistryOrDeviceWalletFactoryOrOwner();
+            revert Errors.OnlyRegistryOrDeviceWalletFactoryOrOwner();
         }
     }
 
@@ -79,7 +71,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
             msg.sender != address(this) &&
             msg.sender != address(registry.deviceWalletFactory())
         ) {
-            revert OnlyDeviceWalletOrOwner();
+            revert Errors.OnlyDeviceWalletOrOwner();
         }
     }
 
@@ -93,7 +85,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
             msg.sender != registry.deviceWalletFactory().eSIMWalletAdmin() &&
             msg.sender != address(registry)
         ) {
-            revert OnlyESIMWalletAdminOrRegistry();
+            revert Errors.OnlyESIMWalletAdminOrRegistry();
         }
     }
 
@@ -103,7 +95,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     }
 
     function _onlyAssociatedESIMWallets() private view {
-        if (!isValidESIMWallet[msg.sender]) revert OnlyAssociatedESIMWallets();
+        if (!isValidESIMWallet[msg.sender]) revert Errors.OnlyAssociatedESIMWallets();
     }
 
     modifier onlyAssociatedESIMWallets() {
@@ -115,7 +107,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         if(
             msg.sender != registry.deviceWalletFactory().eSIMWalletAdmin()
         ) {
-            revert OnlyESIMWalletAdmin();
+            revert Errors.OnlyESIMWalletAdmin();
         }
         _;
     }
@@ -228,7 +220,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
 
         if (_amount > 0) {
             (bool success,) = _recipient.call{value: _amount}("");
-            if (!success) revert FailedToTransfer();
+            if (!success) revert Errors.FailedToTransfer();
             else emit ETHSent(_recipient, _amount);
         }
     }

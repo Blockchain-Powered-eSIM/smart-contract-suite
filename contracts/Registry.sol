@@ -11,11 +11,9 @@ import {RegistryHelper} from "./RegistryHelper.sol";
 import {DeviceWalletFactory} from "./device-wallet/DeviceWalletFactory.sol";
 import {ESIMWalletFactory} from "./esim-wallet/ESIMWalletFactory.sol";
 import {P256Verifier} from "./P256Verifier.sol";
+import {Errors} from "./Errors.sol";
 
 import "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
-
-error OnlyDeviceWallet();
-error OnlyDeviceWalletFactory();
 
 /// @notice Contract for deploying the factory contracts and maintaining registry
 contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, RegistryHelper {
@@ -33,12 +31,12 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
     address public upgradeManager;
 
     modifier onlyDeviceWallet() {
-        if(isDeviceWalletValid[msg.sender] != true) revert OnlyDeviceWallet();
+        if(isDeviceWalletValid[msg.sender] != true) revert Errors.OnlyDeviceWallet();
         _;
     }
 
     modifier onlyDeviceWalletFactory() {
-        if(msg.sender != address(deviceWalletFactory)) revert OnlyDeviceWalletFactory();
+        if(msg.sender != address(deviceWalletFactory)) revert Errors.OnlyDeviceWalletFactory();
         _;
     }
 

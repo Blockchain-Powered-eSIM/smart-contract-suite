@@ -17,8 +17,8 @@ import {Registry} from "../Registry.sol";
 import {DeviceWallet} from "./DeviceWallet.sol";
 import {ESIMWalletFactory} from "../esim-wallet/ESIMWalletFactory.sol";
 import {P256Verifier} from "../P256Verifier.sol";
-
-error OnlyAdmin();
+import {Errors} from "../Errors.sol";
+import "../CustomStructs.sol";
 
 /// @notice Contract for deploying a new eSIM wallet
 contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeable {
@@ -81,7 +81,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
     address public newRequestedAdmin;
 
     function _onlyAdmin() private view {
-        if (msg.sender != eSIMWalletAdmin) revert OnlyAdmin();
+        if (msg.sender != eSIMWalletAdmin) revert Errors.OnlyAdmin();
     }
 
     modifier onlyAdmin() {
@@ -218,7 +218,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
         bytes32[2][] memory _deviceWalletOwnersKey,
         uint256[] calldata _salts,
         uint256[] calldata _depositAmounts
-    ) external payable onlyAdmin returns (address[] memory) {
+    ) external payable onlyAdmin returns (Wallets[] memory) {
         uint256 numberOfDeviceWallets = _deviceUniqueIdentifiers.length;
         require(numberOfDeviceWallets != 0, "Array cannot be empty");
         require(numberOfDeviceWallets == _deviceWalletOwnersKey.length, "Array mismatch");
@@ -227,12 +227,12 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
 
         // Track the available ETH to spend
         uint256 availableETH = msg.value;
-        address[] memory deviceWalletsDeployed = new address[](numberOfDeviceWallets);
+        Wallets[] memory walletsDeployed = new Wallets[](numberOfDeviceWallets);
 
         for (uint256 i = 0; i < numberOfDeviceWallets; ++i) {
             require(_depositAmounts[i] <= availableETH, "Out of ETH");
             
-            deviceWalletsDeployed[i] = deployDeviceWalletAsAdmin(
+            walletsDeployed[i] = deployDeviceWalletAsAdmin(
                 _deviceUniqueIdentifiers[i],
                 _deviceWalletOwnersKey[i],
                 _salts[i],
@@ -248,7 +248,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
             require(success, "ETH return failed");
         }
 
-        return deviceWalletsDeployed;
+        return walletsDeployed;
     }
 
     /// @dev Allow admin to deploy a device wallet (and an eSIM wallet) for given unique device identifiers
@@ -261,7 +261,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
         bytes32[2] memory _deviceWalletOwnerKey,
         uint256 _salt,
         uint256 _depositAmount
-    ) public payable onlyAdmin returns (address) {
+    ) public payable onlyAdmin returns (Wallets memory) {
         address deviceWalletAddress = address(
             createAccount(
                 _deviceUniqueIdentifier,
@@ -280,7 +280,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
 
         emit DeviceWalletDeployed(deviceWalletAddress, eSIMWalletAddress, _deviceWalletOwnerKey);
 
-        return deviceWalletAddress;
+        return Wallets(deviceWalletAddress, eSIMWalletAddress);
     }
 
     /**

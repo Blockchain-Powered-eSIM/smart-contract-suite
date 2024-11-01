@@ -11,8 +11,7 @@ import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/U
 
 import {ESIMWallet} from "./ESIMWallet.sol";
 import {Registry} from "../Registry.sol";
-
-error OnlyRegistryOrDeviceWalletFactoryOrDeviceWallet();
+import {Errors} from "../Errors.sol";
 
 /// @notice Contract for deploying a new eSIM wallet
 contract ESIMWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeable {
@@ -63,7 +62,7 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeable
             msg.sender != address(registry.deviceWalletFactory()) &&
             !registry.isDeviceWalletValid(msg.sender)
         ) {
-            revert OnlyRegistryOrDeviceWalletFactoryOrDeviceWallet();
+            revert Errors.OnlyRegistryOrDeviceWalletFactoryOrDeviceWallet();
         }
         _;
     }
@@ -79,20 +78,21 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeable
     {}
 
     /// @param _upgradeManager Admin address responsible for upgrading contracts
-    function initialize (address _upgradeManager) external initializer {
+    function initialize (
+        address _eSIMWalletImplementation,
+        address _upgradeManager
+    ) external initializer {
         require(_upgradeManager != address(0), "Address cannot be zero");
 
-        // eSIM wallet implementation (logic) contract during deployment
-        address eSIMWalletImplementation = address(new ESIMWallet());
         // Upgradable beacon for eSIM wallet implementation contract
         // Make the eSIM wallet factory the owner of the beacon
         // Only the _upgradeManager can call the update function to update the beacon
         // with the new implementation (logic) contract
-        beacon = new UpgradeableBeacon(eSIMWalletImplementation, (address(this)));
+        beacon = new UpgradeableBeacon(_eSIMWalletImplementation, (address(this)));
 
         emit ESIMWalletFactorydeployed(
             _upgradeManager,
-            eSIMWalletImplementation,
+            _eSIMWalletImplementation,
             address(beacon)
         );
 

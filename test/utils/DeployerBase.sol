@@ -8,6 +8,7 @@ import "forge-std/console.sol";
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 
+import "contracts/CustomStructs.sol";
 import "contracts/P256Verifier.sol";
 import "contracts/device-wallet/DeviceWalletFactory.sol";
 import "contracts/esim-wallet/ESIMWalletFactory.sol";
@@ -16,6 +17,7 @@ import "test/utils/mocks/MockEntryPoint.sol";
 import "test/utils/mocks/MockLazyWalletRegistry.sol";
 import "test/utils/mocks/MockRegistry.sol";
 import "test/utils/mocks/MockDeviceWallet.sol";
+import "test/utils/mocks/MockESIMWallet.sol";
 
 contract DeployerBase is Test {
 
@@ -60,18 +62,21 @@ contract DeployerBase is Test {
     address vault = address(0x78731D3Ca6b7E34aC0F824c42a7cC18A495cabaB);
 
     MockEntryPoint entryPoint;
+    IEntryPoint typeCastEntryPoint;
     P256Verifier p256Verifier;
-    MockDeviceWallet deviceWalletImpl;
     DeviceWalletFactory deviceWalletFactory;
     ESIMWalletFactory eSIMWalletFactory;
     MockRegistry registry;
     MockLazyWalletRegistry lazyWalletRegistry;
 
+    MockDeviceWallet deviceWalletImpl;
+    MockESIMWallet eSIMWalletImpl;
+
     function setUp() public {
         // 1.a. Deploy Mock Entry Point
         entryPoint = new MockEntryPoint();
         // 1.b. Typecast for further use
-        IEntryPoint typeCastEntryPoint = IEntryPoint(address(entryPoint));
+        typeCastEntryPoint = IEntryPoint(address(entryPoint));
         console.log("typeCastEntryPoint: ", address(typeCastEntryPoint));
 
         // 2. Deploy P256 Verifier
@@ -99,24 +104,28 @@ contract DeployerBase is Test {
         deviceWalletFactory = DeviceWalletFactory(address(deviceWalletFactoryProxy));
         console.log("deviceWalletFactory: ", address(deviceWalletFactory));
 
-        // 5.a. Deploy ESIM Wallet Factory Implementation (Logic) contract
+        // 5. Deploy ESIM Wallet implementation
+        eSIMWalletImpl = new MockESIMWallet();
+        console.log("eSIMWalletImpl: ", address(eSIMWalletImpl));
+
+        // 6.a. Deploy ESIM Wallet Factory Implementation (Logic) contract
         ESIMWalletFactory eSIMWalletFactoryImpl = new ESIMWalletFactory();
         console.log("eSIMWalletFactoryImpl: ", address(eSIMWalletFactoryImpl));
-        // 5.b. Deploy ESIM Wallet Factory Proxy contract
+        // 6.b. Deploy ESIM Wallet Factory Proxy contract
         ERC1967Proxy eSIMWalletFactoryProxy = new ERC1967Proxy(
             address(eSIMWalletFactoryImpl),
             abi.encodeCall(
                 eSIMWalletFactoryImpl.initialize,
-                (upgradeManager)
+                (address(eSIMWalletImpl), upgradeManager)
             )
         );
         eSIMWalletFactory = ESIMWalletFactory(address(eSIMWalletFactoryProxy));
         console.log("eSIMWalletFactory: ", address(eSIMWalletFactory));
 
-        // 6.a. Deploy Registry Implementation (Logic) contract
+        // 7.a. Deploy Registry Implementation (Logic) contract
         MockRegistry registryImpl = new MockRegistry();
         console.log("registryImpl: ", address(registryImpl));
-        // 6.b. Deploy Registry Proxy contract
+        // 7.b. Deploy Registry Proxy contract
         ERC1967Proxy registryProxy = new ERC1967Proxy(
             address(registryImpl),
             abi.encodeCall(
@@ -127,10 +136,10 @@ contract DeployerBase is Test {
         registry = MockRegistry(address(registryProxy));
         console.log("registry: ", address(registry));
 
-        // 7.a. Deploy Lazy Wallet Registry Implementation (Logic) contract
+        // 8.a. Deploy Lazy Wallet Registry Implementation (Logic) contract
         MockLazyWalletRegistry lazyWalletRegistryImpl = new MockLazyWalletRegistry();
         console.log("lazyWalletRegistryImpl: ", address(lazyWalletRegistryImpl));
-        // 7.b. Deploy Lazy Wallet Registry Proxy contract
+        // 8.b. Deploy Lazy Wallet Registry Proxy contract
         ERC1967Proxy lazyWalletRegistryProxy = new ERC1967Proxy(
             address(lazyWalletRegistryImpl),
             abi.encodeCall(
@@ -141,7 +150,7 @@ contract DeployerBase is Test {
         lazyWalletRegistry = MockLazyWalletRegistry(address(lazyWalletRegistryProxy));
         console.log("lazyWalletRegistry: ", address(lazyWalletRegistry));
 
-        // 8. Populate addresses deployed during the process
+        // 9. Populate addresses deployed during the process
         vm.startPrank(upgradeManager);
         registry.addOrUpdateLazyWalletRegistryAddress(address(lazyWalletRegistry));
         vm.stopPrank();
