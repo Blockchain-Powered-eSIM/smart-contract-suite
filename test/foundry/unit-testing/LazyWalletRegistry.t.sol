@@ -80,11 +80,6 @@ contract LazyWalletRegistryTest is DeployerBase {
         vm.stopPrank();
     }
 
-    function test_isLazyWalletDeployed() public view {
-        bool isDeployed = lazyWalletRegistry.isLazyWalletDeployed(customDeviceUniqueIdentifiers[0]);
-        assertEq(isDeployed, false);
-    }
-
     function test_switchESIMIdentifierToNewDeviceIdentifier_withoutAdmin() public {
         vm.startPrank(user1);
         vm.expectRevert("Only eSIM wallet admin");
@@ -160,14 +155,6 @@ contract LazyWalletRegistryTest is DeployerBase {
         assertEq(occurrence, 1, "eSIM identifier should have added once");
     }
 
-    /**
-        function deployLazyWalletAndSetESIMIdentifier(
-            bytes32[2] memory _deviceOwnerPublicKey,
-            string calldata _deviceUniqueIdentifier,
-            uint256 _salt,
-            uint256 _depositAmount
-        ) external payable onlyESIMWalletAdmin returns (address, address[] memory) {
-     */
     function test_deployLazyWalletAndSetESIMIdentifier_withoutAdmin() public {
         vm.startPrank(user1);
         vm.expectRevert("Only eSIM wallet admin");
@@ -225,5 +212,31 @@ contract LazyWalletRegistryTest is DeployerBase {
         bytes32[2] memory ownerKey = MockDeviceWallet(payable(deviceWallet)).getOwner();
         assertEq(ownerKey[0], pubKey1[0], "X co-ordinate doesn't match");
         assertEq(ownerKey[1], pubKey1[1], "Y co-ordinate doesn't match");
+    }
+
+    function test_isLazyWalletDeployed_unregisteredIdentfier() public view {
+        bool isDeployed = lazyWalletRegistry.isLazyWalletDeployed(customDeviceUniqueIdentifiers[0]);
+        assertEq(isDeployed, false);
+    }
+
+    function test_isLazyWalletDeployed_registeredIdentfier() public {
+        test_batchPopulateHistory();
+
+        bool isDeployed = lazyWalletRegistry.isLazyWalletDeployed(customDeviceUniqueIdentifiers[0]);
+        assertEq(isDeployed, false);
+    }
+
+    function test_isLazyWalletDeployed_registeredIdentfier_addNewData() public {
+        test_batchPopulateHistory_addNewData();
+
+        bool isDeployed = lazyWalletRegistry.isLazyWalletDeployed(customDeviceUniqueIdentifiers[0]);
+        assertEq(isDeployed, false);
+    }
+
+    function test_isLazyWalletDeployed() public {
+        test_deployLazyWalletAndSetESIMIdentifier();
+
+        bool isDeployed = lazyWalletRegistry.isLazyWalletDeployed(customDeviceUniqueIdentifiers[0]);
+        assertEq(isDeployed, true);
     }
 }
