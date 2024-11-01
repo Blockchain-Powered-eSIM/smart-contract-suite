@@ -306,4 +306,146 @@ contract DeviceWalletFactoryTest is DeployerBase {
         assertEq(upgradedDeviceWallet.isValidESIMWallet(wallet.eSIMWallet), true, "ESIMWallet should have been set to valid");
         assertEq(upgradedDeviceWallet.canPullETH(wallet.eSIMWallet), true, "ESIMWallet should be able to pull ETH");
     }
+
+    function test_getAddress() public {
+        // Check for device wallet address before its deployed
+        address calculatedDeviceWalletAddress1 = deviceWalletFactory.getAddress(
+            pubKey1,
+            customDeviceUniqueIdentifiers[0],
+            999
+        );
+        assertNotEq(calculatedDeviceWalletAddress1, address(0), "Device wallet address cannot be address(0)");
+
+        // Deploy the device wallet
+        test_deployDeviceWalletAsAdmin_withETHDeposit();
+
+        // Check if the actual device wallet address matches the calculated device wallet address
+        address actualDeviceWalletAddress1 = registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[0]);
+        assertEq(actualDeviceWalletAddress1, calculatedDeviceWalletAddress1, "Calculated device wallet address should have matched the actual device wallet address");
+
+        // Check if the calculated device wallet address changes after device wallet deployment
+        address calculatedDeviceWalletAddress2 = deviceWalletFactory.getAddress(
+            pubKey1,
+            customDeviceUniqueIdentifiers[0],
+            999
+        );
+        assertEq(calculatedDeviceWalletAddress1, calculatedDeviceWalletAddress2, "Device wallet address before and after deployment should have matched");
+    }
+
+    /**
+        @dev The deployDeviceWalletAsAdmin deploys both device and eSIM wallet.
+        Although the createAccount returns the address of the already deployed device wallet,
+        it won't fail if the deployDeviceWalletAsAdmin is called twice.
+        The reason this function would fail is, because it attempts to redeploy the eSIM wallets.
+    */
+    function test_deployDeviceWalletAsAdmin_callTwiceFail() public {
+        // Deploy the device wallet
+        test_deployDeviceWalletAsAdmin_withETHDeposit();
+
+        address admin = deviceWalletFactory.eSIMWalletAdmin();
+
+        vm.deal(admin, 10 ether);
+        vm.startPrank(admin);
+        vm.expectRevert();
+        deviceWalletFactory.deployDeviceWalletAsAdmin{value: 1 ether}(
+            customDeviceUniqueIdentifiers[0],
+            pubKey1,
+            999,
+            1000000000000000000 // 1 ether
+        );
+        vm.stopPrank();
+    }
+
+    function test_createAccount() public {
+        // Check for device wallet address before its deployed
+        address calculatedDeviceWalletAddress1 = deviceWalletFactory.getAddress(
+            pubKey1,
+            customDeviceUniqueIdentifiers[0],
+            999
+        );
+        assertNotEq(calculatedDeviceWalletAddress1, address(0), "Device wallet address cannot be address(0)");
+
+        // Deploy the device wallet
+        vm.startPrank(user1);
+        MockDeviceWallet deviceWallet = MockDeviceWallet(payable(deviceWalletFactory.createAccount(
+            customDeviceUniqueIdentifiers[0],
+            pubKey1,
+            999,
+            0
+        )));
+        vm.stopPrank();
+
+        // Check if the actual device wallet address matches the calculated device wallet address
+        assertEq(address(deviceWallet), calculatedDeviceWalletAddress1, "Calculated device wallet address should have matched the actual device wallet address");
+
+        // Check storage variables in registry
+        assertEq(registry.isDeviceWalletValid(address(deviceWallet)), true, "isDeviceWalletValid mapping should have been updated");
+        assertEq(registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[0]), address(deviceWallet), "uniqueIdentifierToDeviceWallet should have been updated");
+        
+        bytes32[2] memory ownerKeys = registry.getDeviceWalletToOwner(address(deviceWallet));
+        assertEq(ownerKeys[0], pubKey1[0], "X co-ordinate should have matched");
+        assertEq(ownerKeys[1], pubKey1[1], "Y co-ordinate should have matched");
+
+        // Check storage variables in device wallet
+        assertEq(deviceWallet.deviceUniqueIdentifier(), customDeviceUniqueIdentifiers[0], "Device unique identifier should have matched");
+        assertEq(address(deviceWallet.registry()), address(registry), "Registry should have been correct");
+        assertEq(address(deviceWallet.eSIMWalletFactory()), address(eSIMWalletFactory), "eSIMWalletFactory address in device wallet should have matched");
+    }
+
+    function test_createAccount_callTwice() public {
+        // Check for device wallet address before its deployed
+        address calculatedDeviceWalletAddress1 = deviceWalletFactory.getAddress(
+            pubKey1,
+            customDeviceUniqueIdentifiers[0],
+            999
+        );
+        assertNotEq(calculatedDeviceWalletAddress1, address(0), "Device wallet address cannot be address(0)");
+
+        // Deploy the device wallet
+        vm.startPrank(user1);
+        MockDeviceWallet deviceWallet = MockDeviceWallet(payable(deviceWalletFactory.createAccount(
+            customDeviceUniqueIdentifiers[0],
+            pubKey1,
+            999,
+            0
+        )));
+        vm.stopPrank();
+
+        // Check if the actual device wallet address matches the calculated device wallet address
+        assertEq(address(deviceWallet), calculatedDeviceWalletAddress1, "Calculated device wallet address should have matched the actual device wallet address");
+
+        // Check storage variables in registry
+        assertEq(registry.isDeviceWalletValid(address(deviceWallet)), true, "isDeviceWalletValid mapping should have been updated");
+        assertEq(registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[0]), address(deviceWallet), "uniqueIdentifierToDeviceWallet should have been updated");
+        
+        bytes32[2] memory ownerKeys = registry.getDeviceWalletToOwner(address(deviceWallet));
+        assertEq(ownerKeys[0], pubKey1[0], "X co-ordinate should have matched");
+        assertEq(ownerKeys[1], pubKey1[1], "Y co-ordinate should have matched");
+
+        // Check storage variables in device wallet
+        assertEq(deviceWallet.deviceUniqueIdentifier(), customDeviceUniqueIdentifiers[0], "Device unique identifier should have matched");
+        assertEq(address(deviceWallet.registry()), address(registry), "Registry should have been correct");
+        assertEq(address(deviceWallet.eSIMWalletFactory()), address(eSIMWalletFactory), "eSIMWalletFactory address in device wallet should have matched");
+
+        // Check if the calculated device wallet address changes after device wallet deployment
+        address calculatedDeviceWalletAddress2 = deviceWalletFactory.getAddress(
+            pubKey1,
+            customDeviceUniqueIdentifiers[0],
+            999
+        );
+        assertEq(calculatedDeviceWalletAddress1, calculatedDeviceWalletAddress2, "Device wallet address before and after deployment should have matched");
+
+        // Trying to deploy the same device identifier again should not deploy a new wallet
+        vm.startPrank(user1);
+        MockDeviceWallet deviceWallet2 = MockDeviceWallet(payable(deviceWalletFactory.createAccount(
+            customDeviceUniqueIdentifiers[0],
+            pubKey1,
+            999,
+            0
+        )));
+        vm.stopPrank();
+
+        // Check if the actual device wallet address matches the calculated device wallet address
+        assertEq(address(deviceWallet2), address(deviceWallet), "New device wallet should not have been deployed again");
+    }
 }
