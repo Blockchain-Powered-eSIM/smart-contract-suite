@@ -138,8 +138,8 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
     function addRegistryAddress(
         address _registryContractAddress
     ) external onlyAdmin returns (address) {
-        require(_registryContractAddress != address(0));
-        require(address(registry) == address(0));
+        require(_registryContractAddress != address(0), "_registryContractAddress 0");
+        require(address(registry) == address(0), "Already added");
 
         registry = Registry(_registryContractAddress);
         emit AddedRegistry(address(registry));

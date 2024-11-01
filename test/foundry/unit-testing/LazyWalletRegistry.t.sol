@@ -5,7 +5,6 @@ pragma solidity ^0.8.18;
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 
-import "contracts/LazyWalletRegistry.sol";
 import "contracts/CustomStructs.sol";
 
 import "test/utils/DeployerBase.sol";
