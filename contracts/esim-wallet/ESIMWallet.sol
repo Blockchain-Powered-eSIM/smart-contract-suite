@@ -8,12 +8,8 @@ import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/ut
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {DeviceWallet} from "../device-wallet/DeviceWallet.sol";
 import {Registry} from "../Registry.sol";
+import {Errors} from "../Errors.sol";
 import "../CustomStructs.sol";
-
-error OnlyDeviceWallet();
-error OnlyRegistry();
-error FailedToTransfer();
-error OnlyESIMWalletAdminOrESIMWalletfactoryOrDeviceWallet();
 
 contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable {
     using Address for address;
@@ -67,12 +63,12 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     // mapping(address => mapping(address => bool)) internal _isTransferApproved;
 
     modifier onlyDeviceWallet() {
-        if (msg.sender != address(deviceWallet)) revert OnlyDeviceWallet();
+        if (msg.sender != address(deviceWallet)) revert Errors.OnlyDeviceWallet();
         _;
     }
 
     modifier onlyRegistry() {
-        if(msg.sender != address(deviceWallet.registry())) revert OnlyRegistry();
+        if(msg.sender != address(deviceWallet.registry())) revert Errors.OnlyRegistry();
         _;
     }
 
@@ -82,7 +78,7 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
             msg.sender != deviceWallet.registry().eSIMWalletAdmin() &&
             msg.sender != address(deviceWallet)
         ) {
-            revert OnlyESIMWalletAdminOrESIMWalletfactoryOrDeviceWallet();
+            revert Errors.OnlyESIMWalletAdminOrESIMWalletfactoryOrDeviceWallet();
         }
     }
 
@@ -238,7 +234,7 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
 
         if (_amount > 0) {
             (bool success,) = _recipient.call{value: _amount}("");
-            if (!success) revert FailedToTransfer();
+            if (!success) revert Errors.FailedToTransfer();
             else emit ETHSent(_recipient, _amount);
         }
     }

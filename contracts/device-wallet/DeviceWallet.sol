@@ -15,15 +15,7 @@ import {ESIMWalletFactory} from "../esim-wallet/ESIMWalletFactory.sol";
 import {ESIMWallet} from "../esim-wallet/ESIMWallet.sol";
 import {Account4337} from "../aa-helper/Account4337.sol";
 import {P256Verifier} from "../P256Verifier.sol";
-
-error OnlyRegistryOrDeviceWalletFactoryOrOwner();
-error OnlyDeviceWalletOrOwner();
-error OnlyESIMWalletAdminOrLazyWallet();
-error OnlyESIMWalletAdminOrDeviceWalletOwner();
-error OnlyESIMWalletAdminOrDeviceWalletFactory();
-error OnlyAssociatedESIMWallets();
-error FailedToTransfer();
-error OnlyESIMWalletAdmin();
+import {Errors} from "../Errors.sol";
 
 contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 {
     using Address for address;
@@ -65,7 +57,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
             msg.sender != address(registry.deviceWalletFactory()) &&
             msg.sender != address(this)
         ) {
-            revert OnlyRegistryOrDeviceWalletFactoryOrOwner();
+            revert Errors.OnlyRegistryOrDeviceWalletFactoryOrOwner();
         }
     }
 
@@ -79,7 +71,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
             msg.sender != address(this) &&
             msg.sender != address(registry.deviceWalletFactory())
         ) {
-            revert OnlyDeviceWalletOrOwner();
+            revert Errors.OnlyDeviceWalletOrOwner();
         }
     }
 
@@ -88,22 +80,22 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         _;
     }
 
-    function _onlyESIMWalletAdminOrLazyWallet() private view {
+    function _onlyESIMWalletAdminOrRegistry() private view {
         if (
             msg.sender != registry.deviceWalletFactory().eSIMWalletAdmin() &&
-            msg.sender != registry.lazyWalletRegistry()
+            msg.sender != address(registry)
         ) {
-            revert OnlyESIMWalletAdminOrLazyWallet();
+            revert Errors.OnlyESIMWalletAdminOrRegistry();
         }
     }
 
-    modifier onlyESIMWalletAdminOrLazyWallet() {
-        _onlyESIMWalletAdminOrLazyWallet();
+    modifier onlyESIMWalletAdminOrRegistry() {
+        _onlyESIMWalletAdminOrRegistry();
         _;
     }
 
     function _onlyAssociatedESIMWallets() private view {
-        if (!isValidESIMWallet[msg.sender]) revert OnlyAssociatedESIMWallets();
+        if (!isValidESIMWallet[msg.sender]) revert Errors.OnlyAssociatedESIMWallets();
     }
 
     modifier onlyAssociatedESIMWallets() {
@@ -115,7 +107,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         if(
             msg.sender != registry.deviceWalletFactory().eSIMWalletAdmin()
         ) {
-            revert OnlyESIMWalletAdmin();
+            revert Errors.OnlyESIMWalletAdmin();
         }
         _;
     }
@@ -124,9 +116,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     constructor(
         IEntryPoint anEntryPoint,
         P256Verifier _verifier
-    ) Account4337(anEntryPoint, _verifier) initializer {
-        _disableInitializers();
-    }
+    ) Account4337(anEntryPoint, _verifier) {}
 
     /// @notice Initialises the device wallet and deploys eSIM wallets for any already existing eSIMs
     function init(
@@ -167,7 +157,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     function setESIMUniqueIdentifierForAnESIMWallet(
         address _eSIMWalletAddress,
         string calldata _eSIMUniqueIdentifier
-    ) public onlyESIMWalletAdminOrLazyWallet returns (string memory) {
+    ) public onlyESIMWalletAdminOrRegistry returns (string memory) {
         require(
             registry.isESIMWalletValid(_eSIMWalletAddress) != address(0),
             "Unknown eSIM wallet address"
@@ -230,7 +220,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
 
         if (_amount > 0) {
             (bool success,) = _recipient.call{value: _amount}("");
-            if (!success) revert FailedToTransfer();
+            if (!success) revert Errors.FailedToTransfer();
             else emit ETHSent(_recipient, _amount);
         }
     }

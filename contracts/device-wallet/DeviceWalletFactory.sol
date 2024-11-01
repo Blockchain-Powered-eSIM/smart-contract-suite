@@ -17,8 +17,8 @@ import {Registry} from "../Registry.sol";
 import {DeviceWallet} from "./DeviceWallet.sol";
 import {ESIMWalletFactory} from "../esim-wallet/ESIMWalletFactory.sol";
 import {P256Verifier} from "../P256Verifier.sol";
-
-error OnlyAdmin();
+import {Errors} from "../Errors.sol";
+import "../CustomStructs.sol";
 
 /// @notice Contract for deploying a new eSIM wallet
 contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeable {
@@ -54,6 +54,9 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
     /// @notice Emitted when the device wallet implementation is updated
     event DeviceWalletImplementationUpdated(address indexed _newDeviceImplementation);
 
+    /// @notice Emitted when the registry is added to the factory contract
+    event AddedRegistry(address indexed registry);
+
     IEntryPoint public entryPoint;
 
     P256Verifier public verifier;
@@ -78,7 +81,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
     address public newRequestedAdmin;
 
     function _onlyAdmin() private view {
-        if (msg.sender != eSIMWalletAdmin) revert OnlyAdmin();
+        if (msg.sender != eSIMWalletAdmin) revert Errors.OnlyAdmin();
     }
 
     modifier onlyAdmin() {
@@ -87,10 +90,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
     }
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(
-    ) initializer {
-        _disableInitializers();
-    }
+    constructor() initializer {}
 
     /// @dev Owner based upgrades
     function _authorizeUpgrade(address newImplementation)
@@ -103,7 +103,6 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
     /// @param _vault Address of the vault that receives payments for the data bundles
     /// @param _upgradeManager Admin address responsible for upgrading contracts
     function initialize(
-        address _registryContractAddress,
         address _deviceWalletImplementation,
         address _eSIMWalletAdmin,
         address _vault,
@@ -119,7 +118,6 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
         vault = _vault;
         entryPoint = _entryPoint;
         verifier = _verifier;
-        registry = Registry(_registryContractAddress);
 
         // Upgradable beacon for device wallet implementation contract
         beacon = new UpgradeableBeacon(_deviceWalletImplementation, address(this));
@@ -134,6 +132,19 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
         
         __Ownable_init(_upgradeManager);
         __UUPSUpgradeable_init();
+    }
+
+    /// @notice Allow admin to add registry contract after it has been deployed
+    function addRegistryAddress(
+        address _registryContractAddress
+    ) external onlyAdmin returns (address) {
+        require(_registryContractAddress != address(0), "_registryContractAddress 0");
+        require(address(registry) == address(0), "Already added");
+
+        registry = Registry(_registryContractAddress);
+        emit AddedRegistry(address(registry));
+
+        return address(registry);
     }
 
     /// @notice Function to update vault address.
@@ -207,7 +218,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
         bytes32[2][] memory _deviceWalletOwnersKey,
         uint256[] calldata _salts,
         uint256[] calldata _depositAmounts
-    ) external payable onlyAdmin returns (address[] memory) {
+    ) external payable onlyAdmin returns (Wallets[] memory) {
         uint256 numberOfDeviceWallets = _deviceUniqueIdentifiers.length;
         require(numberOfDeviceWallets != 0, "Array cannot be empty");
         require(numberOfDeviceWallets == _deviceWalletOwnersKey.length, "Array mismatch");
@@ -216,12 +227,12 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
 
         // Track the available ETH to spend
         uint256 availableETH = msg.value;
-        address[] memory deviceWalletsDeployed = new address[](numberOfDeviceWallets);
+        Wallets[] memory walletsDeployed = new Wallets[](numberOfDeviceWallets);
 
         for (uint256 i = 0; i < numberOfDeviceWallets; ++i) {
             require(_depositAmounts[i] <= availableETH, "Out of ETH");
             
-            deviceWalletsDeployed[i] = deployDeviceWalletAsAdmin(
+            walletsDeployed[i] = deployDeviceWalletAsAdmin(
                 _deviceUniqueIdentifiers[i],
                 _deviceWalletOwnersKey[i],
                 _salts[i],
@@ -237,7 +248,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
             require(success, "ETH return failed");
         }
 
-        return deviceWalletsDeployed;
+        return walletsDeployed;
     }
 
     /// @dev Allow admin to deploy a device wallet (and an eSIM wallet) for given unique device identifiers
@@ -250,7 +261,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
         bytes32[2] memory _deviceWalletOwnerKey,
         uint256 _salt,
         uint256 _depositAmount
-    ) public payable onlyAdmin returns (address) {
+    ) public payable onlyAdmin returns (Wallets memory) {
         address deviceWalletAddress = address(
             createAccount(
                 _deviceUniqueIdentifier,
@@ -269,7 +280,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
 
         emit DeviceWalletDeployed(deviceWalletAddress, eSIMWalletAddress, _deviceWalletOwnerKey);
 
-        return deviceWalletAddress;
+        return Wallets(deviceWalletAddress, eSIMWalletAddress);
     }
 
     /**
@@ -290,7 +301,6 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
         );
 
         address addr = getAddress(
-            address(registry),
             _deviceWalletOwnerKey,
             _deviceUniqueIdentifier,
             _salt
@@ -330,7 +340,6 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
      * calculate the counterfactual address of this account as it would be returned by createAccount()
      */
     function getAddress(
-        address _registry,
         bytes32[2] memory _deviceWalletOwnerKey,
         string memory _deviceUniqueIdentifier,
         uint256 _salt
@@ -344,7 +353,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
                         address(beacon),
                         abi.encodeCall(
                             DeviceWallet.init,
-                            (_registry, _deviceWalletOwnerKey, _deviceUniqueIdentifier)
+                            (address(registry), _deviceWalletOwnerKey, _deviceUniqueIdentifier)
                         )
                     )
                 )

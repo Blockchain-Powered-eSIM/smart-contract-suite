@@ -91,9 +91,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
     }
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() initializer {
-        _disableInitializers();
-    }
+    constructor() initializer {}
 
     /// @dev Owner based upgrades
     function _authorizeUpgrade(address newImplementation)
@@ -161,6 +159,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         address deviceWallet;
 
         string[] memory eSIMUniqueIdentifiers = eSIMIdentifiersAssociatedWithDeviceIdentifier[_deviceUniqueIdentifier];
+        require(eSIMUniqueIdentifiers.length > 0, "No eSIM identifier found");
 
         address[] memory eSIMWallets = new address[](eSIMUniqueIdentifiers.length);
         DataBundleDetails[][] memory listOfDataBundleDetails = new DataBundleDetails[][](eSIMUniqueIdentifiers.length);
@@ -297,15 +296,21 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
     ) internal {
         // Remove eSIM identifier from previous device identifier
         string[] storage eSIMIdentifierOfOldDevice = eSIMIdentifiersAssociatedWithDeviceIdentifier[_oldDeviceIdentifier];
-        for(uint256 i=0; i<eSIMIdentifierOfOldDevice.length; ++i) {
+
+        uint256 i = 0;
+
+        for(; i<eSIMIdentifierOfOldDevice.length; ++i) {
             if(
                 keccak256(bytes(eSIMIdentifierOfOldDevice[i])) == keccak256(bytes(_eSIMIdentifier)) 
             ) {
-                delete eSIMIdentifierOfOldDevice[i];
-                emit ESIMIdentifierRemovedFromOldDeviceIdentifier(_oldDeviceIdentifier, _eSIMIdentifier, eSIMIdentifierOfOldDevice);
                 break;
             }
         }
+
+        // Swap element to be removed with the element at the last index, and then pop last element
+        eSIMIdentifierOfOldDevice[i] = eSIMIdentifierOfOldDevice[eSIMIdentifierOfOldDevice.length - 1];
+        eSIMIdentifierOfOldDevice.pop();
+        emit ESIMIdentifierRemovedFromOldDeviceIdentifier(_oldDeviceIdentifier, _eSIMIdentifier, eSIMIdentifierOfOldDevice);
 
         // Add eSIM identifier to new device identifier
         string[] storage eSIMIdentifierOfNewDevice = eSIMIdentifiersAssociatedWithDeviceIdentifier[_newDeviceIdentifier];

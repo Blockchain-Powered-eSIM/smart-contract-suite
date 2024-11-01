@@ -8,6 +8,12 @@ struct DataBundleDetails {
     uint256 dataBundlePrice;
 }
 
+/// @notice Object returned when a new device and eSIM wallet is deployed
+struct Wallets {
+    address deviceWallet;
+    address eSIMWallet;
+}
+
 struct WebAuthnSignature {
     bytes authenticatorData;    // The WebAuthn authenticator data.
                                 // See https://www.w3.org/TR/webauthn-2/#dom-authenticatorassertionresponse-authenticatordata.
