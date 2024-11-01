@@ -110,9 +110,9 @@ contract LazyWalletRegistryTest is DeployerBase {
 
         vm.startPrank(eSIMWalletAdmin);
         lazyWalletRegistry.switchESIMIdentifierToNewDeviceIdentifier(
-            eSIMIdentifier,  // eSIM identifier
-            oldDeviceIdentifier,   // old device identifier
-            newDeviceIdentifier    // new device identifier
+            eSIMIdentifier,         // eSIM identifier
+            oldDeviceIdentifier,    // old device identifier
+            newDeviceIdentifier     // new device identifier
         );
         vm.stopPrank();
 
@@ -139,6 +139,7 @@ contract LazyWalletRegistryTest is DeployerBase {
             oldDeviceIdentifier
         );
         for(uint256 i=0; i<oldDeviceListOfESIMs.length; ++i) {
+            assertNotEq(oldDeviceListOfESIMs[i], "");
             assertNotEq(oldDeviceListOfESIMs[i], eSIMIdentifier);
         }
 
