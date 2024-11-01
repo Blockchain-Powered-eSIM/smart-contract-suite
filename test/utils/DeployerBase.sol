@@ -51,6 +51,7 @@ contract DeployerBase is Test {
     string[] public customDeviceUniqueIdentifiers = [ "Device_1", "Device_2", "Device_3", "Device_4", "Device_5" ];
     string[][] public customESIMUniqueIdentifiers;
     DataBundleDetails[][] public customDataBundleDetails;
+    bytes32[2][] public listOfOwnerKeys;
 
     // Interchanged params to test if the code correctly reverts
     string[] public modifiedDeviceUniqueIdentifiers = [ "Device_1", "Device_2" ];
@@ -166,6 +167,7 @@ contract DeployerBase is Test {
         initializeCustomESIMUniqueIdentifiers();
         initializeCustomDataBundleDetails();
         initializeIncorrectParams();
+        initializeDeviceOwnerKeys();
     }
 
     function initializeCustomESIMUniqueIdentifiers() public {
@@ -231,5 +233,13 @@ contract DeployerBase is Test {
         modifiedDataBundleDetails.push();
         modifiedDataBundleDetails[1].push(DataBundleDetails("DB_ID_1", 11));
         modifiedDataBundleDetails[1].push(DataBundleDetails("DB_ID_1", 11));
+    }
+
+    function initializeDeviceOwnerKeys() public {
+        listOfOwnerKeys.push(pubKey1);
+        listOfOwnerKeys.push(pubKey2);
+        listOfOwnerKeys.push(pubKey3);
+        listOfOwnerKeys.push(pubKey4);
+        listOfOwnerKeys.push(pubKey5);
     }
 }

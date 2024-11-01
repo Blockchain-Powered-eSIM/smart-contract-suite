@@ -448,4 +448,81 @@ contract DeviceWalletFactoryTest is DeployerBase {
         // Check if the actual device wallet address matches the calculated device wallet address
         assertEq(address(deviceWallet2), address(deviceWallet), "New device wallet should not have been deployed again");
     }
+
+    function test_deployDeviceWalletForUsers_withoutAdmin() public {
+        uint256[] memory salts = new uint256[](5);
+        uint256[] memory deposits = new uint256[](5);
+        for(uint256 i=0; i<5; ++i) {
+            salts[i] = uint256(i);
+            deposits[i] = uint256(0);
+        }
+
+        vm.startPrank(user1);
+        vm.expectRevert(bytes4(keccak256("OnlyAdmin()")));
+        deviceWalletFactory.deployDeviceWalletForUsers(
+            customDeviceUniqueIdentifiers,
+            listOfOwnerKeys,
+            salts,      // [uint256(1), uint256(2), uint256(3), uint256(4), uint256(5)],
+            deposits    // [uint256(0), uint256(0), uint256(0), uint256(0), uint256(0)]
+        );
+        vm.stopPrank();
+    }
+
+    function test_deployDeviceWalletForUsers() public {
+        uint256[] memory salts = new uint256[](5);
+        uint256[] memory deposits = new uint256[](5);
+        uint256 oneEther = 1000000000000000000;
+
+        for(uint256 i=0; i<5; ++i) {
+            salts[i] = uint256(i);
+            deposits[i] = uint256((i+1) * oneEther);
+        }
+
+        vm.deal(eSIMWalletAdmin, 16 ether);
+        vm.startPrank(eSIMWalletAdmin);
+        Wallets[] memory wallets = deviceWalletFactory.deployDeviceWalletForUsers{value: 16 ether}(
+            customDeviceUniqueIdentifiers,
+            listOfOwnerKeys,
+            salts,      // [uint256(1), uint256(2), uint256(3), uint256(4), uint256(5)],
+            deposits    // [1 ether, 2 ether, 3 ether, 4 ether, 5 ether]
+        );
+        vm.stopPrank();
+
+        assertEq(wallets.length, 5, "5 device and eSIM wallets should have been deployed");
+        assertEq(eSIMWalletAdmin.balance, 1 ether, "Admin should have got their 1 ETH back");
+
+        for(uint256 i=0; i<5; ++i) {
+            MockDeviceWallet deviceWallet = MockDeviceWallet(payable(wallets[i].deviceWallet));
+            MockESIMWallet eSIMWallet = MockESIMWallet(payable(wallets[i].eSIMWallet));
+
+            assertNotEq(address(deviceWallet), address(0), "Device wallet address cannot be address(0)");
+            assertNotEq(address(eSIMWallet), address(0), "ESIM wallet address cannot be address(0)");
+            assertEq(address(deviceWallet).balance, (i+1) * oneEther, "Device wallet balance should have been non zero");
+
+            // Check storage variables in registry
+            assertEq(registry.isDeviceWalletValid(address(deviceWallet)), true, "isDeviceWalletValid mapping should have been updated");
+            assertEq(registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[i]), address(deviceWallet), "uniqueIdentifierToDeviceWallet should have been updated");
+            assertEq(registry.isESIMWalletValid(address(eSIMWallet)), address(deviceWallet), "ESIM wallet should have been associated with device wallet");
+            assertEq(registry.isESIMWalletOnStandby(address(eSIMWallet)), false, "ESIM wallet should not have been on standby");
+            
+            bytes32[2] memory ownerKeys = registry.getDeviceWalletToOwner(address(deviceWallet));
+            assertEq(ownerKeys[0], listOfOwnerKeys[i][0], "X co-ordinate should have matched");
+            assertEq(ownerKeys[1], listOfOwnerKeys[i][1], "Y co-ordinate should have matched");
+
+            // Check storage variables in device wallet
+            assertEq(deviceWallet.deviceUniqueIdentifier(), customDeviceUniqueIdentifiers[i], "Device unique identifier should have matched");
+            assertEq(address(deviceWallet.registry()), address(registry), "Registry should have been correct");
+            assertEq(address(deviceWallet.eSIMWalletFactory()), address(eSIMWalletFactory), "eSIMWalletFactory address in device wallet should have matched");
+            assertEq(deviceWallet.isValidESIMWallet(address(eSIMWallet)), true, "ESIMWallet should have been set to valid");
+            assertEq(deviceWallet.canPullETH(address(eSIMWallet)), true, "ESIMWallet should be able to pull ETH");
+
+            // Check storage variables in eSIM wallet
+            assertEq(address(eSIMWallet.eSIMWalletFactory()), address(eSIMWalletFactory), "eSIMWalletFactory address in eSIM wallet should have matched");
+            assertEq(address(eSIMWallet.deviceWallet()), address(deviceWallet), "ESIM wallet should have correct device wallet");
+            assertEq(bytes(eSIMWallet.eSIMUniqueIdentifier()).length, 0, "ESIM unique identifier should be empty");
+            assertEq(eSIMWallet.newRequestedOwner(), address(0), "ESIM wallet's new requested owner should have been address(0)");
+            assertEq(eSIMWallet.getTransactionHistory().length, 0, "Transaction history should have been empty");
+            assertEq(eSIMWallet.owner(), address(deviceWallet), "ESIMWallet owner should have been device wallet");
+        }
+    }
 }
