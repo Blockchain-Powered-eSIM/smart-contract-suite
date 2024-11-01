@@ -301,7 +301,6 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
         );
 
         address addr = getAddress(
-            address(registry),
             _deviceWalletOwnerKey,
             _deviceUniqueIdentifier,
             _salt
@@ -341,7 +340,6 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
      * calculate the counterfactual address of this account as it would be returned by createAccount()
      */
     function getAddress(
-        address _registry,
         bytes32[2] memory _deviceWalletOwnerKey,
         string memory _deviceUniqueIdentifier,
         uint256 _salt
@@ -355,7 +353,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
                         address(beacon),
                         abi.encodeCall(
                             DeviceWallet.init,
-                            (_registry, _deviceWalletOwnerKey, _deviceUniqueIdentifier)
+                            (address(registry), _deviceWalletOwnerKey, _deviceUniqueIdentifier)
                         )
                     )
                 )
