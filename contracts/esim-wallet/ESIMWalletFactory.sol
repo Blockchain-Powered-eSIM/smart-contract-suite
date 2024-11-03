@@ -105,8 +105,8 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeable
         address _registryContractAddress
     ) external returns (address) {
         require(msg.sender == owner(), "Only Owner");
-        require(_registryContractAddress != address(0));
-        require(address(registry) == address(0));
+        require(_registryContractAddress != address(0), "_registryContractAddress 0");
+        require(address(registry) == address(0), "Already added");
 
         registry = Registry(_registryContractAddress);
         emit AddedRegistry(address(registry));

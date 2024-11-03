@@ -185,7 +185,7 @@ contract LazyWalletRegistryTest is DeployerBase {
         string memory deviceIdentifier = customDeviceUniqueIdentifiers[0];
 
         vm.startPrank(eSIMWalletAdmin);
-        (address deviceWallet, address[] memory eSIMWallets) = lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(
+        (address deviceWalletAddress, address[] memory eSIMWallets) = lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(
             pubKey1,
             deviceIdentifier,
             999,
@@ -193,25 +193,55 @@ contract LazyWalletRegistryTest is DeployerBase {
         );
         vm.stopPrank();
 
-        bool isValid = registry.isDeviceWalletValid(deviceWallet);
-        assertEq(isValid, true, "Device wallet should have been deployed");
+        MockDeviceWallet deviceWallet = MockDeviceWallet(payable(deviceWalletAddress));
 
-        address storedDeviceWallet = registry.uniqueIdentifierToDeviceWallet(deviceIdentifier);
-        assertEq(storedDeviceWallet, deviceWallet);
-
-        bytes32[2] memory storedKey = registry.getDeviceWalletToOwner(deviceWallet);
+        // Check storage variables in registry
+        bytes32[2] memory storedKey = registry.getDeviceWalletToOwner(deviceWalletAddress);
         assertEq(storedKey[0], pubKey1[0], "X co-ordinate should match");
         assertEq(storedKey[1], pubKey1[1], "Y co-ordinate should match");
+        assertEq(registry.isDeviceWalletValid(deviceWalletAddress), true, "Device wallet should have been deployed");
+        assertEq(registry.uniqueIdentifierToDeviceWallet(deviceIdentifier), deviceWalletAddress, "Device wallet addres should have matched");
 
-        for(uint256 i=0; i<eSIMWallets.length; ++i) {
-            assertEq(registry.isESIMWalletValid(eSIMWallets[i]), deviceWallet, "Device wallet not associated correctly");
-            assertEq(registry.isESIMWalletOnStandby(eSIMWallets[i]), false, "ESIM wallet should not be set to standby");
-            assertEq(ESIMWallet(payable(eSIMWallets[i])).owner(), deviceWallet, "Device wallet should be owner of the eSIM wallet");
-        }
-
-        bytes32[2] memory ownerKey = MockDeviceWallet(payable(deviceWallet)).getOwner();
+        // Check storage variables in device wallet
+        bytes32[2] memory ownerKey = MockDeviceWallet(payable(deviceWalletAddress)).getOwner();
         assertEq(ownerKey[0], pubKey1[0], "X co-ordinate doesn't match");
         assertEq(ownerKey[1], pubKey1[1], "Y co-ordinate doesn't match");
+        assertEq(deviceWallet.deviceUniqueIdentifier(), customDeviceUniqueIdentifiers[0], "Device unique identifier should have matched");
+        assertEq(address(deviceWallet.registry()), address(registry), "Registry should have been correct");
+        assertEq(address(deviceWallet.eSIMWalletFactory()), address(eSIMWalletFactory), "eSIMWalletFactory address in device wallet should have matched");
+
+        for(uint256 i=0; i<eSIMWallets.length; ++i) {
+            MockESIMWallet eSIMWallet = MockESIMWallet(payable(eSIMWallets[i]));
+
+            // Check storage variables in registry
+            assertEq(registry.isESIMWalletValid(address(eSIMWallet)), deviceWalletAddress, "Device wallet not associated correctly");
+            assertEq(registry.isESIMWalletOnStandby(address(eSIMWallet)), false, "ESIM wallet should not be set to standby");
+
+            // Check storage variables in device wallet
+            assertEq(deviceWallet.isValidESIMWallet(address(eSIMWallet)), true, "ESIMWallet should have been set to valid");
+            assertEq(deviceWallet.canPullETH(address(eSIMWallet)), true, "ESIMWallet should be able to pull ETH");
+
+            // Check storage variables in eSIM wallet
+            assertEq(eSIMWallet.owner(), address(deviceWallet), "ESIMWallet owner should have been device wallet");
+            assertEq(address(eSIMWallet.eSIMWalletFactory()), address(eSIMWalletFactory), "eSIMWalletFactory address in eSIM wallet should have matched");
+            assertEq(address(eSIMWallet.deviceWallet()), address(deviceWallet), "ESIM wallet should have correct device wallet");
+            assertEq(eSIMWallet.newRequestedOwner(), address(0), "ESIM wallet's new requested owner should have been address(0)");
+            assertNotEq(eSIMWallet.getTransactionHistory().length, 0, "Transaction history should not have been empty");
+            assertNotEq(bytes(eSIMWallet.eSIMUniqueIdentifier()).length, 0, "ESIM unique identifier should not be empty");
+        }
+    }
+
+    function test_batchPopulateHistory_afterDeployment() public {
+        test_deployLazyWalletAndSetESIMIdentifier();
+
+        vm.startPrank(eSIMWalletAdmin);
+        vm.expectRevert("Already deployed");
+        lazyWalletRegistry.batchPopulateHistory(
+            customDeviceUniqueIdentifiers,
+            customESIMUniqueIdentifiers,
+            customDataBundleDetails
+        );
+        vm.stopPrank();
     }
 
     function test_isLazyWalletDeployed_unregisteredIdentfier() public view {
