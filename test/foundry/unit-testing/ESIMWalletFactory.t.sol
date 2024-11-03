@@ -9,6 +9,7 @@ import "contracts/esim-wallet/ESIMWalletFactory.sol";
 import "contracts/CustomStructs.sol";
 
 import "test/utils/DeployerBase.sol";
+import "test/utils/mocks/MockESIMWallet.sol";
 
 contract ESIMWalletFactoryTest is DeployerBase {
 
@@ -37,10 +38,24 @@ contract ESIMWalletFactoryTest is DeployerBase {
     }
 
     function test_deployESIMWallet() public {
+        address deviceWalletAddress = user2;
+
         vm.startPrank(address(registry));
-        address eSIMWallet = eSIMWalletFactory.deployESIMWallet(user2, 999);
+        address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(
+            deviceWalletAddress,
+            999
+        );
         vm.stopPrank();
 
-        assertEq(eSIMWalletFactory.isESIMWalletDeployed(eSIMWallet), true, "isESIMWalletDeployed should have been set to true");
+        MockESIMWallet eSIMWallet = MockESIMWallet(payable(eSIMWalletAddress));
+
+        // Check storage variables in eSIM wallet
+        assertEq(eSIMWalletFactory.isESIMWalletDeployed(address(eSIMWallet)), true, "isESIMWalletDeployed should have been set to true");
+        assertEq(address(eSIMWallet.eSIMWalletFactory()), address(eSIMWalletFactory), "eSIMWalletFactory address in eSIM wallet should have matched");
+        assertEq(address(eSIMWallet.deviceWallet()), deviceWalletAddress, "ESIM wallet should have correct device wallet");
+        assertEq(bytes(eSIMWallet.eSIMUniqueIdentifier()).length, 0, "ESIM unique identifier should be empty");
+        assertEq(eSIMWallet.newRequestedOwner(), address(0), "ESIM wallet's new requested owner should have been address(0)");
+        assertEq(eSIMWallet.getTransactionHistory().length, 0, "Transaction history should have been empty");
+        assertEq(eSIMWallet.owner(), deviceWalletAddress, "ESIMWallet owner should have been device wallet");
     }
 }
