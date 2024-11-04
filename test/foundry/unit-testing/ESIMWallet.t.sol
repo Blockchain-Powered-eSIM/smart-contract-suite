@@ -113,4 +113,37 @@ contract ESIMWalletTest is DeployerBase {
 
         assertEq(eSIMWallet2.eSIMUniqueIdentifier(), "ESIM_0_2", "ESIM identifier should have been initialised");
     }
+
+    function test_populateHistory() public {
+        deployWallets();
+
+        vm.startPrank(address(registry));
+        bool historyPopulated = eSIMWallet1.populateHistory(
+            customDataBundleDetails[0]
+        );
+        vm.stopPrank();
+
+        assertEq(historyPopulated, true, "History should have been populated");
+        assertNotEq(eSIMWallet1.getTransactionHistory().length, 0, "Transaction history should have neen non-zero");
+    }
+    
+    function test_populateHistory_callTwiceFail() public {
+        deployWallets();
+
+        vm.startPrank(address(registry));
+        bool historyPopulated = eSIMWallet1.populateHistory(
+            customDataBundleDetails[0]
+        );
+        vm.stopPrank();
+
+        assertEq(historyPopulated, true, "History should have been populated");
+        assertNotEq(eSIMWallet1.getTransactionHistory().length, 0, "Transaction history should have neen non-zero");
+
+        vm.startPrank(address(registry));
+        vm.expectRevert("Wallet already in use");
+        eSIMWallet1.populateHistory(
+            customDataBundleDetails[0]
+        );
+        vm.stopPrank();
+    }
 }
