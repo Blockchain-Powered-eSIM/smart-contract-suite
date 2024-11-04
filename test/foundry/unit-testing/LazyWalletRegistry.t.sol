@@ -201,6 +201,8 @@ contract LazyWalletRegistryTest is DeployerBase {
         assertEq(storedKey[1], pubKey1[1], "Y co-ordinate should match");
         assertEq(registry.isDeviceWalletValid(deviceWalletAddress), true, "Device wallet should have been deployed");
         assertEq(registry.uniqueIdentifierToDeviceWallet(deviceIdentifier), deviceWalletAddress, "Device wallet addres should have matched");
+        bytes32 keyHash = keccak256(abi.encode(pubKey1[0], pubKey1[1]));
+        assertEq(registry.registeredP256Keys(keyHash), deviceWalletAddress, "P256 key hash should have been tied to the device wallet address");
 
         // Check storage variables in device wallet
         bytes32[2] memory ownerKey = MockDeviceWallet(payable(deviceWalletAddress)).getOwner();

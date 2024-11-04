@@ -216,8 +216,6 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
 
     /// @notice Instead of using transferOwnership, the contract uses secureTransferOwnership
     function _secureTransferOwnership() internal {
-        require(msg.sender == address(this), "Cannot call directly");
-
         address newOwner = newRequestedOwner;
         address previousOwner = owner();
         // Reset ownership transfer address

@@ -23,7 +23,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     /// @notice Emitted when the contract pays ETH for data bundle
     event ETHPaidForDataBundle(address indexed _vault, address indexed _eSIMWallet, uint256 indexed _amount);
 
-    /// @notice Emitted when ower updates ETH access to a particular eSIM wallet
+    /// @notice Emitted when owner updates ETH access to a particular eSIM wallet
     event ETHAccessUpdated(address indexed _eSIMWalletAddress, bool _hasAccessToETH);
 
     /// @notice Emitted when ETH is sent out from the contract
@@ -240,8 +240,13 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         address _eSIMWalletAddress,
         bool _hasAccessToETH
     ) internal {
-        require(registry.isESIMWalletValid(_eSIMWalletAddress) == address(0), "Already has device wallet");
-        
+        // If the eSIM wallet is a newly deployed one, then the owner will definitely be set
+        // during initialisation. This device wallet will be the owner.
+        // If the eSIM wallet already existed, then the previous owner (device wallet)
+        // must transfer the ownership to the eSIM wallet, and mark its status as standby. 
+        // And this device wallet must accept the ownership before calling the addESIMWallet function
+        require(ESIMWallet(payable(_eSIMWalletAddress)).owner() == address(this), "Accept ownership first");
+
         isValidESIMWallet[_eSIMWalletAddress] = true;
         canPullETH[_eSIMWalletAddress] = _hasAccessToETH;
 

@@ -68,6 +68,11 @@ contract RegistryHelper {
     /// @notice device wallet address <> owner P256 public key.
     mapping(address => bytes32[2]) public deviceWalletToOwner;
 
+    /// @notice keccak256 hash to device wallet address
+    /// @dev keccak256(abi.encode(X, Y)) <> device wallet address
+    /// Used to maintain one-to-one relationship between P256 keys and device wallet
+    mapping(bytes32 => address) public registeredP256Keys;
+
     /// @notice device wallet address <> boolean (true if deployed by the registry or device wallet factory)
     ///         Mapping of all the device wallets deployed by the registry (or the device wallet factory)
     ///         to their respective owner.
@@ -140,6 +145,9 @@ contract RegistryHelper {
         uniqueIdentifierToDeviceWallet[_deviceUniqueIdentifier] = _deviceWallet;
         isDeviceWalletValid[_deviceWallet] = true;
         deviceWalletToOwner[_deviceWallet] = _deviceWalletOwnerKey;
+        
+        bytes32 keyHash = keccak256(abi.encode(_deviceWalletOwnerKey[0], _deviceWalletOwnerKey[1]));
+        registeredP256Keys[keyHash] = _deviceWallet;
 
         emit DeviceWalletInfoUpdated(_deviceWallet, _deviceUniqueIdentifier, _deviceWalletOwnerKey);
     }

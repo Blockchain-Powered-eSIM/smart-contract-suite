@@ -184,6 +184,8 @@ contract DeviceWalletFactoryTest is DeployerBase {
         assertNotEq(address(eSIMWallet), address(0), "ESIM wallet address cannot be address(0)");
 
         // Check storage variables in registry
+        bytes32 keyHash = keccak256(abi.encode(pubKey1[0], pubKey1[1]));
+        assertEq(registry.registeredP256Keys(keyHash), address(deviceWallet), "P256 key hash should have been tied to the device wallet address");
         assertEq(registry.isDeviceWalletValid(address(deviceWallet)), true, "isDeviceWalletValid mapping should have been updated");
         assertEq(registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[0]), address(deviceWallet), "uniqueIdentifierToDeviceWallet should have been updated");
         assertEq(registry.isESIMWalletValid(address(eSIMWallet)), address(deviceWallet), "ESIM wallet should have been associated with device wallet");
@@ -230,6 +232,8 @@ contract DeviceWalletFactoryTest is DeployerBase {
         assertEq(address(deviceWallet).balance, 1 ether, "Device wallet balance should have been 1 ether");
 
         // Check storage variables in registry
+        bytes32 keyHash = keccak256(abi.encode(pubKey1[0], pubKey1[1]));
+        assertEq(registry.registeredP256Keys(keyHash), address(deviceWallet), "P256 key hash should have been tied to the device wallet address");
         assertEq(registry.isDeviceWalletValid(address(deviceWallet)), true, "isDeviceWalletValid mapping should have been updated");
         assertEq(registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[0]), address(deviceWallet), "uniqueIdentifierToDeviceWallet should have been updated");
         assertEq(registry.isESIMWalletValid(address(eSIMWallet)), address(deviceWallet), "ESIM wallet should have been associated with device wallet");
@@ -379,6 +383,8 @@ contract DeviceWalletFactoryTest is DeployerBase {
         assertEq(address(deviceWallet), calculatedDeviceWalletAddress1, "Calculated device wallet address should have matched the actual device wallet address");
 
         // Check storage variables in registry
+        bytes32 keyHash = keccak256(abi.encode(pubKey1[0], pubKey1[1]));
+        assertEq(registry.registeredP256Keys(keyHash), address(deviceWallet), "P256 key hash should have been tied to the device wallet address");
         assertEq(registry.isDeviceWalletValid(address(deviceWallet)), true, "isDeviceWalletValid mapping should have been updated");
         assertEq(registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[0]), address(deviceWallet), "uniqueIdentifierToDeviceWallet should have been updated");
         
@@ -415,6 +421,8 @@ contract DeviceWalletFactoryTest is DeployerBase {
         assertEq(address(deviceWallet), calculatedDeviceWalletAddress1, "Calculated device wallet address should have matched the actual device wallet address");
 
         // Check storage variables in registry
+        bytes32 keyHash = keccak256(abi.encode(pubKey1[0], pubKey1[1]));
+        assertEq(registry.registeredP256Keys(keyHash), address(deviceWallet), "P256 key hash should have been tied to the device wallet address");
         assertEq(registry.isDeviceWalletValid(address(deviceWallet)), true, "isDeviceWalletValid mapping should have been updated");
         assertEq(registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[0]), address(deviceWallet), "uniqueIdentifierToDeviceWallet should have been updated");
         
@@ -500,6 +508,8 @@ contract DeviceWalletFactoryTest is DeployerBase {
             assertEq(address(deviceWallet).balance, (i+1) * oneEther, "Device wallet balance should have been non zero");
 
             // Check storage variables in registry
+            bytes32 keyHash = keccak256(abi.encode(listOfOwnerKeys[i][0], listOfOwnerKeys[i][1]));
+            assertEq(registry.registeredP256Keys(keyHash), address(deviceWallet), "P256 key hash should have been tied to the device wallet address");
             assertEq(registry.isDeviceWalletValid(address(deviceWallet)), true, "isDeviceWalletValid mapping should have been updated");
             assertEq(registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[i]), address(deviceWallet), "uniqueIdentifierToDeviceWallet should have been updated");
             assertEq(registry.isESIMWalletValid(address(eSIMWallet)), address(deviceWallet), "ESIM wallet should have been associated with device wallet");
