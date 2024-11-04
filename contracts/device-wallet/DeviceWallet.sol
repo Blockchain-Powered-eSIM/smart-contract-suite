@@ -145,7 +145,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     ) external onlyESIMWalletAdmin returns (address) {
         address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(address(this), _salt);
 
-        addESIMWallet(eSIMWalletAddress, _hasAccessToETH);
+        _addESIMWallet(eSIMWalletAddress, _hasAccessToETH);
 
         return eSIMWalletAddress;
     }
@@ -227,10 +227,19 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
 
     /// @notice Allow the device wallet factory or the wallet owner to add new eSIM wallet to this device wallet
     /// @param _eSIMWalletAddress Address of the eSIM wallet to be added
+    /// @param _hasAccessToETH `true` if the eSIM wallet is allowed to pull ETH from this device wallet, `false` otherwise
     function addESIMWallet(
         address _eSIMWalletAddress,
         bool _hasAccessToETH
     ) public onlyRegistryOrDeviceWalletFactoryOrOwner {
+        _addESIMWallet(_eSIMWalletAddress, _hasAccessToETH);
+    }
+
+    /// @notice Internal function for binding eSIM wallet with the device wallet
+    function _addESIMWallet(
+        address _eSIMWalletAddress,
+        bool _hasAccessToETH
+    ) internal {
         require(registry.isESIMWalletValid(_eSIMWalletAddress) == address(0), "Already has device wallet");
         
         isValidESIMWallet[_eSIMWalletAddress] = true;
