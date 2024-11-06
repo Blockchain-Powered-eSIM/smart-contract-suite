@@ -87,6 +87,20 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         _;
     }
 
+    function _onlyDeviceWalletOrESIMWalletAdmin() private view {
+        if(
+            msg.sender != address(deviceWallet) &&
+            msg.sender != deviceWallet.registry().eSIMWalletAdmin()
+        ) {
+            revert Errors.OnlyDeviceWalletOrESIMWalletAdmin();
+        }
+    }
+
+    modifier onlyDeviceWalletOrESIMWalletAdmin() {
+        _onlyDeviceWalletOrESIMWalletAdmin();
+        _;
+    }
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() initializer {}
 
@@ -127,7 +141,9 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     /// @notice Function to make payment for the data bundle
     /// @param _dataBundleDetail Details of the data bundle being bought. (dataBundleID, dataBundlePrice)
     /// @return True if the transaction is successful
-    function buyDataBundle(DataBundleDetails memory _dataBundleDetail) public payable nonReentrant returns (bool) {
+    function buyDataBundle(
+        DataBundleDetails memory _dataBundleDetail
+    ) public payable onlyDeviceWalletOrESIMWalletAdmin nonReentrant returns (bool) {
         require(bytes(_dataBundleDetail.dataBundleID).length > 0, "Data bundle ID cannot be empty");
         require(_dataBundleDetail.dataBundlePrice > 0, "Price cannot be zero");
 
