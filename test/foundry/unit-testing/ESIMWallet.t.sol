@@ -311,4 +311,117 @@ contract ESIMWalletTest is DeployerBase {
         assertEq(registry.isESIMWalletOnStandby(address(eSIMWallet1)), false, "ESIMWallet1 should not have been on standBy");
         assertEq(registry.isESIMWalletValid(address(eSIMWallet1)), address(deviceWallet2), "Registry should have updated the eSIM wallet to the new device wallet");
     }
+
+    function test_buyDataBundle_noFundsFromESIMWallet() public {
+        deployWallets();
+
+        DataBundleDetails memory _dataBundleDetail = DataBundleDetails(
+            "DB_ID_0",
+            100000000000000000      // 0.1 ETH
+        );
+
+        vm.startPrank(eSIMWalletAdmin);
+        vm.expectRevert("Not enough ETH");
+        eSIMWallet1.buyDataBundle(_dataBundleDetail);
+        vm.stopPrank();
+
+        vm.deal(address(deviceWallet), 1 ether);
+        vm.startPrank(eSIMWalletAdmin);
+        eSIMWallet1.buyDataBundle(_dataBundleDetail);
+        vm.stopPrank();
+
+        assertEq(address(deviceWallet).balance, 0.9 ether, "Device wallet balance should have been 0.9 ETH");
+        assertEq((deviceWallet.getVaultAddress()).balance, 0.1 ether, "Vault balance should have increased by 0.1 ETH");
+
+        DataBundleDetails[] memory history = eSIMWallet1.getTransactionHistory();
+        assertEq(history.length, 1, "Transaction history should have been updated");
+        assertEq(history[0].dataBundleID, "DB_ID_0", "Transaction history's data bundle ID should have been correct");
+        assertEq(history[0].dataBundlePrice, 0.1 ether, "Transaction history's data bundle price should have been correct");
+    }
+
+    function test_buyDataBundle_partialFundsFromESIMWallet() public {
+        deployWallets();
+
+        DataBundleDetails memory _dataBundleDetail = DataBundleDetails(
+            "DB_ID_0",
+            100000000000000000      // 0.1 ETH
+        );
+
+        vm.deal(address(eSIMWallet1), 0.03 ether);
+        vm.startPrank(eSIMWalletAdmin);
+        vm.expectRevert();
+        eSIMWallet1.buyDataBundle(_dataBundleDetail);
+        vm.stopPrank();
+
+        vm.deal(address(deviceWallet), 1 ether);
+        vm.startPrank(eSIMWalletAdmin);
+        eSIMWallet1.buyDataBundle(_dataBundleDetail);
+        vm.stopPrank();
+
+        assertEq(address(deviceWallet).balance, 0.93 ether, "Device wallet balance should have been 0.93 ETH");
+        assertEq(address(eSIMWallet1).balance, 0 ether, "ESIM wallet balance should have been 0 ETH");
+        assertEq((deviceWallet.getVaultAddress()).balance, 0.1 ether, "Vault balance should have increased by 0.1 ETH");
+
+        DataBundleDetails[] memory history = eSIMWallet1.getTransactionHistory();
+        assertEq(history.length, 1, "Transaction history should have been updated");
+        assertEq(history[0].dataBundleID, "DB_ID_0", "Transaction history's data bundle ID should have been correct");
+        assertEq(history[0].dataBundlePrice, 0.1 ether, "Transaction history's data bundle price should have been correct");
+    }
+
+    function test_buyDataBundle_partialFundsFromUserAndESIMWallet() public {
+        deployWallets();
+
+        DataBundleDetails memory _dataBundleDetail = DataBundleDetails(
+            "DB_ID_0",
+            100000000000000000      // 0.1 ETH
+        );
+        
+        vm.deal(eSIMWalletAdmin, 0.04 ether);       // 0.04 ETH to be supplied as msg.value
+        vm.deal(address(eSIMWallet1), 0.03 ether);  // 0.03 ETH to be used from eSIM wallet
+
+        vm.startPrank(eSIMWalletAdmin);
+        vm.expectRevert("Not enough ETH");          // revert from Device wallet, needed 0.03 ETH, found 0 ETH
+        eSIMWallet1.buyDataBundle{value: 0.04 ether}(_dataBundleDetail);
+        vm.stopPrank();
+
+        vm.deal(address(deviceWallet), 1 ether);    // needed 0.03 ETH from Device walelt, found 1 ETH
+        vm.startPrank(eSIMWalletAdmin);
+        eSIMWallet1.buyDataBundle{value: 0.04 ether}(_dataBundleDetail);
+        vm.stopPrank();
+
+        assertEq(address(deviceWallet).balance, 0.97 ether, "Device wallet balance should have been 0.97 ETH");
+        assertEq(address(eSIMWallet1).balance, 0 ether, "ESIM wallet balance should have been 0 ETH");
+        assertEq((deviceWallet.getVaultAddress()).balance, 0.1 ether, "Vault balance should have increased by 0.1 ETH");
+
+        DataBundleDetails[] memory history = eSIMWallet1.getTransactionHistory();
+        assertEq(history.length, 1, "Transaction history should have been updated");
+        assertEq(history[0].dataBundleID, "DB_ID_0", "Transaction history's data bundle ID should have been correct");
+        assertEq(history[0].dataBundlePrice, 0.1 ether, "Transaction history's data bundle price should have been correct");
+    }
+
+    function test_buyDataBundle_allFundsFromUser() public {
+        deployWallets();
+
+        DataBundleDetails memory _dataBundleDetail = DataBundleDetails(
+            "DB_ID_0",
+            0.1 ether
+        );
+
+        vm.deal(address(deviceWallet), 2 ether);
+        vm.deal(address(eSIMWallet1), 1 ether);
+        vm.deal(eSIMWalletAdmin, 0.2 ether);        // remaining ETH should go to eSIM wallet
+        
+        vm.startPrank(eSIMWalletAdmin);
+        eSIMWallet1.buyDataBundle{value: 0.2 ether}(_dataBundleDetail);
+        vm.stopPrank();
+
+        assertEq(address(deviceWallet).balance, 2 ether, "Device wallet balance should have been 2 ETH");
+        assertEq(address(eSIMWallet1).balance, 1.1 ether, "ESIM wallet balance should have been 1 ETH");
+        assertEq((deviceWallet.getVaultAddress()).balance, 0.1 ether, "Vault balance should have increased by 0.1 ETH");
+
+        DataBundleDetails[] memory history = eSIMWallet1.getTransactionHistory();
+        assertEq(history.length, 1, "Transaction history should have been updated");
+        assertEq(history[0].dataBundleID, "DB_ID_0", "Transaction history's data bundle ID should have been correct");
+        assertEq(history[0].dataBundlePrice, 0.1 ether, "Transaction history's data bundle price should have been correct");
+    }
 }
