@@ -33,8 +33,14 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     /// @notice Emitted when eSIM wallet is added to this Device Wallet
     event ESIMWalletAdded(address indexed _eSIMWalletAddress, bool _hasAccessToETH, address indexed _caller);
 
-    /// @notice EMitted when the eSIM wallet is removed from this Device Wallet
+    /// @notice Emitted when the eSIM wallet is removed from this Device Wallet
     event ESIMWalletRemoved(address indexed _eSIMWalletAddress, address indexed _deviceWalletAddress, address indexed _caller);
+
+    /// @notice Emitted when the eSIM being remvoved has no ETH to call back to this device wallet
+    event NoETHToCallback();
+
+    /// @notice Emitted when the eSIM being removed sends back ETH to this device wallet
+    event ETHCalledBack(uint256 _amount);
 
     /// @notice Registry contract instance
     Registry public registry;
@@ -71,7 +77,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
             msg.sender != address(this) &&
             msg.sender != address(registry.deviceWalletFactory())
         ) {
-            revert Errors.OnlyDeviceWalletOrOwner();
+            revert Errors.OnlyDeviceWalletFactoryOrOwner();
         }
     }
 
@@ -262,17 +268,28 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
 
     /// @notice Allow device wallet factory or the wallet owner to remove any eSIM wallet bound with this device wallet
     /// @param _eSIMWalletAddress Address of the eSIM wallet to be removed
+    /// @param _callBackETH `true` if any remaining ETH needs to be called back from the ESIM wallet to this device wallet, `false` otherwise
     function removeESIMWallet(
-        address _eSIMWalletAddress
+        address _eSIMWalletAddress,
+        bool _callBackETH
     ) public onlyDeviceWalletFactoryOrOwner {
         require(isValidESIMWallet[_eSIMWalletAddress] == true, "Unknown eSIM wallet");
 
         isValidESIMWallet[_eSIMWalletAddress] = false;
         canPullETH[_eSIMWalletAddress] = false;
 
-        // Inform and update the registry about the newly added eSIM wallet to this device wallet
-        registry.updateDeviceWalletAssociatedWithESIMWallet(_eSIMWalletAddress, address(0));
+        // Inform and update the registry about the existingd eSIM wallet being removed from this device wallet
         registry.toggleESIMWalletStandbyStatus(_eSIMWalletAddress, true);
+        registry.updateDeviceWalletAssociatedWithESIMWallet(_eSIMWalletAddress, address(0));
+
+        if(_callBackETH) {
+            try ESIMWallet(payable(_eSIMWalletAddress)).sendETHToDeviceWallet(_eSIMWalletAddress.balance) returns (uint256 _amount) {
+                emit ETHCalledBack(_amount);
+            }
+            catch {
+                emit NoETHToCallback();
+            }
+        }
 
         emit ESIMWalletRemoved(_eSIMWalletAddress, address(this), msg.sender);
     }

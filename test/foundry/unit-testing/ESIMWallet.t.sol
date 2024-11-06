@@ -279,13 +279,18 @@ contract ESIMWalletTest is DeployerBase {
         vm.stopPrank();
     }
 
+    /// @dev It is important to remove eSIM wallet from the device wallet before transferring ownership
+    /// If not done, the eSIM wallet will still be able to pull ETH from the device wallet it previously belonged to
     function test_acceptOwnershipTransfer_addESIMWallet() public {
         // Current owner requests transfer of ownership to the new owner
         test_requestTransferOwnership();
 
-        // Current owner sets the eSIM wallet to standby before the new owner accepts the ownership
+        vm.deal(address(deviceWallet), 10 ether);
+        vm.deal(address(eSIMWallet1), 1 ether);
+
+        // Current owner removes the ESIM wallet from their device wallet, sets it to standby and mark owner as address(0)
         vm.startPrank(address(deviceWallet));
-        registry.toggleESIMWalletStandbyStatus(address(eSIMWallet1), true);
+        deviceWallet.removeESIMWallet(address(eSIMWallet1), true);
         vm.stopPrank();
         assertEq(registry.isESIMWalletOnStandby(address(eSIMWallet1)), true, "ESIMWallet1 should have been on standBy");
 
@@ -297,6 +302,7 @@ contract ESIMWalletTest is DeployerBase {
 
         address newOwner = address(deviceWallet2);
         assertEq(newOwner, requestedOwner, "newOwner should have accepted the ownership");
+        assertEq(address(eSIMWallet1.deviceWallet()), newOwner, "Device wallet should have updated along with the owner");
 
         requestedOwner = eSIMWallet1.newRequestedOwner();
         assertEq(requestedOwner, address(0), "newRequestedOwner should have reset to address(0)");
@@ -306,6 +312,8 @@ contract ESIMWalletTest is DeployerBase {
         deviceWallet2.addESIMWallet(address(eSIMWallet1), true);
         vm.stopPrank();
 
+        assertEq(address(deviceWallet).balance, 11 ether, "Device wallet balance should have increased to 11 ETH");
+        assertEq(address(eSIMWallet1).balance, 0 ether, "eSIM wallet balance should have decreased to 0 ETH");
         assertEq(deviceWallet2.isValidESIMWallet(address(eSIMWallet1)), true, "eSIM wallet added should have been set to valid");
         assertEq(deviceWallet2.canPullETH(address(eSIMWallet1)), true, "eSIM wallet should have ability to pull ETH");
         assertEq(registry.isESIMWalletOnStandby(address(eSIMWallet1)), false, "ESIMWallet1 should not have been on standBy");
@@ -423,5 +431,44 @@ contract ESIMWalletTest is DeployerBase {
         assertEq(history.length, 1, "Transaction history should have been updated");
         assertEq(history[0].dataBundleID, "DB_ID_0", "Transaction history's data bundle ID should have been correct");
         assertEq(history[0].dataBundlePrice, 0.1 ether, "Transaction history's data bundle price should have been correct");
+    }
+
+    function test_sendETHToDeviceWallet_unauthorised() public {
+        deployWallets();
+
+        vm.deal(address(eSIMWallet1), 1 ether);
+
+        vm.startPrank(user1);
+        vm.expectRevert(bytes4(keccak256("OnlyDeviceWallet()")));
+        eSIMWallet1.sendETHToDeviceWallet(1 ether);
+        vm.stopPrank();
+    }
+
+    function test_sendETHToDeviceWallet() public {
+        deployWallets();
+
+        vm.deal(address(eSIMWallet1), 1 ether);
+
+        vm.startPrank(address(deviceWallet));
+        eSIMWallet1.sendETHToDeviceWallet(1 ether);
+        vm.stopPrank();
+
+        assertEq(address(eSIMWallet1).balance, 0 ether, "eSIM wallet balance should have gone down to 0 ETH");
+        assertEq(address(deviceWallet).balance, 1 ether, "Device wallet balance should have increased to 1 ETH");
+    }
+
+    function test_sendETHToDeviceWallet_newDeviceWallet() public {
+        test_acceptOwnershipTransfer_addESIMWallet();
+
+        vm.deal(address(eSIMWallet1), 1 ether);
+
+        address newDeviceWallet = eSIMWallet1.owner();
+
+        vm.startPrank(newDeviceWallet);
+        eSIMWallet1.sendETHToDeviceWallet(1 ether);
+        vm.stopPrank();
+
+        assertEq(address(eSIMWallet1).balance, 0 ether, "eSIM wallet balance should have gone down to 0 ETH");
+        assertEq(address(newDeviceWallet).balance, 1 ether, "New device wallet balance should have increased to 1 ETH");
     }
 }
