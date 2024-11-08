@@ -266,4 +266,178 @@ contract DeviceWalletTest is DeployerBase {
         assertEq(deviceWallet.canPullETH(address(eSIMWallet1)), false, "ESIM wallet should not be allowed to pull ETH");
         assertEq(deviceWallet.isValidESIMWallet(address(eSIMWallet1)), false, "ESIM wallet should have been set to invalid for the device wallet");
     }
+
+    function test_toggleAccessToETH_unauthorised() public {
+        deployWallets();
+
+        assertEq(deviceWallet.canPullETH(address(eSIMWallet1)), true, "eSIMWallet1 should be able to pull ETH");
+
+        vm.startPrank(user1);
+        vm.expectRevert("Only self");
+        deviceWallet.toggleAccessToETH(
+            address(eSIMWallet1),
+            false
+        );
+        vm.stopPrank();
+    }
+
+    function test_toggleAccessToETH_revoke_deviceWalletHasETH() public {
+        deployWallets();
+
+        assertEq(deviceWallet.canPullETH(address(eSIMWallet1)), true, "eSIMWallet1 should be able to pull ETH");
+
+        vm.startPrank(address(deviceWallet));
+        deviceWallet.toggleAccessToETH(
+            address(eSIMWallet1),
+            false
+        );
+        vm.stopPrank();
+
+        assertEq(deviceWallet.canPullETH(address(eSIMWallet1)), false, "eSIMWallet1 should not be able to pull ETH");
+
+        DataBundleDetails memory _dataBundleDetail = DataBundleDetails(
+            "DB_ID_0",
+            0.1 ether
+        );
+
+        vm.deal(address(deviceWallet), 1 ether);
+        vm.startPrank(eSIMWalletAdmin);
+        vm.expectRevert("Access revoked");
+        eSIMWallet1.buyDataBundle(_dataBundleDetail);
+        vm.stopPrank();
+    }
+
+    function test_toggleAccessToETH_revoke_eSIMWalletHasETH() public {
+        deployWallets();
+
+        assertEq(deviceWallet.canPullETH(address(eSIMWallet1)), true, "eSIMWallet1 should be able to pull ETH");
+
+        vm.startPrank(address(deviceWallet));
+        deviceWallet.toggleAccessToETH(
+            address(eSIMWallet1),
+            false
+        );
+        vm.stopPrank();
+
+        assertEq(deviceWallet.canPullETH(address(eSIMWallet1)), false, "eSIMWallet1 should not be able to pull ETH");
+
+        DataBundleDetails memory _dataBundleDetail = DataBundleDetails(
+            "DB_ID_0",
+            0.1 ether
+        );
+
+        vm.deal(address(eSIMWallet1), 1 ether);
+        vm.startPrank(eSIMWalletAdmin);
+        eSIMWallet1.buyDataBundle(_dataBundleDetail);
+        vm.stopPrank();
+
+        assertEq(address(eSIMWallet1).balance, 0.9 ether, "ESIMWalletAdmin balance should have been decreased to 0.9 ETH");
+        assertEq(vault.balance, 0.1 ether, "Vault balance should have updated to 0.1 ETH");
+        
+        DataBundleDetails[] memory history = eSIMWallet1.getTransactionHistory();
+        assertEq(history.length, 1, "Transaction history should have been updated");
+        assertEq(history[0].dataBundleID, "DB_ID_0", "Data bundle ID should have been correct");
+        assertEq(history[0].dataBundlePrice, 0.1 ether, "Data bundle price should have been correct");
+    }
+
+    function test_toggleAccessToETH_revoke_userHasETH() public {
+        deployWallets();
+
+        assertEq(deviceWallet.canPullETH(address(eSIMWallet1)), true, "eSIMWallet1 should be able to pull ETH");
+
+        vm.startPrank(address(deviceWallet));
+        deviceWallet.toggleAccessToETH(
+            address(eSIMWallet1),
+            false
+        );
+        vm.stopPrank();
+
+        assertEq(deviceWallet.canPullETH(address(eSIMWallet1)), false, "eSIMWallet1 should not be able to pull ETH");
+
+        DataBundleDetails memory _dataBundleDetail = DataBundleDetails(
+            "DB_ID_0",
+            0.1 ether
+        );
+
+        vm.deal(eSIMWalletAdmin, 1 ether);
+        vm.startPrank(eSIMWalletAdmin);
+        eSIMWallet1.buyDataBundle{value: 0.2 ether}(_dataBundleDetail);
+        vm.stopPrank();
+
+        assertEq(address(eSIMWallet1).balance, 0.1 ether, "ESIMWallet balance should have been increased to 0.1 ETH");
+        assertEq(vault.balance, 0.1 ether, "Vault balance should have updated to 0.1 ETH");
+        assertEq(eSIMWalletAdmin.balance, 0.8 ether, "User balance should have been decreased to 0.8 ETH");
+
+        DataBundleDetails[] memory history = eSIMWallet1.getTransactionHistory();
+        assertEq(history.length, 1, "Transaction history should have been updated");
+        assertEq(history[0].dataBundleID, "DB_ID_0", "Data bundle ID should have been correct");
+        assertEq(history[0].dataBundlePrice, 0.1 ether, "Data bundle price should have been correct");
+    }
+
+    function test_toggleAccessToETH_grant_deviceWalletHasETH() public {
+        deployWallets();
+
+        assertEq(deviceWallet.canPullETH(address(eSIMWallet2)), false, "eSIMWallet2 should not be able to pull ETH");
+
+        vm.startPrank(address(deviceWallet));
+        deviceWallet.toggleAccessToETH(
+            address(eSIMWallet2),
+            true
+        );
+        vm.stopPrank();
+
+        assertEq(deviceWallet.canPullETH(address(eSIMWallet2)), true, "eSIMWallet2 should be able to pull ETH");
+
+        DataBundleDetails memory _dataBundleDetail = DataBundleDetails(
+            "DB_ID_0",
+            0.1 ether
+        );
+
+        vm.deal(address(deviceWallet), 1 ether);
+        vm.startPrank(eSIMWalletAdmin);
+        eSIMWallet2.buyDataBundle(_dataBundleDetail);
+        vm.stopPrank();
+
+        assertEq(vault.balance, 0.1 ether, "Vault balance should have updated to 0.1 ETH");
+        assertEq(address(deviceWallet).balance, 0.9 ether, "Device wallet balance should have been decreased to 0.9 ETH");
+        
+        DataBundleDetails[] memory history = eSIMWallet2.getTransactionHistory();
+        assertEq(history.length, 1, "Transaction history should have been updated");
+        assertEq(history[0].dataBundleID, "DB_ID_0", "Data bundle ID should have been correct");
+        assertEq(history[0].dataBundlePrice, 0.1 ether, "Data bundle price should have been correct");
+    }
+
+    function test_toggleAccessToETH_grant_userHasETH() public {
+        deployWallets();
+
+        assertEq(deviceWallet.canPullETH(address(eSIMWallet2)), false, "eSIMWallet2 should not be able to pull ETH");
+
+        vm.startPrank(address(deviceWallet));
+        deviceWallet.toggleAccessToETH(
+            address(eSIMWallet2),
+            true
+        );
+        vm.stopPrank();
+
+        assertEq(deviceWallet.canPullETH(address(eSIMWallet2)), true, "eSIMWallet2 should be able to pull ETH");
+
+        DataBundleDetails memory _dataBundleDetail = DataBundleDetails(
+            "DB_ID_0",
+            0.1 ether
+        );
+
+        vm.deal(eSIMWalletAdmin, 1 ether);
+        vm.startPrank(eSIMWalletAdmin);
+        eSIMWallet2.buyDataBundle{value: 0.2 ether}(_dataBundleDetail);
+        vm.stopPrank();
+
+        assertEq(address(eSIMWallet2).balance, 0.1 ether, "ESIMWallet balance should have been increased to 0.1 ETH");
+        assertEq(vault.balance, 0.1 ether, "Vault balance should have updated to 0.1 ETH");
+        assertEq(eSIMWalletAdmin.balance, 0.8 ether, "User balance should have been decreased to 0.8 ETH");
+        
+        DataBundleDetails[] memory history = eSIMWallet2.getTransactionHistory();
+        assertEq(history.length, 1, "Transaction history should have been updated");
+        assertEq(history[0].dataBundleID, "DB_ID_0", "Data bundle ID should have been correct");
+        assertEq(history[0].dataBundlePrice, 0.1 ether, "Data bundle price should have been correct");
+    }
 }
