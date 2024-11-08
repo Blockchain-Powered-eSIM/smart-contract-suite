@@ -246,6 +246,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         address _eSIMWalletAddress,
         bool _hasAccessToETH
     ) internal {
+        require(isValidESIMWallet[_eSIMWalletAddress] == false, "ESIM wallet already owned");
         // If the eSIM wallet is a newly deployed one, then the owner will definitely be set
         // during initialisation. This device wallet will be the owner.
         // If the eSIM wallet already existed, then the previous owner (device wallet)

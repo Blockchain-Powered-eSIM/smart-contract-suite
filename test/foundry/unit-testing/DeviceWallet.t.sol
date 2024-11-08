@@ -15,8 +15,9 @@ contract DeviceWalletTest is DeployerBase {
 
     MockDeviceWallet deviceWallet;
     MockDeviceWallet deviceWallet2;
-    MockESIMWallet eSIMWallet1;     // has access to ETH, has eSIM identifier set        
-    MockESIMWallet eSIMWallet2;     // no access to ETH, no eSIM identifier set
+    MockESIMWallet eSIMWallet1;     // has access to ETH, has eSIM identifier set, belongs to deviceWallet1        
+    MockESIMWallet eSIMWallet2;     // no access to ETH, no eSIM identifier set, belongs to deviceWallet1
+    MockESIMWallet eSIMWallet3;     // has access to ETH, has eSIM identifier set, belongs to deviceWallet2
 
     function deployWallets() public {
         address admin = deviceWalletFactory.eSIMWalletAdmin();
@@ -30,13 +31,26 @@ contract DeviceWalletTest is DeployerBase {
         );
         vm.stopPrank();
 
+        // Deploy new device wallet
+        vm.startPrank(admin);
+        Wallets memory wallet2 = deviceWalletFactory.deployDeviceWalletAsAdmin(
+            customDeviceUniqueIdentifiers[1],
+            pubKey2,
+            919,
+            0
+        );
+        vm.stopPrank();
+
         // eSIMWallet1 -> has access to ETH, has eSIM identifier set
         deviceWallet = MockDeviceWallet(payable(wallet.deviceWallet));
+        deviceWallet2 = MockDeviceWallet(payable(wallet2.deviceWallet));
         eSIMWallet1 = MockESIMWallet(payable(wallet.eSIMWallet));
+        eSIMWallet3 = MockESIMWallet(payable(wallet2.eSIMWallet));
 
         vm.startPrank(admin);
         // eSIMWallet1 -> has access to ETH, has eSIM identifier set
         deviceWallet.setESIMUniqueIdentifierForAnESIMWallet(address(eSIMWallet1), "ESIM_0_1");
+        deviceWallet2.setESIMUniqueIdentifierForAnESIMWallet(address(eSIMWallet3), "ESIM_1_1");
         vm.stopPrank();
 
         vm.startPrank(admin);
@@ -47,51 +61,79 @@ contract DeviceWalletTest is DeployerBase {
         // eSIMWallet2 -> no access to ETH, no eSIM identifier set
         eSIMWallet2 = MockESIMWallet(payable(newESIMWallet));
 
-        assertNotEq(address(deviceWallet), address(0), "Device wallet address cannot be address(0)");
-        assertNotEq(address(eSIMWallet1), address(0), "ESIM wallet address cannot be address(0)");
-        assertNotEq(address(eSIMWallet2), address(0), "ESIM wallet address cannot be address(0)");
+        assertNotEq(address(deviceWallet), address(0), "deviceWallet address cannot be address(0)");
+        assertNotEq(address(deviceWallet2), address(0), "deviceWallet2 address cannot be address(0)");
+        assertNotEq(address(eSIMWallet1), address(0), "ESIMWallet1 address cannot be address(0)");
+        assertNotEq(address(eSIMWallet2), address(0), "ESIMWallet2 address cannot be address(0)");
+        assertNotEq(address(eSIMWallet2), address(0), "ESIMWallet3 address cannot be address(0)");
 
         // Check storage variables in registry
-        assertEq(registry.isDeviceWalletValid(address(deviceWallet)), true, "isDeviceWalletValid mapping should have been updated");
-        assertEq(registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[0]), address(deviceWallet), "uniqueIdentifierToDeviceWallet should have been updated");
-        assertEq(registry.isESIMWalletValid(address(eSIMWallet1)), address(deviceWallet), "ESIM wallet1 should have been associated with device wallet");
-        assertEq(registry.isESIMWalletValid(address(eSIMWallet2)), address(deviceWallet), "ESIM wallet2 should have been associated with device wallet");
-        assertEq(registry.isESIMWalletOnStandby(address(eSIMWallet1)), false, "ESIM wallet1 should not have been on standby");
-        assertEq(registry.isESIMWalletOnStandby(address(eSIMWallet2)), false, "ESIM wallet2 should not have been on standby");
-        
+        assertEq(registry.isDeviceWalletValid(address(deviceWallet)), true, "isDeviceWalletValid mapping should have been updated for deviceWallet");
+        assertEq(registry.isDeviceWalletValid(address(deviceWallet2)), true, "isDeviceWalletValid mapping should have been updated for deviceWallet2");
+        assertEq(registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[0]), address(deviceWallet), "uniqueIdentifierToDeviceWallet should have been updated for deviceWallet1");
+        assertEq(registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[1]), address(deviceWallet2), "uniqueIdentifierToDeviceWallet should have been updated for deviceWallet2");
+        assertEq(registry.isESIMWalletValid(address(eSIMWallet1)), address(deviceWallet), "ESIM wallet1 should have been associated with deviceWallet");
+        assertEq(registry.isESIMWalletValid(address(eSIMWallet2)), address(deviceWallet), "ESIM wallet2 should have been associated with deviceWallet");
+        assertEq(registry.isESIMWalletValid(address(eSIMWallet3)), address(deviceWallet2), "ESIM wallet3 should have been associated with deviceWallet2");
+        assertEq(registry.isESIMWalletOnStandby(address(eSIMWallet1)), false, "ESIMWallet1 should not have been on standby");
+        assertEq(registry.isESIMWalletOnStandby(address(eSIMWallet2)), false, "ESIMWallet2 should not have been on standby");
+        assertEq(registry.isESIMWalletOnStandby(address(eSIMWallet3)), false, "ESIMWallet3 should not have been on standby");
+
         bytes32[2] memory ownerKeys = registry.getDeviceWalletToOwner(address(deviceWallet));
-        assertEq(ownerKeys[0], pubKey1[0], "X co-ordinate should have matched");
-        assertEq(ownerKeys[1], pubKey1[1], "Y co-ordinate should have matched");
+        assertEq(ownerKeys[0], pubKey1[0], "X co-ordinate should have matched for ownerKeys");
+        assertEq(ownerKeys[1], pubKey1[1], "Y co-ordinate should have matched for ownerKeys");
+
+        bytes32[2] memory ownerKeys2 = registry.getDeviceWalletToOwner(address(deviceWallet2));
+        assertEq(ownerKeys2[0], pubKey2[0], "X co-ordinate should have matched for ownerKeys2");
+        assertEq(ownerKeys2[1], pubKey2[1], "Y co-ordinate should have matched for ownerKeys2");
 
         // Check storage variables in device wallet
-        assertEq(deviceWallet.deviceUniqueIdentifier(), customDeviceUniqueIdentifiers[0], "Device unique identifier should have matched");
-        assertEq(address(deviceWallet.registry()), address(registry), "Registry should have been correct");
-        assertEq(address(deviceWallet.eSIMWalletFactory()), address(eSIMWalletFactory), "eSIMWalletFactory address in device wallet should have matched");
+        assertEq(deviceWallet.deviceUniqueIdentifier(), customDeviceUniqueIdentifiers[0], "Device unique identifier should have matched with deviceWallet");
+        assertEq(deviceWallet2.deviceUniqueIdentifier(), customDeviceUniqueIdentifiers[1], "Device unique identifier should have matched with deviceWallet2");
+        assertEq(address(deviceWallet.registry()), address(registry), "Registry should have been correct for deviceWallet");
+        assertEq(address(deviceWallet2.registry()), address(registry), "Registry should have been correct for deviceWallet2");
+        assertEq(address(deviceWallet.eSIMWalletFactory()), address(eSIMWalletFactory), "eSIMWalletFactory address in deviceWallet should have matched");
+        assertEq(address(deviceWallet2.eSIMWalletFactory()), address(eSIMWalletFactory), "eSIMWalletFactory address in deviceWallet2 should have matched");
         assertEq(deviceWallet.isValidESIMWallet(address(eSIMWallet1)), true, "ESIMWallet1 should have been set to valid");
         assertEq(deviceWallet.isValidESIMWallet(address(eSIMWallet2)), true, "ESIMWallet2 should have been set to valid");
+        assertEq(deviceWallet2.isValidESIMWallet(address(eSIMWallet3)), true, "ESIMWallet3 should have been set to valid");
         assertEq(deviceWallet.canPullETH(address(eSIMWallet1)), true, "ESIMWallet1 should be able to pull ETH");
         assertEq(deviceWallet.canPullETH(address(eSIMWallet2)), false, "ESIMWallet2 should not be able to pull ETH");
-        assertEq(address(deviceWallet.entryPoint()), address(entryPoint), "Entry point address should have been initialised");
-        assertEq(address(deviceWallet.verifier()), address(p256Verifier), "P256Verifier address should have been initialised");
-        assertEq(address(deviceWallet.getVaultAddress()), address(vault), "Vault address should have matched");
+        assertEq(deviceWallet2.canPullETH(address(eSIMWallet3)), true, "ESIMWallet3 should be able to pull ETH");
+        assertEq(address(deviceWallet.entryPoint()), address(entryPoint), "Entry point address should have been initialised in deviceWallet");
+        assertEq(address(deviceWallet2.entryPoint()), address(entryPoint), "Entry point address should have been initialised in deviceWallet2");
+        assertEq(address(deviceWallet.verifier()), address(p256Verifier), "P256Verifier address should have been initialised in deviceWallet");
+        assertEq(address(deviceWallet2.verifier()), address(p256Verifier), "P256Verifier address should have been initialised in deviceWallet2");
+        assertEq(address(deviceWallet.getVaultAddress()), address(vault), "Vault address should have matched in deviceWallet");
+        assertEq(address(deviceWallet2.getVaultAddress()), address(vault), "Vault address should have matched in deviceWallet2");
 
         bytes32[2] memory deviceWalletOwner = deviceWallet.getOwner();
-        assertEq(deviceWalletOwner[0], pubKey1[0], "X co-ordinate of device wallet owner should have matched");
-        assertEq(deviceWalletOwner[1], pubKey1[1], "Y co-ordinate of device wallet owner should have matched");
+        assertEq(deviceWalletOwner[0], pubKey1[0], "X co-ordinate of deviceWallet owner should have matched");
+        assertEq(deviceWalletOwner[1], pubKey1[1], "Y co-ordinate of deviceWallet owner should have matched");
+
+        bytes32[2] memory deviceWalletOwner2 = deviceWallet2.getOwner();
+        assertEq(deviceWalletOwner2[0], pubKey2[0], "X co-ordinate of deviceWallet2 owner should have matched");
+        assertEq(deviceWalletOwner2[1], pubKey2[1], "Y co-ordinate of deviceWallet2 owner should have matched");
 
         // Check storage variables in eSIM wallet
         assertEq(address(eSIMWallet1.eSIMWalletFactory()), address(eSIMWalletFactory), "eSIMWalletFactory address in eSIM wallet1 should have matched");
         assertEq(address(eSIMWallet2.eSIMWalletFactory()), address(eSIMWalletFactory), "eSIMWalletFactory address in eSIM wallet2 should have matched");
+        assertEq(address(eSIMWallet3.eSIMWalletFactory()), address(eSIMWalletFactory), "eSIMWalletFactory address in eSIM wallet3 should have matched");
         assertEq(address(eSIMWallet1.deviceWallet()), address(deviceWallet), "ESIM wallet1 should have correct device wallet");
         assertEq(address(eSIMWallet2.deviceWallet()), address(deviceWallet), "ESIM wallet2 should have correct device wallet");
-        assertEq(eSIMWallet1.eSIMUniqueIdentifier(), "ESIM_0_1", "ESIM unique identifier should not be empty");
+        assertEq(address(eSIMWallet3.deviceWallet()), address(deviceWallet2), "ESIM wallet3 should have correct device wallet");
+        assertEq(eSIMWallet1.eSIMUniqueIdentifier(), "ESIM_0_1", "ESIM unique identifier should not be empty for eSIMWallet1");
+        assertEq(eSIMWallet3.eSIMUniqueIdentifier(), "ESIM_1_1", "ESIM unique identifier should not be empty for eSIMWallet3");
         assertEq(bytes(eSIMWallet2.eSIMUniqueIdentifier()).length, 0, "ESIM unique identifier should be empty");
         assertEq(eSIMWallet1.newRequestedOwner(), address(0), "ESIM wallet1's new requested owner should have been address(0)");
         assertEq(eSIMWallet2.newRequestedOwner(), address(0), "ESIM wallet2's new requested owner should have been address(0)");
+        assertEq(eSIMWallet3.newRequestedOwner(), address(0), "ESIM wallet3's new requested owner should have been address(0)");
         assertEq(eSIMWallet1.getTransactionHistory().length, 0, "Transaction history1 should have been empty");
         assertEq(eSIMWallet2.getTransactionHistory().length, 0, "Transaction history2 should have been empty");
+        assertEq(eSIMWallet3.getTransactionHistory().length, 0, "Transaction history3 should have been empty");
         assertEq(eSIMWallet1.owner(), address(deviceWallet), "ESIMWallet1 owner should have been device wallet");
         assertEq(eSIMWallet2.owner(), address(deviceWallet), "ESIMWallet2 owner should have been device wallet");
+        assertEq(eSIMWallet3.owner(), address(deviceWallet2), "ESIMWallet3 owner should have been device wallet");
     }
 
     function test_deployESIMWallet() public {
@@ -439,5 +481,101 @@ contract DeviceWalletTest is DeployerBase {
         assertEq(history.length, 1, "Transaction history should have been updated");
         assertEq(history[0].dataBundleID, "DB_ID_0", "Data bundle ID should have been correct");
         assertEq(history[0].dataBundlePrice, 0.1 ether, "Data bundle price should have been correct");
+    }
+
+    function test_addESIMWallet_unauthorised() public {
+        deployWallets();
+
+        vm.startPrank(user1);
+        vm.expectRevert(bytes4(keccak256("OnlyRegistryOrDeviceWalletFactoryOrOwner()")));
+        deviceWallet.addESIMWallet(
+            address(eSIMWallet1),
+            true
+        );
+        vm.stopPrank();
+    }
+
+    function test_addESIMWallet_withoutTransferringOwnership() public {
+        deployWallets();
+
+        vm.startPrank(address(deviceWallet));
+        vm.expectRevert("Accept ownership first");
+        deviceWallet.addESIMWallet(
+            address(eSIMWallet3),
+            true
+        );
+        vm.stopPrank();
+    }
+
+    function test_addESIMWallet_alreadyOwnedBySelf() public {
+        deployWallets();
+
+        vm.startPrank(address(deviceWallet));
+        vm.expectRevert("ESIM wallet already owned");
+        deviceWallet.addESIMWallet(
+            address(eSIMWallet1),
+            true
+        );
+        vm.stopPrank();
+    }
+
+    function test_addESIMWallet_afterRemoveESIMWallet_andETHCallback() public {
+        // 1. deviceWallet requests transfer of ownership
+        deployWallets();
+
+        address currentOwner = eSIMWallet1.owner();
+        assertEq(currentOwner, address(deviceWallet), "Owner should have been device wallet");
+
+        vm.startPrank(currentOwner);
+        eSIMWallet1.requestTransferOwnership(address(deviceWallet2));
+        vm.stopPrank();
+
+        assertEq(eSIMWallet1.newRequestedOwner(), address(deviceWallet2), "newRequestedOwner should have been updated");
+
+        currentOwner = eSIMWallet1.owner();
+        assertEq(currentOwner, address(deviceWallet), "Owner should not have changed yet");
+
+        // 2. deviceWallet unbinds/removes eSIMWallet1
+        vm.deal(address(deviceWallet), 10 ether);
+        vm.deal(address(eSIMWallet1), 1 ether);
+
+        vm.startPrank(address(deviceWallet));
+        deviceWallet.removeESIMWallet(address(eSIMWallet1), true);
+        vm.stopPrank();
+
+        assertEq(address(deviceWallet).balance, 11 ether, "Device wallet balance should have increased to 11 ETH");
+        assertEq(address(eSIMWallet1).balance, 0, "eSIM wallet balance should have decreased to 0 ETH");
+
+        assertEq(registry.isESIMWalletOnStandby(address(eSIMWallet1)), true, "eSIM wallet should have been set to standby");
+        assertEq(registry.isESIMWalletValid(address(eSIMWallet1)), address(0), "Device wallet associated with the eSIM wallet should have been set to address(0)");
+        assertEq(deviceWallet.canPullETH(address(eSIMWallet1)), false, "ESIM wallet should not be allowed to pull ETH");
+        assertEq(deviceWallet.isValidESIMWallet(address(eSIMWallet1)), false, "ESIM wallet should have been set to invalid for the device wallet");
+
+        // 3. deviceWallet2 accepts ownership of eSIMWallet1
+        vm.deal(address(deviceWallet2), 5 ether);
+        vm.startPrank(address(deviceWallet2));
+        eSIMWallet1.acceptOwnershipTransfer();
+        vm.stopPrank();
+
+        address newOwner = eSIMWallet1.owner();
+        assertEq(newOwner, address(deviceWallet2), "newOwner should have accepted the ownership");
+
+        address requestedOwner = eSIMWallet1.newRequestedOwner();
+        assertEq(requestedOwner, address(0), "newRequestedOwner should have reset to address(0)");
+
+        // 4. deviceWallet2 adds/binds eSIMWallet1
+        vm.startPrank(address(deviceWallet2));
+        deviceWallet2.addESIMWallet(address(eSIMWallet1), false);
+        vm.stopPrank();
+
+        assertEq(address(deviceWallet2).balance, 5 ether, "Device wallet balance should have been the same");
+        assertEq(address(eSIMWallet1).balance, 0, "eSIM wallet balance should have decreased to 0 ETH");
+
+        assertEq(registry.isESIMWalletOnStandby(address(eSIMWallet1)), false, "eSIM wallet should have no longer been set as standby");
+        assertEq(registry.isESIMWalletValid(address(eSIMWallet1)), address(deviceWallet2), "Device wallet associated with the eSIM wallet should have been set to address(0)");
+        assertEq(deviceWallet2.canPullETH(address(eSIMWallet1)), false, "ESIM wallet should not be allowed to pull ETH from deviceWallet2");
+        assertEq(deviceWallet2.isValidESIMWallet(address(eSIMWallet1)), true, "ESIM wallet should have been set to valid for the deviceWallet2");
+
+        // 4. deviceWallet2 grants access to eSIMWallet1 to pull ETH (This could also be done in a single step during addESIMWallet function call)
     }
 }
