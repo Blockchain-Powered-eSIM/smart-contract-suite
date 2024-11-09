@@ -576,6 +576,30 @@ contract DeviceWalletTest is DeployerBase {
         assertEq(deviceWallet2.canPullETH(address(eSIMWallet1)), false, "ESIM wallet should not be allowed to pull ETH from deviceWallet2");
         assertEq(deviceWallet2.isValidESIMWallet(address(eSIMWallet1)), true, "ESIM wallet should have been set to valid for the deviceWallet2");
 
-        // TODO: 5. deviceWallet2 grants access to eSIMWallet1 to pull ETH (This could also be done in a single step during addESIMWallet function call)
+        // 5. deviceWallet2 grants access to eSIMWallet1 to pull ETH (This could also be done in a single step during addESIMWallet function call)
+        vm.startPrank(address(deviceWallet2));
+        deviceWallet2.toggleAccessToETH(address(eSIMWallet1), true);
+        vm.stopPrank();
+
+        assertEq(deviceWallet2.canPullETH(address(eSIMWallet1)), true, "ESIMWallet1 should have access to ETH for deviceWallet2");
+        assertEq(address(eSIMWallet1).balance, 0, "eSIMWallet1 balance should have been 0 ETH");
+
+        // 6. Add ETH to deviceWallet2, and buy data bundle for eSIMWallet1
+        DataBundleDetails memory _dataBundleDetail = DataBundleDetails(
+            "DB_ID_0",
+            1 ether
+        );
+
+        vm.startPrank(eSIMWalletAdmin);
+        eSIMWallet1.buyDataBundle(_dataBundleDetail);
+        vm.stopPrank();
+
+        assertEq(address(deviceWallet2).balance, 4 ether, "Device wallet balance should have been 4 ETH");
+        assertEq((deviceWallet2.getVaultAddress()).balance, 1 ether, "Vault balance should have increased by 1 ETH");
+
+        DataBundleDetails[] memory history = eSIMWallet1.getTransactionHistory();
+        assertEq(history.length, 1, "Transaction history should have been updated");
+        assertEq(history[0].dataBundleID, "DB_ID_0", "Transaction history's data bundle ID should have been correct");
+        assertEq(history[0].dataBundlePrice, 1 ether, "Transaction history's data bundle price should have been correct");
     }
 }
