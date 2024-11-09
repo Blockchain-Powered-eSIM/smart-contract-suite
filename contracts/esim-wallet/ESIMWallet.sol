@@ -87,6 +87,20 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         _;
     }
 
+    function _onlyDeviceWalletOrESIMWalletAdmin() private view {
+        if(
+            msg.sender != address(deviceWallet) &&
+            msg.sender != deviceWallet.registry().eSIMWalletAdmin()
+        ) {
+            revert Errors.OnlyDeviceWalletOrESIMWalletAdmin();
+        }
+    }
+
+    modifier onlyDeviceWalletOrESIMWalletAdmin() {
+        _onlyDeviceWalletOrESIMWalletAdmin();
+        _;
+    }
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() initializer {}
 
@@ -127,7 +141,9 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     /// @notice Function to make payment for the data bundle
     /// @param _dataBundleDetail Details of the data bundle being bought. (dataBundleID, dataBundlePrice)
     /// @return True if the transaction is successful
-    function buyDataBundle(DataBundleDetails memory _dataBundleDetail) public payable nonReentrant returns (bool) {
+    function buyDataBundle(
+        DataBundleDetails memory _dataBundleDetail
+    ) public payable onlyDeviceWalletOrESIMWalletAdmin nonReentrant returns (bool) {
         require(bytes(_dataBundleDetail.dataBundleID).length > 0, "Data bundle ID cannot be empty");
         require(_dataBundleDetail.dataBundlePrice > 0, "Price cannot be zero");
 
@@ -208,6 +224,19 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         _secureTransferOwnership();
     }
 
+    /// @notice Allow the owner device wallet to callback all the ETH from this eSIM wallet
+    /// @dev This function is generally called before the owner device wallet removes this eSIM wallet
+    /// @param _amount Amount of ETH to be sent
+    function sendETHToDeviceWallet(
+        uint256 _amount
+    ) external onlyDeviceWallet returns (uint256) {
+        require(owner() != address(0), "owner 0");
+
+        _transferETH(owner(), _amount);
+
+        return _amount;
+    }
+
     /// @notice Do not allow owner to directly call OwnableUpgradeable's transferOwnership function
     /// The owner should first call requestTransferOwnership, the recipient o
     function transferOwnership(address) public pure override {
@@ -216,12 +245,11 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
 
     /// @notice Instead of using transferOwnership, the contract uses secureTransferOwnership
     function _secureTransferOwnership() internal {
-        require(msg.sender == address(this), "Cannot call directly");
-
         address newOwner = newRequestedOwner;
         address previousOwner = owner();
         // Reset ownership transfer address
         newRequestedOwner = address(0);
+        deviceWallet = DeviceWallet(payable(newOwner));
         // Transfer ownership to the request address
         _transferOwnership(newOwner);
         emit OwnershipTransferred(previousOwner, owner());

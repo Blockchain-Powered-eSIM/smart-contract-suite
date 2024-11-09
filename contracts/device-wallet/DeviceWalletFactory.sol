@@ -306,7 +306,15 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
             _salt
         );
 
+        // Check if the device identifier is actually unique
         address wallet = registry.uniqueIdentifierToDeviceWallet(_deviceUniqueIdentifier);
+        if(wallet != address(0)) {
+            return DeviceWallet(payable(wallet));
+        }
+
+        // Check if P256 public key is actually unique
+        bytes32 keyHash = keccak256(abi.encode(_deviceWalletOwnerKey[0], _deviceWalletOwnerKey[1]));
+        wallet = registry.registeredP256Keys(keyHash);
         if(wallet != address(0)) {
             return DeviceWallet(payable(wallet));
         }

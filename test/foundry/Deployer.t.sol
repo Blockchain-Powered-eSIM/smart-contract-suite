@@ -36,4 +36,10 @@ contract Deployer is DeployerBase {
 
         assertEq(deviceWalletFactory.getCurrentDeviceWalletImplementation(), address(deviceWalletImpl));
     }
+
+    function test_eSIMWalletFactory_setUp() public view {
+        assertEq(address(eSIMWalletFactory.registry()), address(registry), "Registry address should have been correct");
+        assertNotEq(address(eSIMWalletFactory.beacon()), address(0), "Beacon address cannot be zero");
+        assertEq(eSIMWalletFactory.getCurrentESIMWalletImplementation(), address(eSIMWalletImpl), "eSIM wallet implementation address should have been correct");
+    }
 }

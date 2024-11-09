@@ -23,7 +23,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     /// @notice Emitted when the contract pays ETH for data bundle
     event ETHPaidForDataBundle(address indexed _vault, address indexed _eSIMWallet, uint256 indexed _amount);
 
-    /// @notice Emitted when ower updates ETH access to a particular eSIM wallet
+    /// @notice Emitted when owner updates ETH access to a particular eSIM wallet
     event ETHAccessUpdated(address indexed _eSIMWalletAddress, bool _hasAccessToETH);
 
     /// @notice Emitted when ETH is sent out from the contract
@@ -33,8 +33,14 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     /// @notice Emitted when eSIM wallet is added to this Device Wallet
     event ESIMWalletAdded(address indexed _eSIMWalletAddress, bool _hasAccessToETH, address indexed _caller);
 
-    /// @notice EMitted when the eSIM wallet is removed from this Device Wallet
+    /// @notice Emitted when the eSIM wallet is removed from this Device Wallet
     event ESIMWalletRemoved(address indexed _eSIMWalletAddress, address indexed _deviceWalletAddress, address indexed _caller);
+
+    /// @notice Emitted when the eSIM being remvoved has no ETH to call back to this device wallet
+    event NoETHToCallback();
+
+    /// @notice Emitted when the eSIM being removed sends back ETH to this device wallet
+    event ETHCalledBack(uint256 _amount);
 
     /// @notice Registry contract instance
     Registry public registry;
@@ -71,7 +77,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
             msg.sender != address(this) &&
             msg.sender != address(registry.deviceWalletFactory())
         ) {
-            revert Errors.OnlyDeviceWalletOrOwner();
+            revert Errors.OnlyDeviceWalletFactoryOrOwner();
         }
     }
 
@@ -145,7 +151,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     ) external onlyESIMWalletAdmin returns (address) {
         address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(address(this), _salt);
 
-        addESIMWallet(eSIMWalletAddress, _hasAccessToETH);
+        _addESIMWallet(eSIMWalletAddress, _hasAccessToETH);
 
         return eSIMWalletAddress;
     }
@@ -227,12 +233,27 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
 
     /// @notice Allow the device wallet factory or the wallet owner to add new eSIM wallet to this device wallet
     /// @param _eSIMWalletAddress Address of the eSIM wallet to be added
+    /// @param _hasAccessToETH `true` if the eSIM wallet is allowed to pull ETH from this device wallet, `false` otherwise
     function addESIMWallet(
         address _eSIMWalletAddress,
         bool _hasAccessToETH
     ) public onlyRegistryOrDeviceWalletFactoryOrOwner {
-        require(registry.isESIMWalletValid(_eSIMWalletAddress) == address(0), "Already has device wallet");
-        
+        _addESIMWallet(_eSIMWalletAddress, _hasAccessToETH);
+    }
+
+    /// @notice Internal function for binding eSIM wallet with the device wallet
+    function _addESIMWallet(
+        address _eSIMWalletAddress,
+        bool _hasAccessToETH
+    ) internal {
+        require(isValidESIMWallet[_eSIMWalletAddress] == false, "ESIM wallet already owned");
+        // If the eSIM wallet is a newly deployed one, then the owner will definitely be set
+        // during initialisation. This device wallet will be the owner.
+        // If the eSIM wallet already existed, then the previous owner (device wallet)
+        // must transfer the ownership to the eSIM wallet, and mark its status as standby. 
+        // And this device wallet must accept the ownership before calling the addESIMWallet function
+        require(ESIMWallet(payable(_eSIMWalletAddress)).owner() == address(this), "Accept ownership first");
+
         isValidESIMWallet[_eSIMWalletAddress] = true;
         canPullETH[_eSIMWalletAddress] = _hasAccessToETH;
 
@@ -248,17 +269,28 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
 
     /// @notice Allow device wallet factory or the wallet owner to remove any eSIM wallet bound with this device wallet
     /// @param _eSIMWalletAddress Address of the eSIM wallet to be removed
+    /// @param _callBackETH `true` if any remaining ETH needs to be called back from the ESIM wallet to this device wallet, `false` otherwise
     function removeESIMWallet(
-        address _eSIMWalletAddress
+        address _eSIMWalletAddress,
+        bool _callBackETH
     ) public onlyDeviceWalletFactoryOrOwner {
         require(isValidESIMWallet[_eSIMWalletAddress] == true, "Unknown eSIM wallet");
 
         isValidESIMWallet[_eSIMWalletAddress] = false;
         canPullETH[_eSIMWalletAddress] = false;
 
-        // Inform and update the registry about the newly added eSIM wallet to this device wallet
-        registry.updateDeviceWalletAssociatedWithESIMWallet(_eSIMWalletAddress, address(0));
+        // Inform and update the registry about the existingd eSIM wallet being removed from this device wallet
         registry.toggleESIMWalletStandbyStatus(_eSIMWalletAddress, true);
+        registry.updateDeviceWalletAssociatedWithESIMWallet(_eSIMWalletAddress, address(0));
+
+        if(_callBackETH) {
+            try ESIMWallet(payable(_eSIMWalletAddress)).sendETHToDeviceWallet(_eSIMWalletAddress.balance) returns (uint256 _amount) {
+                emit ETHCalledBack(_amount);
+            }
+            catch {
+                emit NoETHToCallback();
+            }
+        }
 
         emit ESIMWalletRemoved(_eSIMWalletAddress, address(this), msg.sender);
     }
