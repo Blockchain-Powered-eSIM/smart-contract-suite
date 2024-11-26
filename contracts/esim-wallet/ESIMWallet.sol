@@ -4,16 +4,14 @@ pragma solidity ^0.8.18;
 
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
-import {IOwnableESIMWallet} from "../interfaces/IOwnableESIMWallet.sol";
 import {DeviceWallet} from "../device-wallet/DeviceWallet.sol";
+import {Registry} from "../Registry.sol";
+import {Errors} from "../Errors.sol";
 import "../CustomStructs.sol";
 
-error OnlyDeviceWallet();
-error OnlyRegistry();
-error FailedToTransfer();
-
-contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
+contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable {
     using Address for address;
 
     /// Emitted when the eSIM wallet is deployed
@@ -39,6 +37,12 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
     /// @notice Emitted when ETH moves out of this contract
     event ETHSent(address indexed _recipient, uint256 _amount);
 
+    /// @notice Emitted when the current owner wants to transfer the ownership to a new device wallet
+    event OwnershipTransferRequested(address indexed _currentOwner, address indexed _newOwner);
+
+    /// @notice Emitted when the current owner revoked the ownership transfer request
+    event OwnershipTransferRevoked(address indexed _currentOwner, address indexed _revokedOwner);
+
     /// @notice Address of the eSIM wallet factory contract
     address public eSIMWalletFactory;
 
@@ -51,17 +55,49 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
     /// @notice Array of all the data bundle purchase
     DataBundleDetails[] public transactionHistory;
 
+    /// @notice Address of the owner (device wallet) that becomes the new owner
+    address public newRequestedOwner;
+
     /// @dev A map from owner and spender to transfer approval. Determines whether
     ///      the spender can transfer this wallet from the owner.
-    mapping(address => mapping(address => bool)) internal _isTransferApproved;
+    // mapping(address => mapping(address => bool)) internal _isTransferApproved;
 
     modifier onlyDeviceWallet() {
-        if (msg.sender != address(deviceWallet)) revert OnlyDeviceWallet();
+        if (msg.sender != address(deviceWallet)) revert Errors.OnlyDeviceWallet();
         _;
     }
 
     modifier onlyRegistry() {
-        if(msg.sender != address(deviceWallet.registry())) revert OnlyRegistry();
+        if(msg.sender != address(deviceWallet.registry())) revert Errors.OnlyRegistry();
+        _;
+    }
+
+    function _onlyESIMWalletAdminOrESIMWalletfactoryOrDeviceWallet() private view {
+        if (
+            msg.sender != eSIMWalletFactory &&
+            msg.sender != deviceWallet.registry().eSIMWalletAdmin() &&
+            msg.sender != address(deviceWallet)
+        ) {
+            revert Errors.OnlyESIMWalletAdminOrESIMWalletfactoryOrDeviceWallet();
+        }
+    }
+
+    modifier onlyESIMWalletAdminOrESIMWalletfactoryOrDeviceWallet() {
+        _onlyESIMWalletAdminOrESIMWalletfactoryOrDeviceWallet();
+        _;
+    }
+
+    function _onlyDeviceWalletOrESIMWalletAdmin() private view {
+        if(
+            msg.sender != address(deviceWallet) &&
+            msg.sender != deviceWallet.registry().eSIMWalletAdmin()
+        ) {
+            revert Errors.OnlyDeviceWalletOrESIMWalletAdmin();
+        }
+    }
+
+    modifier onlyDeviceWalletOrESIMWalletAdmin() {
+        _onlyDeviceWalletOrESIMWalletAdmin();
         _;
     }
 
@@ -77,14 +113,14 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
         address _eSIMWalletFactoryAddress,
         address _deviceWalletAddress
     ) external initializer {
-        require(_eSIMWalletFactoryAddress != address(0), "eSIM wallet factory address cannot be zero");
-        require(_deviceWalletAddress != address(0), "Device wallet address cannot be zero");
+        require(_eSIMWalletFactoryAddress != address(0), "_eSIMWalletFactoryAddress 0");
+        require(_deviceWalletAddress != address(0), "_deviceWalletAddress 0");
 
         eSIMWalletFactory = _eSIMWalletFactoryAddress;
         deviceWallet = DeviceWallet(payable(_deviceWalletAddress));
 
-        // TODO: check if device wallet can perform all owner related tasks
         __Ownable_init(_deviceWalletAddress);
+        __ReentrancyGuard_init();
 
         emit ESIMWalletDeployed(address(this), _deviceWalletAddress, _deviceWalletAddress);
     }
@@ -94,8 +130,8 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
     /// @dev This function can only be called once
     /// @param _eSIMUniqueIdentifier String that uniquely identifies eSIM wallet
     function setESIMUniqueIdentifier(string calldata _eSIMUniqueIdentifier) external onlyDeviceWallet {
-        require(bytes(eSIMUniqueIdentifier).length == 0, "eSIM unique identifier already initialised");
-        require(bytes(_eSIMUniqueIdentifier).length != 0, "eSIM unique identifier cannot be zero");
+        require(bytes(eSIMUniqueIdentifier).length == 0, "Already initialised");
+        require(bytes(_eSIMUniqueIdentifier).length != 0, "_eSIMUniqueIdentifier 0");
 
         eSIMUniqueIdentifier = _eSIMUniqueIdentifier;
 
@@ -105,7 +141,9 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
     /// @notice Function to make payment for the data bundle
     /// @param _dataBundleDetail Details of the data bundle being bought. (dataBundleID, dataBundlePrice)
     /// @return True if the transaction is successful
-    function buyDataBundle(DataBundleDetails memory _dataBundleDetail) public payable returns (bool) {
+    function buyDataBundle(
+        DataBundleDetails memory _dataBundleDetail
+    ) public payable onlyDeviceWalletOrESIMWalletAdmin nonReentrant returns (bool) {
         require(bytes(_dataBundleDetail.dataBundleID).length > 0, "Data bundle ID cannot be empty");
         require(_dataBundleDetail.dataBundlePrice > 0, "Price cannot be zero");
 
@@ -150,61 +188,81 @@ contract ESIMWallet is IOwnableESIMWallet, Initializable, OwnableUpgradeable {
     }
 
     /// @dev Returns the current owner of the wallet
-    function owner() public view override(IOwnableESIMWallet, OwnableUpgradeable) returns (address) {
+    function owner() public view override returns (address) {
         return OwnableUpgradeable.owner();
     }
 
-    // TODO: check if the approval can be set by device wallet directly or does it happen via entry point
-    /// @dev Transfers ownership from the current owner to another address
-    /// @param newOwner The address that will be the new owner
-    function transferOwnership(address newOwner) public override(IOwnableESIMWallet, OwnableUpgradeable) {
-        // Only the admin of deviceWalletFactory contract can transfer ownership
-        require(isTransferApproved(owner(), msg.sender), "OwnableSmartWallet: Transfer is not allowed");
+    /// @notice Function to request transfer of ownership (a 2-step transfer) to a new device wallet
+    /// @param _newOwner Address of the new device wallet to transfer ownership of this wallet
+    /** 
+    *   @dev newRequestedOwner is deliberately not checked for address(0).
+    *   This helps in scenario where the owner sends ownership request to a wrong address
+    *   The owner (device wallet) can simply call this function to overwrite the request
+    */
+    function requestTransferOwnership(address _newOwner) external onlyDeviceWallet {
+        Registry registry = deviceWallet.registry();
+        require(registry.isDeviceWalletValid(_newOwner), "Invalid _newOwner");
 
-        // Approval is revoked, in order to avoid unintended transfer allowance
-        // if this wallet ever returns to the previous owner
-        if (msg.sender != owner()) {
-            _setApproval(owner(), msg.sender, false);
+        // If the owner wants to retain the ownership of the contract, 
+        // they simply revoke the request by requesting a transfer to themselves
+        if(_newOwner == owner()) {
+            address revokedAddress = newRequestedOwner;
+            newRequestedOwner = address(0);
+            emit OwnershipTransferRevoked(owner(), revokedAddress);
+            return;
         }
+
+        newRequestedOwner = _newOwner;
+
+        emit OwnershipTransferRequested(owner(), newRequestedOwner);
+    }
+
+    /// @notice Function to be called by the new owner to accept the ownership
+    function acceptOwnershipTransfer() external {
+        require(msg.sender == newRequestedOwner, "Not approved");
+
+        _secureTransferOwnership();
+    }
+
+    /// @notice Allow the owner device wallet to callback all the ETH from this eSIM wallet
+    /// @dev This function is generally called before the owner device wallet removes this eSIM wallet
+    /// @param _amount Amount of ETH to be sent
+    function sendETHToDeviceWallet(
+        uint256 _amount
+    ) external onlyDeviceWallet returns (uint256) {
+        require(owner() != address(0), "owner 0");
+
+        _transferETH(owner(), _amount);
+
+        return _amount;
+    }
+
+    /// @notice Do not allow owner to directly call OwnableUpgradeable's transferOwnership function
+    /// The owner should first call requestTransferOwnership, the recipient o
+    function transferOwnership(address) public pure override {
+        require(false, "Use acceptOwnershipTransfer instead.");
+    }
+
+    /// @notice Instead of using transferOwnership, the contract uses secureTransferOwnership
+    function _secureTransferOwnership() internal {
+        address newOwner = newRequestedOwner;
+        address previousOwner = owner();
+        // Reset ownership transfer address
+        newRequestedOwner = address(0);
+        deviceWallet = DeviceWallet(payable(newOwner));
+        // Transfer ownership to the request address
         _transferOwnership(newOwner);
-    }
-
-    /// @dev Returns whether the address 'to' can transfer a wallet from address 'from'
-    /// @param from The owner address
-    /// @param to The spender address
-    /// @notice The owner can always transfer the wallet to someone, i.e.,
-    ///         approval from an address to itself is always 'true'
-    function isTransferApproved(address from, address to) public view override returns (bool) {
-        return from == to ? true : _isTransferApproved[from][to];
-    }
-
-    /// @dev Changes authorization status for transfer approval from msg.sender to an address
-    /// @param to Address to change allowance status for
-    /// @param status The new approval status
-    function setApproval(address to, bool status) external override onlyOwner {
-        require(to != address(0), "OwnableSmartWallet: Approval cannot be set for zero address");
-        _setApproval(msg.sender, to, status);
-    }
-
-    /// @param from The owner address
-    /// @param to The spender address
-    /// @param status Status of approval
-    function _setApproval(address from, address to, bool status) internal {
-        bool statusChanged = _isTransferApproved[from][to] != status;
-        _isTransferApproved[from][to] = status;
-        if (statusChanged) {
-            emit TransferApprovalChanged(from, to, status);
-        }
+        emit OwnershipTransferred(previousOwner, owner());
     }
 
     /// @dev Internal function to send ETH from this contract
     function _transferETH(address _recipient, uint256 _amount) internal virtual {
-        require(address(this).balance >= _amount, "Not enough ETH in the wallet. Please topup ETH into the wallet");
-        require(_recipient != address(0), "Recipient cannot be zero address");
+        require(address(this).balance >= _amount, "Not enough ETH");
+        require(_recipient != address(0), "_recipient 0");
 
         if (_amount > 0) {
             (bool success,) = _recipient.call{value: _amount}("");
-            if (!success) revert FailedToTransfer();
+            if (!success) revert Errors.FailedToTransfer();
             else emit ETHSent(_recipient, _amount);
         }
     }

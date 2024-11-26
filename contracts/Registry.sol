@@ -11,20 +11,18 @@ import {RegistryHelper} from "./RegistryHelper.sol";
 import {DeviceWalletFactory} from "./device-wallet/DeviceWalletFactory.sol";
 import {ESIMWalletFactory} from "./esim-wallet/ESIMWalletFactory.sol";
 import {P256Verifier} from "./P256Verifier.sol";
+import {Errors} from "./Errors.sol";
 
 import "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
-
-error OnlyDeviceWallet();
-error OnlyDeviceWalletFactory();
 
 /// @notice Contract for deploying the factory contracts and maintaining registry
 contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, RegistryHelper {
 
     /// @notice Entry point contract address (one entryPoint per chain)
-    IEntryPoint public immutable entryPoint;
+    IEntryPoint public entryPoint;
 
     ///@notice eSIM wallet project admin address
-    address public admin;
+    address public eSIMWalletAdmin;
 
     /// @notice Address of the vault that receives payments for the eSIM data bundles
     address public vault;
@@ -33,20 +31,17 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
     address public upgradeManager;
 
     modifier onlyDeviceWallet() {
-        if(isDeviceWalletValid[msg.sender] != true) revert OnlyDeviceWallet();
+        if(isDeviceWalletValid[msg.sender] != true) revert Errors.OnlyDeviceWallet();
         _;
     }
 
     modifier onlyDeviceWalletFactory() {
-        if(msg.sender != address(deviceWalletFactory)) revert OnlyDeviceWalletFactory();
+        if(msg.sender != address(deviceWalletFactory)) revert Errors.OnlyDeviceWalletFactory();
         _;
     }
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(IEntryPoint _entryPoint) initializer {
-        entryPoint = _entryPoint;
-        _disableInitializers();
-    }
+    constructor() initializer {}
 
     /// @dev Owner based upgrades
     function _authorizeUpgrade(address newImplementation)
@@ -62,76 +57,46 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
         address _eSIMWalletAdmin,
         address _vault,
         address _upgradeManager,
+        address _deviceWalletFactory,
+        address _eSIMWalletFactory,
+        IEntryPoint _entryPoint,
         P256Verifier _verifier
     ) external initializer {
-        require(_eSIMWalletAdmin != address(0), "eSIM Admin address cannot be zero address");
-        require(_vault != address(0), "Vault address cannot be zero address");
-        require(_upgradeManager != address(0), "Upgrade Manager address cannot be zero address");
+        require(_eSIMWalletAdmin != address(0), "_eSIMWalletAdmin 0");
+        require(_vault != address(0), "_vault 0");
+        require(_upgradeManager != address(0), "_upgradeManager 0");
 
-        admin = _eSIMWalletAdmin;
+        entryPoint = _entryPoint;
+        eSIMWalletAdmin = _eSIMWalletAdmin;
         vault = _vault;
         upgradeManager = _upgradeManager;
 
-        address deviceWalletFactoryImplementation = address(new DeviceWalletFactory(entryPoint, _verifier));
-        ERC1967Proxy deviceWalletFactoryProxy = new ERC1967Proxy(
-            deviceWalletFactoryImplementation,
-            abi.encodeCall(
-                DeviceWalletFactory(deviceWalletFactoryImplementation).initialize,
-                (address(this), _eSIMWalletAdmin, _vault, _upgradeManager)
-            )
-        );
-        deviceWalletFactory = DeviceWalletFactory(address(deviceWalletFactoryProxy));
-
-        address eSIMWalletFactoryImplementation = address(new ESIMWalletFactory());
-        ERC1967Proxy eSIMWalletFactoryProxy = new ERC1967Proxy(
-            eSIMWalletFactoryImplementation,
-            abi.encodeCall(
-                ESIMWalletFactory(eSIMWalletFactoryImplementation).initialize,
-                (address(this), _upgradeManager)
-            )
-        );
-
-        eSIMWalletFactory = ESIMWalletFactory(address(eSIMWalletFactoryProxy));
+        deviceWalletFactory = DeviceWalletFactory(_deviceWalletFactory);
+        eSIMWalletFactory = ESIMWalletFactory(_eSIMWalletFactory);
 
         __Ownable_init(_upgradeManager);
+
+        emit RegistryInitialized(
+            _eSIMWalletAdmin, 
+            _vault, 
+            _upgradeManager, 
+            address(deviceWalletFactory), 
+            address(eSIMWalletFactory),
+            address(_verifier)
+        );
     }
 
     /// @notice Function to add or update the lazy wallet registry address
     function addOrUpdateLazyWalletRegistryAddress(
         address _lazyWalletRegistry
     ) public onlyOwner returns (address) {
-        require(_lazyWalletRegistry != address(0), "Cannot be zero address");
+        require(_lazyWalletRegistry != address(0), "_lazyWalletRegistry 0");
 
         lazyWalletRegistry = _lazyWalletRegistry;
 
         emit UpdatedLazyWalletRegistryAddress(_lazyWalletRegistry);
 
         return lazyWalletRegistry;
-    }
-
-    /// Allow anyone to deploy a device wallet and an eSIM wallet for themselves
-    /// @param _deviceUniqueIdentifier Unique device identifier associated with the device
-    /// @return Return device wallet address and eSIM wallet address
-    function deployWallet(
-        string calldata _deviceUniqueIdentifier,
-        bytes32[2] memory _deviceWalletOwnerKey,
-        uint256 _salt
-    ) external returns (address, address) {
-        require(bytes(_deviceUniqueIdentifier).length >= 1, "Device unique identifier cannot be empty");
-        require(
-            uniqueIdentifierToDeviceWallet[_deviceUniqueIdentifier] == address(0),
-            "Device wallet already exists"
-        );
-
-        address deviceWallet = deviceWalletFactory.deployDeviceWallet(_deviceUniqueIdentifier, _deviceWalletOwnerKey, _salt);
-        _updateDeviceWalletInfo(deviceWallet, _deviceUniqueIdentifier, _deviceWalletOwnerKey);
-
-        address eSIMWallet = eSIMWalletFactory.deployESIMWallet(deviceWallet, _salt);
-        _updateESIMInfo(eSIMWallet, deviceWallet);
-
-        emit WalletDeployed(_deviceUniqueIdentifier, deviceWallet, eSIMWallet);
-
-        return (deviceWallet, eSIMWallet);
     }
 
     function updateDeviceWalletAssociatedWithESIMWallet(
@@ -152,5 +117,18 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
         bytes32[2] memory _deviceWalletOwnerKey
     ) external onlyDeviceWalletFactory {
         _updateDeviceWalletInfo(_deviceWallet, _deviceUniqueIdentifier, _deviceWalletOwnerKey);
+    }
+
+    /// @notice Update eSIM standby status when being moved from one device wallet to another
+    /// @param _eSIMWalletAddress Address of the eSIM wallet
+    /// @param _isOnStandby Set to true when no device wallet is associated, false otherwise
+    function toggleESIMWalletStandbyStatus(
+        address _eSIMWalletAddress,
+        bool _isOnStandby
+    ) public onlyDeviceWallet {
+        require(isESIMWalletValid[_eSIMWalletAddress] == msg.sender, "Unauthorised caller");
+
+        isESIMWalletOnStandby[_eSIMWalletAddress] = _isOnStandby;
+        emit ESIMWalletSetOnStandby(_eSIMWalletAddress, _isOnStandby, msg.sender);
     }
 }
