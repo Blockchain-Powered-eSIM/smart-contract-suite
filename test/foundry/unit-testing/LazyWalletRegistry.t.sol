@@ -61,6 +61,8 @@ contract LazyWalletRegistryTest is DeployerBase {
         for(uint256 i=0; i<listOfESIMIdentifiers.length; ++i) {
             console.log(listOfESIMIdentifiers[i]);
         }
+        assertEq(listOfESIMIdentifiers.length, 1);
+        assertEq(listOfESIMIdentifiers[0], duplicateESIMUniqueIdentifiers[0][1]);
     }
 
     /// Populate the history again, to see if the details get updated with new data
