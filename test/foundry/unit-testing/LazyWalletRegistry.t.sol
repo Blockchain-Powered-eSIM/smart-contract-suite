@@ -42,6 +42,29 @@ contract LazyWalletRegistryTest is DeployerBase {
         assertEq(storedData[0].dataBundlePrice, 21);
     }
 
+    function test_batchPopulateHistory_duplicateData() public {
+        vm.startPrank(eSIMWalletAdmin);
+        lazyWalletRegistry.batchPopulateHistory(
+            customDeviceUniqueIdentifiers,
+            duplicateESIMUniqueIdentifiers,
+            customDataBundleDetails
+        );
+        vm.stopPrank();
+
+        DataBundleDetails[] memory storedData = lazyWalletRegistry.getDeviceIdentifierToESIMDetails(
+            customDeviceUniqueIdentifiers[0],
+            duplicateESIMUniqueIdentifiers[0][1]
+        );
+        assertEq(storedData.length, 5, "DataBundleDetails array length should be 5");
+
+        string[] memory listOfESIMIdentifiers = lazyWalletRegistry.getESIMIdentifiersAssociatedWithDeviceIdentifier(customDeviceUniqueIdentifiers[0]);
+        for(uint256 i=0; i<listOfESIMIdentifiers.length; ++i) {
+            console.log(listOfESIMIdentifiers[i]);
+        }
+        assertEq(listOfESIMIdentifiers.length, 1);
+        assertEq(listOfESIMIdentifiers[0], duplicateESIMUniqueIdentifiers[0][1]);
+    }
+
     /// Populate the history again, to see if the details get updated with new data
     function test_batchPopulateHistory_addNewData() public {
         test_batchPopulateHistory();

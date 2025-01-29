@@ -50,6 +50,7 @@ contract DeployerBase is Test {
 
     string[] public customDeviceUniqueIdentifiers = [ "Device_1", "Device_2", "Device_3", "Device_4", "Device_5" ];
     string[][] public customESIMUniqueIdentifiers;
+    string [][] public duplicateESIMUniqueIdentifiers;
     DataBundleDetails[][] public customDataBundleDetails;
     bytes32[2][] public listOfOwnerKeys;
 
@@ -168,6 +169,7 @@ contract DeployerBase is Test {
         initializeCustomDataBundleDetails();
         initializeIncorrectParams();
         initializeDeviceOwnerKeys();
+        initializeDuplicateESIMUniqueIdentifiers();
     }
 
     function initializeCustomESIMUniqueIdentifiers() public {
@@ -176,6 +178,14 @@ contract DeployerBase is Test {
         customESIMUniqueIdentifiers.push(["eSIM_3_1", "eSIM_3_2", "eSIM_3_3", "eSIM_3_4"]);
         customESIMUniqueIdentifiers.push(["eSIM_4_1", "eSIM_4_2", "eSIM_4_3", "eSIM_4_4", "eSIM_4_5", "eSIM_4_6"]);
         customESIMUniqueIdentifiers.push(["eSIM_5_1", "eSIM_5_2"]);
+    }
+
+    function initializeDuplicateESIMUniqueIdentifiers() public {
+        duplicateESIMUniqueIdentifiers.push(["eSIM_1_1", "eSIM_1_1", "eSIM_1_1", "eSIM_1_1", "eSIM_1_1"]);
+        duplicateESIMUniqueIdentifiers.push(["eSIM_2_1", "eSIM_2_2", "eSIM_2_3", "eSIM_2_4", "eSIM_2_5", "eSIM_2_6"]);
+        duplicateESIMUniqueIdentifiers.push(["eSIM_3_1", "eSIM_3_2", "eSIM_3_3", "eSIM_3_4"]);
+        duplicateESIMUniqueIdentifiers.push(["eSIM_4_1", "eSIM_4_2", "eSIM_4_3", "eSIM_4_4", "eSIM_4_5", "eSIM_4_6"]);
+        duplicateESIMUniqueIdentifiers.push(["eSIM_5_1", "eSIM_5_2"]);
     }
 
     function initializeCustomDataBundleDetails() public {
