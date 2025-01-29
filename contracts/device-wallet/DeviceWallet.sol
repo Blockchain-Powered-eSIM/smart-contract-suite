@@ -276,13 +276,6 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     ) public onlyDeviceWalletFactoryOrOwner {
         require(isValidESIMWallet[_eSIMWalletAddress] == true, "Unknown eSIM wallet");
 
-        isValidESIMWallet[_eSIMWalletAddress] = false;
-        canPullETH[_eSIMWalletAddress] = false;
-
-        // Inform and update the registry about the existingd eSIM wallet being removed from this device wallet
-        registry.toggleESIMWalletStandbyStatus(_eSIMWalletAddress, true);
-        registry.updateDeviceWalletAssociatedWithESIMWallet(_eSIMWalletAddress, address(0));
-
         if(_callBackETH) {
             try ESIMWallet(payable(_eSIMWalletAddress)).sendETHToDeviceWallet(_eSIMWalletAddress.balance) returns (uint256 _amount) {
                 emit ETHCalledBack(_amount);
@@ -291,6 +284,13 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
                 emit NoETHToCallback();
             }
         }
+
+        isValidESIMWallet[_eSIMWalletAddress] = false;
+        canPullETH[_eSIMWalletAddress] = false;
+
+        // Inform and update the registry about the existingd eSIM wallet being removed from this device wallet
+        registry.toggleESIMWalletStandbyStatus(_eSIMWalletAddress, true);
+        registry.updateDeviceWalletAssociatedWithESIMWallet(_eSIMWalletAddress, address(0));
 
         emit ESIMWalletRemoved(_eSIMWalletAddress, address(this), msg.sender);
     }
