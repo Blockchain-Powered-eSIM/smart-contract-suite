@@ -300,15 +300,19 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
             "DeviceIdentifier cannot be empty"
         );
 
+        // Encoding msg.sender with salt prevents deployments and DoS from unauthorised actors
+        bytes32 salt = keccak256(abi.encode(msg.sender, _salt));
+        uint256 uniqueSalt = uint256(salt);
         address addr = getAddress(
             _deviceWalletOwnerKey,
             _deviceUniqueIdentifier,
-            _salt
+            uniqueSalt
         );
 
         // Check if the device identifier is actually unique
         address wallet = registry.uniqueIdentifierToDeviceWallet(_deviceUniqueIdentifier);
         if(wallet != address(0)) {
+            require(wallet == addr, "Wallet already exists with different owner");
             return DeviceWallet(payable(wallet));
         }
 
@@ -316,6 +320,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
         bytes32 keyHash = keccak256(abi.encode(_deviceWalletOwnerKey[0], _deviceWalletOwnerKey[1]));
         wallet = registry.registeredP256Keys(keyHash);
         if(wallet != address(0)) {
+            require(wallet == addr, "Wallet already exists with different owner key");
             return DeviceWallet(payable(wallet));
         }
 
@@ -331,7 +336,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
 
         deviceWallet = DeviceWallet(
             payable(
-                new BeaconProxy{salt : bytes32(_salt)}(
+                new BeaconProxy{salt : bytes32(uniqueSalt)}(
                     address(beacon),
                     abi.encodeCall(
                         DeviceWallet.init, 

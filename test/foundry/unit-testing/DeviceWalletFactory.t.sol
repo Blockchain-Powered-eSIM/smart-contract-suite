@@ -312,11 +312,15 @@ contract DeviceWalletFactoryTest is DeployerBase {
     }
 
     function test_getAddress() public {
+        uint256 salt = 999;
+        address admin = deviceWalletFactory.eSIMWalletAdmin();
+        uint256 uniqueSalt = uint256(keccak256(abi.encode(admin, salt)));
+
         // Check for device wallet address before its deployed
         address calculatedDeviceWalletAddress1 = deviceWalletFactory.getAddress(
             pubKey1,
             customDeviceUniqueIdentifiers[0],
-            999
+            uniqueSalt
         );
         assertNotEq(calculatedDeviceWalletAddress1, address(0), "Device wallet address cannot be address(0)");
 
@@ -331,7 +335,7 @@ contract DeviceWalletFactoryTest is DeployerBase {
         address calculatedDeviceWalletAddress2 = deviceWalletFactory.getAddress(
             pubKey1,
             customDeviceUniqueIdentifiers[0],
-            999
+            uniqueSalt
         );
         assertEq(calculatedDeviceWalletAddress1, calculatedDeviceWalletAddress2, "Device wallet address before and after deployment should have matched");
     }
@@ -361,11 +365,17 @@ contract DeviceWalletFactoryTest is DeployerBase {
     }
 
     function test_createAccount() public {
+        uint256 salt = 999;
+
+        // createAccount calculates uniqueSalt by itself, whereas getAccount doesn't
+        bytes32 modifiedSalt = keccak256(abi.encode(user1, salt));
+        uint256 uniqueSalt = uint256(modifiedSalt);
+
         // Check for device wallet address before its deployed
         address calculatedDeviceWalletAddress1 = deviceWalletFactory.getAddress(
             pubKey1,
             customDeviceUniqueIdentifiers[0],
-            999
+            uniqueSalt
         );
         assertNotEq(calculatedDeviceWalletAddress1, address(0), "Device wallet address cannot be address(0)");
 
@@ -374,7 +384,7 @@ contract DeviceWalletFactoryTest is DeployerBase {
         MockDeviceWallet deviceWallet = MockDeviceWallet(payable(deviceWalletFactory.createAccount(
             customDeviceUniqueIdentifiers[0],
             pubKey1,
-            999,
+            salt,
             0
         )));
         vm.stopPrank();
@@ -399,11 +409,17 @@ contract DeviceWalletFactoryTest is DeployerBase {
     }
 
     function test_createAccount_callTwice() public {
+        uint256 salt = 999;
+
+        // createAccount calculates uniqueSalt by itself, whereas getAccount doesn't
+        bytes32 modifiedSalt = keccak256(abi.encode(user1, salt));
+        uint256 uniqueSalt = uint256(modifiedSalt);
+
         // Check for device wallet address before its deployed
         address calculatedDeviceWalletAddress1 = deviceWalletFactory.getAddress(
             pubKey1,
             customDeviceUniqueIdentifiers[0],
-            999
+            uniqueSalt
         );
         assertNotEq(calculatedDeviceWalletAddress1, address(0), "Device wallet address cannot be address(0)");
 
@@ -412,7 +428,7 @@ contract DeviceWalletFactoryTest is DeployerBase {
         MockDeviceWallet deviceWallet = MockDeviceWallet(payable(deviceWalletFactory.createAccount(
             customDeviceUniqueIdentifiers[0],
             pubKey1,
-            999,
+            salt,
             0
         )));
         vm.stopPrank();
@@ -439,7 +455,7 @@ contract DeviceWalletFactoryTest is DeployerBase {
         address calculatedDeviceWalletAddress2 = deviceWalletFactory.getAddress(
             pubKey1,
             customDeviceUniqueIdentifiers[0],
-            999
+            uniqueSalt
         );
         assertEq(calculatedDeviceWalletAddress1, calculatedDeviceWalletAddress2, "Device wallet address before and after deployment should have matched");
 
@@ -448,7 +464,7 @@ contract DeviceWalletFactoryTest is DeployerBase {
         MockDeviceWallet deviceWallet2 = MockDeviceWallet(payable(deviceWalletFactory.createAccount(
             customDeviceUniqueIdentifiers[0],
             pubKey1,
-            999,
+            salt,
             0
         )));
         vm.stopPrank();
