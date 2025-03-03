@@ -168,7 +168,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
             listOfDataBundleDetails[i] = deviceIdentifierToESIMDetails[_deviceUniqueIdentifier][eSIMUniqueIdentifiers[i]];
         }
 
-        (deviceWallet, eSIMWallets) = registry.deployLazyWallet(
+        (deviceWallet, eSIMWallets) = registry.deployLazyWallet{value: msg.value}(
             _deviceOwnerPublicKey,
             _deviceUniqueIdentifier,
             _salt,

@@ -111,7 +111,7 @@ contract RegistryHelper {
 
         // Deploys device smart wallet
         // Updates device wallet info via Registry
-        address deviceWallet = address(deviceWalletFactory.createAccount(_deviceUniqueIdentifier, _deviceWalletOwnerKey, _salt, _depositAmount));
+        address deviceWallet = address(deviceWalletFactory.createAccount{value: _depositAmount}(_deviceUniqueIdentifier, _deviceWalletOwnerKey, _salt, _depositAmount));
 
         address[] memory eSIMWallets = new address[](_eSIMUniqueIdentifiers.length);
 
