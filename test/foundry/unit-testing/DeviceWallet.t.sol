@@ -602,4 +602,121 @@ contract DeviceWalletTest is DeployerBase {
         assertEq(history[0].dataBundleID, "DB_ID_0", "Transaction history's data bundle ID should have been correct");
         assertEq(history[0].dataBundlePrice, 1 ether, "Transaction history's data bundle price should have been correct");
     }
+
+    // FIXED [C-01]: Malicious but registered Device Wallet can steal an eSIM Wallet
+    /**
+        1. Alice owns an eSIM Wallet (0xESIM1), linked to her device (0xDeviceAlice)**.
+        2. Alice requests ownership transfer of 0xESIM1 to Bob
+        3. Before Bob could accept ownership; Carol, a malicious actor tries to claim 0xESIM1
+        3. Carol calls: updateDeviceWalletAssociatedWithESIMWallet(0xESIM1, 0xDeviceCarol);
+        4. Aliceʼs eSIM Wallet is now controlled by Carolʼs device.
+        5. Carol gains control over Aliceʼs eSIM wallet.
+     */
+    function test_transferESIMWallet_frontrun() public {
+        // 1. deviceWallet requests transfer of ownership
+        deployWallets();
+
+        address currentOwner = eSIMWallet1.owner();
+        assertEq(currentOwner, address(deviceWallet), "Owner should have been device wallet");
+
+        vm.startPrank(currentOwner);
+        eSIMWallet1.requestTransferOwnership(address(deviceWallet2));
+        vm.stopPrank();
+
+        assertEq(eSIMWallet1.newRequestedOwner(), address(deviceWallet2), "newRequestedOwner should have been updated");
+
+        currentOwner = eSIMWallet1.owner();
+        assertEq(currentOwner, address(deviceWallet), "Owner should not have changed yet");
+
+        // 2. Alice (deviceWallet) unbinds/removes eSIMWallet1
+        vm.deal(address(deviceWallet), 10 ether);
+        vm.deal(address(eSIMWallet1), 1 ether);
+
+        vm.startPrank(address(deviceWallet));
+        deviceWallet.removeESIMWallet(address(eSIMWallet1), true);
+        vm.stopPrank();
+
+        assertEq(address(deviceWallet).balance, 11 ether, "Device wallet balance should have increased to 11 ETH");
+        assertEq(address(eSIMWallet1).balance, 0, "eSIM wallet balance should have decreased to 0 ETH");
+
+        assertEq(registry.isESIMWalletOnStandby(address(eSIMWallet1)), true, "eSIM wallet should have been set to standby");
+        assertEq(registry.isESIMWalletValid(address(eSIMWallet1)), address(0), "Device wallet associated with the eSIM wallet should have been set to address(0)");
+        assertEq(deviceWallet.canPullETH(address(eSIMWallet1)), false, "ESIM wallet should not be allowed to pull ETH");
+        assertEq(deviceWallet.isValidESIMWallet(address(eSIMWallet1)), false, "ESIM wallet should have been set to invalid for the device wallet");
+
+        // Deploy Carol's device wallet
+        address admin = deviceWalletFactory.eSIMWalletAdmin();
+        vm.startPrank(admin);
+        Wallets memory wallet3 = deviceWalletFactory.deployDeviceWalletAsAdmin(
+            customDeviceUniqueIdentifiers[2],
+            pubKey3,
+            910,
+            0
+        );
+        vm.stopPrank();
+        MockDeviceWallet deviceWallet3 = MockDeviceWallet(payable(wallet3.deviceWallet));
+
+        // 3. Carol (deviceWallet2) tries to steal standby eSIMWallet (eSIMWallet1)
+        vm.startPrank(address(deviceWallet3));
+        vm.expectRevert("Unauthorise caller or already assigned");
+        registry.updateDeviceWalletAssociatedWithESIMWallet(
+            address(eSIMWallet1),
+            address(deviceWallet3)
+        );
+        vm.stopPrank();
+
+        currentOwner = eSIMWallet1.owner();
+        assertNotEq(address(deviceWallet3), eSIMWallet1.owner(), "Critical Error: ESIMWallet stolen");
+
+        // 4. deviceWallet2 accepts ownership of eSIMWallet1
+        vm.deal(address(deviceWallet2), 5 ether);
+        vm.startPrank(address(deviceWallet2));
+        eSIMWallet1.acceptOwnershipTransfer();
+        vm.stopPrank();
+
+        address newOwner = eSIMWallet1.owner();
+        assertEq(newOwner, address(deviceWallet2), "newOwner should have accepted the ownership");
+
+        address requestedOwner = eSIMWallet1.newRequestedOwner();
+        assertEq(requestedOwner, address(0), "newRequestedOwner should have reset to address(0)");
+
+        // 5. deviceWallet2 adds/binds eSIMWallet1
+        vm.startPrank(address(deviceWallet2));
+        deviceWallet2.addESIMWallet(address(eSIMWallet1), false);
+        vm.stopPrank();
+
+        assertEq(address(deviceWallet2).balance, 5 ether, "Device wallet balance should have been the same");
+        assertEq(address(eSIMWallet1).balance, 0, "eSIM wallet balance should have decreased to 0 ETH");
+
+        assertEq(registry.isESIMWalletOnStandby(address(eSIMWallet1)), false, "eSIM wallet should have no longer been set as standby");
+        assertEq(registry.isESIMWalletValid(address(eSIMWallet1)), address(deviceWallet2), "Device wallet associated with the eSIM wallet should have been set to address(0)");
+        assertEq(deviceWallet2.canPullETH(address(eSIMWallet1)), false, "ESIM wallet should not be allowed to pull ETH from deviceWallet2");
+        assertEq(deviceWallet2.isValidESIMWallet(address(eSIMWallet1)), true, "ESIM wallet should have been set to valid for the deviceWallet2");
+
+        // 6. deviceWallet2 grants access to eSIMWallet1 to pull ETH (This could also be done in a single step during addESIMWallet function call)
+        vm.startPrank(address(deviceWallet2));
+        deviceWallet2.toggleAccessToETH(address(eSIMWallet1), true);
+        vm.stopPrank();
+
+        assertEq(deviceWallet2.canPullETH(address(eSIMWallet1)), true, "ESIMWallet1 should have access to ETH for deviceWallet2");
+        assertEq(address(eSIMWallet1).balance, 0, "eSIMWallet1 balance should have been 0 ETH");
+
+        // 7. Add ETH to deviceWallet2, and buy data bundle for eSIMWallet1
+        DataBundleDetails memory _dataBundleDetail = DataBundleDetails(
+            "DB_ID_0",
+            1 ether
+        );
+
+        vm.startPrank(eSIMWalletAdmin);
+        eSIMWallet1.buyDataBundle(_dataBundleDetail);
+        vm.stopPrank();
+
+        assertEq(address(deviceWallet2).balance, 4 ether, "Device wallet balance should have been 4 ETH");
+        assertEq((deviceWallet2.getVaultAddress()).balance, 1 ether, "Vault balance should have increased by 1 ETH");
+
+        DataBundleDetails[] memory history = eSIMWallet1.getTransactionHistory();
+        assertEq(history.length, 1, "Transaction history should have been updated");
+        assertEq(history[0].dataBundleID, "DB_ID_0", "Transaction history's data bundle ID should have been correct");
+        assertEq(history[0].dataBundlePrice, 1 ether, "Transaction history's data bundle price should have been correct");
+    }
 }

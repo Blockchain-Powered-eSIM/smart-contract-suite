@@ -10,6 +10,7 @@ import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Own
 import {RegistryHelper} from "./RegistryHelper.sol";
 import {DeviceWalletFactory} from "./device-wallet/DeviceWalletFactory.sol";
 import {ESIMWalletFactory} from "./esim-wallet/ESIMWalletFactory.sol";
+import {ESIMWallet} from "./esim-wallet/ESIMWallet.sol";
 import {P256Verifier} from "./P256Verifier.sol";
 import {Errors} from "./Errors.sol";
 
@@ -103,6 +104,12 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
         address _eSIMWalletAddress,
         address _deviceWalletAddress
     ) external onlyDeviceWallet {
+        require(
+            ESIMWallet(payable(_eSIMWalletAddress)).owner() == msg.sender ||
+            isESIMWalletValid[_eSIMWalletAddress] == msg.sender,
+            "Unauthorise caller or already assigned"
+        );
+
         isESIMWalletValid[_eSIMWalletAddress] = _deviceWalletAddress;
         emit UpdatedDeviceWalletassociatedWithESIMWallet(_eSIMWalletAddress, _deviceWalletAddress);
     }
