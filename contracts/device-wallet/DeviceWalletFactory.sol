@@ -309,6 +309,11 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
             uniqueSalt
         );
 
+        // Prefund the account with msg.value
+        if (msg.value > 0 && _depositAmount <= msg.value) {
+            entryPoint.depositTo{value: _depositAmount}(addr);
+        }
+
         // Check if the device identifier is actually unique
         address wallet = registry.uniqueIdentifierToDeviceWallet(_deviceUniqueIdentifier);
         if(wallet != address(0)) {
@@ -327,11 +332,6 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
         uint256 codeSize = addr.code.length;
         if (codeSize > 0) {
             return DeviceWallet(payable(addr));
-        }
-
-        // Prefund the account with msg.value
-        if (msg.value > 0 && _depositAmount <= msg.value) {
-            entryPoint.depositTo{value: _depositAmount}(addr);
         }
 
         deviceWallet = DeviceWallet(
