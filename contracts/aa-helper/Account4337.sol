@@ -220,6 +220,7 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
      * @param amount to withdraw
      */
     function withdrawDepositTo(address payable withdrawAddress, uint256 amount) public onlySelf {
+        require(withdrawAddress != address(0), "Cannot withdraw to address(0)");
         entryPoint.withdrawTo(withdrawAddress, amount);
     }
 
