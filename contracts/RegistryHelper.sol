@@ -86,6 +86,9 @@ contract RegistryHelper {
     ///         If bool is `true`, it means that the eSIM wallet has no device wallet associated to it yet
     mapping(address => bool) public isESIMWalletOnStandby;
 
+    // Reserved storage gap for future upgrades
+    uint256[50] private __gap;
+
     modifier onlyLazyWalletRegistry() {
         if(msg.sender != lazyWalletRegistry) revert Errors.OnlyLazyWalletRegistry();
         _;
