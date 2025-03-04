@@ -232,7 +232,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
         for (uint256 i = 0; i < numberOfDeviceWallets; ++i) {
             require(_depositAmounts[i] <= availableETH, "Out of ETH");
             
-            walletsDeployed[i] = deployDeviceWalletAsAdmin(
+            walletsDeployed[i] = _deployDeviceWallet(
                 _deviceUniqueIdentifiers[i],
                 _deviceWalletOwnersKey[i],
                 _salts[i],
@@ -251,19 +251,19 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
         return walletsDeployed;
     }
 
-    /// @dev Allow admin to deploy a device wallet (and an eSIM wallet) for given unique device identifiers
+    /// @dev Internal function to allow admin to deploy a device wallet (and an eSIM wallet) for given unique device identifiers
     /// @param _deviceUniqueIdentifier Unique device identifier for the device wallet
     /// @param _deviceWalletOwnerKey User's P256 public key (owner of the device wallet and respective eSIM wallets)
     /// @param _depositAmount Amount of ETH to be deposited into the device wallet
     /// @return Deployed device wallet address
-    function deployDeviceWalletAsAdmin(
+    function _deployDeviceWallet(
         string memory _deviceUniqueIdentifier,
         bytes32[2] memory _deviceWalletOwnerKey,
         uint256 _salt,
         uint256 _depositAmount
-    ) public payable onlyAdmin returns (Wallets memory) {
+    ) internal returns (Wallets memory) {
         address deviceWalletAddress = address(
-            createAccount(
+            _createAccount(
                 _deviceUniqueIdentifier,
                 _deviceWalletOwnerKey,
                 _salt,
@@ -295,6 +295,30 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
         uint256 _salt,
         uint256 _depositAmount
     ) public payable returns (DeviceWallet deviceWallet) {
+        
+        deviceWallet = _createAccount(
+            _deviceUniqueIdentifier,
+            _deviceWalletOwnerKey,
+            _salt,
+            _depositAmount
+        );
+
+
+        if(msg.value > _depositAmount) {
+            // return excess ETH
+            uint256 excessETH = msg.value - _depositAmount;
+            
+            (bool success,) = msg.sender.call{value: excessETH}("");
+            require(success, "ETH return failed");
+        }
+    }
+
+    function _createAccount(
+        string memory _deviceUniqueIdentifier,
+        bytes32[2] memory _deviceWalletOwnerKey,
+        uint256 _salt,
+        uint256 _depositAmount
+    ) internal returns (DeviceWallet deviceWallet) {
         require(
             bytes(_deviceUniqueIdentifier).length != 0, 
             "DeviceIdentifier cannot be empty"
@@ -310,7 +334,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
         );
 
         // Prefund the account with msg.value
-        if (msg.value > 0 && _depositAmount <= msg.value) {
+        if (msg.value > 0) {
             entryPoint.depositTo{value: _depositAmount}(addr);
         }
 

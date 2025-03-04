@@ -15,6 +15,7 @@ contract DeviceWalletTest is DeployerBase {
 
     MockDeviceWallet deviceWallet;
     MockDeviceWallet deviceWallet2;
+    MockDeviceWallet deviceWallet3; // [C-01]: Carol's (Malicious actor) device wallet
     MockESIMWallet eSIMWallet1;     // has access to ETH, has eSIM identifier set, belongs to deviceWallet1        
     MockESIMWallet eSIMWallet2;     // no access to ETH, no eSIM identifier set, belongs to deviceWallet1
     MockESIMWallet eSIMWallet3;     // has access to ETH, has eSIM identifier set, belongs to deviceWallet2
@@ -22,30 +23,39 @@ contract DeviceWalletTest is DeployerBase {
     function deployWallets() public {
         address admin = deviceWalletFactory.eSIMWalletAdmin();
 
-        vm.startPrank(admin);
-        Wallets memory wallet = deviceWalletFactory.deployDeviceWalletAsAdmin(
-            customDeviceUniqueIdentifiers[0],
-            pubKey1,
-            999,
-            0
-        );
-        vm.stopPrank();
+        string[] memory deviceUniqueIdentifiers = new string[](3);
+        bytes32[2][] memory listOfKeys = new bytes32[2][](3);
+        uint256[] memory salts = new uint256[](3);
+        uint256[] memory deposits = new uint256[](3);
 
-        // Deploy new device wallet
-        vm.startPrank(admin);
-        Wallets memory wallet2 = deviceWalletFactory.deployDeviceWalletAsAdmin(
-            customDeviceUniqueIdentifiers[1],
-            pubKey2,
-            919,
-            0
+        deviceUniqueIdentifiers[0] = "Device_1";
+        deviceUniqueIdentifiers[1] = "Device_2";
+        deviceUniqueIdentifiers[2] = "Device_3";
+        listOfKeys[0] = listOfOwnerKeys[0];
+        listOfKeys[1] = listOfOwnerKeys[1];
+        listOfKeys[2] = listOfOwnerKeys[2];
+        salts[0] = 999;
+        salts[1] = 919;
+        salts[2] = 910;
+        deposits[0] = 0;
+        deposits[1] = 0;
+        deposits[2] = 0;
+
+        vm.startPrank(eSIMWalletAdmin);
+        Wallets[] memory wallets = deviceWalletFactory.deployDeviceWalletForUsers(
+            deviceUniqueIdentifiers,
+            listOfKeys,
+            salts,
+            deposits
         );
         vm.stopPrank();
 
         // eSIMWallet1 -> has access to ETH, has eSIM identifier set
-        deviceWallet = MockDeviceWallet(payable(wallet.deviceWallet));
-        deviceWallet2 = MockDeviceWallet(payable(wallet2.deviceWallet));
-        eSIMWallet1 = MockESIMWallet(payable(wallet.eSIMWallet));
-        eSIMWallet3 = MockESIMWallet(payable(wallet2.eSIMWallet));
+        deviceWallet = MockDeviceWallet(payable(wallets[0].deviceWallet));
+        deviceWallet2 = MockDeviceWallet(payable(wallets[1].deviceWallet));
+        deviceWallet3 = MockDeviceWallet(payable(wallets[2].deviceWallet));
+        eSIMWallet1 = MockESIMWallet(payable(wallets[0].eSIMWallet));
+        eSIMWallet3 = MockESIMWallet(payable(wallets[1].eSIMWallet));
 
         vm.startPrank(admin);
         // eSIMWallet1 -> has access to ETH, has eSIM identifier set
@@ -644,19 +654,7 @@ contract DeviceWalletTest is DeployerBase {
         assertEq(deviceWallet.canPullETH(address(eSIMWallet1)), false, "ESIM wallet should not be allowed to pull ETH");
         assertEq(deviceWallet.isValidESIMWallet(address(eSIMWallet1)), false, "ESIM wallet should have been set to invalid for the device wallet");
 
-        // Deploy Carol's device wallet
-        address admin = deviceWalletFactory.eSIMWalletAdmin();
-        vm.startPrank(admin);
-        Wallets memory wallet3 = deviceWalletFactory.deployDeviceWalletAsAdmin(
-            customDeviceUniqueIdentifiers[2],
-            pubKey3,
-            910,
-            0
-        );
-        vm.stopPrank();
-        MockDeviceWallet deviceWallet3 = MockDeviceWallet(payable(wallet3.deviceWallet));
-
-        // 3. Carol (deviceWallet2) tries to steal standby eSIMWallet (eSIMWallet1)
+        // 3. Carol (deviceWallet3) tries to steal standby eSIMWallet (eSIMWallet1)
         vm.startPrank(address(deviceWallet3));
         vm.expectRevert("Unauthorise caller or already assigned");
         registry.updateDeviceWalletAssociatedWithESIMWallet(

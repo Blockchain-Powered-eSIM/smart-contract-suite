@@ -21,13 +21,23 @@ contract ESIMWalletTest is DeployerBase {
     function deployWallets() public {
         address admin = deviceWalletFactory.eSIMWalletAdmin();
 
+        string[] memory deviceUniqueIdentifiers = new string[](1);
+        bytes32[2][] memory listOfKeys = new bytes32[2][](1);
+        uint256[] memory salts = new uint256[](1);
+        uint256[] memory deposits = new uint256[](1);
+
+        deviceUniqueIdentifiers[0] = customDeviceUniqueIdentifiers[0];
+        listOfKeys[0] = listOfOwnerKeys[0];
+        salts[0] = 999;
+        deposits[0] = 0;
+
         vm.startPrank(admin);
-        Wallets memory wallet = deviceWalletFactory.deployDeviceWalletAsAdmin(
-            customDeviceUniqueIdentifiers[0],
-            pubKey1,
-            999,
-            0
-        );
+        Wallets memory wallet = deviceWalletFactory.deployDeviceWalletForUsers(
+            deviceUniqueIdentifiers,
+            listOfKeys,
+            salts,
+            deposits
+        )[0];
         vm.stopPrank();
 
         // eSIMWallet1 -> has access to ETH, has eSIM identifier set
@@ -182,14 +192,24 @@ contract ESIMWalletTest is DeployerBase {
 
         address admin = deviceWalletFactory.eSIMWalletAdmin();
 
+        string[] memory deviceUniqueIdentifiers = new string[](1);
+        bytes32[2][] memory listOfKeys = new bytes32[2][](1);
+        uint256[] memory salts = new uint256[](1);
+        uint256[] memory deposits = new uint256[](1);
+
+        deviceUniqueIdentifiers[0] = customDeviceUniqueIdentifiers[1];
+        listOfKeys[0] = listOfOwnerKeys[1];
+        salts[0] = 919;
+        deposits[0] = 0;
+
         // Deploy new device wallet
         vm.startPrank(admin);
-        Wallets memory wallet = deviceWalletFactory.deployDeviceWalletAsAdmin(
-            customDeviceUniqueIdentifiers[1],
-            pubKey2,
-            919,
-            0
-        );
+        Wallets memory wallet = deviceWalletFactory.deployDeviceWalletForUsers(
+            deviceUniqueIdentifiers,
+            listOfKeys,
+            salts,
+            deposits
+        )[0];
         vm.stopPrank();
 
         deviceWallet2 = MockDeviceWallet(payable(wallet.deviceWallet));

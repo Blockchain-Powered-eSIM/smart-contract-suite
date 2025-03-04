@@ -153,112 +153,6 @@ contract DeviceWalletFactoryTest is DeployerBase {
         assertEq(admin, eSIMWalletAdmin, "Admin should not have updated");
     }
 
-    function test_deployDeviceWalletAsAdmin_withoutAdmin() public {
-        vm.startPrank(user1);
-        vm.expectRevert(bytes4(keccak256("OnlyAdmin()")));
-        deviceWalletFactory.deployDeviceWalletAsAdmin(
-            customDeviceUniqueIdentifiers[0],
-            pubKey1,
-            999,
-            0
-        );
-        vm.stopPrank();
-    }
-
-    function test_deployDeviceWalletAsAdmin() public {
-        address admin = deviceWalletFactory.eSIMWalletAdmin();
-
-        vm.startPrank(admin);
-        Wallets memory wallet = deviceWalletFactory.deployDeviceWalletAsAdmin(
-            customDeviceUniqueIdentifiers[0],
-            pubKey1,
-            999,
-            0
-        );
-        vm.stopPrank();
-
-        MockDeviceWallet deviceWallet = MockDeviceWallet(payable(wallet.deviceWallet));
-        MockESIMWallet eSIMWallet = MockESIMWallet(payable(wallet.eSIMWallet));
-
-        assertNotEq(address(deviceWallet), address(0), "Device wallet address cannot be address(0)");
-        assertNotEq(address(eSIMWallet), address(0), "ESIM wallet address cannot be address(0)");
-
-        // Check storage variables in registry
-        bytes32 keyHash = keccak256(abi.encode(pubKey1[0], pubKey1[1]));
-        assertEq(registry.registeredP256Keys(keyHash), address(deviceWallet), "P256 key hash should have been tied to the device wallet address");
-        assertEq(registry.isDeviceWalletValid(address(deviceWallet)), true, "isDeviceWalletValid mapping should have been updated");
-        assertEq(registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[0]), address(deviceWallet), "uniqueIdentifierToDeviceWallet should have been updated");
-        assertEq(registry.isESIMWalletValid(address(eSIMWallet)), address(deviceWallet), "ESIM wallet should have been associated with device wallet");
-        assertEq(registry.isESIMWalletOnStandby(address(eSIMWallet)), false, "ESIM wallet should not have been on standby");
-        
-        bytes32[2] memory ownerKeys = registry.getDeviceWalletToOwner(address(deviceWallet));
-        assertEq(ownerKeys[0], pubKey1[0], "X co-ordinate should have matched");
-        assertEq(ownerKeys[1], pubKey1[1], "Y co-ordinate should have matched");
-
-        // Check storage variables in device wallet
-        assertEq(deviceWallet.deviceUniqueIdentifier(), customDeviceUniqueIdentifiers[0], "Device unique identifier should have matched");
-        assertEq(address(deviceWallet.registry()), address(registry), "Registry should have been correct");
-        assertEq(address(deviceWallet.eSIMWalletFactory()), address(eSIMWalletFactory), "eSIMWalletFactory address in device wallet should have matched");
-        assertEq(deviceWallet.isValidESIMWallet(address(eSIMWallet)), true, "ESIMWallet should have been set to valid");
-        assertEq(deviceWallet.canPullETH(address(eSIMWallet)), true, "ESIMWallet should be able to pull ETH");
-
-        // Check storage variables in eSIM wallet
-        assertEq(address(eSIMWallet.eSIMWalletFactory()), address(eSIMWalletFactory), "eSIMWalletFactory address in eSIM wallet should have matched");
-        assertEq(address(eSIMWallet.deviceWallet()), address(deviceWallet), "ESIM wallet should have correct device wallet");
-        assertEq(bytes(eSIMWallet.eSIMUniqueIdentifier()).length, 0, "ESIM unique identifier should be empty");
-        assertEq(eSIMWallet.newRequestedOwner(), address(0), "ESIM wallet's new requested owner should have been address(0)");
-        assertEq(eSIMWallet.getTransactionHistory().length, 0, "Transaction history should have been empty");
-        assertEq(eSIMWallet.owner(), address(deviceWallet), "ESIMWallet owner should have been device wallet");
-    }
-
-    function test_deployDeviceWalletAsAdmin_withETHDeposit() public {
-        address admin = deviceWalletFactory.eSIMWalletAdmin();
-
-        vm.deal(admin, 10 ether);
-        vm.startPrank(admin);
-        Wallets memory wallet = deviceWalletFactory.deployDeviceWalletAsAdmin{value: 1 ether}(
-            customDeviceUniqueIdentifiers[0],
-            pubKey1,
-            999,
-            1000000000000000000 // 1 ether
-        );
-        vm.stopPrank();
-
-        MockDeviceWallet deviceWallet = MockDeviceWallet(payable(wallet.deviceWallet));
-        MockESIMWallet eSIMWallet = MockESIMWallet(payable(wallet.eSIMWallet));
-
-        assertNotEq(address(deviceWallet), address(0), "Device wallet address cannot be address(0)");
-        assertNotEq(address(eSIMWallet), address(0), "ESIM wallet address cannot be address(0)");
-        assertEq(address(deviceWallet).balance, 1 ether, "Device wallet balance should have been 1 ether");
-
-        // Check storage variables in registry
-        bytes32 keyHash = keccak256(abi.encode(pubKey1[0], pubKey1[1]));
-        assertEq(registry.registeredP256Keys(keyHash), address(deviceWallet), "P256 key hash should have been tied to the device wallet address");
-        assertEq(registry.isDeviceWalletValid(address(deviceWallet)), true, "isDeviceWalletValid mapping should have been updated");
-        assertEq(registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[0]), address(deviceWallet), "uniqueIdentifierToDeviceWallet should have been updated");
-        assertEq(registry.isESIMWalletValid(address(eSIMWallet)), address(deviceWallet), "ESIM wallet should have been associated with device wallet");
-        assertEq(registry.isESIMWalletOnStandby(address(eSIMWallet)), false, "ESIM wallet should not have been on standby");
-        
-        bytes32[2] memory ownerKeys = registry.getDeviceWalletToOwner(address(deviceWallet));
-        assertEq(ownerKeys[0], pubKey1[0], "X co-ordinate should have matched");
-        assertEq(ownerKeys[1], pubKey1[1], "Y co-ordinate should have matched");
-
-        // Check storage variables in device wallet
-        assertEq(deviceWallet.deviceUniqueIdentifier(), customDeviceUniqueIdentifiers[0], "Device unique identifier should have matched");
-        assertEq(address(deviceWallet.registry()), address(registry), "Registry should have been correct");
-        assertEq(address(deviceWallet.eSIMWalletFactory()), address(eSIMWalletFactory), "eSIMWalletFactory address in device wallet should have matched");
-        assertEq(deviceWallet.isValidESIMWallet(address(eSIMWallet)), true, "ESIMWallet should have been set to valid");
-        assertEq(deviceWallet.canPullETH(address(eSIMWallet)), true, "ESIMWallet should be able to pull ETH");
-
-        // Check storage variables in eSIM wallet
-        assertEq(address(eSIMWallet.eSIMWalletFactory()), address(eSIMWalletFactory), "eSIMWalletFactory address in eSIM wallet should have matched");
-        assertEq(address(eSIMWallet.deviceWallet()), address(deviceWallet), "ESIM wallet should have correct device wallet");
-        assertEq(bytes(eSIMWallet.eSIMUniqueIdentifier()).length, 0, "ESIM unique identifier should be empty");
-        assertEq(eSIMWallet.newRequestedOwner(), address(0), "ESIM wallet's new requested owner should have been address(0)");
-        assertEq(eSIMWallet.getTransactionHistory().length, 0, "Transaction history should have been empty");
-        assertEq(eSIMWallet.owner(), address(deviceWallet), "ESIMWallet owner should have been device wallet");
-    }
-
     function test_updateDeviceWalletImplementation_admin() public {
         address admin = deviceWalletFactory.eSIMWalletAdmin();
 
@@ -272,13 +166,23 @@ contract DeviceWalletFactoryTest is DeployerBase {
         // First deploy a device wallet
         address admin = deviceWalletFactory.eSIMWalletAdmin();
 
+        string[] memory deviceUniqueIdentifiers = new string[](1);
+        bytes32[2][] memory listOfKeys = new bytes32[2][](1);
+        uint256[] memory salts = new uint256[](1);
+        uint256[] memory deposits = new uint256[](1);
+
+        deviceUniqueIdentifiers[0] = customDeviceUniqueIdentifiers[0];
+        listOfKeys[0] = listOfOwnerKeys[0];
+        salts[0] = 999;
+        deposits[0] = 0;
+
         vm.startPrank(admin);
-        Wallets memory wallet = deviceWalletFactory.deployDeviceWalletAsAdmin(
-            customDeviceUniqueIdentifiers[0],
-            pubKey1,
-            999,
-            0
-        );
+        Wallets memory wallet = deviceWalletFactory.deployDeviceWalletForUsers(
+            deviceUniqueIdentifiers,
+            listOfKeys,
+            salts,
+            deposits
+        )[0];
         vm.stopPrank();
 
         // Now upgrade the Device Wallet implementation contract
@@ -324,8 +228,25 @@ contract DeviceWalletFactoryTest is DeployerBase {
         );
         assertNotEq(calculatedDeviceWalletAddress1, address(0), "Device wallet address cannot be address(0)");
 
+        string[] memory deviceUniqueIdentifiers = new string[](1);
+        bytes32[2][] memory listOfKeys = new bytes32[2][](1);
+        uint256[] memory salts = new uint256[](1);
+        uint256[] memory deposits = new uint256[](1);
+
+        deviceUniqueIdentifiers[0] = customDeviceUniqueIdentifiers[0];
+        listOfKeys[0] = listOfOwnerKeys[0];
+        salts[0] = salt;
+        deposits[0] = 0;
+
         // Deploy the device wallet
-        test_deployDeviceWalletAsAdmin_withETHDeposit();
+        vm.startPrank(eSIMWalletAdmin);
+        deviceWalletFactory.deployDeviceWalletForUsers(
+            deviceUniqueIdentifiers,
+            listOfKeys,
+            salts,
+            deposits
+        )[0];
+        vm.stopPrank();
 
         // Check if the actual device wallet address matches the calculated device wallet address
         address actualDeviceWalletAddress1 = registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[0]);
@@ -338,30 +259,6 @@ contract DeviceWalletFactoryTest is DeployerBase {
             uniqueSalt
         );
         assertEq(calculatedDeviceWalletAddress1, calculatedDeviceWalletAddress2, "Device wallet address before and after deployment should have matched");
-    }
-
-    /**
-        @dev The deployDeviceWalletAsAdmin deploys both device and eSIM wallet.
-        Although the createAccount returns the address of the already deployed device wallet,
-        it won't fail if the deployDeviceWalletAsAdmin is called twice.
-        The reason this function would fail is, because it attempts to redeploy the eSIM wallets.
-    */
-    function test_deployDeviceWalletAsAdmin_callTwiceFail() public {
-        // Deploy the device wallet
-        test_deployDeviceWalletAsAdmin_withETHDeposit();
-
-        address admin = deviceWalletFactory.eSIMWalletAdmin();
-
-        vm.deal(admin, 10 ether);
-        vm.startPrank(admin);
-        vm.expectRevert();
-        deviceWalletFactory.deployDeviceWalletAsAdmin{value: 1 ether}(
-            customDeviceUniqueIdentifiers[0],
-            pubKey1,
-            999,
-            1000000000000000000 // 1 ether
-        );
-        vm.stopPrank();
     }
 
     function test_createAccount() public {
@@ -471,6 +368,53 @@ contract DeviceWalletFactoryTest is DeployerBase {
 
         // Check if the actual device wallet address matches the calculated device wallet address
         assertEq(address(deviceWallet2), address(deviceWallet), "New device wallet should not have been deployed again");
+    }
+
+    function test_createAccount_excessETH() public {
+        uint256 salt = 999;
+
+        // createAccount calculates uniqueSalt by itself, whereas getAccount doesn't
+        bytes32 modifiedSalt = keccak256(abi.encode(user1, salt));
+        uint256 uniqueSalt = uint256(modifiedSalt);
+
+        // Check for device wallet address before its deployed
+        address calculatedDeviceWalletAddress1 = deviceWalletFactory.getAddress(
+            pubKey1,
+            customDeviceUniqueIdentifiers[0],
+            uniqueSalt
+        );
+        assertNotEq(calculatedDeviceWalletAddress1, address(0), "Device wallet address cannot be address(0)");
+
+        // Deploy the device wallet
+        vm.startPrank(user1);
+        vm.deal(user1, 10 ether);
+        MockDeviceWallet deviceWallet = MockDeviceWallet(payable(deviceWalletFactory.createAccount{value: 5 ether} (
+            customDeviceUniqueIdentifiers[0],
+            pubKey1,
+            salt,
+            1 ether
+        )));
+        vm.stopPrank();
+
+        // Check if the actual device wallet address matches the calculated device wallet address
+        assertEq(address(deviceWallet), calculatedDeviceWalletAddress1, "Calculated device wallet address should have matched the actual device wallet address");
+        assertEq(user1.balance, 9 ether, "User should have received unused ETH");
+        assertEq(address(deviceWallet).balance, 1 ether, "Device wallet balance should have been 1 ether");
+
+        // Check storage variables in registry
+        bytes32 keyHash = keccak256(abi.encode(pubKey1[0], pubKey1[1]));
+        assertEq(registry.registeredP256Keys(keyHash), address(deviceWallet), "P256 key hash should have been tied to the device wallet address");
+        assertEq(registry.isDeviceWalletValid(address(deviceWallet)), true, "isDeviceWalletValid mapping should have been updated");
+        assertEq(registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[0]), address(deviceWallet), "uniqueIdentifierToDeviceWallet should have been updated");
+        
+        bytes32[2] memory ownerKeys = registry.getDeviceWalletToOwner(address(deviceWallet));
+        assertEq(ownerKeys[0], pubKey1[0], "X co-ordinate should have matched");
+        assertEq(ownerKeys[1], pubKey1[1], "Y co-ordinate should have matched");
+
+        // Check storage variables in device wallet
+        assertEq(deviceWallet.deviceUniqueIdentifier(), customDeviceUniqueIdentifiers[0], "Device unique identifier should have matched");
+        assertEq(address(deviceWallet.registry()), address(registry), "Registry should have been correct");
+        assertEq(address(deviceWallet.eSIMWalletFactory()), address(eSIMWalletFactory), "eSIMWalletFactory address in device wallet should have matched");
     }
 
     function test_deployDeviceWalletForUsers_withoutAdmin() public {
