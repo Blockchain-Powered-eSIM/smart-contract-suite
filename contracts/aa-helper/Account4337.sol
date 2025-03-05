@@ -149,6 +149,7 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
         }
 
         if (_validateSignature(messageToVerify, signature)) {
+            require(block.timestamp <= returnIfValid.validUntil, "Signature expired");
             return _packValidationData(returnIfValid);
         }
         return SIG_VALIDATION_FAILED;

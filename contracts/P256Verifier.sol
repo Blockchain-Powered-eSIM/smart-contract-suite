@@ -8,17 +8,13 @@ import "./WebAuthn.sol";
 // Proxies a webAuthnSignature verification call to the Webauthn library.
 contract P256Verifier {
 
-    /// @dev Signature should expire after 3 minutes.
     function verifySignature(
         bytes memory message,
         bool requireUserVerification,
         WebAuthnSignature memory webAuthnSignature,
         uint256 x,
-        uint256 y,
-        uint256 deadline
+        uint256 y
     ) public view returns (bool) {
-        require(block.timestamp <= deadline, "Signature expired");
-
         return
             WebAuthn.verifySignature({
                 challenge: message,
