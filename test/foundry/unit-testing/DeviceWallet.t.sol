@@ -277,7 +277,7 @@ contract DeviceWalletTest is DeployerBase {
         vm.deal(address(eSIMWallet1), 1 ether);
 
         vm.startPrank(user1);
-        vm.expectRevert(bytes4(keccak256("OnlyDeviceWalletFactoryOrOwner()")));
+        vm.expectRevert(bytes4(keccak256("OnlySelfOrAssociatedESIMWallet()")));
         deviceWallet.removeESIMWallet(address(eSIMWallet1), true);
         vm.stopPrank();
     }
@@ -530,13 +530,16 @@ contract DeviceWalletTest is DeployerBase {
     }
 
     function test_addESIMWallet_afterRemoveESIMWallet_andETHCallback() public {
-        // 1. deviceWallet requests transfer of ownership
         deployWallets();
+        vm.deal(address(deviceWallet), 10 ether);
+        vm.deal(address(eSIMWallet1), 1 ether);
 
         address currentOwner = eSIMWallet1.owner();
         assertEq(currentOwner, address(deviceWallet), "Owner should have been device wallet");
 
         vm.startPrank(currentOwner);
+        // 1. deviceWallet requests transfer of ownership
+        // 2. remove eSIM wallet from the device wallet
         eSIMWallet1.requestTransferOwnership(address(deviceWallet2));
         vm.stopPrank();
 
@@ -545,14 +548,6 @@ contract DeviceWalletTest is DeployerBase {
         currentOwner = eSIMWallet1.owner();
         assertEq(currentOwner, address(deviceWallet), "Owner should not have changed yet");
 
-        // 2. deviceWallet unbinds/removes eSIMWallet1
-        vm.deal(address(deviceWallet), 10 ether);
-        vm.deal(address(eSIMWallet1), 1 ether);
-
-        vm.startPrank(address(deviceWallet));
-        deviceWallet.removeESIMWallet(address(eSIMWallet1), true);
-        vm.stopPrank();
-
         assertEq(address(deviceWallet).balance, 11 ether, "Device wallet balance should have increased to 11 ETH");
         assertEq(address(eSIMWallet1).balance, 0, "eSIM wallet balance should have decreased to 0 ETH");
 
@@ -560,6 +555,22 @@ contract DeviceWalletTest is DeployerBase {
         assertEq(registry.isESIMWalletValid(address(eSIMWallet1)), address(0), "Device wallet associated with the eSIM wallet should have been set to address(0)");
         assertEq(deviceWallet.canPullETH(address(eSIMWallet1)), false, "ESIM wallet should not be allowed to pull ETH");
         assertEq(deviceWallet.isValidESIMWallet(address(eSIMWallet1)), false, "ESIM wallet should have been set to invalid for the device wallet");
+        
+        vm.startPrank(currentOwner);
+        vm.expectRevert("Unauthorised caller");
+        registry.toggleESIMWalletStandbyStatus(address(eSIMWallet1), false);
+
+        vm.expectRevert("Unauthorised action");
+        registry.updateDeviceWalletAssociatedWithESIMWallet(address(eSIMWallet1), currentOwner);
+        vm.stopPrank();
+
+        assertEq(registry.isESIMWalletValid(address(eSIMWallet1)), address(0), "Previous owner should not be able to change the device wallet");
+
+        // Since the eSIM wallet was already removed, the user cannot do the operation again
+        vm.startPrank(address(deviceWallet));
+        vm.expectRevert("Unknown eSIM wallet");
+        deviceWallet.removeESIMWallet(address(eSIMWallet1), true);
+        vm.stopPrank();
 
         // 3. deviceWallet2 accepts ownership of eSIMWallet1
         vm.deal(address(deviceWallet2), 5 ether);
@@ -623,13 +634,16 @@ contract DeviceWalletTest is DeployerBase {
         5. Carol gains control over Aliceʼs eSIM wallet.
      */
     function test_transferESIMWallet_frontrun() public {
-        // 1. deviceWallet requests transfer of ownership
         deployWallets();
+        vm.deal(address(deviceWallet), 10 ether);
+        vm.deal(address(eSIMWallet1), 1 ether);
 
         address currentOwner = eSIMWallet1.owner();
         assertEq(currentOwner, address(deviceWallet), "Owner should have been device wallet");
 
         vm.startPrank(currentOwner);
+        // 1. deviceWallet requests transfer of ownership
+        // 2. Alice (deviceWallet) unbinds/removes eSIMWallet1
         eSIMWallet1.requestTransferOwnership(address(deviceWallet2));
         vm.stopPrank();
 
@@ -638,11 +652,8 @@ contract DeviceWalletTest is DeployerBase {
         currentOwner = eSIMWallet1.owner();
         assertEq(currentOwner, address(deviceWallet), "Owner should not have changed yet");
 
-        // 2. Alice (deviceWallet) unbinds/removes eSIMWallet1
-        vm.deal(address(deviceWallet), 10 ether);
-        vm.deal(address(eSIMWallet1), 1 ether);
-
         vm.startPrank(address(deviceWallet));
+        vm.expectRevert("Unknown eSIM wallet");
         deviceWallet.removeESIMWallet(address(eSIMWallet1), true);
         vm.stopPrank();
 

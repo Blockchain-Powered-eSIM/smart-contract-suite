@@ -109,6 +109,18 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
             isESIMWalletValid[_eSIMWalletAddress] == msg.sender,
             "Unauthorise caller or already assigned"
         );
+        // address(0) => owner removed eSIM wallet from device wallet
+        // msg.sender => new device wallet added the eSIM wallet
+        // any other address => Unauthorised: user is trying to change owner without initiating transfer of ownership
+        require(
+            _deviceWalletAddress == address(0) || _deviceWalletAddress == msg.sender,
+            "Transfer ownership first"
+        );
+        // Owner cannot change device wallet address in the middle of ownership transfer
+        require(
+            ESIMWallet(payable(_eSIMWalletAddress)).newRequestedOwner() == address(0),
+            "Unauthorised action"
+        );
 
         isESIMWalletValid[_eSIMWalletAddress] = _deviceWalletAddress;
         emit UpdatedDeviceWalletassociatedWithESIMWallet(_eSIMWalletAddress, _deviceWalletAddress);

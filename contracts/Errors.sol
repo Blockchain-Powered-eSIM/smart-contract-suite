@@ -27,7 +27,7 @@ interface Errors {
 
     // DeviceWallet
     error OnlyRegistryOrDeviceWalletFactoryOrOwner();
-    error OnlyDeviceWalletFactoryOrOwner();
+    error OnlySelfOrAssociatedESIMWallet();
     error OnlyESIMWalletAdminOrRegistry();
     error OnlyESIMWalletAdminOrDeviceWalletOwner();
     error OnlyESIMWalletAdminOrDeviceWalletFactory();

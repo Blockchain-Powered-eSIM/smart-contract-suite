@@ -72,17 +72,17 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         _;
     }
 
-    function _onlyDeviceWalletFactoryOrOwner() private view {
+    function _onlySelfOrAssociatedESIMWallet() private view {
         if(
             msg.sender != address(this) &&
-            msg.sender != address(registry.deviceWalletFactory())
+            !isValidESIMWallet[msg.sender]
         ) {
-            revert Errors.OnlyDeviceWalletFactoryOrOwner();
+            revert Errors.OnlySelfOrAssociatedESIMWallet();
         }
     }
 
-    modifier onlyDeviceWalletFactoryOrOwner() {
-        _onlyDeviceWalletFactoryOrOwner();
+    modifier onlySelfOrAssociatedESIMWallet() {
+        _onlySelfOrAssociatedESIMWallet();
         _;
     }
 
@@ -267,13 +267,13 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         emit ESIMWalletAdded(_eSIMWalletAddress, _hasAccessToETH, msg.sender);
     }
 
-    /// @notice Allow device wallet factory or the wallet owner to remove any eSIM wallet bound with this device wallet
+    /// @notice Allow the device wallet owner or the eSIM wallet to remove any eSIM wallet bound with this device wallet
     /// @param _eSIMWalletAddress Address of the eSIM wallet to be removed
     /// @param _callBackETH `true` if any remaining ETH needs to be called back from the ESIM wallet to this device wallet, `false` otherwise
     function removeESIMWallet(
         address _eSIMWalletAddress,
         bool _callBackETH
-    ) public onlyDeviceWalletFactoryOrOwner {
+    ) public onlySelfOrAssociatedESIMWallet {
         require(isValidESIMWallet[_eSIMWalletAddress] == true, "Unknown eSIM wallet");
 
         if(_callBackETH) {

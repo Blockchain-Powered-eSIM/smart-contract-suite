@@ -193,6 +193,7 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     }
 
     /// @notice Function to request transfer of ownership (a 2-step transfer) to a new device wallet
+    /// If the owner revokes the transfer, they have to manually add the eSIM wallet from their device wallet
     /// @param _newOwner Address of the new device wallet to transfer ownership of this wallet
     /** 
     *   @dev newRequestedOwner is deliberately not checked for address(0).
@@ -211,6 +212,9 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
             emit OwnershipTransferRevoked(owner(), revokedAddress);
             return;
         }
+
+        // Remove this eSIMWallet from the device wallet and send all ETH to device wallet
+        deviceWallet.removeESIMWallet(address(this), true);
 
         newRequestedOwner = _newOwner;
 
