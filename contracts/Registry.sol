@@ -66,6 +66,7 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
         require(_eSIMWalletAdmin != address(0), "_eSIMWalletAdmin 0");
         require(_vault != address(0), "_vault 0");
         require(_upgradeManager != address(0), "_upgradeManager 0");
+        require(address(_entryPoint) != address(0), "_entryPoint 0");
 
         entryPoint = _entryPoint;
         eSIMWalletAdmin = _eSIMWalletAdmin;
