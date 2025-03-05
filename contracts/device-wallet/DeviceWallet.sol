@@ -52,10 +52,10 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     string public deviceUniqueIdentifier;
 
     /// @notice Set to true if the eSIM wallet belongs to this device wallet
-    mapping(address => bool) public isValidESIMWallet;
+    mapping(address eSIMWalletAddress => bool isValid) public isValidESIMWallet;
 
-    /// @notice Mapping that tracks if an associated eSIM wallet can pull ETH or not
-    mapping(address => bool) public canPullETH;
+    /// @notice Tracks if an associated eSIM wallet can pull ETH or not
+    mapping(address eSIMWalletAddress => bool isAllowedToPullETH) public canPullETH;
 
     function _onlyRegistryOrDeviceWalletFactoryOrOwner() private view {
         if(

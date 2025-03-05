@@ -54,7 +54,7 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeable
     UpgradeableBeacon public beacon;
 
     /// @notice Set to true if eSIM wallet address is deployed using the factory, false otherwise
-    mapping(address => bool) public isESIMWalletDeployed;
+    mapping(address eSIMWalletAddress => bool isDeployed) public isESIMWalletDeployed;
 
     modifier onlyRegistryOrDeviceWalletFactoryOrDeviceWallet() {
         if(

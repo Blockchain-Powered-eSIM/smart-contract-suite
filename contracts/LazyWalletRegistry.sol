@@ -74,16 +74,16 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
     /// @notice Registry contract instance
     Registry public registry;
 
-    /// @notice Device identifier <> eSIM identifier <> DataBundleDetails[](list of purchase history)
-    mapping(string => mapping(string => DataBundleDetails[])) public deviceIdentifierToESIMDetails;
+    /// @notice eSIM identifiers and their details associated with the device identifiers
+    mapping(string deviceIdentifier => mapping(string eSIMIdentifier => DataBundleDetails[] dataBundleDetails)) public deviceIdentifierToESIMDetails;
 
     /// @notice Mapping from eSIM unique identifier to device unique identifier
     /// @dev A device identifier can have multiple associated eSIM identifiers.
     /// But an eSIM identifier can have only a single device identifier.
-    mapping(string => string) public eSIMIdentifierToDeviceIdentifier;
+    mapping(string eSIMIdentifier => string deviceIdentifier) public eSIMIdentifierToDeviceIdentifier;
 
-    /// @notice Device identifier <> List of associated eSIM identifiers
-    mapping(string => string[]) public eSIMIdentifiersAssociatedWithDeviceIdentifier;
+    /// @notice List of eSIM identifiers associated with the device identifiers
+    mapping(string deviceIdentifier => string[] associatedESIMIdentifiers) public eSIMIdentifiersAssociatedWithDeviceIdentifier;
 
     modifier onlyESIMWalletAdmin() {
         require(msg.sender == registry.eSIMWalletAdmin(), "Only eSIM wallet admin");
