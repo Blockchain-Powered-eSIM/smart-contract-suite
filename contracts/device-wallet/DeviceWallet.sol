@@ -141,7 +141,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         __ReentrancyGuard_init();
     }
 
-    /// @notice Allow device wallet owner to deploy new eSIM wallet
+    /// @notice Allow eSIMWalletAdmin to deploy new eSIM wallet whenever new eSIM is installed
     /// @dev Don't forget to call setESIMUniqueIdentifierForAnESIMWallet function after deploying eSIM wallet
     /// @param _hasAccessToETH Set to true if the eSIM wallet is allowed to pull ETH from this wallet.
     /// @return eSIM wallet address
