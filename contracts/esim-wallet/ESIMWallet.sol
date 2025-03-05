@@ -72,21 +72,6 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         _;
     }
 
-    function _onlyESIMWalletAdminOrESIMWalletfactoryOrDeviceWallet() private view {
-        if (
-            msg.sender != eSIMWalletFactory &&
-            msg.sender != deviceWallet.registry().eSIMWalletAdmin() &&
-            msg.sender != address(deviceWallet)
-        ) {
-            revert Errors.OnlyESIMWalletAdminOrESIMWalletfactoryOrDeviceWallet();
-        }
-    }
-
-    modifier onlyESIMWalletAdminOrESIMWalletfactoryOrDeviceWallet() {
-        _onlyESIMWalletAdminOrESIMWalletfactoryOrDeviceWallet();
-        _;
-    }
-
     function _onlyDeviceWalletOrESIMWalletAdmin() private view {
         if(
             msg.sender != address(deviceWallet) &&
