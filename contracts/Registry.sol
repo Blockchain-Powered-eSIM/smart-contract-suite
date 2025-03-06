@@ -5,7 +5,7 @@ pragma solidity 0.8.25;
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 
 import {RegistryHelper} from "./RegistryHelper.sol";
 import {DeviceWalletFactory} from "./device-wallet/DeviceWalletFactory.sol";
@@ -17,7 +17,7 @@ import {Errors} from "./Errors.sol";
 import "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 
 /// @notice Contract for deploying the factory contracts and maintaining registry
-contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, RegistryHelper {
+contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, RegistryHelper {
 
     /// @notice Entry point contract address (one entryPoint per chain)
     IEntryPoint public entryPoint;
@@ -76,6 +76,7 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
         deviceWalletFactory = DeviceWalletFactory(_deviceWalletFactory);
         eSIMWalletFactory = ESIMWalletFactory(_eSIMWalletFactory);
 
+        __Ownable2Step_init();
         __Ownable_init(_upgradeManager);
 
         emit RegistryInitialized(

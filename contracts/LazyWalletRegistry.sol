@@ -4,13 +4,13 @@ pragma solidity 0.8.25;
 
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 
 import {Registry} from "./Registry.sol";
 import "./CustomStructs.sol";
 
 /// @notice Contract for deploying the factory contracts and maintaining registry
-contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeable{
+contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable {
 
     /// @notice Emitted when data related to a device is updated
     event DataUpdatedForDevice(
@@ -110,6 +110,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         registry = Registry(_registry);
         upgradeManager = _upgradeManager;
 
+        __Ownable2Step_init();
         __Ownable_init(_upgradeManager);
     }
 

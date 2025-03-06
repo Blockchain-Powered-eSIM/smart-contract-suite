@@ -4,7 +4,7 @@ pragma solidity 0.8.25;
 
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 import {BeaconProxy} from "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
 import {UpgradeableBeacon} from "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
@@ -14,7 +14,7 @@ import {Registry} from "../Registry.sol";
 import {Errors} from "../Errors.sol";
 
 /// @notice Contract for deploying a new eSIM wallet
-contract ESIMWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeable {
+contract ESIMWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable {
     /// @notice Emitted when the eSIM wallet factory is deployed
     event ESIMWalletFactorydeployed(
         address indexed _upgradeManager,
@@ -96,6 +96,7 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeable
             address(beacon)
         );
 
+        __Ownable2Step_init();
         __Ownable_init(_upgradeManager);
         __UUPSUpgradeable_init();
     }
