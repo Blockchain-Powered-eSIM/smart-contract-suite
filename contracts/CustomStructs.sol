@@ -1,4 +1,4 @@
-pragma solidity ^0.8.18;
+pragma solidity 0.8.25;
 
 // SPDX-License-Identifier: MIT
 
@@ -6,6 +6,12 @@ pragma solidity ^0.8.18;
 struct DataBundleDetails {
     string dataBundleID;
     uint256 dataBundlePrice;
+}
+
+/// @notice Object returned when a new device and eSIM wallet is deployed
+struct Wallets {
+    address deviceWallet;
+    address eSIMWallet;
 }
 
 struct WebAuthnSignature {

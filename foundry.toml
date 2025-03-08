@@ -1,10 +1,17 @@
 [profile.default]
 src = 'contracts'
 out = 'out'
+solc = "0.8.25"
+evm_version = "paris"
+fs_permissions = [{ access = "read", path = "out" }]
 libs = ['node_modules', 'lib', 'test/utils']
 test = 'test/foundry'
 cache_path  = 'forge-cache'
 optimizer = true
 optimizer-runs = 10_000_000
+ffi = true
+ast = true
+build_info = true
+extra_output = ["storageLayout"]
 
 # See more config options https://book.getfoundry.sh/reference/config.html

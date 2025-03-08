@@ -1,4 +1,4 @@
-pragma solidity ^0.8.18;
+pragma solidity 0.8.25;
 
 // SPDX-License-Identifier: MIT
 
@@ -7,7 +7,6 @@ pragma solidity ^0.8.18;
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import "@account-abstraction/contracts/interfaces/IAccount.sol";
 import "@account-abstraction/contracts/core/Helpers.sol";
@@ -19,7 +18,7 @@ import {P256Verifier} from "../P256Verifier.sol";
 import {WebAuthn} from "../WebAuthn.sol";
 import "../CustomStructs.sol";
 
-contract Account4337 is IAccount, Initializable, UUPSUpgradeable, TokenCallbackHandler, IERC1271 {
+contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 {
     using UserOperationLib for PackedUserOperation;
     using MessageHashUtils for bytes32;
     using ECDSA for bytes32;
@@ -150,6 +149,7 @@ contract Account4337 is IAccount, Initializable, UUPSUpgradeable, TokenCallbackH
         }
 
         if (_validateSignature(messageToVerify, signature)) {
+            require(block.timestamp <= returnIfValid.validUntil, "Signature expired");
             return _packValidationData(returnIfValid);
         }
         return SIG_VALIDATION_FAILED;
@@ -221,12 +221,8 @@ contract Account4337 is IAccount, Initializable, UUPSUpgradeable, TokenCallbackH
      * @param amount to withdraw
      */
     function withdrawDepositTo(address payable withdrawAddress, uint256 amount) public onlySelf {
+        require(withdrawAddress != address(0), "Cannot withdraw to address(0)");
         entryPoint.withdrawTo(withdrawAddress, amount);
-    }
-
-    /// UUPSUpsgradeable: only allow self-upgrade.
-    function _authorizeUpgrade(address newImplementation) internal view override onlySelf {
-        (newImplementation); // No-op; silence unused parameter warning
     }
 
     // solhint-disable-next-line no-empty-blocks
