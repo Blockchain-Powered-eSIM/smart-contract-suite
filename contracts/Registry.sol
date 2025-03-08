@@ -1,22 +1,23 @@
-pragma solidity ^0.8.18;
+pragma solidity 0.8.25;
 
 // SPDX-License-Identifier: MIT
 
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 
 import {RegistryHelper} from "./RegistryHelper.sol";
 import {DeviceWalletFactory} from "./device-wallet/DeviceWalletFactory.sol";
 import {ESIMWalletFactory} from "./esim-wallet/ESIMWalletFactory.sol";
+import {ESIMWallet} from "./esim-wallet/ESIMWallet.sol";
 import {P256Verifier} from "./P256Verifier.sol";
 import {Errors} from "./Errors.sol";
 
 import "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 
 /// @notice Contract for deploying the factory contracts and maintaining registry
-contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, RegistryHelper {
+contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, RegistryHelper {
 
     /// @notice Entry point contract address (one entryPoint per chain)
     IEntryPoint public entryPoint;
@@ -65,6 +66,7 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
         require(_eSIMWalletAdmin != address(0), "_eSIMWalletAdmin 0");
         require(_vault != address(0), "_vault 0");
         require(_upgradeManager != address(0), "_upgradeManager 0");
+        require(address(_entryPoint) != address(0), "_entryPoint 0");
 
         entryPoint = _entryPoint;
         eSIMWalletAdmin = _eSIMWalletAdmin;
@@ -74,6 +76,7 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
         deviceWalletFactory = DeviceWalletFactory(_deviceWalletFactory);
         eSIMWalletFactory = ESIMWalletFactory(_eSIMWalletFactory);
 
+        __Ownable2Step_init();
         __Ownable_init(_upgradeManager);
 
         emit RegistryInitialized(
@@ -103,6 +106,24 @@ contract Registry is Initializable, UUPSUpgradeable, OwnableUpgradeable, Registr
         address _eSIMWalletAddress,
         address _deviceWalletAddress
     ) external onlyDeviceWallet {
+        require(
+            ESIMWallet(payable(_eSIMWalletAddress)).owner() == msg.sender ||
+            isESIMWalletValid[_eSIMWalletAddress] == msg.sender,
+            "Unauthorise caller or already assigned"
+        );
+        // address(0) => owner removed eSIM wallet from device wallet
+        // msg.sender => new device wallet added the eSIM wallet
+        // any other address => Unauthorised: user is trying to change owner without initiating transfer of ownership
+        require(
+            _deviceWalletAddress == address(0) || _deviceWalletAddress == msg.sender,
+            "Transfer ownership first"
+        );
+        // Owner cannot change device wallet address in the middle of ownership transfer
+        require(
+            ESIMWallet(payable(_eSIMWalletAddress)).newRequestedOwner() == address(0),
+            "Unauthorised action"
+        );
+
         isESIMWalletValid[_eSIMWalletAddress] = _deviceWalletAddress;
         emit UpdatedDeviceWalletassociatedWithESIMWallet(_eSIMWalletAddress, _deviceWalletAddress);
     }

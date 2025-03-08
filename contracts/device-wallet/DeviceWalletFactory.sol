@@ -1,10 +1,10 @@
-pragma solidity ^0.8.18;
+pragma solidity 0.8.25;
 
 // SPDX-License-Identifier: MIT
 
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {BeaconProxy} from "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
 import {UpgradeableBeacon} from "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
@@ -21,7 +21,7 @@ import {Errors} from "../Errors.sol";
 import "../CustomStructs.sol";
 
 /// @notice Contract for deploying a new eSIM wallet
-contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeable {
+contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable {
 
     /// @notice Emitted when factory is deployed and admin is set
     event DeviceWalletFactoryDeployed(
@@ -130,6 +130,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
             address(beacon)
         );
         
+        __Ownable2Step_init();
         __Ownable_init(_upgradeManager);
         __UUPSUpgradeable_init();
     }
@@ -232,7 +233,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
         for (uint256 i = 0; i < numberOfDeviceWallets; ++i) {
             require(_depositAmounts[i] <= availableETH, "Out of ETH");
             
-            walletsDeployed[i] = deployDeviceWalletAsAdmin(
+            walletsDeployed[i] = _deployDeviceWallet(
                 _deviceUniqueIdentifiers[i],
                 _deviceWalletOwnersKey[i],
                 _salts[i],
@@ -251,19 +252,19 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
         return walletsDeployed;
     }
 
-    /// @dev Allow admin to deploy a device wallet (and an eSIM wallet) for given unique device identifiers
+    /// @dev Internal function to allow admin to deploy a device wallet (and an eSIM wallet) for given unique device identifiers
     /// @param _deviceUniqueIdentifier Unique device identifier for the device wallet
     /// @param _deviceWalletOwnerKey User's P256 public key (owner of the device wallet and respective eSIM wallets)
     /// @param _depositAmount Amount of ETH to be deposited into the device wallet
     /// @return Deployed device wallet address
-    function deployDeviceWalletAsAdmin(
+    function _deployDeviceWallet(
         string memory _deviceUniqueIdentifier,
         bytes32[2] memory _deviceWalletOwnerKey,
         uint256 _salt,
         uint256 _depositAmount
-    ) public payable onlyAdmin returns (Wallets memory) {
+    ) internal returns (Wallets memory) {
         address deviceWalletAddress = address(
-            createAccount(
+            _createAccount(
                 _deviceUniqueIdentifier,
                 _deviceWalletOwnerKey,
                 _salt,
@@ -295,20 +296,53 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
         uint256 _salt,
         uint256 _depositAmount
     ) public payable returns (DeviceWallet deviceWallet) {
+        
+        deviceWallet = _createAccount(
+            _deviceUniqueIdentifier,
+            _deviceWalletOwnerKey,
+            _salt,
+            _depositAmount
+        );
+
+
+        if(msg.value > _depositAmount) {
+            // return excess ETH
+            uint256 excessETH = msg.value - _depositAmount;
+            
+            (bool success,) = msg.sender.call{value: excessETH}("");
+            require(success, "ETH return failed");
+        }
+    }
+
+    function _createAccount(
+        string memory _deviceUniqueIdentifier,
+        bytes32[2] memory _deviceWalletOwnerKey,
+        uint256 _salt,
+        uint256 _depositAmount
+    ) internal returns (DeviceWallet deviceWallet) {
         require(
             bytes(_deviceUniqueIdentifier).length != 0, 
             "DeviceIdentifier cannot be empty"
         );
 
+        // Encoding msg.sender with salt prevents deployments and DoS from unauthorised actors
+        bytes32 salt = keccak256(abi.encode(msg.sender, _salt));
+        uint256 uniqueSalt = uint256(salt);
         address addr = getAddress(
             _deviceWalletOwnerKey,
             _deviceUniqueIdentifier,
-            _salt
+            uniqueSalt
         );
+
+        // Prefund the account with msg.value
+        if (msg.value > 0) {
+            entryPoint.depositTo{value: _depositAmount}(addr);
+        }
 
         // Check if the device identifier is actually unique
         address wallet = registry.uniqueIdentifierToDeviceWallet(_deviceUniqueIdentifier);
         if(wallet != address(0)) {
+            require(wallet == addr, "Wallet already exists with different owner");
             return DeviceWallet(payable(wallet));
         }
 
@@ -316,6 +350,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
         bytes32 keyHash = keccak256(abi.encode(_deviceWalletOwnerKey[0], _deviceWalletOwnerKey[1]));
         wallet = registry.registeredP256Keys(keyHash);
         if(wallet != address(0)) {
+            require(wallet == addr, "Wallet already exists with different owner key");
             return DeviceWallet(payable(wallet));
         }
 
@@ -324,14 +359,9 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, OwnableUpgradeab
             return DeviceWallet(payable(addr));
         }
 
-        // Prefund the account with msg.value
-        if (msg.value > 0 && _depositAmount <= msg.value) {
-            entryPoint.depositTo{value: _depositAmount}(addr);
-        }
-
         deviceWallet = DeviceWallet(
             payable(
-                new BeaconProxy{salt : bytes32(_salt)}(
+                new BeaconProxy{salt : bytes32(uniqueSalt)}(
                     address(beacon),
                     abi.encodeCall(
                         DeviceWallet.init, 

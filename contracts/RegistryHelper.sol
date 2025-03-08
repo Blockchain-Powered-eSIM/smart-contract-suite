@@ -1,4 +1,4 @@
-pragma solidity ^0.8.18;
+pragma solidity 0.8.25;
 
 // SPDX-License-Identifier: MIT
 
@@ -60,31 +60,31 @@ contract RegistryHelper {
     /// @notice eSIM wallet factory instance
     ESIMWalletFactory public eSIMWalletFactory;
 
-    /// @notice device unique identifier <> device wallet address
-    ///         Mapping for all the device wallets deployed by the registry
+    /// @notice Mapping for all the device wallets deployed by the registry
     /// @dev Use this to check if a device identifier has already been used or not
-    mapping(string => address) public uniqueIdentifierToDeviceWallet;
+    mapping(string deviceIdentifier => address deviceWalletAddress) public uniqueIdentifierToDeviceWallet;
 
-    /// @notice device wallet address <> owner P256 public key.
-    mapping(address => bytes32[2]) public deviceWalletToOwner;
+    /// @notice X,Y co-ordinates of the P256 keys associated with the device wallet
+    mapping(address deviceWalletAddress => bytes32[2] ownerP256Keys) public deviceWalletToOwner;
 
     /// @notice keccak256 hash to device wallet address
     /// @dev keccak256(abi.encode(X, Y)) <> device wallet address
     /// Used to maintain one-to-one relationship between P256 keys and device wallet
-    mapping(bytes32 => address) public registeredP256Keys;
+    mapping(bytes32 hashOfOwnerP256Keys => address deviceWalletAddress) public registeredP256Keys;
 
-    /// @notice device wallet address <> boolean (true if deployed by the registry or device wallet factory)
-    ///         Mapping of all the device wallets deployed by the registry (or the device wallet factory)
-    ///         to their respective owner.
-    mapping(address => bool) public isDeviceWalletValid;
+    /// @notice true if deployed by the registry or device wallet factory
+    ///         Mapping of all the device wallets deployed by the registry (or the device wallet factory) are set to true
+    mapping(address deviceWalletAddress => bool valid) public isDeviceWalletValid;
 
-    /// @notice eSIM wallet address <> device wallet address
-    ///         All the eSIM wallets deployed using this registry are valid and set to true
-    mapping(address => address) public isESIMWalletValid;
+    /// @notice All the eSIM wallets deployed using this registry are valid and mapped to their owner device wallet
+    mapping(address eSIMWalletAddress => address deviceWalletAddress) public isESIMWalletValid;
 
     /// @notice If an existing eSIM wallet is in the process of being transferred from one device wallet to another
     ///         If bool is `true`, it means that the eSIM wallet has no device wallet associated to it yet
-    mapping(address => bool) public isESIMWalletOnStandby;
+    mapping(address eSIMWalletAddress => bool isOnStandby) public isESIMWalletOnStandby;
+
+    // Reserved storage gap for future upgrades
+    uint256[50] private __gap;
 
     modifier onlyLazyWalletRegistry() {
         if(msg.sender != lazyWalletRegistry) revert Errors.OnlyLazyWalletRegistry();
@@ -111,7 +111,7 @@ contract RegistryHelper {
 
         // Deploys device smart wallet
         // Updates device wallet info via Registry
-        address deviceWallet = address(deviceWalletFactory.createAccount(_deviceUniqueIdentifier, _deviceWalletOwnerKey, _salt, _depositAmount));
+        address deviceWallet = address(deviceWalletFactory.createAccount{value: _depositAmount}(_deviceUniqueIdentifier, _deviceWalletOwnerKey, _salt, _depositAmount));
 
         address[] memory eSIMWallets = new address[](_eSIMUniqueIdentifiers.length);
 

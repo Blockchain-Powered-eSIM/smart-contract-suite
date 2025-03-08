@@ -1,16 +1,16 @@
-pragma solidity ^0.8.18;
+pragma solidity 0.8.25;
 
 // SPDX-License-Identifier: MIT
 
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 
 import {Registry} from "./Registry.sol";
 import "./CustomStructs.sol";
 
 /// @notice Contract for deploying the factory contracts and maintaining registry
-contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeable{
+contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable {
 
     /// @notice Emitted when data related to a device is updated
     event DataUpdatedForDevice(
@@ -74,16 +74,16 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
     /// @notice Registry contract instance
     Registry public registry;
 
-    /// @notice Device identifier <> eSIM identifier <> DataBundleDetails[](list of purchase history)
-    mapping(string => mapping(string => DataBundleDetails[])) public deviceIdentifierToESIMDetails;
+    /// @notice eSIM identifiers and their details associated with the device identifiers
+    mapping(string deviceIdentifier => mapping(string eSIMIdentifier => DataBundleDetails[] dataBundleDetails)) public deviceIdentifierToESIMDetails;
 
     /// @notice Mapping from eSIM unique identifier to device unique identifier
     /// @dev A device identifier can have multiple associated eSIM identifiers.
     /// But an eSIM identifier can have only a single device identifier.
-    mapping(string => string) public eSIMIdentifierToDeviceIdentifier;
+    mapping(string eSIMIdentifier => string deviceIdentifier) public eSIMIdentifierToDeviceIdentifier;
 
-    /// @notice Device identifier <> List of associated eSIM identifiers
-    mapping(string => string[]) public eSIMIdentifiersAssociatedWithDeviceIdentifier;
+    /// @notice List of eSIM identifiers associated with the device identifiers
+    mapping(string deviceIdentifier => string[] associatedESIMIdentifiers) public eSIMIdentifiersAssociatedWithDeviceIdentifier;
 
     modifier onlyESIMWalletAdmin() {
         require(msg.sender == registry.eSIMWalletAdmin(), "Only eSIM wallet admin");
@@ -110,6 +110,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         registry = Registry(_registry);
         upgradeManager = _upgradeManager;
 
+        __Ownable2Step_init();
         __Ownable_init(_upgradeManager);
     }
 
@@ -168,7 +169,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, OwnableUpgradeabl
             listOfDataBundleDetails[i] = deviceIdentifierToESIMDetails[_deviceUniqueIdentifier][eSIMUniqueIdentifiers[i]];
         }
 
-        (deviceWallet, eSIMWallets) = registry.deployLazyWallet(
+        (deviceWallet, eSIMWallets) = registry.deployLazyWallet{value: msg.value}(
             _deviceOwnerPublicKey,
             _deviceUniqueIdentifier,
             _salt,

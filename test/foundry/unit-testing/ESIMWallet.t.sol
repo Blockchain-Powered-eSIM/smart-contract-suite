@@ -21,13 +21,23 @@ contract ESIMWalletTest is DeployerBase {
     function deployWallets() public {
         address admin = deviceWalletFactory.eSIMWalletAdmin();
 
+        string[] memory deviceUniqueIdentifiers = new string[](1);
+        bytes32[2][] memory listOfKeys = new bytes32[2][](1);
+        uint256[] memory salts = new uint256[](1);
+        uint256[] memory deposits = new uint256[](1);
+
+        deviceUniqueIdentifiers[0] = customDeviceUniqueIdentifiers[0];
+        listOfKeys[0] = listOfOwnerKeys[0];
+        salts[0] = 999;
+        deposits[0] = 0;
+
         vm.startPrank(admin);
-        Wallets memory wallet = deviceWalletFactory.deployDeviceWalletAsAdmin(
-            customDeviceUniqueIdentifiers[0],
-            pubKey1,
-            999,
-            0
-        );
+        Wallets memory wallet = deviceWalletFactory.deployDeviceWalletForUsers(
+            deviceUniqueIdentifiers,
+            listOfKeys,
+            salts,
+            deposits
+        )[0];
         vm.stopPrank();
 
         // eSIMWallet1 -> has access to ETH, has eSIM identifier set
@@ -180,26 +190,43 @@ contract ESIMWalletTest is DeployerBase {
     function test_requestTransferOwnership() public {
         deployWallets();
 
+        vm.deal(address(deviceWallet), 10 ether);
+        vm.deal(address(eSIMWallet1), 1 ether);
+
         address admin = deviceWalletFactory.eSIMWalletAdmin();
+
+        string[] memory deviceUniqueIdentifiers = new string[](1);
+        bytes32[2][] memory listOfKeys = new bytes32[2][](1);
+        uint256[] memory salts = new uint256[](1);
+        uint256[] memory deposits = new uint256[](1);
+
+        deviceUniqueIdentifiers[0] = customDeviceUniqueIdentifiers[1];
+        listOfKeys[0] = listOfOwnerKeys[1];
+        salts[0] = 919;
+        deposits[0] = 0;
 
         // Deploy new device wallet
         vm.startPrank(admin);
-        Wallets memory wallet = deviceWalletFactory.deployDeviceWalletAsAdmin(
-            customDeviceUniqueIdentifiers[1],
-            pubKey2,
-            919,
-            0
-        );
+        Wallets memory wallet = deviceWalletFactory.deployDeviceWalletForUsers(
+            deviceUniqueIdentifiers,
+            listOfKeys,
+            salts,
+            deposits
+        )[0];
         vm.stopPrank();
 
         deviceWallet2 = MockDeviceWallet(payable(wallet.deviceWallet));
 
         address currentOwner = eSIMWallet1.owner();
         assertEq(currentOwner, address(deviceWallet), "Owner should have been device wallet");
+        assertEq(address(eSIMWallet1).balance, 1 ether, "eSIM wallet balance should have been 1 ETH");
+        assertEq(currentOwner.balance, 10 ether, "device wallet balance should have been 10 ETH");
 
         vm.startPrank(currentOwner);
         eSIMWallet1.requestTransferOwnership(address(deviceWallet2));
         vm.stopPrank();
+        assertEq(address(eSIMWallet1).balance, 0 ether, "eSIM wallet balance should have been 0 ETH");
+        assertEq(currentOwner.balance, 11 ether, "device wallet balance should have been 11 ETH");
 
         assertEq(eSIMWallet1.newRequestedOwner(), address(deviceWallet2), "newRequestedOwner should have been updated");
 
@@ -282,14 +309,13 @@ contract ESIMWalletTest is DeployerBase {
     /// @dev It is important to remove eSIM wallet from the device wallet before transferring ownership
     /// If not done, the eSIM wallet will still be able to pull ETH from the device wallet it previously belonged to
     function test_acceptOwnershipTransfer_addESIMWallet() public {
-        // Current owner requests transfer of ownership to the new owner
+        // Current owner requests transfer of ownership to the new owner & removes eSIM wallet in same step
+        // also sets it to standby and mark owner as address(0)
         test_requestTransferOwnership();
 
-        vm.deal(address(deviceWallet), 10 ether);
-        vm.deal(address(eSIMWallet1), 1 ether);
-
-        // Current owner removes the ESIM wallet from their device wallet, sets it to standby and mark owner as address(0)
+        // Should revert as eSIM wallet has already been removed in previous step
         vm.startPrank(address(deviceWallet));
+        vm.expectRevert("Unknown eSIM wallet");
         deviceWallet.removeESIMWallet(address(eSIMWallet1), true);
         vm.stopPrank();
         assertEq(registry.isESIMWalletOnStandby(address(eSIMWallet1)), true, "ESIMWallet1 should have been on standBy");

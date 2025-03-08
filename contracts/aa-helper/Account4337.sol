@@ -1,4 +1,4 @@
-pragma solidity ^0.8.18;
+pragma solidity 0.8.25;
 
 // SPDX-License-Identifier: MIT
 
@@ -149,6 +149,7 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
         }
 
         if (_validateSignature(messageToVerify, signature)) {
+            require(block.timestamp <= returnIfValid.validUntil, "Signature expired");
             return _packValidationData(returnIfValid);
         }
         return SIG_VALIDATION_FAILED;
@@ -220,6 +221,7 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
      * @param amount to withdraw
      */
     function withdrawDepositTo(address payable withdrawAddress, uint256 amount) public onlySelf {
+        require(withdrawAddress != address(0), "Cannot withdraw to address(0)");
         entryPoint.withdrawTo(withdrawAddress, amount);
     }
 

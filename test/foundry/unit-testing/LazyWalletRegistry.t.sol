@@ -208,15 +208,17 @@ contract LazyWalletRegistryTest is DeployerBase {
         string memory deviceIdentifier = customDeviceUniqueIdentifiers[0];
 
         vm.startPrank(eSIMWalletAdmin);
-        (address deviceWalletAddress, address[] memory eSIMWallets) = lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(
+        vm.deal(eSIMWalletAdmin, 10 ether);
+        (address deviceWalletAddress, address[] memory eSIMWallets) = lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier{value: 2 ether}(
             pubKey1,
             deviceIdentifier,
             999,
-            0
+            2 ether
         );
         vm.stopPrank();
 
         MockDeviceWallet deviceWallet = MockDeviceWallet(payable(deviceWalletAddress));
+        assertEq(address(deviceWallet).balance, 2 ether, "Incorrect wallet balance");
 
         // Check storage variables in registry
         bytes32[2] memory storedKey = registry.getDeviceWalletToOwner(deviceWalletAddress);
