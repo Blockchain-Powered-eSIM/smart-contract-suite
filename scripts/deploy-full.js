@@ -1,4 +1,4 @@
-const { ethers, upgrades } = require("hardhat");
+const { ethers, upgrades, hre } = require("hardhat");
 const dotenv = require("dotenv");
 
 dotenv.config();
@@ -11,14 +11,29 @@ async function main() {
     console.log(`Deploying contracts with account: ${deployer.address}`);
     console.log(`Account balance: ${ethers.formatEther(await deployer.provider.getBalance(deployer.address))} ETH`);
 
-    // Check for required environment variables
-    const adminAddress = process.env.ESIM_WALLET_ADMIN;
-    const vaultAddress = process.env.VAULT;
-    const upgradeManagerAddress = process.env.UPGRADE_MANAGER;
+    const provider = new ethers.JsonRpcProvider('http://localhost:8545');
 
-    console.log(`Admin address: ${adminAddress}`);
-    console.log(`Vault address: ${vaultAddress}`);
-    console.log(`Upgrade manager address: ${upgradeManagerAddress}`);
+    // Check for required environment variables
+    const upgradeManagerAddress = process.env.UPGRADE_MANAGER;
+    const upgradeManagerSigner = new ethers.Wallet(process.env.PRIVATE_KEY_1, provider);
+
+    const eSIMWalletAdminAddress = process.env.ESIM_WALLET_ADMIN;
+    const eSIMWalletAdminSigner = new ethers.Wallet(process.env.PRIVATE_KEY_3, provider);
+
+    const vaultAddress = process.env.VAULT;
+
+    await network.provider.send("hardhat_setBalance", [
+        eSIMWalletAdminAddress,
+        "0x1000000000000000000000000", // we are giving ourselves a LOT eth
+    ]);
+    await network.provider.send("hardhat_setBalance", [
+        upgradeManagerAddress,
+        "0x1000000000000000000000000", // we are giving ourselves a LOT eth
+    ]);
+
+    console.log(`Admin address: ${eSIMWalletAdminAddress}, balance: ${await provider.getBalance(eSIMWalletAdminAddress)}`);
+    console.log(`Vault address: ${vaultAddress}, balance: ${await provider.getBalance(eSIMWalletAdminAddress)}`);
+    console.log(`Upgrade manager address: ${upgradeManagerAddress}, balance: ${await provider.getBalance(eSIMWalletAdminAddress)}`);
 
     // 1. Deploy or use existing EntryPoint
     let entryPointAddress;
@@ -56,7 +71,7 @@ async function main() {
         DeviceWalletFactory,
         [
             deviceWalletImplAddress,
-            adminAddress,
+            eSIMWalletAdminAddress,
             vaultAddress,
             upgradeManagerAddress,
             entryPointAddress,
@@ -103,17 +118,17 @@ async function main() {
     const registry = await upgrades.deployProxy(
         Registry,
         [
-            adminAddress,
+            eSIMWalletAdminAddress,
             vaultAddress,
             upgradeManagerAddress,
-            deviceWalletFactory,
+            deviceWalletFactoryAddress,
             esimWalletFactoryAddress,
             entryPointAddress,
             p256VerifierAddress
         ],
         {
             initializer: "initialize",
-            kind: "uups",
+            kind: "uups"
         }
     );
     await registry.waitForDeployment();
@@ -141,73 +156,23 @@ async function main() {
     // Post-deployment configuration
     console.log("Performing post-deployment configuration...");
 
-    // 1. Set factories on Registry
-    console.log("Setting factories on Registry...");
-    const setFactoriesTx = await registry.setFactories(
-        deviceWalletFactoryAddress,
-        esimWalletFactoryAddress
-    );
-    await setFactoriesTx.wait();
-    console.log("Factories set on Registry");
+    // 1. Set LazyWalletRegistry address in Registry (as upgradeManager)
+    console.log("Setting LazyWalletRegistry address in Registry...");
+    const tx1 = await registry.connect(upgradeManagerSigner).addOrUpdateLazyWalletRegistryAddress(lazyWalletRegistryAddress);
+    await tx1.wait();
+    console.log("LazyWalletRegistry address set in Registry");
 
-    // 2. Set registries on factories
-    console.log("Setting registry on DeviceWalletFactory...");
-    const setDeviceRegistryTx = await deviceWalletFactory.setRegistry(registryAddress);
-    await setDeviceRegistryTx.wait();
-    console.log("Registry set on DeviceWalletFactory");
+    // 2. Set Registry address in DeviceWalletFactory (as eSIMWalletAdmin)
+    console.log("Setting Registry address in DeviceWalletFactory...");
+    const tx2 = await deviceWalletFactory.connect(eSIMWalletAdminSigner).addRegistryAddress(registryAddress);
+    await tx2.wait();
+    console.log("Registry address set in DeviceWalletFactory");
 
-    console.log("Setting registry on ESIMWalletFactory...");
-    const setEsimRegistryTx = await esimWalletFactory.setRegistry(registryAddress);
-    await setEsimRegistryTx.wait();
-    console.log("Registry set on ESIMWalletFactory");
-
-    // 3. Set LazyWalletRegistry on Registry
-    console.log("Setting LazyWalletRegistry on Registry...");
-    const setLazyRegistryTx = await registry.setLazyWalletRegistry(lazyWalletRegistryAddress);
-    await setLazyRegistryTx.wait();
-    console.log("LazyWalletRegistry set on Registry");
-
-    // 4. Set Registry on LazyWalletRegistry
-    console.log("Setting Registry on LazyWalletRegistry...");
-    const setRegistryTx = await lazyWalletRegistry.setRegistry(registryAddress);
-    await setRegistryTx.wait();
-    console.log("Registry set on LazyWalletRegistry");
-
-    // 5. Set vault addresses
-    console.log("Setting vault address on DeviceWalletFactory...");
-    const setDeviceVaultTx = await deviceWalletFactory.setVault(vaultAddress);
-    await setDeviceVaultTx.wait();
-    console.log("Vault address set on DeviceWalletFactory");
-
-    console.log("Setting vault address on ESIMWalletFactory...");
-    const setEsimVaultTx = await esimWalletFactory.setVault(vaultAddress);
-    await setEsimVaultTx.wait();
-    console.log("Vault address set on ESIMWalletFactory");
-
-    // 6. Set upgradeManager if different from admin
-    if (upgradeManagerAddress !== adminAddress) {
-        console.log("Setting upgrade manager role...");
-        
-        const UPGRADER_ROLE = await registry.UPGRADER_ROLE();
-        
-        console.log("Setting upgrade manager on Registry...");
-        const grantRegistryUpgraderTx = await registry.grantRole(UPGRADER_ROLE, upgradeManagerAddress);
-        await grantRegistryUpgraderTx.wait();
-        
-        console.log("Setting upgrade manager on LazyWalletRegistry...");
-        const grantLazyRegistryUpgraderTx = await lazyWalletRegistry.grantRole(UPGRADER_ROLE, upgradeManagerAddress);
-        await grantLazyRegistryUpgraderTx.wait();
-        
-        console.log("Setting upgrade manager on DeviceWalletFactory...");
-        const grantDeviceFactoryUpgraderTx = await deviceWalletFactory.grantRole(UPGRADER_ROLE, upgradeManagerAddress);
-        await grantDeviceFactoryUpgraderTx.wait();
-        
-        console.log("Setting upgrade manager on ESIMWalletFactory...");
-        const grantEsimFactoryUpgraderTx = await esimWalletFactory.grantRole(UPGRADER_ROLE, upgradeManagerAddress);
-        await grantEsimFactoryUpgraderTx.wait();
-        
-        console.log("Upgrade manager role granted to:", upgradeManagerAddress);
-    }
+    // 3. Set Registry address in ESIMWalletFactory (as upgradeManager)
+    console.log("Setting Registry address in ESIMWalletFactory...");
+    const tx3 = await esimWalletFactory.connect(upgradeManagerSigner).addRegistryAddress(registryAddress);
+    await tx3.wait();
+    console.log("Registry address set in ESIMWalletFactory");
 
     // Deployment summary
     console.log("\n--- DEPLOYMENT SUMMARY ---");
