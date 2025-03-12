@@ -18,6 +18,7 @@ module.exports = {
       chainId: 31337,
     },
     sepolia: {
+      name: "sepolia",
       chainId: 11155111,
       url: `${ALCHEMY_SEPOLIA_HTTPS}`,
       accounts: [PRIV_KEY],
@@ -30,6 +31,7 @@ module.exports = {
       },
     },
     op_sepolia: {
+      name: "optimism-sepolia",
       chainId: 11155420,
       url: `${ALCHEMY_OP_SEPOLIA_HTTPS}`,
       accounts: [PRIV_KEY],
