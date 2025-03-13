@@ -2,8 +2,6 @@ require('dotenv').config();
 require("@nomicfoundation/hardhat-ethers");
 require('@openzeppelin/hardhat-upgrades');
 require("@nomicfoundation/hardhat-foundry");
-require("@nomicfoundation/hardhat-ignition-ethers");
-require("@nomicfoundation/hardhat-viem");
 require('solidity-docgen');
 
 const PRIV_KEY = process.env.PRIVATE_KEY_1;

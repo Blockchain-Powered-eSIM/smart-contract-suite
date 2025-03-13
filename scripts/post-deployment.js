@@ -1,4 +1,4 @@
-const { ethers, upgrades, hre, network } = require("hardhat");
+const { ethers, upgrades, network } = require("hardhat");
 const dotenv = require("dotenv");
 const ADDRESS = require("../deployments/address.json");
 
