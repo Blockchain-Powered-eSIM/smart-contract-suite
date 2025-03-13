@@ -89,8 +89,8 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         _;
     }
 
-    /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() initializer {}
+    // /// @custom:oz-upgrades-unsafe-allow constructor
+    // constructor() initializer {}
 
     /// @dev Owner based upgrades
     function _authorizeUpgrade(address newImplementation)
@@ -130,8 +130,8 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
             address(beacon)
         );
         
-        __Ownable2Step_init();
         __Ownable_init(_upgradeManager);
+        __Ownable2Step_init();
         __UUPSUpgradeable_init();
     }
 

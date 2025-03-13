@@ -1,9 +1,11 @@
 require('dotenv').config();
-// require("hardhat");
+require("@nomicfoundation/hardhat-ethers");
+require('@openzeppelin/hardhat-upgrades');
 require("@nomicfoundation/hardhat-foundry");
 require('solidity-docgen');
 
-const PRIV_KEY = process.env.PRIV_KEY;
+const PRIV_KEY = process.env.PRIVATE_KEY_1;
+const ALCHEMY_OP_SEPOLIA_HTTPS = process.env.ALCHEMY_OP_SEPOLIA_HTTPS;
 const ALCHEMY_SEPOLIA_HTTPS = process.env.ALCHEMY_SEPOLIA_HTTPS;
 
 /** @type import('hardhat/config').HardhatUserConfig */
@@ -14,10 +16,30 @@ module.exports = {
       chainId: 31337,
     },
     sepolia: {
+      name: "sepolia",
       chainId: 11155111,
       url: `${ALCHEMY_SEPOLIA_HTTPS}`,
       accounts: [PRIV_KEY],
-      saveDeployments: true
+      saveDeployments: true,
+      ignition: {
+        maxFeePerGasLimit: 50_000_000_000n, // 50 gwei
+        maxPriorityFeePerGas: 2_000_000_000n, // 2 gwei
+        gasPrice: 50_000_000_000n, // 50 gwei
+        disableFeeBumping: false,
+      },
+    },
+    op_sepolia: {
+      name: "optimism-sepolia",
+      chainId: 11155420,
+      url: `${ALCHEMY_OP_SEPOLIA_HTTPS}`,
+      accounts: [PRIV_KEY],
+      saveDeployments: true,
+      ignition: {
+        maxFeePerGasLimit: 50_000_000_000n, // 50 gwei
+        maxPriorityFeePerGas: 2_000_000_000n, // 2 gwei
+        gasPrice: 50_000_000_000n, // 50 gwei
+        disableFeeBumping: false,
+      },
     },
     localhost: {
       url: "http://127.0.0.1:8545"
@@ -29,7 +51,7 @@ module.exports = {
     },
   },
   solidity: {
-    version: "0.8.24",
+    version: "0.8.25",
     settings: {
       optimizer: {
         enabled: true,
