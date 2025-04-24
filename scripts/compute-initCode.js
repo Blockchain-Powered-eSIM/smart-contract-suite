@@ -22,9 +22,15 @@ async function main () {
     const sender = ESIM_WALLET_ADMIN;
 
     // Sample values
-    const deviceWalletOwnerKey = ["0x6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C297", "0x4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F6"];
-    const deviceUniqueIdentifier = "Device_1";
-    const salt = 123n; // bigint or number
+    // const deviceWalletOwnerKey = ["0x6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296", "0x4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5"];
+    const deviceWalletOwnerKey = ["0x6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C291", "0x4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F1"];
+    const deviceUniqueIdentifier = "Device_11";
+    const salt = 111n; // bigint or number
+
+    // const deviceWalletOwnerKey = ["0x6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296", "0x4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5"];
+    // const deviceWalletOwnerKey = ["0x6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C298", "0x4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F7"];
+    // const deviceUniqueIdentifier = "Device_10";
+    // const salt = 123n; // bigint or number
     
     const registry = ADDRESS[network.config.name].RegistryProxy;
     const deviceWalletFactoryAddress = ADDRESS[network.config.name].DeviceWalletFactoryProxy;
@@ -80,6 +86,7 @@ async function main () {
     return;
 
     console.log("Calling createAccount from Device wallet factory");
+    const deviceWalletFactory = await ethers.getContractAt("DeviceWalletFactory", deviceWalletFactoryAddress);
     const tx = await deviceWalletFactory.connect(eSIMWalletAdminSigner).createAccount(
         deviceUniqueIdentifier,
         deviceWalletOwnerKey,
