@@ -227,6 +227,7 @@ contract DeviceWalletFactoryTest is DeployerBase {
             uniqueSalt
         );
         assertNotEq(calculatedDeviceWalletAddress1, address(0), "Device wallet address cannot be address(0)");
+        console.log("calculatedDeviceWalletAddress1: ", calculatedDeviceWalletAddress1);
 
         string[] memory deviceUniqueIdentifiers = new string[](1);
         bytes32[2][] memory listOfKeys = new bytes32[2][](1);
@@ -266,7 +267,11 @@ contract DeviceWalletFactoryTest is DeployerBase {
 
         // createAccount calculates uniqueSalt by itself, whereas getAccount doesn't
         bytes32 modifiedSalt = keccak256(abi.encode(user1, salt));
+        console.logString("modifiedSalt: ");
+        console.logBytes32(modifiedSalt);
         uint256 uniqueSalt = uint256(modifiedSalt);
+        console.logString("uniqueSalt: ");
+        console.logUint(uniqueSalt);
 
         // Check for device wallet address before its deployed
         address calculatedDeviceWalletAddress1 = deviceWalletFactory.getAddress(
