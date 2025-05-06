@@ -23,7 +23,7 @@ async function main() {
 
     const vaultAddress = process.env.VAULT;
 
-    // // Set balance in case of tenderly virtual-mainnet deployment or localhost
+    // Set balance in case of hardhat localhost or tenderly virtual-mainnet deployment or localhost
     // await network.provider.send("hardhat_setBalance", [
     //     eSIMWalletAdminAddress,
     //     "0x1000000000000000000000000", // we are giving ourselves a LOT eth
