@@ -34,9 +34,10 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
     /// "\x19Ethereum Signed Message:\n"
     string private constant EIP191_PREFIX = "\x19Ethereum Signed Message:\n";
     /// Length of the packed data: version (1) + validUntil (6) + userOpHash (32) = 39
+    /// Defined as string because it is concatenated along with EIP191_PREFIX before hashing
     string private constant USEROP_PRECURSOR_LENGTH = "39";
     /// version (uint8) + validUntil (uint48)
-    uint256 private constant SIGNATURE_HEADER_LENGTH = "7";
+    uint256 private constant SIGNATURE_HEADER_LENGTH = 7;
 
     event Account4337Initialized(IEntryPoint indexed entryPoint, bytes32[2] owner);
 
@@ -237,19 +238,10 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
         // Decoding the WebAuthnSignature struct from the provided ABI-encoded bytes
         WebAuthnSignature memory sig = abi.decode(webAuthnSignatureBytes, (WebAuthnSignature));
 
-        WebAuthnSignature memory webAuthnSig = WebAuthnSignature({
-            authenticatorData: sig.authenticatorData,
-            clienDataJSON: sig.clientDataJSON,
-            challengeIndex: sig.challengeIndex,
-            typeIndex: sig.typeIndex,
-            r: sig.r,
-            s: sig.s
-        });
-
         return verifier.verifySignature({
             message: challenge,
             requireUserVerification: false,
-            webAuthnSignature: webAuthnSig,
+            webAuthnSignature: sig,
             x: uint256(owner[0]),
             y: uint256(owner[1])
         });
