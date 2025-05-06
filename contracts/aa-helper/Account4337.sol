@@ -43,9 +43,6 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
 
     event AccountOwnershipTransferred(bytes32[2] newOwner);
 
-    /// @notice Emitted when the signature becomes invalid
-    event SignatureExpired(bytes signature, uint256 validUntil, uint256 currentTimestamp);
-
     modifier onlySelf() {
         require(msg.sender == address(this), "Only self");
         _;
@@ -136,10 +133,9 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
             // Version 1: version (1 byte) | validUntil (6 bytes) | abi.encode(WebAuthnSignature)
             uint48 validUntil = uint48(bytes6(_signature[1:SIGNATURE_HEADER_LENGTH]));
             // ABI encoded WebAuthnSignature bytes
-            bytes memory webAuthnSignatureBytes = bytes(_signature[SIGNATURE_HEADER_LENGTH]);
+            bytes calldata webAuthnSignatureBytes = bytes(_signature[SIGNATURE_HEADER_LENGTH:]);
 
             if(block.timestamp > validUntil) {
-                emit SignatureExpired(_signature, validUntil, block.timestamp);
                 return 0xffffffff;
             }
 
@@ -183,7 +179,7 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
             // Version 1: version (1 byte) | validUntil (6 bytes) | abi.encode(WebAuthnSignature)
             uint48 validUntil = uint48(bytes6(signature[1:SIGNATURE_HEADER_LENGTH]));
             // ABI encoded WebAuthnSignature bytes
-            bytes memory webAuthnSignatureBytes = bytes(signature[SIGNATURE_HEADER_LENGTH]);
+            bytes calldata webAuthnSignatureBytes = bytes(signature[SIGNATURE_HEADER_LENGTH:]);
 
             if(block.timestamp > validUntil) {
                 // true for signature failure
@@ -227,8 +223,8 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
      * @dev Internal function to validate a signature using the P256Verifier -> WebAuthn library.
      * @param challenge The raw bytes expected to be found (Base64Url encoded) in the
      *                  `challenge` field of the `clientDataJSON` within the `webAuthnSignatureBytes`.
-     * @param webAuthnSignature The ABI-encoded WebAuthnSigData tuple containing authenticatorData,
-     *                                    clientDataJSON, indices, r, and s.
+     * @param webAuthnSignatureBytes The ABI-encoded WebAuthnSigData tuple containing authenticatorData,
+     *                               clientDataJSON, indices, r, and s.
      * @return True if the WebAuthn assertion is valid according to the WebAuthn library's checks.
      */
     function _validateSignature(
