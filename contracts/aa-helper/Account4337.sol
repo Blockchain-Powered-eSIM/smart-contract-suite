@@ -30,10 +30,20 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
 
     /// Signature verifier contract
     P256Verifier public immutable verifier;
-    
+
+    /// "\x19Ethereum Signed Message:\n"
+    string private constant EIP191_PREFIX = "\x19Ethereum Signed Message:\n";
+    /// Length of the packed data: version (1) + validUntil (6) + userOpHash (32) = 39
+    string private constant USEROP_PRECURSOR_LENGTH = "39";
+    /// version (uint8) + validUntil (uint48)
+    uint256 private constant SIGNATURE_HEADER_LENGTH = "7";
+
     event Account4337Initialized(IEntryPoint indexed entryPoint, bytes32[2] owner);
 
     event AccountOwnershipTransferred(bytes32[2] newOwner);
+
+    /// @notice Emitted when the signature becomes invalid
+    event SignatureExpired(bytes signature, uint256 validUntil, uint256 currentTimestamp);
 
     modifier onlySelf() {
         require(msg.sender == address(this), "Only self");
@@ -103,12 +113,40 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
         }
     }
 
+    /**
+     * @notice Validates a signature according to EIP-1271 using the WebAuthn verifier.
+     * @dev Assumes the `_signature` bytes were encoded off-chain using the `_encodeSignature`
+     *      TypeScript function format: `abi.encodePacked(version, validUntil, abi.encode(WebAuthnSigData))`.
+     *      Assumes the `_messageHash` provided is the EIP-191 digest that was embedded as the challenge
+     *      in the `clientDataJSON` during off-chain signing (i.e., `_messageHash = hashMessage(originalMessage)`).
+     * @param _messageHash The EIP-191 digest of the original message (`keccak256("\x19Ethereum Signed Message:\n" + len(message) + message)`).
+     * @param _signature The packed signature bytes including version, validUntil, and ABI-encoded WebAuthn data.
+     * @return magicValue `0x1626ba7e` if the signature is valid and timely, `0xffffffff` otherwise.
+     */
     function isValidSignature(
-        bytes32 message,
-        bytes calldata signature
+        bytes32 _messageHash,
+        bytes calldata _signature
     ) external view override returns (bytes4 magicValue) {
-        if (_validateSignature(abi.encodePacked(message), signature)) {
-            return IERC1271(this).isValidSignature.selector;
+        uint256 sigLength = _signature.length;
+        if(sigLength <= SIGNATURE_HEADER_LENGTH + 32) return 0xffffffff;
+
+        uint8 version = uint8(_signature[0]);
+        if(version == 1) {
+            // Version 1: version (1 byte) | validUntil (6 bytes) | abi.encode(WebAuthnSignature)
+            uint48 validUntil = uint48(bytes6(_signature[1:SIGNATURE_HEADER_LENGTH]));
+            // ABI encoded WebAuthnSignature bytes
+            bytes memory webAuthnSignatureBytes = bytes(_signature[SIGNATURE_HEADER_LENGTH]);
+
+            if(block.timestamp > validUntil) {
+                emit SignatureExpired(_signature, validUntil, block.timestamp);
+                return 0xffffffff;
+            }
+
+            // The challenge expected by WebAuthn.sol is the EIP-191 digest itself in bytes format
+            bytes memory challengeBytes = abi.encodePacked(_messageHash);
+            if(_validateSignature(challengeBytes, webAuthnSignatureBytes)) {
+                return IERC1271(this).isValidSignature.selector;    // magic value: `0x1626ba7e`
+            }
         }
         return 0xffffffff;
     }
@@ -125,32 +163,53 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
         _payPrefund(missingAccountFunds);
     }
 
+    /**
+     * @dev Validates the signature of a UserOperation based on the custom versioning scheme using WebAuthn.
+     * @param userOp The packed user operation.
+     * @param userOpHash The hash calculated by the EntryPoint according to ERC-4337 rules.
+     * @return validationData Packed validAfter (0) and validUntil timestamps, or SIG_VALIDATION_FAILED.
+     */
     function _validateUserOpSignature(
         PackedUserOperation calldata userOp,
         bytes32 userOpHash
     ) private view returns (uint256 validationData) {
-        bytes memory messageToVerify;
-        bytes calldata signature;
-        ValidationData memory returnIfValid;
+        bytes calldata signature = userOp.signature;
+        uint256 sigLength = signature.length;
+        if(sigLength <= SIGNATURE_HEADER_LENGTH + 32) return 0xffffffff;
 
-        uint256 sigLength = userOp.signature.length;
-        if (sigLength == 0) return SIG_VALIDATION_FAILED;
+        uint8 version = uint8(signature[0]);
+        if(version == 1) {
+            // Version 1: version (1 byte) | validUntil (6 bytes) | abi.encode(WebAuthnSignature)
+            uint48 validUntil = uint48(bytes6(signature[1:SIGNATURE_HEADER_LENGTH]));
+            // ABI encoded WebAuthnSignature bytes
+            bytes memory webAuthnSignatureBytes = bytes(signature[SIGNATURE_HEADER_LENGTH]);
 
-        uint8 version = uint8(userOp.signature[0]);
-        if (version == 1) {
-            if (sigLength < 7) return SIG_VALIDATION_FAILED;
-            uint48 validUntil = uint48(bytes6(userOp.signature[1:7]));
+            if(block.timestamp > validUntil) {
+                // true for signature failure
+                return _packValidationData(true, 0, 0);
+            }
 
-            signature = userOp.signature[7:]; // keySlot, signature
-            messageToVerify = abi.encodePacked(version, validUntil, userOpHash);
-            returnIfValid.validUntil = validUntil;
-        } else {
-            return SIG_VALIDATION_FAILED;
-        }
-
-        if (_validateSignature(messageToVerify, signature)) {
-            require(block.timestamp <= returnIfValid.validUntil, "Signature expired");
-            return _packValidationData(returnIfValid);
+            // Reconstructing the exact bytes that were hashed with EIP-191 prefix off-chain
+            bytes memory precursorBytes = abi.encodePacked(version, validUntil, userOpHash);
+            // Calculating the EIP-191 digest of the precursor bytes
+            // keccak256("\x19Ethereum Signed Message:\n39" + precursorBytes)
+            bytes32 challengeDigest = keccak256(
+                abi.encodePacked(
+                    EIP191_PREFIX,
+                    USEROP_PRECURSOR_LENGTH,
+                    precursorBytes
+                )
+            );
+            // The challenge expected by the WebAuthn.sol is in bytes format
+            bytes memory challengeBytes = abi.encodePacked(challengeDigest);
+            
+            if(_validateSignature(challengeBytes, webAuthnSignatureBytes)) {
+                // False because signature is valid
+                return _packValidationData(false, validUntil, 0);
+            }
+            else {
+                return SIG_VALIDATION_FAILED;
+            }
         }
         return SIG_VALIDATION_FAILED;
     }
@@ -163,16 +222,34 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
         );
     }
 
+    /**
+     * @dev Internal function to validate a signature using the P256Verifier -> WebAuthn library.
+     * @param challenge The raw bytes expected to be found (Base64Url encoded) in the
+     *                  `challenge` field of the `clientDataJSON` within the `webAuthnSignatureBytes`.
+     * @param webAuthnSignature The ABI-encoded WebAuthnSigData tuple containing authenticatorData,
+     *                                    clientDataJSON, indices, r, and s.
+     * @return True if the WebAuthn assertion is valid according to the WebAuthn library's checks.
+     */
     function _validateSignature(
-        bytes memory message,
-        bytes calldata signature
+        bytes memory challenge,
+        bytes calldata webAuthnSignatureBytes
     ) private view returns (bool) {
-        WebAuthnSignature memory sig = abi.decode(signature, (WebAuthnSignature));
+        // Decoding the WebAuthnSignature struct from the provided ABI-encoded bytes
+        WebAuthnSignature memory sig = abi.decode(webAuthnSignatureBytes, (WebAuthnSignature));
+
+        WebAuthnSignature memory webAuthnSig = WebAuthnSignature({
+            authenticatorData: sig.authenticatorData,
+            clienDataJSON: sig.clientDataJSON,
+            challengeIndex: sig.challengeIndex,
+            typeIndex: sig.typeIndex,
+            r: sig.r,
+            s: sig.s
+        });
 
         return verifier.verifySignature({
-            message: message,
+            message: challenge,
             requireUserVerification: false,
-            webAuthnSignature: sig,
+            webAuthnSignature: webAuthnSig,
             x: uint256(owner[0]),
             y: uint256(owner[1])
         });
