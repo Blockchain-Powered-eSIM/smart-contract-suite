@@ -1,5 +1,5 @@
 const hre = require("hardhat");
-const { ethers } = hre;
+const {ethers} = hre;
 const dotenv = require("dotenv");
 const ADDRESS = require("../deployments/address.json");
 
@@ -19,12 +19,11 @@ async function main () {
     const ESIM_WALLET_ADMIN = process.env.ESIM_WALLET_ADMIN;
     const eSIMWalletAdminSigner = new ethers.Wallet(process.env.PRIVATE_KEY_3, provider);
 
-    const sender = ESIM_WALLET_ADMIN;
-
     // Sample values
     const deviceWalletOwnerKey = ["0x6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C291", "0x4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F1"];
     const deviceUniqueIdentifier = "Device_11";
     const salt = 111n; // bigint or number
+    const sender = ESIM_WALLET_ADMIN;
     
     const registry = ADDRESS[network.config.name].RegistryProxy;
     const deviceWalletFactoryAddress = ADDRESS[network.config.name].DeviceWalletFactoryProxy;
