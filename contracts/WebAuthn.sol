@@ -3,7 +3,7 @@ pragma solidity 0.8.25;
 
 import {FCL_ecdsa} from "FreshCryptoLib/FCL_ecdsa.sol";
 import {FCL_Elliptic_ZZ} from "FreshCryptoLib/FCL_elliptic.sol";
-import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
+import {Base64 as SoladyBase64} from "solady/utils/Base64.sol";
 import {LibString} from "solady/utils/LibString.sol";
 import "./CustomStructs.sol";
 
@@ -110,10 +110,42 @@ library WebAuthn {
         }
 
         // 12. Verify that the value of C.challenge equals the base64url encoding of options.challenge.
-        bytes memory expectedChallenge = bytes(string.concat('"challenge":"', Base64.encode(challenge), '"'));
-        string memory actualChallenge =
-            webAuthnSignature.clientDataJSON.slice(webAuthnSignature.challengeIndex, webAuthnSignature.challengeIndex + expectedChallenge.length);
-        if (keccak256(bytes(actualChallenge)) != keccak256(expectedChallenge)) {
+        // The `challenge` argument to this function is the raw bytes.
+        // `webAuthnSignature.clientDataJSON` (after off-chain fix for Problem 1) contains:
+        // "challenge":"<base64url_encoded_raw_hash_bytes_no_padding>"
+
+        // `challengeIndex` points to the 'c' in "challenge":
+        // So, "challenge":" is 13 characters long.
+        uint256 challengeValueStartIndexInJson = webAuthnSignature.challengeIndex + 13; // Start of the Base64URL string
+
+        if (challengeValueStartIndexInJson >= bytes(webAuthnSignature.clientDataJSON).length) {
+            return false;
+        }
+
+        // Find the closing quote for the challenge value
+        uint256 challengeValueEndIndexInJson = 0;
+        bytes memory clientDataBytes = bytes(webAuthnSignature.clientDataJSON);
+        for (uint256 i = challengeValueStartIndexInJson; i < clientDataBytes.length; i++) {
+            console.logBytes1(clientDataBytes[i]);
+            if (clientDataBytes[i] == '"') { // Found the closing quote
+                challengeValueEndIndexInJson = i;
+                break;
+            }
+        }
+
+        if (challengeValueEndIndexInJson == 0 || challengeValueEndIndexInJson <= challengeValueStartIndexInJson) {
+            return false;
+        }
+
+        string memory actualChallengeValue = webAuthnSignature.clientDataJSON.slice(
+            challengeValueStartIndexInJson,
+            challengeValueEndIndexInJson // Slice up to (but not including) the closing quote
+        );
+
+        // Encode the raw `challenge` bytes using Solady's Base64URL (fileSafe=true, noPadding=true)
+        // Matches simple-webauthn's isoBase64URL.fromBuffer() encodes.
+        string memory expectedChallengeValue = SoladyBase64.encode(challenge, true, true);
+        if (keccak256(bytes(actualChallengeValue)) != keccak256(bytes(expectedChallengeValue))) {
             return false;
         }
 
@@ -147,7 +179,9 @@ library WebAuthn {
         // so an invalid signature will be checked twice: once by the precompile and once by FCL.
         // Ideally this signature failure is simulated offchain and no one actually pay this gas.
         bool valid = ret.length > 0;
-        if (success && valid) return abi.decode(ret, (uint256)) == 1;
+        if (success && valid) {
+            return abi.decode(ret, (uint256)) == 1;
+        }
 
         return FCL_ecdsa.ecdsa_verify(messageHash, webAuthnSignature.r, webAuthnSignature.s, x, y);
     }

@@ -44,8 +44,8 @@ module.exports = {
       },
     },
     tenderly_op_sepolia: {
-      name: "OP_Sepolia",
-      chainId: 11155420,
+      name: "Kokio-OP-Sepolia",
+      chainId: 1212121,
       url: `${ALCHEMY_TENDERLY_OP_SEPOLIA_HTTPS}`,
       accounts: [PRIV_KEY],
       saveDeployments: true,

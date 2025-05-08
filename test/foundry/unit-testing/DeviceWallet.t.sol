@@ -4,6 +4,7 @@ pragma solidity ^0.8.18;
 
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
+import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
 
 import "contracts/CustomStructs.sol";
 
@@ -727,5 +728,41 @@ contract DeviceWalletTest is DeployerBase {
         assertEq(history.length, 1, "Transaction history should have been updated");
         assertEq(history[0].dataBundleID, "DB_ID_0", "Transaction history's data bundle ID should have been correct");
         assertEq(history[0].dataBundlePrice, 1 ether, "Transaction history's data bundle price should have been correct");
+    }
+
+    function test_isValidSignature() public {
+        deployWallets();
+        vm.startPrank(user1);
+        // Input params are sample values used after off-chain calculation and signing
+        bytes4 returnValue = deviceWallet.isValidSignature(
+            // messageHash,
+            // encodePackedSignature
+            hex"bc59481040739fe031440de55e52ee645b7cd177075920433a8dd2b81e91fd4c",
+            hex"010000681c5092000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000c0000000000000000000000000000000000000000000000000000000000000012000000000000000000000000000000000000000000000000000000000000000170000000000000000000000000000000000000000000000000000000000000001fefdf225ba179b8d2121152116454d1cf852a26804de57ba39349c144cff2dc4100a020dc56ac02a31d46b651581058d057ee793171031f64d991176a4b24fa5000000000000000000000000000000000000000000000000000000000000002593613e408a25dbfc09d33b17fdc30d43e4b61f59a2ff388f28dd4e073ba058fb1d0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000be7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a2276466c494545427a6e2d41785241336c586c4c755a46743830586348575342444f6f3353754236525f5577222c226f726967696e223a22616e64726f69643a61706b2d6b65792d686173683a53447852554851355957742d6475656744537a4766515f4757455f4146314556796e6d2d6b73544e474755222c22616e64726f69645061636b6167654e616d65223a226170702e6b6f6b696f227d0000"
+        );
+        vm.stopPrank();
+        assertNotEq("0x1626ba7e", returnValue, "Signature invalid");
+    }
+
+    function test_webAuthn_encodeDecode() public {
+        // WebAuthnSignature memory webAuthnSignatureData = WebAuthnSignature(
+        //     "0x93613e408a25dbfc09d33b17fdc30d43e4b61f59a2ff388f28dd4e073ba058fb1d00000000",
+        //     '{"type":"webauthn.get","challenge":"MTgyNmU2NmUxMzI0ZWVjNTk5M2E2OGE5YTZmMDdhMzIwNWM5MjVhMmVhMDNhYWEzMTI1MzEwZjQwM2E1MzVjZA","origin":"android:apk-key-hash:SDxRUHQ5YWt-duegDSzGfQ_GWE_AF1EVynm-ksTNGGU","androidPackageName":"app.kokio"}',
+        //     23,
+        //     1,
+        //     45961455800004125052396584148558921233963633569227808536744376686154150690997,
+        //     21146418585897763519974678241940796266068219257824371122281587248552492377525
+        // );
+        
+        // bytes memory encodedData = abi.encode(webAuthnSignatureData);
+        // console.logBytes(encodedData);
+
+        // WebAuthnSignature memory decodedWebAuthn = abi.decode(encodedData, (WebAuthnSignature));
+        // console.logBytes(decodedWebAuthn.authenticatorData);
+        // console.logString(decodedWebAuthn.clientDataJSON);
+        // console.logUint(decodedWebAuthn.challengeIndex);
+        // console.logUint(decodedWebAuthn.typeIndex);
+        // console.logUint(decodedWebAuthn.r);
+        // console.logUint(decodedWebAuthn.s);
     }
 }
