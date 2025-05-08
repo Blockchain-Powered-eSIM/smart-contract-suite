@@ -126,7 +126,6 @@ library WebAuthn {
         uint256 challengeValueEndIndexInJson = 0;
         bytes memory clientDataBytes = bytes(webAuthnSignature.clientDataJSON);
         for (uint256 i = challengeValueStartIndexInJson; i < clientDataBytes.length; i++) {
-            console.logBytes1(clientDataBytes[i]);
             if (clientDataBytes[i] == '"') { // Found the closing quote
                 challengeValueEndIndexInJson = i;
                 break;
