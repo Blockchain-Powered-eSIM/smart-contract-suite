@@ -84,7 +84,8 @@ module.exports = {
       optimizer: {
         enabled: true,
         runs: 200
-      }
+      },
+      viaIR: true,
     }
   },
   paths: {

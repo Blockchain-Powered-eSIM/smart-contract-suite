@@ -142,7 +142,7 @@ library WebAuthn {
         );
 
         // Encode the raw `challenge` bytes using Solady's Base64URL (fileSafe=true, noPadding=true)
-        // Matches simple-webauthn's isoBase64URL.fromBuffer() encodes.
+        // This should match how simple-webauthn's isoBase64URL.fromBuffer() encodes.
         string memory expectedChallengeValue = SoladyBase64.encode(challenge, true, true);
         if (keccak256(bytes(actualChallengeValue)) != keccak256(bytes(expectedChallengeValue))) {
             return false;

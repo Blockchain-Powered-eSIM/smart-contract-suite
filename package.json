@@ -1,9 +1,9 @@
 {
   "name": "smart-contract-suite",
   "scripts": {
-    "forge-build": "forge build --sizes",
-    "test": "forge test -v",
-    "test-debug": "forge test -vvv",
+    "forge-build": "forge build --via-ir --sizes",
+    "test": "forge test --via-ir -v",
+    "test-debug": "forge test --via-ir -vvv",
     "coverage": "forge coverage",
     "coverage-with-report": "forge coverage --report lcov",
     "html-coverage-report": "forge coverage --report lcov && genhtml lcov.info -o report",
