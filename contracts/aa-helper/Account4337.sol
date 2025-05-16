@@ -135,6 +135,7 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
             // ABI encoded WebAuthnSignature bytes
             bytes calldata webAuthnSignatureBytes = bytes(_signature[SIGNATURE_HEADER_LENGTH:]);
 
+            // Its Okay to access TIMESTAMP here, as it is only restricted for validateUserOp
             if(block.timestamp > validUntil) {
                 return 0xffffffff;
             }
@@ -181,11 +182,6 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
             // ABI encoded WebAuthnSignature bytes
             bytes calldata webAuthnSignatureBytes = bytes(signature[SIGNATURE_HEADER_LENGTH:]);
 
-            if(block.timestamp > validUntil) {
-                // true for signature failure
-                return _packValidationData(true, 0, 0);
-            }
-
             // Reconstructing the exact bytes that were hashed with EIP-191 prefix off-chain
             bytes memory precursorBytes = abi.encodePacked(version, validUntil, userOpHash);
             // Calculating the EIP-191 digest of the precursor bytes
@@ -201,6 +197,8 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
             bytes memory challengeBytes = abi.encodePacked(challengeDigest);
             
             if(_validateSignature(challengeBytes, webAuthnSignatureBytes)) {
+                // Since TIMESTAMP is a blocked opcode in validateUserOp, _packValidationData asks the entryPoint
+                // to check for validUntil and validAfter (0 in our case)
                 // False because signature is valid
                 return _packValidationData(false, validUntil, 0);
             }
@@ -236,7 +234,7 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
 
         return verifier.verifySignature({
             message: challenge,
-            requireUserVerification: false,
+            requireUserVerification: true,
             webAuthnSignature: sig,
             x: uint256(owner[0]),
             y: uint256(owner[1])
