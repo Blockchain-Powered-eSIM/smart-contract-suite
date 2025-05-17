@@ -177,14 +177,14 @@ async function main() {
 
     // Deployment summary
     console.log("\n--- DEPLOYMENT SUMMARY ---");
-    console.log(`EntryPoint: ${entryPointAddress}`);
-    console.log(`P256Verifier: ${p256VerifierAddress}`);
-    console.log(`DeviceWallet Implementation: ${deviceWalletImplAddress}`);
-    console.log(`ESIMWallet Implementation: ${esimWalletImplAddress}`);
-    console.log(`Registry: ${registryAddress}`);
-    console.log(`LazyWalletRegistry: ${lazyWalletRegistryAddress}`);
-    console.log(`DeviceWalletFactory: ${deviceWalletFactoryAddress}`);
-    console.log(`ESIMWalletFactory: ${esimWalletFactoryAddress}`);
+    console.log(`"EntryPoint": "${entryPointAddress}",`);
+    console.log(`"P256Verifier": "${p256VerifierAddress}",`);
+    console.log(`"DeviceWalletImpl": "${deviceWalletImplAddress}",`);
+    console.log(`"ESIMWalletImpl": "${esimWalletImplAddress}",`);
+    console.log(`"DeviceWalletFactoryProxy": "${deviceWalletFactoryAddress}",`);
+    console.log(`"ESIMWalletFactoryProxy": "${esimWalletFactoryAddress}",`);
+    console.log(`"RegistryProxy": "${registryAddress}",`);
+    console.log(`"LazyWalletRegistryProxy": "${lazyWalletRegistryAddress}"`);
     console.log("--- END SUMMARY ---\n");
 
     console.log("Deployment completed successfully!");

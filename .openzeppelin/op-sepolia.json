@@ -1,0 +1,832 @@
+{
+  "manifestVersion": "3.2",
+  "proxies": [
+    {
+      "address": "0x539C14adAc8eA6013e6C9CF0Ef7cdF0255Df462f",
+      "txHash": "0xc605cb7c2906e86bc871a151ff0553734a332a2bc5a6431c041c07463586ccb2",
+      "kind": "uups"
+    },
+    {
+      "address": "0x5141407ca59DACF4D8433ffb4eF7c44409e00784",
+      "txHash": "0x73ac45440213798b64da29dcce49799101dae3de0d9d251dc6a3cd07417c82cd",
+      "kind": "uups"
+    },
+    {
+      "address": "0x959C67e2Ee207dC22864b83cFd897C7707397c1C",
+      "txHash": "0x8f6851fb0f5aa109478fe9ab94d87aed325f709072ee6bfdae7d937465e2ac1f",
+      "kind": "uups"
+    },
+    {
+      "address": "0x2A25c8aB9Bd6a45D753762024c5c1e061448D5A3",
+      "txHash": "0x410c297d1a91a08c2cabd2405bb1205c039733b045ef07a3098adee8ea1cb9ce",
+      "kind": "uups"
+    }
+  ],
+  "impls": {
+    "18a0a488cad942686b6dc62001dc2a91d475f4ecda896d4b1c7d5792f3556d82": {
+      "address": "0x62D69396D1ba24917AD0a15eB22427BaAA02920a",
+      "txHash": "0x816e3ff2636061daf0657ec6d0c2fdb573bf4e1cb7a3a0ef385e0ddaa368e63a",
+      "layout": {
+        "solcVersion": "0.8.25",
+        "storage": [
+          {
+            "label": "entryPoint",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_contract(IEntryPoint)770",
+            "contract": "DeviceWalletFactory",
+            "src": "contracts/device-wallet/DeviceWalletFactory.sol:60"
+          },
+          {
+            "label": "verifier",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_contract(P256Verifier)7830",
+            "contract": "DeviceWalletFactory",
+            "src": "contracts/device-wallet/DeviceWalletFactory.sol:62"
+          },
+          {
+            "label": "eSIMWalletAdmin",
+            "offset": 0,
+            "slot": "2",
+            "type": "t_address",
+            "contract": "DeviceWalletFactory",
+            "src": "contracts/device-wallet/DeviceWalletFactory.sol:65"
+          },
+          {
+            "label": "vault",
+            "offset": 0,
+            "slot": "3",
+            "type": "t_address",
+            "contract": "DeviceWalletFactory",
+            "src": "contracts/device-wallet/DeviceWalletFactory.sol:68"
+          },
+          {
+            "label": "beacon",
+            "offset": 0,
+            "slot": "4",
+            "type": "t_contract(UpgradeableBeacon)2667",
+            "contract": "DeviceWalletFactory",
+            "src": "contracts/device-wallet/DeviceWalletFactory.sol:73"
+          },
+          {
+            "label": "registry",
+            "offset": 0,
+            "slot": "5",
+            "type": "t_contract(Registry)8199",
+            "contract": "DeviceWalletFactory",
+            "src": "contracts/device-wallet/DeviceWalletFactory.sol:76"
+          },
+          {
+            "label": "newRequestedAdmin",
+            "offset": 0,
+            "slot": "6",
+            "type": "t_address",
+            "contract": "DeviceWalletFactory",
+            "src": "contracts/device-wallet/DeviceWalletFactory.sol:81"
+          },
+          {
+            "label": "deviceWalletInfoAdded",
+            "offset": 0,
+            "slot": "7",
+            "type": "t_mapping(t_address,t_bool)",
+            "contract": "DeviceWalletFactory",
+            "src": "contracts/device-wallet/DeviceWalletFactory.sol:84"
+          }
+        ],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_struct(InitializableStorage)660_storage": {
+            "label": "struct Initializable.InitializableStorage",
+            "members": [
+              {
+                "label": "_initialized",
+                "type": "t_uint64",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "_initializing",
+                "type": "t_bool",
+                "offset": 8,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(Ownable2StepStorage)545_storage": {
+            "label": "struct Ownable2StepUpgradeable.Ownable2StepStorage",
+            "members": [
+              {
+                "label": "_pendingOwner",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(OwnableStorage)600_storage": {
+            "label": "struct OwnableUpgradeable.OwnableStorage",
+            "members": [
+              {
+                "label": "_owner",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_uint64": {
+            "label": "uint64",
+            "numberOfBytes": "8"
+          },
+          "t_contract(IEntryPoint)770": {
+            "label": "contract IEntryPoint",
+            "numberOfBytes": "20"
+          },
+          "t_contract(P256Verifier)7830": {
+            "label": "contract P256Verifier",
+            "numberOfBytes": "20"
+          },
+          "t_contract(Registry)8199": {
+            "label": "contract Registry",
+            "numberOfBytes": "20"
+          },
+          "t_contract(UpgradeableBeacon)2667": {
+            "label": "contract UpgradeableBeacon",
+            "numberOfBytes": "20"
+          },
+          "t_mapping(t_address,t_bool)": {
+            "label": "mapping(address => bool)",
+            "numberOfBytes": "32"
+          }
+        },
+        "namespaces": {
+          "erc7201:openzeppelin.storage.Ownable2Step": [
+            {
+              "contract": "Ownable2StepUpgradeable",
+              "label": "_pendingOwner",
+              "type": "t_address",
+              "src": "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol:23",
+              "offset": 0,
+              "slot": "0"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Ownable": [
+            {
+              "contract": "OwnableUpgradeable",
+              "label": "_owner",
+              "type": "t_address",
+              "src": "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol:24",
+              "offset": 0,
+              "slot": "0"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Initializable": [
+            {
+              "contract": "Initializable",
+              "label": "_initialized",
+              "type": "t_uint64",
+              "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:69",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "Initializable",
+              "label": "_initializing",
+              "type": "t_bool",
+              "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:73",
+              "offset": 8,
+              "slot": "0"
+            }
+          ]
+        }
+      }
+    },
+    "7030c5e8d04fabe90c39e9ef531f064cac34deed4acb1f39c61fdf968a0d3161": {
+      "address": "0x4F53900D935691c3E092F3e467f051b1eC5CBF5C",
+      "txHash": "0x72ef44b27b8be02b1764dc8dcb28e16148a64fcf9a30ba5084f96c6dbb05d89f",
+      "layout": {
+        "solcVersion": "0.8.25",
+        "storage": [
+          {
+            "label": "registry",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_contract(Registry)8199",
+            "contract": "ESIMWalletFactory",
+            "src": "contracts/esim-wallet/ESIMWalletFactory.sol:41"
+          },
+          {
+            "label": "beacon",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_contract(UpgradeableBeacon)2667",
+            "contract": "ESIMWalletFactory",
+            "src": "contracts/esim-wallet/ESIMWalletFactory.sol:54"
+          },
+          {
+            "label": "isESIMWalletDeployed",
+            "offset": 0,
+            "slot": "2",
+            "type": "t_mapping(t_address,t_bool)",
+            "contract": "ESIMWalletFactory",
+            "src": "contracts/esim-wallet/ESIMWalletFactory.sol:57"
+          }
+        ],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_struct(InitializableStorage)660_storage": {
+            "label": "struct Initializable.InitializableStorage",
+            "members": [
+              {
+                "label": "_initialized",
+                "type": "t_uint64",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "_initializing",
+                "type": "t_bool",
+                "offset": 8,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(Ownable2StepStorage)545_storage": {
+            "label": "struct Ownable2StepUpgradeable.Ownable2StepStorage",
+            "members": [
+              {
+                "label": "_pendingOwner",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(OwnableStorage)600_storage": {
+            "label": "struct OwnableUpgradeable.OwnableStorage",
+            "members": [
+              {
+                "label": "_owner",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_uint64": {
+            "label": "uint64",
+            "numberOfBytes": "8"
+          },
+          "t_contract(Registry)8199": {
+            "label": "contract Registry",
+            "numberOfBytes": "20"
+          },
+          "t_contract(UpgradeableBeacon)2667": {
+            "label": "contract UpgradeableBeacon",
+            "numberOfBytes": "20"
+          },
+          "t_mapping(t_address,t_bool)": {
+            "label": "mapping(address => bool)",
+            "numberOfBytes": "32"
+          }
+        },
+        "namespaces": {
+          "erc7201:openzeppelin.storage.Ownable2Step": [
+            {
+              "contract": "Ownable2StepUpgradeable",
+              "label": "_pendingOwner",
+              "type": "t_address",
+              "src": "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol:23",
+              "offset": 0,
+              "slot": "0"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Ownable": [
+            {
+              "contract": "OwnableUpgradeable",
+              "label": "_owner",
+              "type": "t_address",
+              "src": "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol:24",
+              "offset": 0,
+              "slot": "0"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Initializable": [
+            {
+              "contract": "Initializable",
+              "label": "_initialized",
+              "type": "t_uint64",
+              "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:69",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "Initializable",
+              "label": "_initializing",
+              "type": "t_bool",
+              "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:73",
+              "offset": 8,
+              "slot": "0"
+            }
+          ]
+        }
+      }
+    },
+    "546eaae52f56410861acff1a46ab31f37026fc1637e31b5583a7e597186c3f96": {
+      "address": "0x169F2305d2db8748c37c56031D2BCb5BBAEf6EEc",
+      "txHash": "0x1db75ec1d14163aa09fcedf682d30c92280459a616222ba379730499646b0b52",
+      "layout": {
+        "solcVersion": "0.8.25",
+        "storage": [
+          {
+            "label": "lazyWalletRegistry",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_address",
+            "contract": "RegistryHelper",
+            "src": "contracts/RegistryHelper.sol:55"
+          },
+          {
+            "label": "deviceWalletFactory",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_contract(DeviceWalletFactory)11664",
+            "contract": "RegistryHelper",
+            "src": "contracts/RegistryHelper.sol:58"
+          },
+          {
+            "label": "eSIMWalletFactory",
+            "offset": 0,
+            "slot": "2",
+            "type": "t_contract(ESIMWalletFactory)12681",
+            "contract": "RegistryHelper",
+            "src": "contracts/RegistryHelper.sol:61"
+          },
+          {
+            "label": "uniqueIdentifierToDeviceWallet",
+            "offset": 0,
+            "slot": "3",
+            "type": "t_mapping(t_string_memory_ptr,t_address)",
+            "contract": "RegistryHelper",
+            "src": "contracts/RegistryHelper.sol:65"
+          },
+          {
+            "label": "deviceWalletToOwner",
+            "offset": 0,
+            "slot": "4",
+            "type": "t_mapping(t_address,t_array(t_bytes32)2_storage)",
+            "contract": "RegistryHelper",
+            "src": "contracts/RegistryHelper.sol:68"
+          },
+          {
+            "label": "registeredP256Keys",
+            "offset": 0,
+            "slot": "5",
+            "type": "t_mapping(t_bytes32,t_address)",
+            "contract": "RegistryHelper",
+            "src": "contracts/RegistryHelper.sol:73"
+          },
+          {
+            "label": "isDeviceWalletValid",
+            "offset": 0,
+            "slot": "6",
+            "type": "t_mapping(t_address,t_bool)",
+            "contract": "RegistryHelper",
+            "src": "contracts/RegistryHelper.sol:77"
+          },
+          {
+            "label": "isESIMWalletValid",
+            "offset": 0,
+            "slot": "7",
+            "type": "t_mapping(t_address,t_address)",
+            "contract": "RegistryHelper",
+            "src": "contracts/RegistryHelper.sol:80"
+          },
+          {
+            "label": "isESIMWalletOnStandby",
+            "offset": 0,
+            "slot": "8",
+            "type": "t_mapping(t_address,t_bool)",
+            "contract": "RegistryHelper",
+            "src": "contracts/RegistryHelper.sol:84"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "9",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "RegistryHelper",
+            "src": "contracts/RegistryHelper.sol:87"
+          },
+          {
+            "label": "entryPoint",
+            "offset": 0,
+            "slot": "59",
+            "type": "t_contract(IEntryPoint)770",
+            "contract": "Registry",
+            "src": "contracts/Registry.sol:23"
+          },
+          {
+            "label": "eSIMWalletAdmin",
+            "offset": 0,
+            "slot": "60",
+            "type": "t_address",
+            "contract": "Registry",
+            "src": "contracts/Registry.sol:26"
+          },
+          {
+            "label": "vault",
+            "offset": 0,
+            "slot": "61",
+            "type": "t_address",
+            "contract": "Registry",
+            "src": "contracts/Registry.sol:29"
+          },
+          {
+            "label": "upgradeManager",
+            "offset": 0,
+            "slot": "62",
+            "type": "t_address",
+            "contract": "Registry",
+            "src": "contracts/Registry.sol:32"
+          }
+        ],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_struct(InitializableStorage)660_storage": {
+            "label": "struct Initializable.InitializableStorage",
+            "members": [
+              {
+                "label": "_initialized",
+                "type": "t_uint64",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "_initializing",
+                "type": "t_bool",
+                "offset": 8,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(Ownable2StepStorage)545_storage": {
+            "label": "struct Ownable2StepUpgradeable.Ownable2StepStorage",
+            "members": [
+              {
+                "label": "_pendingOwner",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(OwnableStorage)600_storage": {
+            "label": "struct OwnableUpgradeable.OwnableStorage",
+            "members": [
+              {
+                "label": "_owner",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_uint64": {
+            "label": "uint64",
+            "numberOfBytes": "8"
+          },
+          "t_array(t_bytes32)2_storage": {
+            "label": "bytes32[2]",
+            "numberOfBytes": "64"
+          },
+          "t_array(t_uint256)50_storage": {
+            "label": "uint256[50]",
+            "numberOfBytes": "1600"
+          },
+          "t_bytes32": {
+            "label": "bytes32",
+            "numberOfBytes": "32"
+          },
+          "t_contract(DeviceWalletFactory)11664": {
+            "label": "contract DeviceWalletFactory",
+            "numberOfBytes": "20"
+          },
+          "t_contract(ESIMWalletFactory)12681": {
+            "label": "contract ESIMWalletFactory",
+            "numberOfBytes": "20"
+          },
+          "t_contract(IEntryPoint)770": {
+            "label": "contract IEntryPoint",
+            "numberOfBytes": "20"
+          },
+          "t_mapping(t_address,t_address)": {
+            "label": "mapping(address => address)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_array(t_bytes32)2_storage)": {
+            "label": "mapping(address => bytes32[2])",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_bool)": {
+            "label": "mapping(address => bool)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_bytes32,t_address)": {
+            "label": "mapping(bytes32 => address)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_string_memory_ptr,t_address)": {
+            "label": "mapping(string => address)",
+            "numberOfBytes": "32"
+          },
+          "t_string_memory_ptr": {
+            "label": "string",
+            "numberOfBytes": "32"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_string_storage": {
+            "label": "string"
+          }
+        },
+        "namespaces": {
+          "erc7201:openzeppelin.storage.Ownable2Step": [
+            {
+              "contract": "Ownable2StepUpgradeable",
+              "label": "_pendingOwner",
+              "type": "t_address",
+              "src": "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol:23",
+              "offset": 0,
+              "slot": "0"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Ownable": [
+            {
+              "contract": "OwnableUpgradeable",
+              "label": "_owner",
+              "type": "t_address",
+              "src": "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol:24",
+              "offset": 0,
+              "slot": "0"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Initializable": [
+            {
+              "contract": "Initializable",
+              "label": "_initialized",
+              "type": "t_uint64",
+              "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:69",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "Initializable",
+              "label": "_initializing",
+              "type": "t_bool",
+              "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:73",
+              "offset": 8,
+              "slot": "0"
+            }
+          ]
+        }
+      }
+    },
+    "1db013f46141a6654e2b496e60985b569d02a616be22c48e021486b2e0c130d6": {
+      "address": "0x9a1FB2E6142399904C155DF61D66998Ebd33dA7b",
+      "txHash": "0xfa9762ddb049916c5d58150c0859112ac1b765cb076dbe908e39ef16ccbf76ec",
+      "layout": {
+        "solcVersion": "0.8.25",
+        "storage": [
+          {
+            "label": "upgradeManager",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_address",
+            "contract": "LazyWalletRegistry",
+            "src": "contracts/LazyWalletRegistry.sol:72"
+          },
+          {
+            "label": "registry",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_contract(Registry)8199",
+            "contract": "LazyWalletRegistry",
+            "src": "contracts/LazyWalletRegistry.sol:75"
+          },
+          {
+            "label": "deviceIdentifierToESIMDetails",
+            "offset": 0,
+            "slot": "2",
+            "type": "t_mapping(t_string_memory_ptr,t_mapping(t_string_memory_ptr,t_array(t_struct(DataBundleDetails)6814_storage)dyn_storage))",
+            "contract": "LazyWalletRegistry",
+            "src": "contracts/LazyWalletRegistry.sol:78"
+          },
+          {
+            "label": "eSIMIdentifierToDeviceIdentifier",
+            "offset": 0,
+            "slot": "3",
+            "type": "t_mapping(t_string_memory_ptr,t_string_storage)",
+            "contract": "LazyWalletRegistry",
+            "src": "contracts/LazyWalletRegistry.sol:83"
+          },
+          {
+            "label": "eSIMIdentifiersAssociatedWithDeviceIdentifier",
+            "offset": 0,
+            "slot": "4",
+            "type": "t_mapping(t_string_memory_ptr,t_array(t_string_storage)dyn_storage)",
+            "contract": "LazyWalletRegistry",
+            "src": "contracts/LazyWalletRegistry.sol:86"
+          }
+        ],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_struct(InitializableStorage)660_storage": {
+            "label": "struct Initializable.InitializableStorage",
+            "members": [
+              {
+                "label": "_initialized",
+                "type": "t_uint64",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "_initializing",
+                "type": "t_bool",
+                "offset": 8,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(Ownable2StepStorage)545_storage": {
+            "label": "struct Ownable2StepUpgradeable.Ownable2StepStorage",
+            "members": [
+              {
+                "label": "_pendingOwner",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(OwnableStorage)600_storage": {
+            "label": "struct OwnableUpgradeable.OwnableStorage",
+            "members": [
+              {
+                "label": "_owner",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_uint64": {
+            "label": "uint64",
+            "numberOfBytes": "8"
+          },
+          "t_array(t_string_storage)dyn_storage": {
+            "label": "string[]",
+            "numberOfBytes": "32"
+          },
+          "t_array(t_struct(DataBundleDetails)6814_storage)dyn_storage": {
+            "label": "struct DataBundleDetails[]",
+            "numberOfBytes": "32"
+          },
+          "t_contract(Registry)8199": {
+            "label": "contract Registry",
+            "numberOfBytes": "20"
+          },
+          "t_mapping(t_string_memory_ptr,t_array(t_string_storage)dyn_storage)": {
+            "label": "mapping(string => string[])",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_string_memory_ptr,t_array(t_struct(DataBundleDetails)6814_storage)dyn_storage)": {
+            "label": "mapping(string => struct DataBundleDetails[])",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_string_memory_ptr,t_mapping(t_string_memory_ptr,t_array(t_struct(DataBundleDetails)6814_storage)dyn_storage))": {
+            "label": "mapping(string => mapping(string => struct DataBundleDetails[]))",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_string_memory_ptr,t_string_storage)": {
+            "label": "mapping(string => string)",
+            "numberOfBytes": "32"
+          },
+          "t_string_memory_ptr": {
+            "label": "string",
+            "numberOfBytes": "32"
+          },
+          "t_string_storage": {
+            "label": "string",
+            "numberOfBytes": "32"
+          },
+          "t_struct(DataBundleDetails)6814_storage": {
+            "label": "struct DataBundleDetails",
+            "members": [
+              {
+                "label": "dataBundleID",
+                "type": "t_string_storage",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "dataBundlePrice",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              }
+            ],
+            "numberOfBytes": "64"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          }
+        },
+        "namespaces": {
+          "erc7201:openzeppelin.storage.Ownable2Step": [
+            {
+              "contract": "Ownable2StepUpgradeable",
+              "label": "_pendingOwner",
+              "type": "t_address",
+              "src": "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol:23",
+              "offset": 0,
+              "slot": "0"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Ownable": [
+            {
+              "contract": "OwnableUpgradeable",
+              "label": "_owner",
+              "type": "t_address",
+              "src": "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol:24",
+              "offset": 0,
+              "slot": "0"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Initializable": [
+            {
+              "contract": "Initializable",
+              "label": "_initialized",
+              "type": "t_uint64",
+              "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:69",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "Initializable",
+              "label": "_initializing",
+              "type": "t_bool",
+              "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:73",
+              "offset": 8,
+              "slot": "0"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

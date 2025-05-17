@@ -16,6 +16,8 @@ interface Errors {
 
     // DeviceWalletFactory
     error OnlyAdmin();
+    error OnlyAdminOrRegistry();
+    error OnlyEntryPoint();
 
     // ESIMWallet and DeviceWallet
     error FailedToTransfer();

@@ -109,13 +109,42 @@ contract RegistryHelper {
             "Device wallet already exists"
         );
 
+        string[] memory deviceUniqueIdentifier = new string[](1);
+        bytes32[2][] memory deviceWalletOwnersKey = new bytes32[2][](1);
+        uint256[] memory salt = new uint256[](1);
+        uint256[] memory depositAmount = new uint256[](1);
+
+        deviceUniqueIdentifier[0] = _deviceUniqueIdentifier;
+        deviceWalletOwnersKey[0] = _deviceWalletOwnerKey;
+        salt[0] = _salt;
+        depositAmount[0] = _depositAmount;
+
         // Deploys device smart wallet
         // Updates device wallet info via Registry
-        address deviceWallet = address(deviceWalletFactory.createAccount{value: _depositAmount}(_deviceUniqueIdentifier, _deviceWalletOwnerKey, _salt, _depositAmount));
+        Wallets[] memory wallet = deviceWalletFactory.deployDeviceWalletForUsers{value: _depositAmount}(
+            deviceUniqueIdentifier,
+            deviceWalletOwnersKey,
+            salt,
+            depositAmount
+        );
 
+        address deviceWallet = wallet[0].deviceWallet;
+        address firstESIMWallet = wallet[0].eSIMWallet;
         address[] memory eSIMWallets = new address[](_eSIMUniqueIdentifiers.length);
+        
+        // Tracks the eSIMWallets array index
+        uint256 i = 0;
 
-        for(uint256 i=0; i<_eSIMUniqueIdentifiers.length; ++i) {
+        // 1st eSIM wallet will already be deployed by the deployDeviceWalletForUsers function
+        eSIMWallets[i] = firstESIMWallet;
+        // deployDeviceWalletForUsers doesn't set the eSIM identifer, hence updating it here for the 1st eSIM wallet
+        DeviceWallet(payable(deviceWallet)).setESIMUniqueIdentifierForAnESIMWallet(firstESIMWallet, _eSIMUniqueIdentifiers[i]);
+        // Populate data bundle purchase details for the eSIM wallet
+        ESIMWallet(payable(firstESIMWallet)).populateHistory(_dataBundleDetails[i]);
+        // Increase the index to deploy, set identifier and populate history for the remaining _eSIMUniqueIdentifiers
+        i++;
+
+        for(; i<_eSIMUniqueIdentifiers.length; ++i) {
             // increase salt for subsequent eSIM wallet deployments
             address eSIMWallet = eSIMWalletFactory.deployESIMWallet(deviceWallet, (_salt + i));
 

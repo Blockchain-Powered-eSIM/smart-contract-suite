@@ -11,6 +11,26 @@
     },
     "optimism-sepolia": {
         "EntryPoint": "0x0000000071727De22E5E9d8BAf0edAc6f37da032",
+        "P256Verifier": "0x0b227817024Ad508EF2Ae05da13aF31BC489B49F",
+        "DeviceWalletImpl": "0xE220c23D324E5627B09A96cd642230C3a4d5b494",
+        "ESIMWalletImpl": "0x2E4C4034cBb2CA2f4470990EEbc63719D9E196Fe",
+        "DeviceWalletFactoryProxy": "0x539C14adAc8eA6013e6C9CF0Ef7cdF0255Df462f",
+        "ESIMWalletFactoryProxy": "0x5141407ca59DACF4D8433ffb4eF7c44409e00784",
+        "RegistryProxy": "0x959C67e2Ee207dC22864b83cFd897C7707397c1C",
+        "LazyWalletRegistryProxy": "0x2A25c8aB9Bd6a45D753762024c5c1e061448D5A3"
+    },
+    "optimism-sepolia-v3": {
+        "EntryPoint": "0x0000000071727De22E5E9d8BAf0edAc6f37da032",
+        "P256Verifier": "0x828a3820C04792C886E636587A44DCc237017Bf0",
+        "DeviceWalletImpl": "0x468Acae76e0b2b9FB28B9cf63094b89442AFE1bF",
+        "ESIMWalletImpl": "0x594B28C3417Ef13D2C34fDBEcEA875Cb11AC1577",
+        "DeviceWalletFactoryProxy": "0xCFcc3B87edFEF212c9de959Ba99d4FE58634E277",
+        "ESIMWalletFactoryProxy": "0x7712053a85BAa46b8dD07e931c27B4a952DF78A9",
+        "RegistryProxy": "0x3D77C42c4e9fA4d3bb232bb938d543cbD033Aef8",
+        "LazyWalletRegistryProxy": "0x0c3124Ac8481e3B4507632D49e1A416C8a90E4BB"
+    },
+    "optimism-sepolia-v2": {
+        "EntryPoint": "0x0000000071727De22E5E9d8BAf0edAc6f37da032",
         "P256Verifier": "0x8a1E53b903efcc6b252CE4bD3b255202318505Ef",
         "DeviceWalletImpl": "0x5B3985c34B61DA42ED13B3113bEEE5493eB960D0",
         "ESIMWalletImpl": "0xd322d786f047EEe8235CA5A9e8B63DF1231a61ab",

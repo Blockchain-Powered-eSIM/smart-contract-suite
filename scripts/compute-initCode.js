@@ -11,7 +11,10 @@ async function main () {
         keccak256,
         getCreate2Address,
         concat,
-        toBigInt
+        toBigInt,
+        hexlify,
+        toBeHex,
+        zeroPadValue
     } = ethers;
 
     const provider = new ethers.JsonRpcProvider(network.config.url);
@@ -27,6 +30,7 @@ async function main () {
     
     const registry = ADDRESS[network.config.name].RegistryProxy;
     const deviceWalletFactoryAddress = ADDRESS[network.config.name].DeviceWalletFactoryProxy;
+    const eSIMWalletFactoryAddress = ADDRESS[network.config.name].ESIMWalletFactoryProxy;
 
     console.log("registry: ", registry);
     console.log("deviceWalletFactoryAddress: ", deviceWalletFactoryAddress);
@@ -35,16 +39,8 @@ async function main () {
     const beacon = await factory.beacon();
     console.log("Beacon Proxy address: ", beacon);
 
-    // Calculating unique salt based on createAccount function's implementation
     const abiCoder = ethers.AbiCoder.defaultAbiCoder();
-    const encoded = abiCoder.encode(
-        ["address", "uint256"],
-        [sender, salt]
-    );
-    const uniqueSaltBytes32 = keccak256(encoded); // already in bytes32 format
-    const uniqueSaltUint256 = toBigInt(uniqueSaltBytes32);
-    console.log("uniqueSaltBytes32: ", uniqueSaltBytes32);
-    console.log("uniqueSaltUint256: ", uniqueSaltUint256);
+    const saltBytes32 = zeroPadValue(toBeHex(salt), 32);
 
     // Encode the DeviceWallet.init with the init params
     const DeviceWallet = await ethers.getContractFactory("DeviceWallet");
@@ -52,6 +48,7 @@ async function main () {
         registry,
         deviceWalletOwnerKey,
         deviceUniqueIdentifier,
+        eSIMWalletFactoryAddress
     ]);
 
     const beaconProxyBytecode = (await ethers.getContractFactory("@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol:BeaconProxy")).bytecode;
@@ -73,13 +70,20 @@ async function main () {
     console.log("initCodeHash: ", initCodeHash, "\n");
 
     // Calculate deterministic address from init code hash
-    const create2Address = getCreate2Address(deviceWalletFactoryAddress, uniqueSaltBytes32, initCodeHash);
+    const create2Address = getCreate2Address(deviceWalletFactoryAddress, saltBytes32, initCodeHash);
     console.log("Off-chain Create2 address:", create2Address);
+
+    const deviceWalletFactory = await ethers.getContractAt("DeviceWalletFactory", deviceWalletFactoryAddress);
+    const onChainCounterfactualAddress = await deviceWalletFactory.connect(eSIMWalletAdminSigner).getCounterFactualAddress(
+        deviceWalletOwnerKey,
+        deviceUniqueIdentifier,
+        salt
+    );
+    console.log("Device wallet counterfactualAddress: ", onChainCounterfactualAddress, onChainCounterfactualAddress == create2Address);
 
     return;
 
     console.log("Calling createAccount from Device wallet factory");
-    const deviceWalletFactory = await ethers.getContractAt("DeviceWalletFactory", deviceWalletFactoryAddress);
     const tx = await deviceWalletFactory.connect(eSIMWalletAdminSigner).createAccount(
         deviceUniqueIdentifier,
         deviceWalletOwnerKey,

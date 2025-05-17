@@ -80,12 +80,32 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     ///      The new admin should accept the role, once accepted, this variable should be reset
     address public newRequestedAdmin;
 
+    /// @notice Tracks all the device wallets that have their data added into the registry upon deployment
+    mapping(address deviceWallet => bool isAdded) public deviceWalletInfoAdded;
+
     function _onlyAdmin() private view {
         if (msg.sender != eSIMWalletAdmin) revert Errors.OnlyAdmin();
     }
 
     modifier onlyAdmin() {
         _onlyAdmin();
+        _;
+    }
+
+    function _onlyAdminOrRegistry() private view {
+        if (
+            msg.sender != eSIMWalletAdmin &&
+            msg.sender != address(registry)
+        ) revert Errors.OnlyAdminOrRegistry();
+    }
+
+    modifier onlyAdminOrRegistry() {
+        _onlyAdminOrRegistry();
+        _;
+    }
+
+    modifier onlyEntryPoint() {
+        if(msg.sender != address(entryPoint)) revert Errors.OnlyEntryPoint();
         _;
     }
 
@@ -219,7 +239,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         bytes32[2][] memory _deviceWalletOwnersKey,
         uint256[] calldata _salts,
         uint256[] calldata _depositAmounts
-    ) external payable onlyAdmin returns (Wallets[] memory) {
+    ) external payable onlyAdminOrRegistry returns (Wallets[] memory) {
         uint256 numberOfDeviceWallets = _deviceUniqueIdentifiers.length;
         require(numberOfDeviceWallets != 0, "Array cannot be empty");
         require(numberOfDeviceWallets == _deviceWalletOwnersKey.length, "Array mismatch");
@@ -264,7 +284,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         uint256 _depositAmount
     ) internal returns (Wallets memory) {
         address deviceWalletAddress = address(
-            _createAccount(
+            _createAccountForUser(
                 _deviceUniqueIdentifier,
                 _deviceWalletOwnerKey,
                 _salt,
@@ -284,37 +304,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         return Wallets(deviceWalletAddress, eSIMWalletAddress);
     }
 
-    /**
-     * create an account, and return its address.
-     * returns the address even if the account is already deployed.
-     * Note that during UserOperation execution, this method is called only if the account is not deployed.
-     * This method returns an existing account address so that entryPoint.getSenderAddress() would work even after account creation
-     */
-    function createAccount(
-        string memory _deviceUniqueIdentifier,
-        bytes32[2] memory _deviceWalletOwnerKey,
-        uint256 _salt,
-        uint256 _depositAmount
-    ) public payable returns (DeviceWallet deviceWallet) {
-        
-        deviceWallet = _createAccount(
-            _deviceUniqueIdentifier,
-            _deviceWalletOwnerKey,
-            _salt,
-            _depositAmount
-        );
-
-
-        if(msg.value > _depositAmount) {
-            // return excess ETH
-            uint256 excessETH = msg.value - _depositAmount;
-            
-            (bool success,) = msg.sender.call{value: excessETH}("");
-            require(success, "ETH return failed");
-        }
-    }
-
-    function _createAccount(
+    function _createAccountForUser(
         string memory _deviceUniqueIdentifier,
         bytes32[2] memory _deviceWalletOwnerKey,
         uint256 _salt,
@@ -325,19 +315,11 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
             "DeviceIdentifier cannot be empty"
         );
 
-        // Encoding msg.sender with salt prevents deployments and DoS from unauthorised actors
-        bytes32 salt = keccak256(abi.encode(msg.sender, _salt));
-        uint256 uniqueSalt = uint256(salt);
-        address addr = getAddress(
+        address addr = getCounterFactualAddress(
             _deviceWalletOwnerKey,
             _deviceUniqueIdentifier,
-            uniqueSalt
+            _salt
         );
-
-        // Prefund the account with msg.value
-        if (msg.value > 0) {
-            entryPoint.depositTo{value: _depositAmount}(addr);
-        }
 
         // Check if the device identifier is actually unique
         address wallet = registry.uniqueIdentifierToDeviceWallet(_deviceUniqueIdentifier);
@@ -359,25 +341,136 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
             return DeviceWallet(payable(addr));
         }
 
+        // Prefund the account with msg.value
+        if (msg.value > 0) {
+            // The ERC4337 wallet MUST have a stake in EntryPoint in order to interact using userops,
+            // regardless of it being deployed by an EOA or EntryPoint
+            entryPoint.depositTo{value: _depositAmount}(addr);
+        }
+
         deviceWallet = DeviceWallet(
             payable(
-                new BeaconProxy{salt : bytes32(uniqueSalt)}(
+                new BeaconProxy{salt : bytes32(_salt)}(
                     address(beacon),
                     abi.encodeCall(
                         DeviceWallet.init, 
-                        (address(registry), _deviceWalletOwnerKey, _deviceUniqueIdentifier)
+                        (address(registry), _deviceWalletOwnerKey, _deviceUniqueIdentifier, address(registry.eSIMWalletFactory()))
                     )
                 )
             )
         );
 
         registry.updateDeviceWalletInfo(address(deviceWallet), _deviceUniqueIdentifier, _deviceWalletOwnerKey);
+        deviceWalletInfoAdded[address(deviceWallet)] = true;
+    }
+
+    /// @notice Checks that all the input params needed for deploying a fresh device wallet are valid
+    /// @dev This is needed when deploying the device wallet via the EntryPoint using userops
+    /// @param _deviceUniqueIdentifier Unique device identifier for the device wallet
+    /// @param _deviceWalletOwnerKey User's P256 public key (owner of the device wallet and respective eSIM wallets)
+    /// @return wallet address(0) if valid. device wallet address for any existing wallet
+    function preCreateAccountValidation(
+        string memory _deviceUniqueIdentifier,
+        bytes32[2] memory _deviceWalletOwnerKey
+    ) public view returns (address wallet) {
+        require(
+            bytes(_deviceUniqueIdentifier).length != 0, 
+            "DeviceIdentifier cannot be empty"
+        );
+        require(
+            _deviceWalletOwnerKey[0].length != 0, 
+            "Key[0] cannot be empty"
+        );
+        require(
+            _deviceWalletOwnerKey[1].length != 0, 
+            "Key[1] cannot be empty"
+        );
+        // Check if the device identifier is actually unique
+        wallet = registry.uniqueIdentifierToDeviceWallet(_deviceUniqueIdentifier);
+        if(wallet != address(0)) {
+            return wallet;
+        }
+
+        // Check if P256 public key is actually unique
+        bytes32 keyHash = keccak256(abi.encode(_deviceWalletOwnerKey[0], _deviceWalletOwnerKey[1]));
+        wallet = registry.registeredP256Keys(keyHash);
+        if(wallet != address(0)) {
+            return wallet;
+        }
+    }
+
+    /**
+     * create an account, and return its address.
+     * returns the address even if the account is already deployed.
+     * Note that during UserOperation execution, this method is called only if the account is not deployed.
+     * This method returns an existing account address so that entryPoint.getSenderAddress() would work even after account creation
+     */
+    /// @dev This createAccount needs to be called by the entry point,
+    /// hence it cannot read or write to any external contract storages
+    /// The validation should be done off-chain, and any storage update to external contracts should be done as a separate function
+    function createAccount(
+        string memory _deviceUniqueIdentifier,
+        bytes32[2] memory _deviceWalletOwnerKey,
+        uint256 _salt,
+        uint256 _depositAmount
+    ) public payable onlyEntryPoint returns (DeviceWallet deviceWallet) {
+        require(msg.value == _depositAmount, "Too less or too much ETH");
+        require(
+            bytes(_deviceUniqueIdentifier).length != 0, 
+            "DeviceIdentifier cannot be empty"
+        );
+
+        address addr = getCounterFactualAddress(
+            _deviceWalletOwnerKey,
+            _deviceUniqueIdentifier,
+            _salt
+        );
+
+        // Prefund the account with msg.value
+        if (msg.value > 0) {
+            entryPoint.depositTo{value: _depositAmount}(addr);
+        }
+
+        uint256 codeSize = addr.code.length;
+        if (codeSize > 0) {
+            return DeviceWallet(payable(addr));
+        }
+
+        deviceWallet = DeviceWallet(
+            payable(
+                new BeaconProxy{salt : bytes32(_salt)}(
+                    address(beacon),
+                    abi.encodeCall(
+                        DeviceWallet.init, 
+                        (address(registry), _deviceWalletOwnerKey, _deviceUniqueIdentifier, address(registry.eSIMWalletFactory()))
+                    )
+                )
+            )
+        );
+    }
+
+    /// @notice Update the respective storage after createAccount was called via EntryPoint
+    /// @dev This is not needed if the admin deploys the wallet for users as an EOA
+    /// The function can be called by the admin directly, and can also be called by the registry
+    /// when deploying the wallet via lazy wallet registry
+    function postCreateAccount(
+        address _deviceWallet,
+        string memory _deviceUniqueIdentifier,
+        bytes32[2] memory _deviceWalletOwnerKey
+    ) external onlyAdminOrRegistry {
+        require(deviceWalletInfoAdded[_deviceWallet] == false, "Device info already added");
+        require(
+            bytes(_deviceUniqueIdentifier).length != 0, 
+            "DeviceIdentifier cannot be empty"
+        );
+        registry.updateDeviceWalletInfo(address(_deviceWallet), _deviceUniqueIdentifier, _deviceWalletOwnerKey);
+        deviceWalletInfoAdded[_deviceWallet] = true;
     }
 
     /**
      * calculate the counterfactual address of this account as it would be returned by createAccount()
      */
-    function getAddress(
+    function getCounterFactualAddress(
         bytes32[2] memory _deviceWalletOwnerKey,
         string memory _deviceUniqueIdentifier,
         uint256 _salt
@@ -391,7 +484,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
                         address(beacon),
                         abi.encodeCall(
                             DeviceWallet.init,
-                            (address(registry), _deviceWalletOwnerKey, _deviceUniqueIdentifier)
+                            (address(registry), _deviceWalletOwnerKey, _deviceUniqueIdentifier, address(registry.eSIMWalletFactory()))
                         )
                     )
                 )
