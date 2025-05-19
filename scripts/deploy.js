@@ -58,36 +58,7 @@ async function main() {
     const p256VerifierAddress = await p256Verifier.getAddress();
     console.log(`P256Verifier deployed to: ${p256VerifierAddress}`);
 
-    // 3. Deploy DeviceWallet implementation
-    console.log("Deploying DeviceWallet implementation...");
-    const DeviceWallet = await ethers.getContractFactory("DeviceWallet");
-    const deviceWalletImpl = await DeviceWallet.deploy(entryPointAddress, p256VerifierAddress);
-    const deviceWalletImplAddress = await deviceWalletImpl.getAddress();
-    console.log(`DeviceWallet implementation deployed to: ${deviceWalletImplAddress}`);
-
-    // 4. Deploy DeviceWalletFactory with proxy
-    console.log("Deploying DeviceWalletFactory with proxy...");
-    const DeviceWalletFactory = await ethers.getContractFactory("DeviceWalletFactory");
-    const deviceWalletFactory = await upgrades.deployProxy(
-        DeviceWalletFactory,
-        [
-            deviceWalletImplAddress,
-            eSIMWalletAdminAddress,
-            vaultAddress,
-            upgradeManagerAddress,
-            entryPointAddress,
-            p256VerifierAddress
-        ],
-        {
-            initializer: "initialize",
-            kind: "uups",
-        }
-    );
-    await deviceWalletFactory.waitForDeployment();
-    const deviceWalletFactoryAddress = await deviceWalletFactory.getAddress();
-    console.log(`DeviceWalletFactory proxy deployed to: ${deviceWalletFactoryAddress}`);
-
-    // 5. Deploy ESIMWallet implementation
+    // 3. Deploy ESIMWallet implementation
     console.log("Deploying ESIMWallet implementation...");
     const ESIMWallet = await ethers.getContractFactory("ESIMWallet");
     const esimWalletImpl = await ESIMWallet.deploy();
@@ -95,7 +66,7 @@ async function main() {
     const esimWalletImplAddress = await esimWalletImpl.getAddress();
     console.log(`ESIMWallet implementation deployed to: ${esimWalletImplAddress}`);
 
-    // 6. Deploy ESIMWalletFactory with proxy
+    // 4. Deploy ESIMWalletFactory with proxy
     console.log("Deploying ESIMWalletFactory with proxy...");
     const ESIMWalletFactory = await ethers.getContractFactory("ESIMWalletFactory");
     const esimWalletFactory = await upgrades.deployProxy(
@@ -112,6 +83,36 @@ async function main() {
     await esimWalletFactory.waitForDeployment();
     const esimWalletFactoryAddress = await esimWalletFactory.getAddress();
     console.log(`ESIMWalletFactory proxy deployed to: ${esimWalletFactoryAddress}`);
+
+    // 5. Deploy DeviceWallet implementation
+    console.log("Deploying DeviceWallet implementation...");
+    const DeviceWallet = await ethers.getContractFactory("DeviceWallet");
+    const deviceWalletImpl = await DeviceWallet.deploy(entryPointAddress, p256VerifierAddress);
+    const deviceWalletImplAddress = await deviceWalletImpl.getAddress();
+    console.log(`DeviceWallet implementation deployed to: ${deviceWalletImplAddress}`);
+
+    // 6. Deploy DeviceWalletFactory with proxy
+    console.log("Deploying DeviceWalletFactory with proxy...");
+    const DeviceWalletFactory = await ethers.getContractFactory("DeviceWalletFactory");
+    const deviceWalletFactory = await upgrades.deployProxy(
+        DeviceWalletFactory,
+        [
+            deviceWalletImplAddress,
+            eSIMWalletAdminAddress,
+            vaultAddress,
+            upgradeManagerAddress,
+            esimWalletFactoryAddress,
+            entryPointAddress,
+            p256VerifierAddress
+        ],
+        {
+            initializer: "initialize",
+            kind: "uups",
+        }
+    );
+    await deviceWalletFactory.waitForDeployment();
+    const deviceWalletFactoryAddress = await deviceWalletFactory.getAddress();
+    console.log(`DeviceWalletFactory proxy deployed to: ${deviceWalletFactoryAddress}`);
 
     // 7. Deploy Registry with proxy
     console.log("Deploying Registry with proxy...");

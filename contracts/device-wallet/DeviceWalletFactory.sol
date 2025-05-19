@@ -57,23 +57,26 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     /// @notice Emitted when the registry is added to the factory contract
     event AddedRegistry(address indexed registry);
 
+    /// @notice Upgradeable beacon that points to correct Device wallet implementation
+    /// @dev    Just updating the device wallet implementation address in this contract resolves
+    ///         the issue of manually updating each device wallet proxy with a new implementation
+    UpgradeableBeacon public beacon;
+
     IEntryPoint public entryPoint;
 
     P256Verifier public verifier;
+
+    ///@notice Registry contract instance
+    Registry public registry;
+
+    /// @notice eSIM wallet factory contract instance
+    ESIMWalletFactory public eSIMWalletFactory;
 
     /// @notice Admin address of the eSIM wallet project
     address public eSIMWalletAdmin;
 
     /// @notice Vault address that receives payments for eSIM data bundles
     address public vault;
-
-    /// @notice Upgradeable beacon that points to correct Device wallet implementation
-    /// @dev    Just updating the device wallet implementation address in this contract resolves
-    ///         the issue of manually updating each device wallet proxy with a new implementation
-    UpgradeableBeacon public beacon;
-
-    ///@notice Registry contract instance
-    Registry public registry;
 
     /// @notice Address of the admin to be appointed
     /// @dev Only the current admin can send the request to transfer admin role
@@ -127,6 +130,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         address _eSIMWalletAdmin,
         address _vault,
         address _upgradeManager,
+        address _eSIMWalletFactoryAddress,
         IEntryPoint _entryPoint,
         P256Verifier _verifier
     ) external initializer {
@@ -138,6 +142,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         vault = _vault;
         entryPoint = _entryPoint;
         verifier = _verifier;
+        eSIMWalletFactory = ESIMWalletFactory(_eSIMWalletFactoryAddress);
 
         // Upgradable beacon for device wallet implementation contract
         beacon = new UpgradeableBeacon(_deviceWalletImplementation, address(this));
@@ -292,7 +297,6 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
             )
         );
 
-        ESIMWalletFactory eSIMWalletFactory = registry.eSIMWalletFactory();
         address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(deviceWalletAddress, _salt);
         DeviceWallet(payable(deviceWalletAddress)).addESIMWallet(
             eSIMWalletAddress,
@@ -354,7 +358,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
                     address(beacon),
                     abi.encodeCall(
                         DeviceWallet.init, 
-                        (address(registry), _deviceWalletOwnerKey, _deviceUniqueIdentifier, address(registry.eSIMWalletFactory()))
+                        (address(registry), _deviceWalletOwnerKey, _deviceUniqueIdentifier, address(eSIMWalletFactory))
                     )
                 )
             )
@@ -411,10 +415,8 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     function createAccount(
         string memory _deviceUniqueIdentifier,
         bytes32[2] memory _deviceWalletOwnerKey,
-        uint256 _salt,
-        uint256 _depositAmount
+        uint256 _salt
     ) public payable onlyEntryPoint returns (DeviceWallet deviceWallet) {
-        require(msg.value == _depositAmount, "Too less or too much ETH");
         require(
             bytes(_deviceUniqueIdentifier).length != 0, 
             "DeviceIdentifier cannot be empty"
@@ -428,7 +430,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
 
         // Prefund the account with msg.value
         if (msg.value > 0) {
-            entryPoint.depositTo{value: _depositAmount}(addr);
+            entryPoint.depositTo{value: msg.value}(addr);
         }
 
         uint256 codeSize = addr.code.length;
@@ -442,7 +444,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
                     address(beacon),
                     abi.encodeCall(
                         DeviceWallet.init, 
-                        (address(registry), _deviceWalletOwnerKey, _deviceUniqueIdentifier, address(registry.eSIMWalletFactory()))
+                        (address(registry), _deviceWalletOwnerKey, _deviceUniqueIdentifier, address(eSIMWalletFactory))
                     )
                 )
             )
@@ -484,7 +486,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
                         address(beacon),
                         abi.encodeCall(
                             DeviceWallet.init,
-                            (address(registry), _deviceWalletOwnerKey, _deviceUniqueIdentifier, address(registry.eSIMWalletFactory()))
+                            (address(registry), _deviceWalletOwnerKey, _deviceUniqueIdentifier, address(eSIMWalletFactory))
                         )
                     )
                 )

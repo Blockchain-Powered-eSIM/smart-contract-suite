@@ -277,8 +277,7 @@ contract DeviceWalletFactoryTest is DeployerBase {
         MockDeviceWallet(payable(deviceWalletFactory.createAccount(
             customDeviceUniqueIdentifiers[0],
             pubKey1,
-            salt,
-            0
+            salt
         )));
         vm.stopPrank();
     }
@@ -299,8 +298,7 @@ contract DeviceWalletFactoryTest is DeployerBase {
         MockDeviceWallet deviceWallet = MockDeviceWallet(payable(deviceWalletFactory.createAccount(
             customDeviceUniqueIdentifiers[0],
             pubKey1,
-            salt,
-            0
+            salt
         )));
         vm.stopPrank();
 
@@ -356,8 +354,7 @@ contract DeviceWalletFactoryTest is DeployerBase {
         MockDeviceWallet deviceWallet = MockDeviceWallet(payable(deviceWalletFactory.createAccount(
             customDeviceUniqueIdentifiers[0],
             pubKey1,
-            salt,
-            0
+            salt
         )));
         vm.stopPrank();
 
@@ -409,8 +406,7 @@ contract DeviceWalletFactoryTest is DeployerBase {
         MockDeviceWallet deviceWallet2 = MockDeviceWallet(payable(deviceWalletFactory.createAccount(
             customDeviceUniqueIdentifiers[0],
             pubKey1,
-            salt,
-            0
+            salt
         )));
         vm.stopPrank();
 

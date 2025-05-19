@@ -74,8 +74,7 @@ contract ESIMWalletFactoryTest is DeployerBase {
         MockDeviceWallet deviceWallet = MockDeviceWallet(payable(deviceWalletFactory.createAccount(
             customDeviceUniqueIdentifiers[0],
             pubKey1,
-            999,
-            0
+            999
         )));
         vm.stopPrank();
         
