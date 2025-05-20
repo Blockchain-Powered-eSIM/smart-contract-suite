@@ -416,7 +416,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         string memory _deviceUniqueIdentifier,
         bytes32[2] memory _deviceWalletOwnerKey,
         uint256 _salt
-    ) public payable onlyEntryPoint returns (DeviceWallet deviceWallet) {
+    ) public payable returns (DeviceWallet deviceWallet) {
         require(
             bytes(_deviceUniqueIdentifier).length != 0, 
             "DeviceIdentifier cannot be empty"
