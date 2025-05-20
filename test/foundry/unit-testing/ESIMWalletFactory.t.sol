@@ -70,13 +70,21 @@ contract ESIMWalletFactoryTest is DeployerBase {
 
     function test_updateESIMWalletImplementation() public {
         // Deploy the device wallet
-        vm.startPrank(user1);
+        vm.startPrank(address(typeCastEntryPoint));
         MockDeviceWallet deviceWallet = MockDeviceWallet(payable(deviceWalletFactory.createAccount(
             customDeviceUniqueIdentifiers[0],
             pubKey1,
-            999,
-            0
+            999
         )));
+        vm.stopPrank();
+        
+        // Update storage variables after createAccount
+        vm.startPrank(eSIMWalletAdmin);
+        deviceWalletFactory.postCreateAccount(
+            address(deviceWallet),
+            customDeviceUniqueIdentifiers[0],
+            pubKey1
+        );
         vm.stopPrank();
 
         // Deploy eSIM wallet

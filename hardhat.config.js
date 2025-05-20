@@ -1,23 +1,73 @@
 require('dotenv').config();
-// require("hardhat");
+require("@nomicfoundation/hardhat-ethers");
+require('@openzeppelin/hardhat-upgrades');
 require("@nomicfoundation/hardhat-foundry");
 require('solidity-docgen');
 
-const PRIV_KEY = process.env.PRIV_KEY;
+const PRIV_KEY = process.env.PRIVATE_KEY_1;
+const ALCHEMY_OP_SEPOLIA_HTTPS = process.env.ALCHEMY_OP_SEPOLIA_HTTPS;
+const ALCHEMY_TENDERLY_OP_SEPOLIA_HTTPS = process.env.ALCHEMY_TENDERLY_OP_SEPOLIA_HTTPS;
 const ALCHEMY_SEPOLIA_HTTPS = process.env.ALCHEMY_SEPOLIA_HTTPS;
+const TENDERLY_KOKIO_MAINNET_FORK = process.env.TENDERLY_KOKIO_MAINNET_FORK;
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
-  defaultNetwork: "sepolia",
+  defaultNetwork: "localhost",
   networks: {
     hardhat: {
       chainId: 31337,
     },
     sepolia: {
+      name: "sepolia",
       chainId: 11155111,
       url: `${ALCHEMY_SEPOLIA_HTTPS}`,
       accounts: [PRIV_KEY],
-      saveDeployments: true
+      saveDeployments: true,
+      ignition: {
+        maxFeePerGasLimit: 50_000_000_000n, // 50 gwei
+        maxPriorityFeePerGas: 2_000_000_000n, // 2 gwei
+        gasPrice: 50_000_000_000n, // 50 gwei
+        disableFeeBumping: false,
+      },
+    },
+    op_sepolia: {
+      name: "optimism-sepolia",
+      chainId: 11155420,
+      url: `${ALCHEMY_OP_SEPOLIA_HTTPS}`,
+      accounts: [PRIV_KEY],
+      saveDeployments: true,
+      ignition: {
+        maxFeePerGasLimit: 50_000_000_000n, // 50 gwei
+        maxPriorityFeePerGas: 2_000_000_000n, // 2 gwei
+        gasPrice: 50_000_000_000n, // 50 gwei
+        disableFeeBumping: false,
+      },
+    },
+    tenderly_op_sepolia: {
+      name: "Kokio-OP-Sepolia",
+      chainId: 1212121,
+      url: `${ALCHEMY_TENDERLY_OP_SEPOLIA_HTTPS}`,
+      accounts: [PRIV_KEY],
+      saveDeployments: true,
+      ignition: {
+        maxFeePerGasLimit: 50_000_000_000n, // 50 gwei
+        maxPriorityFeePerGas: 2_000_000_000n, // 2 gwei
+        gasPrice: 50_000_000_000n, // 50 gwei
+        disableFeeBumping: false,
+      },
+    },
+    kokio_mainnet_fork: {
+      name: "kokio-mainnet-fork",
+      chainId: 1122334455,
+      url: `${TENDERLY_KOKIO_MAINNET_FORK}`,
+      accounts: [PRIV_KEY],
+      saveDeployments: true,
+      ignition: {
+        maxFeePerGasLimit: 50_000_000_000n, // 50 gwei
+        maxPriorityFeePerGas: 2_000_000_000n, // 2 gwei
+        gasPrice: 50_000_000_000n, // 50 gwei
+        disableFeeBumping: false,
+      },
     },
     localhost: {
       url: "http://127.0.0.1:8545"
@@ -29,12 +79,13 @@ module.exports = {
     },
   },
   solidity: {
-    version: "0.8.24",
+    version: "0.8.25",
     settings: {
       optimizer: {
         enabled: true,
         runs: 200
-      }
+      },
+      viaIR: true,
     }
   },
   paths: {

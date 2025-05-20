@@ -1,0 +1,32 @@
+{
+    "sepolia": {
+        "EntryPoint": "0x0000000071727De22E5E9d8BAf0edAc6f37da032",
+        "P256Verifier": "0xF04f3b3935aD461D17d4a8a78E7ea21d4a61AEb1",
+        "DeviceWalletImpl": "0x59A78Cbb73e94a3fD6ada0136C89AE658BA16Dd9",
+        "ESIMWalletImpl": "0xde0dC03eF67317D4702e1d6Ef3f8cE246517e84e",
+        "DeviceWalletFactoryProxy": "0x63005d8214533fC7209678Aa39F7b9b0b51a7bcB",
+        "ESIMWalletFactoryProxy": "0xB4473979ff8cE4e09161B08f74EEb66BD7718076",
+        "RegistryProxy": "0xCa447f5C75C57f6C59027304A5Fb5A09F0E005c9",
+        "LazyWalletRegistryProxy": "0x8a1E53b903efcc6b252CE4bD3b255202318505Ef"
+    },
+    "optimism-sepolia": {
+        "EntryPoint": "0x0000000071727De22E5E9d8BAf0edAc6f37da032",
+        "P256Verifier": "0x3c15a78046838481788613A9F111F972B562623C",
+        "DeviceWalletImpl": "0x50x22FCFa80868dc9F423873F9332817eDAe44839746000094e2E7a034cfd0333fa2856e1293886E29",
+        "ESIMWalletImpl": "0xf86FE9253b6ea9454abda657f47aE508B00c15C1",
+        "DeviceWalletFactoryProxy": "0x243cCdE6a56b0Ba740E067f39896772748E20fFD",
+        "ESIMWalletFactoryProxy": "0x8444bF9C39F01e4B092e42DC11695C61f8B93957",
+        "RegistryProxy": "0x96dA9cE92D2C09f7b3ADE01260608e9079f16d12",
+        "LazyWalletRegistryProxy": "0x3F14D060074B174B0784056bDe5e0f8970D25ff1"
+    },
+    "kokio-mainnet-fork": {
+        "EntryPoint": "0x0000000071727De22E5E9d8BAf0edAc6f37da032",
+        "P256Verifier": "0xF04f3b3935aD461D17d4a8a78E7ea21d4a61AEb1",
+        "DeviceWalletImpl": "0x59A78Cbb73e94a3fD6ada0136C89AE658BA16Dd9",
+        "ESIMWalletImpl": "0xde0dC03eF67317D4702e1d6Ef3f8cE246517e84e",
+        "DeviceWalletFactoryProxy": "0x63005d8214533fC7209678Aa39F7b9b0b51a7bcB",
+        "ESIMWalletFactoryProxy": "0xB4473979ff8cE4e09161B08f74EEb66BD7718076",
+        "RegistryProxy": "0xCa447f5C75C57f6C59027304A5Fb5A09F0E005c9",
+        "LazyWalletRegistryProxy": "0x8a1E53b903efcc6b252CE4bD3b255202318505Ef"
+    }
+}
