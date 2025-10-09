@@ -7,6 +7,7 @@ require('solidity-docgen');
 const PRIV_KEY = process.env.PRIVATE_KEY_1;
 const ALCHEMY_OP_SEPOLIA_HTTPS = process.env.ALCHEMY_OP_SEPOLIA_HTTPS;
 const ALCHEMY_TENDERLY_OP_SEPOLIA_HTTPS = process.env.ALCHEMY_TENDERLY_OP_SEPOLIA_HTTPS;
+const ALCHEMY_BASE_SEPOLIA_HTTPS = process.env.ALCHEMY_BASE_SEPOLIA_HTTPS;
 const ALCHEMY_SEPOLIA_HTTPS = process.env.ALCHEMY_SEPOLIA_HTTPS;
 const TENDERLY_KOKIO_MAINNET_FORK = process.env.TENDERLY_KOKIO_MAINNET_FORK;
 
@@ -34,6 +35,19 @@ module.exports = {
       name: "optimism-sepolia",
       chainId: 11155420,
       url: `${ALCHEMY_OP_SEPOLIA_HTTPS}`,
+      accounts: [PRIV_KEY],
+      saveDeployments: true,
+      ignition: {
+        maxFeePerGasLimit: 50_000_000_000n, // 50 gwei
+        maxPriorityFeePerGas: 2_000_000_000n, // 2 gwei
+        gasPrice: 50_000_000_000n, // 50 gwei
+        disableFeeBumping: false,
+      },
+    },
+    base_sepolia: {
+      name: "base-sepolia",
+      chainId: 84532,
+      url: `${ALCHEMY_BASE_SEPOLIA_HTTPS}`,
       accounts: [PRIV_KEY],
       saveDeployments: true,
       ignition: {
