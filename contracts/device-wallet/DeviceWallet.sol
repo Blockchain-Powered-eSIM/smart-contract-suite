@@ -128,14 +128,15 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     function init(
         address _registry,
         bytes32[2] memory _deviceWalletOwnerKey,
-        string memory _deviceUniqueIdentifier
+        string memory _deviceUniqueIdentifier,
+        address _eSIMWalletFactory
     ) external initializer {
         require(_registry != address(0), "Registry contract cannot be zero");
         require(bytes(_deviceUniqueIdentifier).length != 0, "Device identifier cannot be zero");
 
         registry = Registry(_registry);
         deviceUniqueIdentifier = _deviceUniqueIdentifier;
-        eSIMWalletFactory = registry.eSIMWalletFactory();
+        eSIMWalletFactory = ESIMWalletFactory(_eSIMWalletFactory);
         
         initialize(_deviceWalletOwnerKey);
         __ReentrancyGuard_init();

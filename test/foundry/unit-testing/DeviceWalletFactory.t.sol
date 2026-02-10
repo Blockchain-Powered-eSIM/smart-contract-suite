@@ -215,16 +215,15 @@ contract DeviceWalletFactoryTest is DeployerBase {
         assertEq(upgradedDeviceWallet.canPullETH(wallet.eSIMWallet), true, "ESIMWallet should be able to pull ETH");
     }
 
-    function test_getAddress() public {
+    function test_getCounterFactualAddress() public {
         uint256 salt = 999;
-        address admin = deviceWalletFactory.eSIMWalletAdmin();
-        uint256 uniqueSalt = uint256(keccak256(abi.encode(admin, salt)));
+        // uint256 uniqueSalt = uint256(keccak256(abi.encode(admin, salt)));
 
         // Check for device wallet address before its deployed
-        address calculatedDeviceWalletAddress1 = deviceWalletFactory.getAddress(
+        address calculatedDeviceWalletAddress1 = deviceWalletFactory.getCounterFactualAddress(
             pubKey1,
             customDeviceUniqueIdentifiers[0],
-            uniqueSalt
+            salt
         );
         assertNotEq(calculatedDeviceWalletAddress1, address(0), "Device wallet address cannot be address(0)");
 
@@ -253,48 +252,82 @@ contract DeviceWalletFactoryTest is DeployerBase {
         assertEq(actualDeviceWalletAddress1, calculatedDeviceWalletAddress1, "Calculated device wallet address should have matched the actual device wallet address");
 
         // Check if the calculated device wallet address changes after device wallet deployment
-        address calculatedDeviceWalletAddress2 = deviceWalletFactory.getAddress(
+        address calculatedDeviceWalletAddress2 = deviceWalletFactory.getCounterFactualAddress(
             pubKey1,
             customDeviceUniqueIdentifiers[0],
-            uniqueSalt
+            salt
         );
         assertEq(calculatedDeviceWalletAddress1, calculatedDeviceWalletAddress2, "Device wallet address before and after deployment should have matched");
     }
 
-    function test_createAccount() public {
+    function test_createAccount_withoutEntryPoint() public {
         uint256 salt = 999;
 
-        // createAccount calculates uniqueSalt by itself, whereas getAccount doesn't
-        bytes32 modifiedSalt = keccak256(abi.encode(user1, salt));
-        uint256 uniqueSalt = uint256(modifiedSalt);
-
         // Check for device wallet address before its deployed
-        address calculatedDeviceWalletAddress1 = deviceWalletFactory.getAddress(
+        address calculatedDeviceWalletAddress1 = deviceWalletFactory.getCounterFactualAddress(
             pubKey1,
             customDeviceUniqueIdentifiers[0],
-            uniqueSalt
+            salt
         );
         assertNotEq(calculatedDeviceWalletAddress1, address(0), "Device wallet address cannot be address(0)");
 
         // Deploy the device wallet
         vm.startPrank(user1);
+        vm.expectRevert(bytes4(keccak256("OnlyEntryPoint()")));
+        MockDeviceWallet(payable(deviceWalletFactory.createAccount(
+            customDeviceUniqueIdentifiers[0],
+            pubKey1,
+            salt
+        )));
+        vm.stopPrank();
+    }
+
+    function test_createAccount() public {
+        uint256 salt = 999;
+
+        // Check for device wallet address before its deployed
+        address calculatedDeviceWalletAddress1 = deviceWalletFactory.getCounterFactualAddress(
+            pubKey1,
+            customDeviceUniqueIdentifiers[0],
+            salt
+        );
+        assertNotEq(calculatedDeviceWalletAddress1, address(0), "Device wallet address cannot be address(0)");
+
+        // Deploy the device wallet
+        vm.startPrank(address(typeCastEntryPoint));
         MockDeviceWallet deviceWallet = MockDeviceWallet(payable(deviceWalletFactory.createAccount(
             customDeviceUniqueIdentifiers[0],
             pubKey1,
-            salt,
-            0
+            salt
         )));
         vm.stopPrank();
 
         // Check if the actual device wallet address matches the calculated device wallet address
         assertEq(address(deviceWallet), calculatedDeviceWalletAddress1, "Calculated device wallet address should have matched the actual device wallet address");
 
-        // Check storage variables in registry
+        // Check storage variables in registry without calling postCreateAccount function
         bytes32 keyHash = keccak256(abi.encode(pubKey1[0], pubKey1[1]));
+        assertEq(registry.registeredP256Keys(keyHash), address(0), "P256 key hash should NOT have been tied to the device wallet address");
+        assertEq(registry.isDeviceWalletValid(address(deviceWallet)), false, "isDeviceWalletValid mapping should NOT have been updated");
+        assertEq(registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[0]), address(0), "uniqueIdentifierToDeviceWallet should NOT have been updated");
+        // Check storage variable in Device Wallet Factory
+        assertEq(deviceWalletFactory.deviceWalletInfoAdded(address(deviceWallet)), false, "Device wallet info should NOT have been added");
+
+        vm.startPrank(eSIMWalletAdmin);
+        deviceWalletFactory.postCreateAccount(
+            address(deviceWallet),
+            customDeviceUniqueIdentifiers[0],
+            pubKey1
+        );
+        vm.stopPrank();
+
+        // Check storage variables in registry after calling postCreateAccount function
         assertEq(registry.registeredP256Keys(keyHash), address(deviceWallet), "P256 key hash should have been tied to the device wallet address");
         assertEq(registry.isDeviceWalletValid(address(deviceWallet)), true, "isDeviceWalletValid mapping should have been updated");
         assertEq(registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[0]), address(deviceWallet), "uniqueIdentifierToDeviceWallet should have been updated");
-        
+        // Check storage variable in Device Wallet Factory
+        assertEq(deviceWalletFactory.deviceWalletInfoAdded(address(deviceWallet)), true, "Device wallet info should have been added");
+
         bytes32[2] memory ownerKeys = registry.getDeviceWalletToOwner(address(deviceWallet));
         assertEq(ownerKeys[0], pubKey1[0], "X co-ordinate should have matched");
         assertEq(ownerKeys[1], pubKey1[1], "Y co-ordinate should have matched");
@@ -308,37 +341,49 @@ contract DeviceWalletFactoryTest is DeployerBase {
     function test_createAccount_callTwice() public {
         uint256 salt = 999;
 
-        // createAccount calculates uniqueSalt by itself, whereas getAccount doesn't
-        bytes32 modifiedSalt = keccak256(abi.encode(user1, salt));
-        uint256 uniqueSalt = uint256(modifiedSalt);
-
         // Check for device wallet address before its deployed
-        address calculatedDeviceWalletAddress1 = deviceWalletFactory.getAddress(
+        address calculatedDeviceWalletAddress1 = deviceWalletFactory.getCounterFactualAddress(
             pubKey1,
             customDeviceUniqueIdentifiers[0],
-            uniqueSalt
+            salt
         );
         assertNotEq(calculatedDeviceWalletAddress1, address(0), "Device wallet address cannot be address(0)");
 
         // Deploy the device wallet
-        vm.startPrank(user1);
+        vm.startPrank(address(typeCastEntryPoint));
         MockDeviceWallet deviceWallet = MockDeviceWallet(payable(deviceWalletFactory.createAccount(
             customDeviceUniqueIdentifiers[0],
             pubKey1,
-            salt,
-            0
+            salt
         )));
         vm.stopPrank();
 
         // Check if the actual device wallet address matches the calculated device wallet address
         assertEq(address(deviceWallet), calculatedDeviceWalletAddress1, "Calculated device wallet address should have matched the actual device wallet address");
 
-        // Check storage variables in registry
+        // Check storage variables in registry without calling postCreateAccount function
         bytes32 keyHash = keccak256(abi.encode(pubKey1[0], pubKey1[1]));
+        assertEq(registry.registeredP256Keys(keyHash), address(0), "P256 key hash should NOT have been tied to the device wallet address");
+        assertEq(registry.isDeviceWalletValid(address(deviceWallet)), false, "isDeviceWalletValid mapping should NOT have been updated");
+        assertEq(registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[0]), address(0), "uniqueIdentifierToDeviceWallet should NOT have been updated");
+        // Check storage variable in Device Wallet Factory
+        assertEq(deviceWalletFactory.deviceWalletInfoAdded(address(deviceWallet)), false, "Device wallet info should NOT have been added");
+
+        vm.startPrank(eSIMWalletAdmin);
+        deviceWalletFactory.postCreateAccount(
+            address(deviceWallet),
+            customDeviceUniqueIdentifiers[0],
+            pubKey1
+        );
+        vm.stopPrank();
+
+        // Check storage variables in registry after calling postCreateAccount function
         assertEq(registry.registeredP256Keys(keyHash), address(deviceWallet), "P256 key hash should have been tied to the device wallet address");
         assertEq(registry.isDeviceWalletValid(address(deviceWallet)), true, "isDeviceWalletValid mapping should have been updated");
         assertEq(registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[0]), address(deviceWallet), "uniqueIdentifierToDeviceWallet should have been updated");
-        
+        // Check storage variable in Device Wallet Factory
+        assertEq(deviceWalletFactory.deviceWalletInfoAdded(address(deviceWallet)), true, "Device wallet info should have been added");
+
         bytes32[2] memory ownerKeys = registry.getDeviceWalletToOwner(address(deviceWallet));
         assertEq(ownerKeys[0], pubKey1[0], "X co-ordinate should have matched");
         assertEq(ownerKeys[1], pubKey1[1], "Y co-ordinate should have matched");
@@ -349,20 +394,19 @@ contract DeviceWalletFactoryTest is DeployerBase {
         assertEq(address(deviceWallet.eSIMWalletFactory()), address(eSIMWalletFactory), "eSIMWalletFactory address in device wallet should have matched");
 
         // Check if the calculated device wallet address changes after device wallet deployment
-        address calculatedDeviceWalletAddress2 = deviceWalletFactory.getAddress(
+        address calculatedDeviceWalletAddress2 = deviceWalletFactory.getCounterFactualAddress(
             pubKey1,
             customDeviceUniqueIdentifiers[0],
-            uniqueSalt
+            salt
         );
         assertEq(calculatedDeviceWalletAddress1, calculatedDeviceWalletAddress2, "Device wallet address before and after deployment should have matched");
 
         // Trying to deploy the same device identifier again should not deploy a new wallet
-        vm.startPrank(user1);
+        vm.startPrank(address(typeCastEntryPoint));
         MockDeviceWallet deviceWallet2 = MockDeviceWallet(payable(deviceWalletFactory.createAccount(
             customDeviceUniqueIdentifiers[0],
             pubKey1,
-            salt,
-            0
+            salt
         )));
         vm.stopPrank();
 
@@ -370,54 +414,7 @@ contract DeviceWalletFactoryTest is DeployerBase {
         assertEq(address(deviceWallet2), address(deviceWallet), "New device wallet should not have been deployed again");
     }
 
-    function test_createAccount_excessETH() public {
-        uint256 salt = 999;
-
-        // createAccount calculates uniqueSalt by itself, whereas getAccount doesn't
-        bytes32 modifiedSalt = keccak256(abi.encode(user1, salt));
-        uint256 uniqueSalt = uint256(modifiedSalt);
-
-        // Check for device wallet address before its deployed
-        address calculatedDeviceWalletAddress1 = deviceWalletFactory.getAddress(
-            pubKey1,
-            customDeviceUniqueIdentifiers[0],
-            uniqueSalt
-        );
-        assertNotEq(calculatedDeviceWalletAddress1, address(0), "Device wallet address cannot be address(0)");
-
-        // Deploy the device wallet
-        vm.startPrank(user1);
-        vm.deal(user1, 10 ether);
-        MockDeviceWallet deviceWallet = MockDeviceWallet(payable(deviceWalletFactory.createAccount{value: 5 ether} (
-            customDeviceUniqueIdentifiers[0],
-            pubKey1,
-            salt,
-            1 ether
-        )));
-        vm.stopPrank();
-
-        // Check if the actual device wallet address matches the calculated device wallet address
-        assertEq(address(deviceWallet), calculatedDeviceWalletAddress1, "Calculated device wallet address should have matched the actual device wallet address");
-        assertEq(user1.balance, 9 ether, "User should have received unused ETH");
-        assertEq(address(deviceWallet).balance, 1 ether, "Device wallet balance should have been 1 ether");
-
-        // Check storage variables in registry
-        bytes32 keyHash = keccak256(abi.encode(pubKey1[0], pubKey1[1]));
-        assertEq(registry.registeredP256Keys(keyHash), address(deviceWallet), "P256 key hash should have been tied to the device wallet address");
-        assertEq(registry.isDeviceWalletValid(address(deviceWallet)), true, "isDeviceWalletValid mapping should have been updated");
-        assertEq(registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[0]), address(deviceWallet), "uniqueIdentifierToDeviceWallet should have been updated");
-        
-        bytes32[2] memory ownerKeys = registry.getDeviceWalletToOwner(address(deviceWallet));
-        assertEq(ownerKeys[0], pubKey1[0], "X co-ordinate should have matched");
-        assertEq(ownerKeys[1], pubKey1[1], "Y co-ordinate should have matched");
-
-        // Check storage variables in device wallet
-        assertEq(deviceWallet.deviceUniqueIdentifier(), customDeviceUniqueIdentifiers[0], "Device unique identifier should have matched");
-        assertEq(address(deviceWallet.registry()), address(registry), "Registry should have been correct");
-        assertEq(address(deviceWallet.eSIMWalletFactory()), address(eSIMWalletFactory), "eSIMWalletFactory address in device wallet should have matched");
-    }
-
-    function test_deployDeviceWalletForUsers_withoutAdmin() public {
+    function test_deployDeviceWalletForUsers_withoutAdminOrRegistry() public {
         uint256[] memory salts = new uint256[](5);
         uint256[] memory deposits = new uint256[](5);
         for(uint256 i=0; i<5; ++i) {
@@ -426,7 +423,7 @@ contract DeviceWalletFactoryTest is DeployerBase {
         }
 
         vm.startPrank(user1);
-        vm.expectRevert(bytes4(keccak256("OnlyAdmin()")));
+        vm.expectRevert(bytes4(keccak256("OnlyAdminOrRegistry()")));
         deviceWalletFactory.deployDeviceWalletForUsers(
             customDeviceUniqueIdentifiers,
             listOfOwnerKeys,
@@ -478,6 +475,9 @@ contract DeviceWalletFactoryTest is DeployerBase {
             bytes32[2] memory ownerKeys = registry.getDeviceWalletToOwner(address(deviceWallet));
             assertEq(ownerKeys[0], listOfOwnerKeys[i][0], "X co-ordinate should have matched");
             assertEq(ownerKeys[1], listOfOwnerKeys[i][1], "Y co-ordinate should have matched");
+
+            // Check storage variables in device wallet factory
+            assertEq(deviceWalletFactory.deviceWalletInfoAdded(address(deviceWallet)), true, "Device wallet info should have been added");
 
             // Check storage variables in device wallet
             assertEq(deviceWallet.deviceUniqueIdentifier(), customDeviceUniqueIdentifiers[i], "Device unique identifier should have matched");

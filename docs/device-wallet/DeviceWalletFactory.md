@@ -236,10 +236,10 @@ returns the address even if the account is already deployed.
 Note that during UserOperation execution, this method is called only if the account is not deployed.
 This method returns an existing account address so that entryPoint.getSenderAddress() would work even after account creation
 
-### getAddress
+### getCounterFactualAddress
 
 ```solidity
-function getAddress(address _registry, bytes32[2] _deviceWalletOwnerKey, string _deviceUniqueIdentifier, uint256 _salt) public view returns (address)
+function getCounterFactualAddress(address _registry, bytes32[2] _deviceWalletOwnerKey, string _deviceUniqueIdentifier, uint256 _salt) public view returns (address)
 ```
 
 calculate the counterfactual address of this account as it would be returned by createAccount()

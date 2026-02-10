@@ -67,8 +67,8 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgrad
         _;
     }
     
-    /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() initializer {}
+    // /// @custom:oz-upgrades-unsafe-allow constructor
+    // constructor() initializer {}
 
     /// @dev Owner based upgrades for UUPS eSIM wallet factory
     function _authorizeUpgrade(address newImplementation)
