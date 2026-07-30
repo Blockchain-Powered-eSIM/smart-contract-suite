@@ -351,8 +351,8 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
             // The wallet exists but holds no registry record, which is the state createAccount
             // leaves behind. Anyone can put a wallet into it, so adopt it here rather than
             // returning an unregistered address that later registry writes would reject.
-            registry.updateDeviceWalletInfo(addr, _deviceUniqueIdentifier, _deviceWalletOwnerKey);
             deviceWalletInfoAdded[addr] = true;
+            registry.updateDeviceWalletInfo(addr, _deviceUniqueIdentifier, _deviceWalletOwnerKey);
 
             return (DeviceWallet(payable(addr)), 0);
         }
