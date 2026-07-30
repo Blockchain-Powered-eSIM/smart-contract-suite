@@ -11,6 +11,7 @@ import "contracts/CustomStructs.sol";
 import "test/utils/DeployerBase.sol";
 import "test/utils/mocks/MockESIMWallet.sol";
 import "test/utils/mocks/MockDeviceWallet.sol";
+import {ReentrantESIMWallet} from "test/utils/mocks/ReentrantESIMWallet.sol";
 
 contract DeviceWalletTest is DeployerBase {
 
@@ -401,6 +402,28 @@ contract DeviceWalletTest is DeployerBase {
 
         assertEq(address(deviceWallet).balance, 10 ether, "Device wallet balance should have been the same, 11 ETH");
         assertEq(address(eSIMWallet1).balance, 0, "eSIM wallet balance should have been the same, 0 ETH");
+
+        _assertESIMWalletBinding(deviceWallet, eSIMWallet1, true, address(0), false, false);
+    }
+
+    /// @notice A wallet whose logic re-enters the device wallet during its own removal must find
+    /// that it has already lost both its association and its right to pull ETH
+    function test_removeESIMWallet_reentrantCallbackCannotPullETH() public {
+        deployWallets();
+
+        vm.deal(address(deviceWallet), 10 ether);
+
+        ReentrantESIMWallet handlerImpl = new ReentrantESIMWallet(DeviceWallet(payable(address(deviceWallet))));
+        vm.etch(address(eSIMWallet1), address(handlerImpl).code);
+        ReentrantESIMWallet handler = ReentrantESIMWallet(payable(address(eSIMWallet1)));
+
+        vm.prank(address(deviceWallet));
+        deviceWallet.removeESIMWallet(address(eSIMWallet1), true);
+
+        assertEq(address(deviceWallet).balance, 10 ether, "Device wallet must not have lost any ETH to the callback");
+        assertEq(handler.pullETHSucceededDuringRemoval(), false, "pullETH must not succeed from inside the removal");
+        assertEq(handler.wasStillValidDuringRemoval(), false, "The wallet must already be unbound when the callback runs");
+        assertEq(handler.couldStillPullETHDuringRemoval(), false, "The wallet must already have lost ETH access when the callback runs");
 
         _assertESIMWalletBinding(deviceWallet, eSIMWallet1, true, address(0), false, false);
     }
