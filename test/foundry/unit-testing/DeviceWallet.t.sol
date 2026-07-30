@@ -406,6 +406,25 @@ contract DeviceWalletTest is DeployerBase {
         _assertESIMWalletBinding(deviceWallet, eSIMWallet1, true, address(0), false, false);
     }
 
+    /// @notice An associated eSIM wallet may remove itself but not a sibling
+    function test_removeESIMWallet_siblingCannotRemoveAnother() public {
+        deployWallets();
+
+        vm.deal(address(eSIMWallet2), 1 ether);
+
+        vm.prank(address(eSIMWallet1));
+        vm.expectRevert(Errors.OnlySelfOrAssociatedESIMWallet.selector);
+        deviceWallet.removeESIMWallet(address(eSIMWallet2), true);
+
+        assertEq(deviceWallet.isValidESIMWallet(address(eSIMWallet2)), true, "The sibling must still be bound");
+        assertEq(address(eSIMWallet2).balance, 1 ether, "The sibling must keep its ETH");
+
+        // The same caller removing itself is still allowed
+        vm.prank(address(eSIMWallet1));
+        deviceWallet.removeESIMWallet(address(eSIMWallet1), false);
+        assertEq(deviceWallet.isValidESIMWallet(address(eSIMWallet1)), false, "A wallet must still be able to remove itself");
+    }
+
     /// @notice A wallet whose logic re-enters the device wallet during its own removal must find
     /// that it has already lost both its association and its right to pull ETH
     function test_removeESIMWallet_reentrantCallbackCannotPullETH() public {
