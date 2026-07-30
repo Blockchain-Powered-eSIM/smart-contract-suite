@@ -7,6 +7,7 @@ import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/U
 import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 
 import {Registry} from "./Registry.sol";
+import {Errors} from "./Errors.sol";
 import "./CustomStructs.sol";
 
 /// @notice Contract for deploying the factory contracts and maintaining registry
@@ -104,6 +105,14 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
     onlyOwner
     override
     {}
+
+    /// @notice Ownership of this contract is never renounced
+    /// @dev The owner is the only caller _authorizeUpgrade accepts, and there is no other route to
+    ///      replace this implementation. Renouncing would freeze the contract on its current logic
+    ///      permanently.
+    function renounceOwnership() public pure override {
+        revert Errors.OwnershipCannotBeRenounced();
+    }
 
     function initialize(
         address _registry,

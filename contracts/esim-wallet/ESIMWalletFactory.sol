@@ -83,6 +83,14 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgrad
     onlyOwner
     {}
 
+    /// @notice Ownership of this contract is never renounced
+    /// @dev The owner is the only caller _authorizeUpgrade accepts, and this contract owns the
+    ///      beacon, so it is also the only route to updateESIMWalletImplementation. Renouncing
+    ///      would freeze every eSIM wallet on its current logic permanently.
+    function renounceOwnership() public pure override {
+        revert Errors.OwnershipCannotBeRenounced();
+    }
+
     /// @param _upgradeManager Admin address responsible for upgrading contracts
     function initialize (
         address _eSIMWalletImplementation,

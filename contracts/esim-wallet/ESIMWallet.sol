@@ -233,6 +233,15 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         require(false, "Use acceptOwnershipTransfer instead.");
     }
 
+    /// @notice An eSIM wallet always belongs to a device wallet, so ownership is never renounced
+    /// @dev Renouncing leaves owner() at zero while deviceWallet still points at the old device
+    ///      wallet. sendETHToDeviceWallet then reverts on its own zero-owner check and
+    ///      DeviceWallet._addESIMWallet can never accept this wallet again, so the ETH held here
+    ///      is unreachable for the rest of the wallet's life.
+    function renounceOwnership() public pure override {
+        revert Errors.OwnershipCannotBeRenounced();
+    }
+
     /// @notice Instead of using transferOwnership, the contract uses secureTransferOwnership
     function _secureTransferOwnership() internal {
         address newOwner = newRequestedOwner;

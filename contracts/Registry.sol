@@ -56,6 +56,14 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
     override
     {}
 
+    /// @notice Ownership of this contract is never renounced
+    /// @dev The owner is the only caller _authorizeUpgrade accepts, and there is no other route to
+    ///      replace this implementation. Renouncing would freeze the contract on its current logic
+    ///      permanently.
+    function renounceOwnership() public pure override {
+        revert Errors.OwnershipCannotBeRenounced();
+    }
+
     /// @param _eSIMWalletAdmin Admin address of the eSIM wallet project
     /// @param _vault Address of the vault that receives payments for the data bundles
     /// @param _upgradeManager Admin address responsible for upgrading contracts

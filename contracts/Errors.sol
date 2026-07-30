@@ -2,6 +2,10 @@
 pragma solidity 0.8.36;
 
 interface Errors {
+    // Every Ownable contract: Registry, LazyWalletRegistry, DeviceWalletFactory,
+    // ESIMWalletFactory and ESIMWallet
+    error OwnershipCannotBeRenounced();
+
     // Registry and ESIMWallet
     error OnlyDeviceWallet();
 
