@@ -18,6 +18,7 @@ interface Errors {
     error OnlyAdmin();
     error OnlyAdminOrRegistry();
     error OnlyEntryPoint();
+    error InvalidDeviceWalletOwnerKey();
 
     // ESIMWallet and DeviceWallet
     error FailedToTransfer();

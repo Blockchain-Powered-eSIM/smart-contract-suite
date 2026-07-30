@@ -311,6 +311,17 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         return (Wallets(deviceWalletAddress, eSIMWalletAddress), spentETH);
     }
 
+    /// @notice Rejects a P256 public key with a zero component
+    /// @dev Neither coordinate of a point on the P256 curve can be zero, so such a key can never
+    ///      verify a signature. A wallet deployed with one is unusable for its whole life and it
+    ///      consumes its device identifier and key hash, neither of which can be released.
+    function _requireNonZeroOwnerKey(bytes32[2] memory _deviceWalletOwnerKey) private pure {
+        if(
+            _deviceWalletOwnerKey[0] == bytes32(0) ||
+            _deviceWalletOwnerKey[1] == bytes32(0)
+        ) revert Errors.InvalidDeviceWalletOwnerKey();
+    }
+
     /// @dev Returns the ETH actually forwarded to the EntryPoint, which is zero whenever an
     ///      existing wallet is returned instead of a new one being deployed. Callers holding a
     ///      budget must decrement by this value, not by the requested deposit.
@@ -321,9 +332,10 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         uint256 _depositAmount
     ) internal returns (DeviceWallet deviceWallet, uint256 spentETH) {
         require(
-            bytes(_deviceUniqueIdentifier).length != 0, 
+            bytes(_deviceUniqueIdentifier).length != 0,
             "DeviceIdentifier cannot be empty"
         );
+        _requireNonZeroOwnerKey(_deviceWalletOwnerKey);
 
         address addr = getCounterFactualAddress(
             _deviceWalletOwnerKey,
@@ -431,9 +443,10 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         uint256 _salt
     ) public payable returns (DeviceWallet deviceWallet) {
         require(
-            bytes(_deviceUniqueIdentifier).length != 0, 
+            bytes(_deviceUniqueIdentifier).length != 0,
             "DeviceIdentifier cannot be empty"
         );
+        _requireNonZeroOwnerKey(_deviceWalletOwnerKey);
 
         address addr = getCounterFactualAddress(
             _deviceWalletOwnerKey,
