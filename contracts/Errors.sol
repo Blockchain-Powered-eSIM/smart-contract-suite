@@ -18,6 +18,8 @@ interface Errors {
 
     // RegistryHelper
     error OnlyLazyWalletRegistry();
+    error DeviceIdentifierAlreadyRegistered(string deviceIdentifier);
+    error OwnerKeyAlreadyRegistered(bytes32 ownerKeyHash);
 
     // LazyWalletRegistry
     error LazyWalletAlreadyDeployed(string deviceIdentifier);

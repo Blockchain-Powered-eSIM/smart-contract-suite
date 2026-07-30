@@ -170,11 +170,23 @@ contract RegistryHelper {
         string calldata _deviceUniqueIdentifier,
         bytes32[2] memory _deviceWalletOwnerKey
     ) internal {
+        // Both mappings are meant to be one-to-one. The deploy paths check that before they get
+        // here, but postCreateAccount only checks that the wallet address is new, so without this
+        // a second wallet can take over an identifier or a key that already belongs to another.
+        // The overwrite is silent and unrecoverable: the identifier keeps resolving to the wrong
+        // wallet and the original can never be redeployed against it.
+        if(uniqueIdentifierToDeviceWallet[_deviceUniqueIdentifier] != address(0)) {
+            revert Errors.DeviceIdentifierAlreadyRegistered(_deviceUniqueIdentifier);
+        }
+
+        bytes32 keyHash = keccak256(abi.encode(_deviceWalletOwnerKey[0], _deviceWalletOwnerKey[1]));
+        if(registeredP256Keys[keyHash] != address(0)) {
+            revert Errors.OwnerKeyAlreadyRegistered(keyHash);
+        }
+
         uniqueIdentifierToDeviceWallet[_deviceUniqueIdentifier] = _deviceWallet;
         isDeviceWalletValid[_deviceWallet] = true;
         deviceWalletToOwner[_deviceWallet] = _deviceWalletOwnerKey;
-        
-        bytes32 keyHash = keccak256(abi.encode(_deviceWalletOwnerKey[0], _deviceWalletOwnerKey[1]));
         registeredP256Keys[keyHash] = _deviceWallet;
 
         emit DeviceWalletInfoUpdated(_deviceWallet, _deviceUniqueIdentifier, _deviceWalletOwnerKey);
