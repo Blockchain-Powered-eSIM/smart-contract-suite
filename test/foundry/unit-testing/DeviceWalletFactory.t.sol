@@ -573,6 +573,76 @@ contract DeviceWalletFactoryTest is DeployerBase {
         assertEq(eSIMWalletAdmin.balance, 1 ether, "Admin should have been refunded the undeposited ETH");
     }
 
+    /// @notice postCreateAccount only checks that the wallet address is new, so a second wallet
+    /// used to be able to take over a device identifier that already belonged to another. The
+    /// registry binding must survive the attempt untouched.
+    function test_postCreateAccount_revertsOnRegisteredIdentifier() public {
+        vm.prank(user1);
+        address firstWallet = address(deviceWalletFactory.createAccount(
+            customDeviceUniqueIdentifiers[0],
+            pubKey1,
+            111
+        ));
+        vm.prank(eSIMWalletAdmin);
+        deviceWalletFactory.postCreateAccount(firstWallet, customDeviceUniqueIdentifiers[0], pubKey1);
+
+        vm.prank(user2);
+        address secondWallet = address(deviceWalletFactory.createAccount(
+            customDeviceUniqueIdentifiers[1],
+            pubKey2,
+            222
+        ));
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Errors.DeviceIdentifierAlreadyRegistered.selector,
+                customDeviceUniqueIdentifiers[0]
+            )
+        );
+        deviceWalletFactory.postCreateAccount(secondWallet, customDeviceUniqueIdentifiers[0], pubKey2);
+
+        assertEq(
+            registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[0]),
+            firstWallet,
+            "Identifier must still resolve to the wallet that claimed it first"
+        );
+    }
+
+    /// @notice The same hole reached through the P256 key rather than the identifier. A key that
+    /// already resolves to a wallet must keep resolving to it.
+    function test_postCreateAccount_revertsOnRegisteredOwnerKey() public {
+        vm.prank(user1);
+        address firstWallet = address(deviceWalletFactory.createAccount(
+            customDeviceUniqueIdentifiers[0],
+            pubKey1,
+            111
+        ));
+        vm.prank(eSIMWalletAdmin);
+        deviceWalletFactory.postCreateAccount(firstWallet, customDeviceUniqueIdentifiers[0], pubKey1);
+
+        vm.prank(user2);
+        address secondWallet = address(deviceWalletFactory.createAccount(
+            customDeviceUniqueIdentifiers[1],
+            pubKey2,
+            222
+        ));
+
+        bytes32 reusedKeyHash = keccak256(abi.encode(pubKey1[0], pubKey1[1]));
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(
+            abi.encodeWithSelector(Errors.OwnerKeyAlreadyRegistered.selector, reusedKeyHash)
+        );
+        deviceWalletFactory.postCreateAccount(secondWallet, customDeviceUniqueIdentifiers[1], pubKey1);
+
+        assertEq(
+            registry.registeredP256Keys(reusedKeyHash),
+            firstWallet,
+            "Owner key must still resolve to the wallet that registered it first"
+        );
+    }
+
     /// @notice The happy path still forwards the full deposit, asserted against the EntryPoint's own
     /// accounting rather than the wallet balance, which the mock reaches by forwarding the ETH on.
     function test_deployDeviceWalletForUsers_depositsAndRefundsExactly() public {
