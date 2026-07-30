@@ -15,4 +15,9 @@ ast = true
 build_info = true
 extra_output = ["storageLayout"]
 
+# The metadata hash covers source unit names, which differ between forge's remappings and
+# hardhat's import paths. Dropping it makes both toolchains emit byte-identical bytecode.
+# The CBOR trailer is kept, so the compiler version is still recorded onchain.
+bytecode_hash = "none"
+
 # See more config options https://book.getfoundry.sh/reference/config.html

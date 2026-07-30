@@ -101,6 +101,9 @@ module.exports = {
       },
       viaIR: true,
       evmVersion: "osaka",
+      metadata: {
+        bytecodeHash: "none"
+      },
     }
   },
   paths: {
