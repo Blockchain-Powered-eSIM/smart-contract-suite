@@ -39,6 +39,20 @@ library WebAuthn {
     ///      See https://www.w3.org/TR/webauthn-2/#dom-collectedclientdata-type
     bytes32 private constant _EXPECTED_TYPE_HASH = keccak256('"type":"webauthn.get"');
 
+    /// @dev bytes('"type":"webauthn.get"').length
+    uint256 private constant _TYPE_FIELD_LENGTH = 21;
+
+    /// @dev The expected key and separator immediately preceding the challenge value in the client
+    ///      data JSON. See https://www.w3.org/TR/webauthn-2/#dom-collectedclientdata-challenge
+    bytes32 private constant _EXPECTED_CHALLENGE_KEY_HASH = keccak256('"challenge":"');
+
+    /// @dev bytes('"challenge":"').length
+    uint256 private constant _CHALLENGE_KEY_LENGTH = 13;
+
+    /// @dev Offset of the flags byte in the authenticator data, after the 32 byte rpIdHash.
+    ///      See https://www.w3.org/TR/webauthn-2/#sctn-authenticator-data.
+    uint256 private constant _AUTH_DATA_FLAGS_OFFSET = 32;
+
     ///
     /// @notice Verifies a Webauthn Authentication Assertion as described
     /// in https://www.w3.org/TR/webauthn-2/#sctn-verifying-assertion.
@@ -102,9 +116,23 @@ library WebAuthn {
             return false;
         }
 
+        // Both indices come from the caller, so bound them before any arithmetic on them. Past the
+        // end of the JSON the addition below would overflow and panic, and this function must
+        // return false on a malformed signature rather than revert: it runs inside ERC-4337
+        // validation and behind isValidSignature, where a revert is not a rejection.
+        uint256 clientDataJSONLength = bytes(webAuthnSignature.clientDataJSON).length;
+        if (
+            webAuthnSignature.typeIndex >= clientDataJSONLength ||
+            webAuthnSignature.challengeIndex >= clientDataJSONLength
+        ) {
+            return false;
+        }
+
         // 11. Verify that the value of C.type is the string webauthn.get.
-        //     bytes("type":"webauthn.get").length = 21
-        string memory _type = webAuthnSignature.clientDataJSON.slice(webAuthnSignature.typeIndex, webAuthnSignature.typeIndex + 21);
+        string memory _type = webAuthnSignature.clientDataJSON.slice(
+            webAuthnSignature.typeIndex,
+            webAuthnSignature.typeIndex + _TYPE_FIELD_LENGTH
+        );
         if (keccak256(bytes(_type)) != _EXPECTED_TYPE_HASH) {
             return false;
         }
@@ -114,9 +142,20 @@ library WebAuthn {
         // `webAuthnSignature.clientDataJSON` (after off-chain fix for Problem 1) contains:
         // "challenge":"<base64url_encoded_raw_hash_bytes_no_padding>"
 
-        // `challengeIndex` points to the 'c' in "challenge":
-        // So, "challenge":" is 13 characters long.
-        uint256 challengeValueStartIndexInJson = webAuthnSignature.challengeIndex + 13; // Start of the Base64URL string
+        // challengeIndex must actually point at the challenge key. Without this the bytes are
+        // skipped blindly, so an index aimed at any other quoted field is accepted, and a signature
+        // made over a different challenge passes whenever that field happens to contain the
+        // expected base64url value before its closing quote. The origin is the obvious carrier.
+        string memory challengeKey = webAuthnSignature.clientDataJSON.slice(
+            webAuthnSignature.challengeIndex,
+            webAuthnSignature.challengeIndex + _CHALLENGE_KEY_LENGTH
+        );
+        if (keccak256(bytes(challengeKey)) != _EXPECTED_CHALLENGE_KEY_HASH) {
+            return false;
+        }
+
+        // `challengeIndex` points to the opening quote of "challenge":
+        uint256 challengeValueStartIndexInJson = webAuthnSignature.challengeIndex + _CHALLENGE_KEY_LENGTH; // Start of the Base64URL string
 
         if (challengeValueStartIndexInJson >= bytes(webAuthnSignature.clientDataJSON).length) {
             return false;
@@ -150,14 +189,21 @@ library WebAuthn {
 
         // Skip 13., 14., 15.
 
+        // The flags byte has to exist before it can be read. Indexing a shorter authenticatorData
+        // panics, which reverts validation instead of failing the signature.
+        if (webAuthnSignature.authenticatorData.length <= _AUTH_DATA_FLAGS_OFFSET) {
+            return false;
+        }
+        bytes1 flags = webAuthnSignature.authenticatorData[_AUTH_DATA_FLAGS_OFFSET];
+
         // 16. Verify that the UP bit of the flags in authData is set.
-        if (webAuthnSignature.authenticatorData[32] & _AUTH_DATA_FLAGS_UP != _AUTH_DATA_FLAGS_UP) {
+        if (flags & _AUTH_DATA_FLAGS_UP != _AUTH_DATA_FLAGS_UP) {
             return false;
         }
 
         // 17. If user verification is required for this assertion, verify that the User Verified bit of the flags in
         //     authData is set.
-        if (requireUV && (webAuthnSignature.authenticatorData[32] & _AUTH_DATA_FLAGS_UV) != _AUTH_DATA_FLAGS_UV) {
+        if (requireUV && (flags & _AUTH_DATA_FLAGS_UV) != _AUTH_DATA_FLAGS_UV) {
             return false;
         }
 
