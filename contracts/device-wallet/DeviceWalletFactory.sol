@@ -403,17 +403,11 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         bytes32[2] memory _deviceWalletOwnerKey
     ) public view returns (address wallet) {
         require(
-            bytes(_deviceUniqueIdentifier).length != 0, 
+            bytes(_deviceUniqueIdentifier).length != 0,
             "DeviceIdentifier cannot be empty"
         );
-        require(
-            _deviceWalletOwnerKey[0].length != 0, 
-            "Key[0] cannot be empty"
-        );
-        require(
-            _deviceWalletOwnerKey[1].length != 0, 
-            "Key[1] cannot be empty"
-        );
+        _requireNonZeroOwnerKey(_deviceWalletOwnerKey);
+
         // Check if the device identifier is actually unique
         wallet = registry.uniqueIdentifierToDeviceWallet(_deviceUniqueIdentifier);
         if(wallet != address(0)) {
