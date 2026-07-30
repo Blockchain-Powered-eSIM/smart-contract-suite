@@ -185,7 +185,7 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     *   This helps in scenario where the owner sends ownership request to a wrong address
     *   The owner (device wallet) can simply call this function to overwrite the request
     */
-    function requestTransferOwnership(address _newOwner) external onlyDeviceWallet {
+    function requestTransferOwnership(address _newOwner) external onlyDeviceWallet nonReentrant {
         Registry registry = deviceWallet.registry();
         require(registry.isDeviceWalletValid(_newOwner), "Invalid _newOwner");
 
@@ -199,6 +199,9 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         }
 
         // Remove this eSIMWallet from the device wallet and send all ETH to device wallet
+        // This has to run before newRequestedOwner is written: the registry refuses to clear the
+        // association of a wallet that already has a pending request, so writing first would make
+        // the removal revert.
         deviceWallet.removeESIMWallet(address(this), true);
 
         newRequestedOwner = _newOwner;
@@ -215,6 +218,11 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
 
     /// @notice Allow the owner device wallet to callback all the ETH from this eSIM wallet
     /// @dev This function is generally called before the owner device wallet removes this eSIM wallet
+    /// @dev Deliberately not nonReentrant. removeESIMWallet calls this from inside a try/catch while
+    ///      requestTransferOwnership already holds this contract's guard, so guarding here would
+    ///      make the callback revert into that catch and strand the wallet's ETH with no error.
+    ///      It writes no state of its own, and only the owner can call it to move ETH to itself,
+    ///      so re-entering it gains nothing.
     /// @param _amount Amount of ETH to be sent
     function sendETHToDeviceWallet(
         uint256 _amount

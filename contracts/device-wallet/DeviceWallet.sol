@@ -274,9 +274,23 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     function removeESIMWallet(
         address _eSIMWalletAddress,
         bool _callBackETH
-    ) public onlySelfOrAssociatedESIMWallet {
+    ) public onlySelfOrAssociatedESIMWallet nonReentrant {
         require(isValidESIMWallet[_eSIMWalletAddress] == true, "Unknown eSIM wallet");
 
+        isValidESIMWallet[_eSIMWalletAddress] = false;
+        canPullETH[_eSIMWalletAddress] = false;
+
+        // Inform and update the registry about the existingd eSIM wallet being removed from this device wallet
+        // The standby toggle reads the association, so it has to run before that association is cleared
+        registry.toggleESIMWalletStandbyStatus(_eSIMWalletAddress, true);
+        registry.updateDeviceWalletAssociatedWithESIMWallet(_eSIMWalletAddress, address(0));
+
+        emit ESIMWalletRemoved(_eSIMWalletAddress, address(this), msg.sender);
+
+        // The callback runs last. All eSIM wallets share one upgradeable beacon, so the logic
+        // reached here is not fixed for the life of the protocol. By this point the wallet has
+        // already lost canPullETH and its registry association, so a handler that re-enters
+        // cannot use the rights it is in the middle of losing.
         if(_callBackETH) {
             try ESIMWallet(payable(_eSIMWalletAddress)).sendETHToDeviceWallet(_eSIMWalletAddress.balance) returns (uint256 _amount) {
                 emit ETHCalledBack(_amount);
@@ -285,15 +299,6 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
                 emit NoETHToCallback();
             }
         }
-
-        isValidESIMWallet[_eSIMWalletAddress] = false;
-        canPullETH[_eSIMWalletAddress] = false;
-
-        // Inform and update the registry about the existingd eSIM wallet being removed from this device wallet
-        registry.toggleESIMWalletStandbyStatus(_eSIMWalletAddress, true);
-        registry.updateDeviceWalletAssociatedWithESIMWallet(_eSIMWalletAddress, address(0));
-
-        emit ESIMWalletRemoved(_eSIMWalletAddress, address(this), msg.sender);
     }
 
     // receive function already exists in the Account4337.sol
