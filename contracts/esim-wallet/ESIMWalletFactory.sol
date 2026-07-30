@@ -137,6 +137,14 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgrad
         address _deviceWalletAddress,
         uint256 _salt
     ) external onlyRegistryOrDeviceWalletFactoryOrDeviceWallet returns (address) {
+        // The registry and the device wallet factory deploy on behalf of a device wallet, so they
+        // name an arbitrary one. A device wallet calling directly may only name itself: otherwise
+        // it can create a wallet owned by another device wallet that never asked for it and that
+        // neither _addESIMWallet nor the registry records, and can take the CREATE2 address that
+        // owner would get for this salt, leaving its own deployment to fail without a reason.
+        if(registry.isDeviceWalletValid(msg.sender) && _deviceWalletAddress != msg.sender) {
+            revert Errors.OnlyDeployForSelf();
+        }
 
         // Beacon Proxy deploys all the proxies which interact with the
         // beacon contract to get the implementation (logic) contract address

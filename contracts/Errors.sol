@@ -24,6 +24,7 @@ interface Errors {
 
     // ESIMWalletFactory
     error OnlyRegistryOrDeviceWalletFactoryOrDeviceWallet();
+    error OnlyDeployForSelf();
 
     // DeviceWalletFactory
     error OnlyAdmin();
