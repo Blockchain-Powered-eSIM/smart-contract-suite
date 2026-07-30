@@ -346,6 +346,35 @@ contract ESIMWalletTest is DeployerBase {
         assertEq(registry.isESIMWalletValid(address(eSIMWallet1)), address(deviceWallet2), "Registry should have updated the eSIM wallet to the new device wallet");
     }
 
+    /// @notice A single ownership transfer emits exactly one OwnershipTransferred
+    /// @dev Counts logs rather than using vm.expectEmit, which matches one occurrence and would
+    ///      pass just as happily against a duplicate emission.
+    function test_acceptOwnershipTransfer_emitsOwnershipTransferredOnce() public {
+        test_requestTransferOwnership();
+
+        address requestedOwner = eSIMWallet1.newRequestedOwner();
+
+        vm.recordLogs();
+        vm.prank(requestedOwner);
+        eSIMWallet1.acceptOwnershipTransfer();
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+
+        bytes32 ownershipTransferred = keccak256("OwnershipTransferred(address,address)");
+        uint256 count;
+        for (uint256 i = 0; i < logs.length; ++i) {
+            if (
+                logs[i].emitter == address(eSIMWallet1) &&
+                logs[i].topics.length > 0 &&
+                logs[i].topics[0] == ownershipTransferred
+            ) {
+                ++count;
+            }
+        }
+
+        assertEq(count, 1, "Exactly one OwnershipTransferred should have been emitted");
+        assertEq(eSIMWallet1.owner(), requestedOwner, "Ownership should have moved to the requested owner");
+    }
+
     function test_buyDataBundle_noFundsFromESIMWallet() public {
         deployWallets();
 
