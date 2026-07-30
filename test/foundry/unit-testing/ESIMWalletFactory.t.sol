@@ -61,6 +61,87 @@ contract ESIMWalletFactoryTest is DeployerBase {
         assertEq(eSIMWallet.owner(), deviceWalletAddress, "ESIMWallet owner should have been device wallet");
     }
 
+    /// @notice A device wallet cannot deploy an eSIM wallet owned by a different device wallet
+    /// @dev After the revert the second device wallet deploys at the same salt successfully, which
+    ///      proves the address it would have used was left free.
+    function test_deployESIMWallet_revertsWhenDeviceWalletNamesAnother() public {
+        MockDeviceWallet deviceWalletA = _deployDeviceWallet(customDeviceUniqueIdentifiers[0], pubKey1, 401);
+        MockDeviceWallet deviceWalletB = _deployDeviceWallet(customDeviceUniqueIdentifiers[1], pubKey2, 402);
+
+        vm.prank(address(deviceWalletA));
+        vm.expectRevert(Errors.OnlyDeployForSelf.selector);
+        eSIMWalletFactory.deployESIMWallet(address(deviceWalletB), 403);
+
+        vm.prank(address(deviceWalletB));
+        address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(address(deviceWalletB), 403);
+
+        assertEq(
+            eSIMWalletFactory.isESIMWalletDeployed(eSIMWalletAddress),
+            true,
+            "The named device wallet should still be able to deploy at that salt"
+        );
+        assertEq(
+            MockESIMWallet(payable(eSIMWalletAddress)).owner(),
+            address(deviceWalletB),
+            "The eSIM wallet should be owned by the device wallet that deployed it"
+        );
+    }
+
+    /// @notice A device wallet may still deploy for itself
+    function test_deployESIMWallet_allowsDeviceWalletToDeployForItself() public {
+        MockDeviceWallet deviceWallet = _deployDeviceWallet(customDeviceUniqueIdentifiers[0], pubKey1, 411);
+
+        vm.prank(address(deviceWallet));
+        address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(address(deviceWallet), 412);
+
+        assertEq(
+            address(MockESIMWallet(payable(eSIMWalletAddress)).deviceWallet()),
+            address(deviceWallet),
+            "The eSIM wallet should point at the deploying device wallet"
+        );
+    }
+
+    /// @notice The same salt with two different owners already resolves to two addresses
+    /// @dev The owner sits in the encoded initialize call, which is a constructor argument and so
+    ///      part of the CREATE2 init code. The salt alone does not determine the address.
+    function test_deployESIMWallet_sameSaltDifferentOwnersDoNotCollide() public {
+        vm.startPrank(address(registry));
+        address first = eSIMWalletFactory.deployESIMWallet(user2, 421);
+        address second = eSIMWalletFactory.deployESIMWallet(user3, 421);
+        vm.stopPrank();
+
+        assertNotEq(first, second, "Two owners at one salt should resolve to different addresses");
+        assertEq(
+            address(MockESIMWallet(payable(first)).deviceWallet()),
+            user2,
+            "The first eSIM wallet should point at the first owner"
+        );
+        assertEq(
+            address(MockESIMWallet(payable(second)).deviceWallet()),
+            user3,
+            "The second eSIM wallet should point at the second owner"
+        );
+    }
+
+    /// @notice Deploys a device wallet through the factory and completes its registration
+    function _deployDeviceWallet(
+        string memory _deviceUniqueIdentifier,
+        bytes32[2] memory _ownerKey,
+        uint256 _salt
+    ) internal returns (MockDeviceWallet) {
+        vm.prank(address(typeCastEntryPoint));
+        address deviceWalletAddress = address(deviceWalletFactory.createAccount(
+            _deviceUniqueIdentifier,
+            _ownerKey,
+            _salt
+        ));
+
+        vm.prank(eSIMWalletAdmin);
+        deviceWalletFactory.postCreateAccount(deviceWalletAddress, _deviceUniqueIdentifier, _ownerKey);
+
+        return MockDeviceWallet(payable(deviceWalletAddress));
+    }
+
     function test_updateESIMWalletImplementation_unauthorised() public {
         vm.startPrank(eSIMWalletAdmin);
         vm.expectRevert();
