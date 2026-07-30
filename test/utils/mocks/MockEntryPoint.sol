@@ -45,6 +45,13 @@ contract MockEntryPoint is IEntryPoint, MockStakeManager, MockNonceManager {
         revert DelegateAndRevert(true, "MockDelegateCall");
     }
 
+    /// @notice The real EntryPoint deploys a SenderCreator helper in its constructor and calls
+    ///         initCode through it. No test exercises that path, so the mock reports address(0)
+    ///         rather than deploying one. A test that needs sender creation has to override this.
+    function senderCreator() external pure override returns (ISenderCreator) {
+        return ISenderCreator(address(0));
+    }
+
     // Add mock implementations for required methods from inherited interfaces
     function incrementNonce(address user) external {
         nonces[user]++;

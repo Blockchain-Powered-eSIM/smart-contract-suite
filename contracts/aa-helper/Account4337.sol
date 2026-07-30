@@ -13,7 +13,7 @@ import "@account-abstraction/contracts/core/Helpers.sol";
 import "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 import "@account-abstraction/contracts/core/UserOperationLib.sol";
 // To allow the smart wallet to handle ERC20 and ERC721 tokens
-import {TokenCallbackHandler} from "@account-abstraction/contracts/samples/callback/TokenCallbackHandler.sol";
+import {TokenCallbackHandler} from "@account-abstraction/contracts/accounts/callback/TokenCallbackHandler.sol";
 import {P256Verifier} from "../P256Verifier.sol";
 import {WebAuthn} from "../WebAuthn.sol";
 import "../CustomStructs.sol";
