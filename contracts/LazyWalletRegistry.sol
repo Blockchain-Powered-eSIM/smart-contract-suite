@@ -90,8 +90,13 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         _;
     }
 
-    // /// @custom:oz-upgrades-unsafe-allow constructor
-    // constructor() initializer {}
+    /// @dev Locks the implementation contract itself. Without this, anyone can call initialize
+    ///      directly on the implementation and own it. The proxy is unaffected either way, but an
+    ///      owned implementation is a trap for any later upgrade that adds an outward call.
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
 
     /// @dev Owner based upgrades
     function _authorizeUpgrade(address newImplementation)
