@@ -258,14 +258,17 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         for (uint256 i = 0; i < numberOfDeviceWallets; ++i) {
             require(_depositAmounts[i] <= availableETH, "Out of ETH");
             
-            walletsDeployed[i] = _deployDeviceWallet(
+            uint256 spentETH;
+            (walletsDeployed[i], spentETH) = _deployDeviceWallet(
                 _deviceUniqueIdentifiers[i],
                 _deviceWalletOwnersKey[i],
                 _salts[i],
                 _depositAmounts[i]
             );
 
-            availableETH -= _depositAmounts[i];
+            // Charge the budget for what was forwarded, not what was requested. An entry that
+            // resolves to an existing wallet forwards nothing, and that ETH must stay refundable.
+            availableETH -= spentETH;
         }
 
         // return unused ETH
@@ -282,20 +285,20 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     /// @param _deviceWalletOwnerKey User's P256 public key (owner of the device wallet and respective eSIM wallets)
     /// @param _depositAmount Amount of ETH to be deposited into the device wallet
     /// @return Deployed device wallet address
+    /// @return ETH actually forwarded to the EntryPoint, zero if an existing wallet was returned
     function _deployDeviceWallet(
         string memory _deviceUniqueIdentifier,
         bytes32[2] memory _deviceWalletOwnerKey,
         uint256 _salt,
         uint256 _depositAmount
-    ) internal returns (Wallets memory) {
-        address deviceWalletAddress = address(
-            _createAccountForUser(
-                _deviceUniqueIdentifier,
-                _deviceWalletOwnerKey,
-                _salt,
-                _depositAmount
-            )
+    ) internal returns (Wallets memory, uint256) {
+        (DeviceWallet deviceWallet, uint256 spentETH) = _createAccountForUser(
+            _deviceUniqueIdentifier,
+            _deviceWalletOwnerKey,
+            _salt,
+            _depositAmount
         );
+        address deviceWalletAddress = address(deviceWallet);
 
         address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(deviceWalletAddress, _salt);
         DeviceWallet(payable(deviceWalletAddress)).addESIMWallet(
@@ -305,15 +308,18 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
 
         emit DeviceWalletDeployed(deviceWalletAddress, eSIMWalletAddress, _deviceWalletOwnerKey);
 
-        return Wallets(deviceWalletAddress, eSIMWalletAddress);
+        return (Wallets(deviceWalletAddress, eSIMWalletAddress), spentETH);
     }
 
+    /// @dev Returns the ETH actually forwarded to the EntryPoint, which is zero whenever an
+    ///      existing wallet is returned instead of a new one being deployed. Callers holding a
+    ///      budget must decrement by this value, not by the requested deposit.
     function _createAccountForUser(
         string memory _deviceUniqueIdentifier,
         bytes32[2] memory _deviceWalletOwnerKey,
         uint256 _salt,
         uint256 _depositAmount
-    ) internal returns (DeviceWallet deviceWallet) {
+    ) internal returns (DeviceWallet deviceWallet, uint256 spentETH) {
         require(
             bytes(_deviceUniqueIdentifier).length != 0, 
             "DeviceIdentifier cannot be empty"
@@ -329,7 +335,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         address wallet = registry.uniqueIdentifierToDeviceWallet(_deviceUniqueIdentifier);
         if(wallet != address(0)) {
             require(wallet == addr, "Wallet already exists with different owner");
-            return DeviceWallet(payable(wallet));
+            return (DeviceWallet(payable(wallet)), 0);
         }
 
         // Check if P256 public key is actually unique
@@ -337,12 +343,12 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         wallet = registry.registeredP256Keys(keyHash);
         if(wallet != address(0)) {
             require(wallet == addr, "Wallet already exists with different owner key");
-            return DeviceWallet(payable(wallet));
+            return (DeviceWallet(payable(wallet)), 0);
         }
 
         uint256 codeSize = addr.code.length;
         if (codeSize > 0) {
-            return DeviceWallet(payable(addr));
+            return (DeviceWallet(payable(addr)), 0);
         }
 
         // Prefund the account with msg.value
@@ -350,6 +356,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
             // The ERC4337 wallet MUST have a stake in EntryPoint in order to interact using userops,
             // regardless of it being deployed by an EOA or EntryPoint
             entryPoint.depositTo{value: _depositAmount}(addr);
+            spentETH = _depositAmount;
         }
 
         deviceWallet = DeviceWallet(
