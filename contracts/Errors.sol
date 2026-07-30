@@ -15,6 +15,9 @@ interface Errors {
     // RegistryHelper
     error OnlyLazyWalletRegistry();
 
+    // LazyWalletRegistry
+    error LazyWalletAlreadyDeployed(string deviceIdentifier);
+
     // ESIMWalletFactory
     error OnlyRegistryOrDeviceWalletFactoryOrDeviceWallet();
 

@@ -272,6 +272,17 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
             keccak256(bytes(_newDeviceIdentifier)) != keccak256(bytes(currentDeviceIdentifier)),
             "Cannot switch to same device"
         );
+        // Once a wallet exists onchain, the onchain graph is the authoritative record of which eSIM
+        // belongs to which device, and nothing here reads back into it. Switching the old device
+        // would leave the deployed eSIM wallet owned by it while deleting its purchase history.
+        // Switching to a deployed new device orphans the eSIM, because deploying that device again
+        // is already refused. Post-deployment movement belongs to ESIMWallet's ownership transfer.
+        if(isLazyWalletDeployed(_oldDeviceIdentifier)) {
+            revert Errors.LazyWalletAlreadyDeployed(_oldDeviceIdentifier);
+        }
+        if(isLazyWalletDeployed(_newDeviceIdentifier)) {
+            revert Errors.LazyWalletAlreadyDeployed(_newDeviceIdentifier);
+        }
 
         eSIMIdentifierToDeviceIdentifier[_eSIMIdentifier] = _newDeviceIdentifier;
         emit NewDeviceIdentifierAssociatedWithESIMIdentifier(_eSIMIdentifier, currentDeviceIdentifier, _newDeviceIdentifier);
