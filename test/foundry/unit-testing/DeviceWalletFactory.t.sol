@@ -633,6 +633,52 @@ contract DeviceWalletFactoryTest is DeployerBase {
         assertEq(eSIMWalletAdmin.balance, 5 ether, "Admin should have been refunded everything");
     }
 
+    /// @notice PoC for the front-run denial of service. createAccount is permissionless, so anyone
+    /// watching the mempool can deploy a wallet the admin is about to deploy, leaving it with code
+    /// but no registry record. The batch must absorb that wallet instead of reverting.
+    function test_deployDeviceWalletForUsers_survivesCreateAccountFrontRun() public {
+        uint256 salt = 780;
+
+        // The attacker deploys the wallet the admin is about to deploy
+        vm.prank(user2);
+        address frontRunWallet = address(deviceWalletFactory.createAccount(
+            customDeviceUniqueIdentifiers[0],
+            pubKey1,
+            salt
+        ));
+        assertEq(registry.isDeviceWalletValid(frontRunWallet), false, "Front-run wallet should hold no registry record");
+
+        (
+            string[] memory identifiers,
+            bytes32[2][] memory keys,
+            uint256[] memory salts,
+            uint256[] memory deposits
+        ) = _singleEntryBatch(customDeviceUniqueIdentifiers[0], pubKey1, salt, 1 ether);
+
+        vm.deal(eSIMWalletAdmin, 1 ether);
+        vm.prank(eSIMWalletAdmin);
+        Wallets[] memory wallets = deviceWalletFactory.deployDeviceWalletForUsers{value: 1 ether}(
+            identifiers,
+            keys,
+            salts,
+            deposits
+        );
+
+        // The batch completes and the front-run wallet is now a first-class wallet
+        assertEq(wallets[0].deviceWallet, frontRunWallet, "Batch should have adopted the front-run wallet");
+        assertEq(registry.isDeviceWalletValid(frontRunWallet), true, "Adopted wallet should be valid in the registry");
+        assertEq(registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[0]), frontRunWallet, "Identifier should resolve to the adopted wallet");
+        assertEq(deviceWalletFactory.deviceWalletInfoAdded(frontRunWallet), true, "Factory should record the adopted wallet");
+        assertEq(registry.isESIMWalletValid(wallets[0].eSIMWallet), frontRunWallet, "ESIM wallet should be bound to the adopted wallet");
+
+        bytes32 keyHash = keccak256(abi.encode(pubKey1[0], pubKey1[1]));
+        assertEq(registry.registeredP256Keys(keyHash), frontRunWallet, "Owner key should resolve to the adopted wallet");
+
+        // Nothing was deposited for a wallet that already existed, so the ETH comes back
+        assertEq(address(deviceWalletFactory).balance, 0, "Factory must not retain any ETH");
+        assertEq(eSIMWalletAdmin.balance, 1 ether, "Admin should have been refunded");
+    }
+
     /// @dev Builds a one-entry batch, since the four arrays have to agree in length
     function _singleEntryBatch(
         string memory _identifier,
