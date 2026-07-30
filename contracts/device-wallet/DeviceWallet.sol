@@ -72,17 +72,21 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         _;
     }
 
-    function _onlySelfOrAssociatedESIMWallet() private view {
+    /// @dev An eSIM wallet may only name itself. Accepting any associated wallet let one of them
+    ///      unbind a sibling, strip its ETH access, put it on standby and force its balance back to
+    ///      the device wallet. Association of the named wallet is still established by the caller,
+    ///      which requires isValidESIMWallet before doing anything.
+    function _onlySelfOrESIMWalletBeingRemoved(address _eSIMWalletAddress) private view {
         if(
             msg.sender != address(this) &&
-            !isValidESIMWallet[msg.sender]
+            msg.sender != _eSIMWalletAddress
         ) {
             revert Errors.OnlySelfOrAssociatedESIMWallet();
         }
     }
 
-    modifier onlySelfOrAssociatedESIMWallet() {
-        _onlySelfOrAssociatedESIMWallet();
+    modifier onlySelfOrESIMWalletBeingRemoved(address _eSIMWalletAddress) {
+        _onlySelfOrESIMWalletBeingRemoved(_eSIMWalletAddress);
         _;
     }
 
@@ -274,7 +278,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     function removeESIMWallet(
         address _eSIMWalletAddress,
         bool _callBackETH
-    ) public onlySelfOrAssociatedESIMWallet nonReentrant {
+    ) public onlySelfOrESIMWalletBeingRemoved(_eSIMWalletAddress) nonReentrant {
         require(isValidESIMWallet[_eSIMWalletAddress] == true, "Unknown eSIM wallet");
 
         isValidESIMWallet[_eSIMWalletAddress] = false;
