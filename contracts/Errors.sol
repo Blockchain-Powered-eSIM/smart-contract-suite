@@ -2,6 +2,10 @@
 pragma solidity 0.8.36;
 
 interface Errors {
+    // Any contract rejecting a zero address argument. The parameter name identifies which
+    // argument was zero, since a single function often checks several.
+    error ZeroAddress(string parameter);
+
     // Every Ownable contract: Registry, LazyWalletRegistry, DeviceWalletFactory,
     // ESIMWalletFactory and ESIMWallet
     error OwnershipCannotBeRenounced();

@@ -80,6 +80,12 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
         require(_vault != address(0), "_vault 0");
         require(_upgradeManager != address(0), "_upgradeManager 0");
         require(address(_entryPoint) != address(0), "_entryPoint 0");
+        // Neither factory has a setter anywhere in the protocol, so a zero here is permanent.
+        // It would leave deployLazyWalletAndSetESIMIdentifier calling into address(0),
+        // onlyDeviceWalletFactory unable to match any sender, and the factory branch of
+        // ESIMWalletFactory's caller check dead, recoverable only by an upgrade.
+        if(_deviceWalletFactory == address(0)) revert Errors.ZeroAddress("_deviceWalletFactory");
+        if(_eSIMWalletFactory == address(0)) revert Errors.ZeroAddress("_eSIMWalletFactory");
 
         entryPoint = _entryPoint;
         eSIMWalletAdmin = _eSIMWalletAdmin;
