@@ -10,6 +10,7 @@ import {SIG_VALIDATION_FAILED} from "@account-abstraction/contracts/core/Helpers
 import "contracts/CustomStructs.sol";
 
 import "test/utils/DeployerBase.sol";
+import {WebAuthnSigner} from "test/utils/WebAuthnSigner.sol";
 import "test/utils/mocks/MockESIMWallet.sol";
 import "test/utils/mocks/MockDeviceWallet.sol";
 import {ReentrantESIMWallet} from "test/utils/mocks/ReentrantESIMWallet.sol";
@@ -864,6 +865,45 @@ contract DeviceWalletTest is DeployerBase {
         );
         vm.stopPrank();
         assertEq(hex"1626ba7e", returnValue, "Signature is valid");
+    }
+
+    /// @notice A second positive control, signed during the test rather than replayed from a
+    /// captured assertion. The fixture above is pinned to one message hash, because the challenge
+    /// sits inside the clientDataJSON that the P256 signature covers, so it cannot be reused to
+    /// check a challenge derived any other way.
+    function test_isValidSignature_acceptsAnAssertionSignedForThisMessage() public {
+        bytes32[2] memory ownerKey = WebAuthnSigner.publicKey();
+        deployCustomWallet("Device_Harness", ownerKey[0], ownerKey[1], 25042025);
+
+        bytes32 messageHash = keccak256("a message the wallet was asked to sign");
+        bytes memory signature = abi.encodePacked(
+            uint8(1),
+            uint48(block.timestamp + 1 days),
+            WebAuthnSigner.sign(abi.encodePacked(messageHash))
+        );
+
+        bytes4 returnValue = userDeviceWallet.isValidSignature(messageHash, signature);
+        assertEq(hex"1626ba7e", returnValue, "An assertion signed for this message hash must be accepted");
+    }
+
+    /// @notice The harness must not be trusted just because it holds the owner key. An assertion
+    /// made for a different message carries a different challenge in its clientDataJSON, and the
+    /// onchain comparison has to catch that.
+    function test_isValidSignature_rejectsAnAssertionSignedForAnotherMessage() public {
+        bytes32[2] memory ownerKey = WebAuthnSigner.publicKey();
+        deployCustomWallet("Device_Harness", ownerKey[0], ownerKey[1], 25042025);
+
+        bytes memory signature = abi.encodePacked(
+            uint8(1),
+            uint48(block.timestamp + 1 days),
+            WebAuthnSigner.sign(abi.encodePacked(keccak256("a message the wallet was never asked about")))
+        );
+
+        bytes4 returnValue = userDeviceWallet.isValidSignature(
+            keccak256("a message the wallet was asked to sign"),
+            signature
+        );
+        assertEq(hex"ffffffff", returnValue, "An assertion made for another message must be rejected");
     }
 
     function test_webAuthn_encodeDecode() public {
