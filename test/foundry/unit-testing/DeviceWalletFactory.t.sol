@@ -532,4 +532,127 @@ contract DeviceWalletFactoryTest is DeployerBase {
             assertEq(eSIMWallet.owner(), address(deviceWallet), "ESIMWallet owner should have been device wallet");
         }
     }
+
+    /// @notice A device identifier already present in the registry makes the batch return the
+    /// existing wallet without depositing. The requested ETH must still be refundable.
+    /// Reached through createAccount followed by postCreateAccount, which registers a wallet
+    /// without deploying an eSIM wallet against that salt.
+    function test_deployDeviceWalletForUsers_existingIdentifierRefundsItsDeposit() public {
+        uint256 salt = 777;
+
+        vm.prank(user1);
+        address deployedWallet = address(deviceWalletFactory.createAccount(
+            customDeviceUniqueIdentifiers[0],
+            pubKey1,
+            salt
+        ));
+
+        vm.prank(eSIMWalletAdmin);
+        deviceWalletFactory.postCreateAccount(deployedWallet, customDeviceUniqueIdentifiers[0], pubKey1);
+        assertEq(registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[0]), deployedWallet, "Registry should now hold the wallet");
+
+        (
+            string[] memory identifiers,
+            bytes32[2][] memory keys,
+            uint256[] memory salts,
+            uint256[] memory deposits
+        ) = _singleEntryBatch(customDeviceUniqueIdentifiers[0], pubKey1, salt, 1 ether);
+
+        vm.deal(eSIMWalletAdmin, 1 ether);
+        vm.prank(eSIMWalletAdmin);
+        Wallets[] memory wallets = deviceWalletFactory.deployDeviceWalletForUsers{value: 1 ether}(
+            identifiers,
+            keys,
+            salts,
+            deposits
+        );
+
+        assertEq(wallets[0].deviceWallet, deployedWallet, "Batch should have returned the existing wallet");
+        assertEq(entryPoint.balanceOf(deployedWallet), 0, "Nothing should have been deposited for an existing wallet");
+        assertEq(address(deviceWalletFactory).balance, 0, "Factory must not retain any ETH");
+        assertEq(eSIMWalletAdmin.balance, 1 ether, "Admin should have been refunded the undeposited ETH");
+    }
+
+    /// @notice The happy path still forwards the full deposit, asserted against the EntryPoint's own
+    /// accounting rather than the wallet balance, which the mock reaches by forwarding the ETH on.
+    function test_deployDeviceWalletForUsers_depositsAndRefundsExactly() public {
+        (
+            string[] memory identifiers,
+            bytes32[2][] memory keys,
+            uint256[] memory salts,
+            uint256[] memory deposits
+        ) = _singleEntryBatch(customDeviceUniqueIdentifiers[0], pubKey1, uint256(778), 2 ether);
+
+        vm.deal(eSIMWalletAdmin, 3 ether);
+        vm.prank(eSIMWalletAdmin);
+        Wallets[] memory wallets = deviceWalletFactory.deployDeviceWalletForUsers{value: 3 ether}(
+            identifiers,
+            keys,
+            salts,
+            deposits
+        );
+
+        assertEq(entryPoint.balanceOf(wallets[0].deviceWallet), 2 ether, "Full deposit should have reached the EntryPoint");
+        assertEq(address(deviceWalletFactory).balance, 0, "Factory must not retain any ETH");
+        assertEq(eSIMWalletAdmin.balance, 1 ether, "Admin should have been refunded the surplus");
+    }
+
+    /// @notice A zero deposit inside a funded batch must not reach the EntryPoint at all.
+    /// The guard has to read the per-wallet amount, not the batch total in msg.value.
+    function test_deployDeviceWalletForUsers_zeroDepositSkipsEntryPoint() public {
+        uint256 salt = 779;
+        (
+            string[] memory identifiers,
+            bytes32[2][] memory keys,
+            uint256[] memory salts,
+            uint256[] memory deposits
+        ) = _singleEntryBatch(customDeviceUniqueIdentifiers[0], pubKey1, salt, 0);
+
+        address expectedWallet = deviceWalletFactory.getCounterFactualAddress(
+            pubKey1,
+            customDeviceUniqueIdentifiers[0],
+            salt
+        );
+
+        vm.deal(eSIMWalletAdmin, 5 ether);
+        vm.expectCall(
+            address(entryPoint),
+            abi.encodeCall(IStakeManager.depositTo, (expectedWallet)),
+            0
+        );
+        vm.prank(eSIMWalletAdmin);
+        Wallets[] memory wallets = deviceWalletFactory.deployDeviceWalletForUsers{value: 5 ether}(
+            identifiers,
+            keys,
+            salts,
+            deposits
+        );
+
+        assertEq(entryPoint.balanceOf(wallets[0].deviceWallet), 0, "A zero deposit should not create an EntryPoint balance");
+        assertEq(address(deviceWalletFactory).balance, 0, "Factory must not retain any ETH");
+        assertEq(eSIMWalletAdmin.balance, 5 ether, "Admin should have been refunded everything");
+    }
+
+    /// @dev Builds a one-entry batch, since the four arrays have to agree in length
+    function _singleEntryBatch(
+        string memory _identifier,
+        bytes32[2] memory _key,
+        uint256 _salt,
+        uint256 _deposit
+    ) internal pure returns (
+        string[] memory identifiers,
+        bytes32[2][] memory keys,
+        uint256[] memory salts,
+        uint256[] memory deposits
+    ) {
+        identifiers = new string[](1);
+        keys = new bytes32[2][](1);
+        salts = new uint256[](1);
+        deposits = new uint256[](1);
+
+        identifiers[0] = _identifier;
+        keys[0] = _key;
+        salts[0] = _salt;
+        deposits[0] = _deposit;
+    }
 }
