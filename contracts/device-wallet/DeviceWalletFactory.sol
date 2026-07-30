@@ -351,8 +351,8 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
             return (DeviceWallet(payable(addr)), 0);
         }
 
-        // Prefund the account with msg.value
-        if (msg.value > 0) {
+        // Prefund the account with its own share of the ETH sent
+        if (_depositAmount > 0) {
             // The ERC4337 wallet MUST have a stake in EntryPoint in order to interact using userops,
             // regardless of it being deployed by an EOA or EntryPoint
             entryPoint.depositTo{value: _depositAmount}(addr);
