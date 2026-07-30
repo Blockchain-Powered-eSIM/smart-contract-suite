@@ -173,7 +173,10 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
     ) private view returns (uint256 validationData) {
         bytes calldata signature = userOp.signature;
         uint256 sigLength = signature.length;
-        if(sigLength <= SIGNATURE_HEADER_LENGTH + 32) return 0xffffffff;
+        // Not 0xffffffff. This is packed validationData, not a bytes4, and the EntryPoint reads
+        // its low 160 bits as an authorizer. 0xffffffff decodes as an aggregator address that
+        // does not exist, so the whole bundle reverts instead of this one operation failing.
+        if(sigLength <= SIGNATURE_HEADER_LENGTH + 32) return SIG_VALIDATION_FAILED;
 
         uint8 version = uint8(signature[0]);
         if(version == 1) {
