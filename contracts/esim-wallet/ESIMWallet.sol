@@ -245,13 +245,12 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     /// @notice Instead of using transferOwnership, the contract uses secureTransferOwnership
     function _secureTransferOwnership() internal {
         address newOwner = newRequestedOwner;
-        address previousOwner = owner();
         // Reset ownership transfer address
         newRequestedOwner = address(0);
         deviceWallet = DeviceWallet(payable(newOwner));
         // Transfer ownership to the request address
+        // _transferOwnership emits OwnershipTransferred, so this function must not emit it again
         _transferOwnership(newOwner);
-        emit OwnershipTransferred(previousOwner, owner());
     }
 
     /// @dev Internal function to send ETH from this contract
