@@ -1,4 +1,4 @@
-pragma solidity 0.8.25;
+pragma solidity 0.8.36;
 
 // SPDX-License-Identifier: MIT
 
@@ -41,8 +41,8 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
         _;
     }
 
-    /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() initializer {}
+    // /// @custom:oz-upgrades-unsafe-allow constructor
+    // constructor() initializer {}
 
     /// @dev Owner based upgrades
     function _authorizeUpgrade(address newImplementation)

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.25;
+pragma solidity 0.8.36;
 
 interface Errors {
     // Registry and ESIMWallet
@@ -16,6 +16,8 @@ interface Errors {
 
     // DeviceWalletFactory
     error OnlyAdmin();
+    error OnlyAdminOrRegistry();
+    error OnlyEntryPoint();
 
     // ESIMWallet and DeviceWallet
     error FailedToTransfer();
