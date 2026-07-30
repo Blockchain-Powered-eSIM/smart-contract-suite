@@ -41,8 +41,7 @@ contract RegistryHelper {
         address _vault, 
         address indexed _upgradeManager, 
         address indexed _deviceWalletFactory, 
-        address indexed _eSIMWalletFactory,
-        address _verifier
+        address indexed _eSIMWalletFactory
     );
 
     event ESIMWalletSetOnStandby(

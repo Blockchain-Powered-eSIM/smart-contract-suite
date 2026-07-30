@@ -22,8 +22,7 @@ contract RegistryInitializeTest is DeployerBase {
                     upgradeManager,
                     address(0),
                     address(eSIMWalletFactory),
-                    typeCastEntryPoint,
-                    p256Verifier
+                    typeCastEntryPoint
                 )
             )
         );
@@ -44,8 +43,7 @@ contract RegistryInitializeTest is DeployerBase {
                     upgradeManager,
                     address(deviceWalletFactory),
                     address(0),
-                    typeCastEntryPoint,
-                    p256Verifier
+                    typeCastEntryPoint
                 )
             )
         );

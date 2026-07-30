@@ -11,7 +11,6 @@ import {RegistryHelper} from "./RegistryHelper.sol";
 import {DeviceWalletFactory} from "./device-wallet/DeviceWalletFactory.sol";
 import {ESIMWalletFactory} from "./esim-wallet/ESIMWalletFactory.sol";
 import {ESIMWallet} from "./esim-wallet/ESIMWallet.sol";
-import {P256Verifier} from "./P256Verifier.sol";
 import {Errors} from "./Errors.sol";
 
 import "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
@@ -73,8 +72,7 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
         address _upgradeManager,
         address _deviceWalletFactory,
         address _eSIMWalletFactory,
-        IEntryPoint _entryPoint,
-        P256Verifier _verifier
+        IEntryPoint _entryPoint
     ) external initializer {
         require(_eSIMWalletAdmin != address(0), "_eSIMWalletAdmin 0");
         require(_vault != address(0), "_vault 0");
@@ -102,9 +100,8 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
             _eSIMWalletAdmin, 
             _vault, 
             _upgradeManager, 
-            address(deviceWalletFactory), 
-            address(eSIMWalletFactory),
-            address(_verifier)
+            address(deviceWalletFactory),
+            address(eSIMWalletFactory)
         );
     }
 

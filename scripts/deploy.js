@@ -125,8 +125,7 @@ async function main() {
             upgradeManagerAddress,
             deviceWalletFactoryAddress,
             esimWalletFactoryAddress,
-            entryPointAddress,
-            p256VerifierAddress
+            entryPointAddress
         ],
         {
             initializer: "initialize",
