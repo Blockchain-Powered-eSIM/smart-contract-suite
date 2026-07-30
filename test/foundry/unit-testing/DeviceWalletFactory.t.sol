@@ -730,6 +730,75 @@ contract DeviceWalletFactoryTest is DeployerBase {
         );
     }
 
+    /// @notice Both coordinates are non-zero and inside the field, and the pair still fails
+    /// y^2 = x^3 - 3x + b, so signature verification would reject it for the wallet's whole life.
+    function _offCurveKey() internal pure returns (bytes32[2] memory) {
+        return [bytes32(uint256(1)), bytes32(uint256(1))];
+    }
+
+    /// @notice A coordinate at or above the field prime is not a field element at all
+    function _outOfFieldKey() internal view returns (bytes32[2] memory) {
+        return [bytes32(type(uint256).max), pubKey1[1]];
+    }
+
+    /// @notice The admin batch path must refuse a key that is not on the curve
+    function test_deployDeviceWalletForUsers_revertsOnOffCurveOwnerKey() public {
+        bytes32[2] memory offCurveKey = _offCurveKey();
+        (
+            string[] memory identifiers,
+            bytes32[2][] memory keys,
+            uint256[] memory salts,
+            uint256[] memory deposits
+        ) = _singleEntryBatch(customDeviceUniqueIdentifiers[0], offCurveKey, uint256(783), 1 ether);
+
+        vm.deal(eSIMWalletAdmin, 1 ether);
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(Errors.InvalidDeviceWalletOwnerKey.selector);
+        deviceWalletFactory.deployDeviceWalletForUsers{value: 1 ether}(
+            identifiers,
+            keys,
+            salts,
+            deposits
+        );
+
+        assertEq(registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[0]), address(0), "Identifier must not have been consumed");
+        assertEq(registry.registeredP256Keys(keccak256(abi.encode(offCurveKey[0], offCurveKey[1]))), address(0), "Off-curve key must not have been registered");
+    }
+
+    /// @notice The permissionless deploy path must refuse the same key
+    function test_createAccount_revertsOnOffCurveOwnerKey() public {
+        bytes32[2] memory offCurveKey = _offCurveKey();
+
+        vm.prank(user1);
+        vm.expectRevert(Errors.InvalidDeviceWalletOwnerKey.selector);
+        deviceWalletFactory.createAccount(customDeviceUniqueIdentifiers[0], offCurveKey, uint256(783));
+
+        address counterfactual = deviceWalletFactory.getCounterFactualAddress(
+            offCurveKey,
+            customDeviceUniqueIdentifiers[0],
+            uint256(783)
+        );
+        assertEq(counterfactual.code.length, 0, "No wallet should have been deployed");
+    }
+
+    /// @notice A coordinate outside the field is refused rather than reduced into it
+    function test_createAccount_revertsOnOutOfFieldOwnerKey() public {
+        vm.prank(user1);
+        vm.expectRevert(Errors.InvalidDeviceWalletOwnerKey.selector);
+        deviceWalletFactory.createAccount(customDeviceUniqueIdentifiers[0], _outOfFieldKey(), uint256(784));
+
+        assertEq(registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[0]), address(0), "Identifier must not have been consumed");
+    }
+
+    /// @notice The off-chain pre-check must agree with the deploy paths on an off-curve key too
+    function test_preCreateAccountValidation_revertsOnOffCurveOwnerKey() public {
+        vm.expectRevert(Errors.InvalidDeviceWalletOwnerKey.selector);
+        deviceWalletFactory.preCreateAccountValidation(
+            customDeviceUniqueIdentifiers[0],
+            _offCurveKey()
+        );
+    }
+
     /// @dev Builds a one-entry batch, since the four arrays have to agree in length
     function _singleEntryBatch(
         string memory _identifier,
