@@ -5,6 +5,7 @@ pragma solidity 0.8.36;
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
+import {SIG_VALIDATION_FAILED} from "@account-abstraction/contracts/core/Helpers.sol";
 
 import "contracts/CustomStructs.sol";
 
@@ -885,6 +886,30 @@ contract DeviceWalletTest is DeployerBase {
         // console.logUint(decodedWebAuthn.typeIndex);
         // console.logUint(decodedWebAuthn.r);
         // console.logUint(decodedWebAuthn.s);
+    }
+
+    /// @notice A signature too short to carry a header and a challenge must fail the operation,
+    /// not the bundle. validateUserOp returns packed validationData whose low 160 bits the
+    /// EntryPoint reads as an authorizer, so anything other than 0 or SIG_VALIDATION_FAILED names
+    /// an aggregator. 0xffffffff named one that does not exist.
+    function test_validateUserOp_shortSignatureFailsGracefully() public {
+        deployWallets();
+
+        PackedUserOperation memory userOp;
+        userOp.sender = address(deviceWallet);
+        // Exactly a version byte, six validUntil bytes and a 32 byte challenge, which the guard
+        // rejects because it leaves no room for the WebAuthn assertion itself
+        userOp.signature = new bytes(39);
+
+        vm.prank(address(deviceWallet.entryPoint()));
+        uint256 validationData = deviceWallet.validateUserOp(userOp, bytes32(0), 0);
+
+        assertEq(validationData, SIG_VALIDATION_FAILED, "A short signature must fail the operation");
+        assertEq(
+            validationData >> 160,
+            0,
+            "Failure must carry no validity window, otherwise the EntryPoint reads a time range"
+        );
     }
 
     // function test_validateUserOp() public {
