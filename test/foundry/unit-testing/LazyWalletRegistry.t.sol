@@ -271,6 +271,76 @@ contract LazyWalletRegistryTest is DeployerBase {
         vm.stopPrank();
     }
 
+    /// @notice An eSIM cannot be switched away from a device whose wallet already exists onchain
+    /// @dev The deployed eSIM wallet stays owned by the old device wallet, and the switch would
+    ///      delete that device's purchase history while nothing reads back into the onchain graph.
+    function test_switchESIMIdentifierToNewDeviceIdentifier_revertsWhenOldDeviceDeployed() public {
+        test_deployLazyWalletAndSetESIMIdentifier();
+
+        string memory eSIMIdentifier = customESIMUniqueIdentifiers[0][0];
+        string memory deployedDeviceIdentifier = customDeviceUniqueIdentifiers[0];
+        string memory newDeviceIdentifier = customDeviceUniqueIdentifiers[1];
+
+        assertEq(lazyWalletRegistry.isLazyWalletDeployed(deployedDeviceIdentifier), true, "Old device should be deployed");
+        assertEq(lazyWalletRegistry.isLazyWalletDeployed(newDeviceIdentifier), false, "New device should not be deployed");
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(
+            abi.encodeWithSelector(Errors.LazyWalletAlreadyDeployed.selector, deployedDeviceIdentifier)
+        );
+        lazyWalletRegistry.switchESIMIdentifierToNewDeviceIdentifier(
+            eSIMIdentifier,
+            deployedDeviceIdentifier,
+            newDeviceIdentifier
+        );
+
+        assertEq(
+            lazyWalletRegistry.eSIMIdentifierToDeviceIdentifier(eSIMIdentifier),
+            deployedDeviceIdentifier,
+            "eSIM should still be associated with the deployed device"
+        );
+        assertNotEq(
+            lazyWalletRegistry.getDeviceIdentifierToESIMDetails(deployedDeviceIdentifier, eSIMIdentifier).length,
+            0,
+            "Purchase history should not have been deleted from the deployed device"
+        );
+    }
+
+    /// @notice An eSIM cannot be switched onto a device whose wallet already exists onchain
+    /// @dev Deploying that device again is already refused, so the eSIM would never receive a wallet
+    ///      under it and its record would be orphaned.
+    function test_switchESIMIdentifierToNewDeviceIdentifier_revertsWhenNewDeviceDeployed() public {
+        test_deployLazyWalletAndSetESIMIdentifier();
+
+        string memory eSIMIdentifier = customESIMUniqueIdentifiers[1][0];
+        string memory oldDeviceIdentifier = customDeviceUniqueIdentifiers[1];
+        string memory deployedDeviceIdentifier = customDeviceUniqueIdentifiers[0];
+
+        assertEq(lazyWalletRegistry.isLazyWalletDeployed(oldDeviceIdentifier), false, "Old device should not be deployed");
+        assertEq(lazyWalletRegistry.isLazyWalletDeployed(deployedDeviceIdentifier), true, "New device should be deployed");
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(
+            abi.encodeWithSelector(Errors.LazyWalletAlreadyDeployed.selector, deployedDeviceIdentifier)
+        );
+        lazyWalletRegistry.switchESIMIdentifierToNewDeviceIdentifier(
+            eSIMIdentifier,
+            oldDeviceIdentifier,
+            deployedDeviceIdentifier
+        );
+
+        assertEq(
+            lazyWalletRegistry.eSIMIdentifierToDeviceIdentifier(eSIMIdentifier),
+            oldDeviceIdentifier,
+            "eSIM should still be associated with the old device"
+        );
+        assertNotEq(
+            lazyWalletRegistry.getDeviceIdentifierToESIMDetails(oldDeviceIdentifier, eSIMIdentifier).length,
+            0,
+            "Purchase history should not have been moved off the old device"
+        );
+    }
+
     function test_isLazyWalletDeployed_unregisteredIdentfier() public view {
         bool isDeployed = lazyWalletRegistry.isLazyWalletDeployed(customDeviceUniqueIdentifiers[0]);
         assertEq(isDeployed, false);
