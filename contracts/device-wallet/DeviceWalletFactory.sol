@@ -2,6 +2,8 @@ pragma solidity 0.8.36;
 
 // SPDX-License-Identifier: MIT
 
+import {FCL_Elliptic_ZZ} from "FreshCryptoLib/FCL_elliptic.sol";
+
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
@@ -325,14 +327,17 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         return (Wallets(deviceWalletAddress, eSIMWalletAddress), spentETH);
     }
 
-    /// @notice Rejects a P256 public key with a zero component
-    /// @dev Neither coordinate of a point on the P256 curve can be zero, so such a key can never
-    ///      verify a signature. A wallet deployed with one is unusable for its whole life and it
-    ///      consumes its device identifier and key hash, neither of which can be released.
-    function _requireNonZeroOwnerKey(bytes32[2] memory _deviceWalletOwnerKey) private pure {
+    /// @notice Rejects a P256 public key that is not a point on the curve
+    /// @dev This is the same predicate FCL_ecdsa.ecdsa_verify applies before it does anything else,
+    ///      so a key rejected here is one that could never have verified a signature. A wallet
+    ///      deployed with such a key is unusable for its whole life and it consumes its device
+    ///      identifier and key hash, neither of which the protocol can release.
+    function _requireValidOwnerKey(bytes32[2] memory _deviceWalletOwnerKey) private pure {
         if(
-            _deviceWalletOwnerKey[0] == bytes32(0) ||
-            _deviceWalletOwnerKey[1] == bytes32(0)
+            !FCL_Elliptic_ZZ.ecAff_isOnCurve(
+                uint256(_deviceWalletOwnerKey[0]),
+                uint256(_deviceWalletOwnerKey[1])
+            )
         ) revert Errors.InvalidDeviceWalletOwnerKey();
     }
 
@@ -349,7 +354,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
             bytes(_deviceUniqueIdentifier).length != 0,
             "DeviceIdentifier cannot be empty"
         );
-        _requireNonZeroOwnerKey(_deviceWalletOwnerKey);
+        _requireValidOwnerKey(_deviceWalletOwnerKey);
 
         address addr = getCounterFactualAddress(
             _deviceWalletOwnerKey,
@@ -420,7 +425,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
             bytes(_deviceUniqueIdentifier).length != 0,
             "DeviceIdentifier cannot be empty"
         );
-        _requireNonZeroOwnerKey(_deviceWalletOwnerKey);
+        _requireValidOwnerKey(_deviceWalletOwnerKey);
 
         // Check if the device identifier is actually unique
         wallet = registry.uniqueIdentifierToDeviceWallet(_deviceUniqueIdentifier);
@@ -454,7 +459,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
             bytes(_deviceUniqueIdentifier).length != 0,
             "DeviceIdentifier cannot be empty"
         );
-        _requireNonZeroOwnerKey(_deviceWalletOwnerKey);
+        _requireValidOwnerKey(_deviceWalletOwnerKey);
 
         address addr = getCounterFactualAddress(
             _deviceWalletOwnerKey,
