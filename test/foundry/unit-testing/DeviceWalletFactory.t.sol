@@ -679,6 +679,57 @@ contract DeviceWalletFactoryTest is DeployerBase {
         assertEq(eSIMWalletAdmin.balance, 1 ether, "Admin should have been refunded");
     }
 
+    /// @notice A zero P256 key can never sit on the curve, so the wallet it produces could never
+    /// authorise anything while still consuming its device identifier permanently.
+    function test_deployDeviceWalletForUsers_revertsOnZeroOwnerKey() public {
+        bytes32[2] memory zeroKey = [bytes32(0), bytes32(0)];
+        (
+            string[] memory identifiers,
+            bytes32[2][] memory keys,
+            uint256[] memory salts,
+            uint256[] memory deposits
+        ) = _singleEntryBatch(customDeviceUniqueIdentifiers[0], zeroKey, uint256(781), 1 ether);
+
+        vm.deal(eSIMWalletAdmin, 1 ether);
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(Errors.InvalidDeviceWalletOwnerKey.selector);
+        deviceWalletFactory.deployDeviceWalletForUsers{value: 1 ether}(
+            identifiers,
+            keys,
+            salts,
+            deposits
+        );
+
+        assertEq(registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[0]), address(0), "Identifier must not have been consumed");
+        assertEq(registry.registeredP256Keys(keccak256(abi.encode(zeroKey[0], zeroKey[1]))), address(0), "Zero key must not have been registered");
+    }
+
+    /// @notice The permissionless deploy path has to reject the same key, and a single zero
+    /// coordinate is already off the curve.
+    function test_createAccount_revertsOnZeroOwnerKeyComponent() public {
+        bytes32[2] memory halfZeroKey = [pubKey1[0], bytes32(0)];
+
+        vm.prank(user1);
+        vm.expectRevert(Errors.InvalidDeviceWalletOwnerKey.selector);
+        deviceWalletFactory.createAccount(customDeviceUniqueIdentifiers[0], halfZeroKey, uint256(782));
+
+        address counterfactual = deviceWalletFactory.getCounterFactualAddress(
+            halfZeroKey,
+            customDeviceUniqueIdentifiers[0],
+            uint256(782)
+        );
+        assertEq(counterfactual.code.length, 0, "No wallet should have been deployed");
+    }
+
+    /// @notice The off-chain pre-check for the userop deploy path must agree with the deploy path.
+    function test_preCreateAccountValidation_revertsOnZeroOwnerKey() public {
+        vm.expectRevert(Errors.InvalidDeviceWalletOwnerKey.selector);
+        deviceWalletFactory.preCreateAccountValidation(
+            customDeviceUniqueIdentifiers[0],
+            [bytes32(0), bytes32(0)]
+        );
+    }
+
     /// @dev Builds a one-entry batch, since the four arrays have to agree in length
     function _singleEntryBatch(
         string memory _identifier,
