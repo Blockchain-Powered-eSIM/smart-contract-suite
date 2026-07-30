@@ -93,13 +93,14 @@ module.exports = {
     },
   },
   solidity: {
-    version: "0.8.25",
+    version: "0.8.36",
     settings: {
       optimizer: {
         enabled: true,
-        runs: 200
+        runs: 10_000_000
       },
       viaIR: true,
+      evmVersion: "osaka",
     }
   },
   paths: {

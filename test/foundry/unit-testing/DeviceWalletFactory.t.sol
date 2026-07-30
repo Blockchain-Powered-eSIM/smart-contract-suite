@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.18;
+pragma solidity 0.8.36;
 
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
@@ -260,7 +260,12 @@ contract DeviceWalletFactoryTest is DeployerBase {
         assertEq(calculatedDeviceWalletAddress1, calculatedDeviceWalletAddress2, "Device wallet address before and after deployment should have matched");
     }
 
-    function test_createAccount_withoutEntryPoint() public {
+    /// @notice createAccount is permissionless by design.
+    /// During a real UserOperation the caller is the EntryPoint's SenderCreator helper, not the
+    /// EntryPoint itself, so gating on the EntryPoint address would break userOp deployment.
+    /// Deploying is safe for anyone to do because the owner key and device identifier are part of
+    /// the counterfactual address, so a caller can only ever deploy the wallet those params describe.
+    function test_createAccount_byArbitraryCaller() public {
         uint256 salt = 999;
 
         // Check for device wallet address before its deployed
@@ -271,14 +276,46 @@ contract DeviceWalletFactoryTest is DeployerBase {
         );
         assertNotEq(calculatedDeviceWalletAddress1, address(0), "Device wallet address cannot be address(0)");
 
-        // Deploy the device wallet
+        // Deploy the device wallet from an EOA that is not the entry point
         vm.startPrank(user1);
-        vm.expectRevert(bytes4(keccak256("OnlyEntryPoint()")));
-        MockDeviceWallet(payable(deviceWalletFactory.createAccount(
+        MockDeviceWallet deviceWallet = MockDeviceWallet(payable(deviceWalletFactory.createAccount(
             customDeviceUniqueIdentifiers[0],
             pubKey1,
             salt
         )));
+        vm.stopPrank();
+
+        assertEq(address(deviceWallet), calculatedDeviceWalletAddress1, "Wallet should be deployed at the counterfactual address");
+
+        // The wallet is owned by pubKey1, not by the caller
+        assertEq(deviceWallet.owner(0), pubKey1[0], "X co-ordinate should have matched");
+        assertEq(deviceWallet.owner(1), pubKey1[1], "Y co-ordinate should have matched");
+        assertEq(deviceWallet.deviceUniqueIdentifier(), customDeviceUniqueIdentifiers[0], "Device unique identifier should have matched");
+
+        // createAccount must not touch external storage, regardless of who called it
+        bytes32 keyHash = keccak256(abi.encode(pubKey1[0], pubKey1[1]));
+        assertEq(registry.registeredP256Keys(keyHash), address(0), "P256 key hash should NOT have been tied to the device wallet address");
+        assertEq(registry.isDeviceWalletValid(address(deviceWallet)), false, "isDeviceWalletValid mapping should NOT have been updated");
+        assertEq(deviceWalletFactory.deviceWalletInfoAdded(address(deviceWallet)), false, "Device wallet info should NOT have been added");
+    }
+
+    /// @notice An arbitrary caller cannot promote a wallet they deployed into the registry
+    function test_createAccount_byArbitraryCaller_cannotCallPostCreateAccount() public {
+        uint256 salt = 999;
+
+        vm.startPrank(user1);
+        MockDeviceWallet deviceWallet = MockDeviceWallet(payable(deviceWalletFactory.createAccount(
+            customDeviceUniqueIdentifiers[0],
+            pubKey1,
+            salt
+        )));
+
+        vm.expectRevert(bytes4(keccak256("OnlyAdminOrRegistry()")));
+        deviceWalletFactory.postCreateAccount(
+            address(deviceWallet),
+            customDeviceUniqueIdentifiers[0],
+            pubKey1
+        );
         vm.stopPrank();
     }
 

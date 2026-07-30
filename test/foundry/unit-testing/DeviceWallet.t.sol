@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.18;
+pragma solidity 0.8.36;
 
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
@@ -221,6 +221,23 @@ contract DeviceWalletTest is DeployerBase {
         assertEq(eSIMWallet3.owner(), address(deviceWallet2), "ESIMWallet3 owner should have been device wallet");
     }
 
+    /// @notice Checks the registry and device wallet view of a single eSIM wallet binding.
+    /// Kept as a helper rather than four inline assertions because the via-IR pipeline runs out
+    /// of stack slots when this many consecutive assertions are fused into one test body.
+    function _assertESIMWalletBinding(
+        MockDeviceWallet _deviceWallet,
+        MockESIMWallet _eSIMWallet,
+        bool _onStandby,
+        address _associatedDeviceWallet,
+        bool _canPullETH,
+        bool _isValidForDeviceWallet
+    ) internal view {
+        assertEq(registry.isESIMWalletOnStandby(address(_eSIMWallet)), _onStandby, "Unexpected standby status for the eSIM wallet");
+        assertEq(registry.isESIMWalletValid(address(_eSIMWallet)), _associatedDeviceWallet, "Unexpected device wallet associated with the eSIM wallet");
+        assertEq(_deviceWallet.canPullETH(address(_eSIMWallet)), _canPullETH, "Unexpected ETH pull access for the eSIM wallet");
+        assertEq(_deviceWallet.isValidESIMWallet(address(_eSIMWallet)), _isValidForDeviceWallet, "Unexpected eSIM wallet validity for the device wallet");
+    }
+
     function test_deployESIMWallet() public {
         deployWallets();
     }
@@ -370,10 +387,7 @@ contract DeviceWalletTest is DeployerBase {
         assertEq(address(deviceWallet).balance, 11 ether, "Device wallet balance should have increased to 11 ETH");
         assertEq(address(eSIMWallet1).balance, 0, "eSIM wallet balance should have decreased to 0 ETH");
 
-        assertEq(registry.isESIMWalletOnStandby(address(eSIMWallet1)), true, "eSIM wallet should have been set to standby");
-        assertEq(registry.isESIMWalletValid(address(eSIMWallet1)), address(0), "Device wallet associated with the eSIM wallet should have been set to address(0)");
-        assertEq(deviceWallet.canPullETH(address(eSIMWallet1)), false, "ESIM wallet should not be allowed to pull ETH");
-        assertEq(deviceWallet.isValidESIMWallet(address(eSIMWallet1)), false, "ESIM wallet should have been set to invalid for the device wallet");
+        _assertESIMWalletBinding(deviceWallet, eSIMWallet1, true, address(0), false, false);
     }
 
     function test_removeESIMWallet_noETHToCallBack() public {
@@ -388,10 +402,7 @@ contract DeviceWalletTest is DeployerBase {
         assertEq(address(deviceWallet).balance, 10 ether, "Device wallet balance should have been the same, 11 ETH");
         assertEq(address(eSIMWallet1).balance, 0, "eSIM wallet balance should have been the same, 0 ETH");
 
-        assertEq(registry.isESIMWalletOnStandby(address(eSIMWallet1)), true, "eSIM wallet should have been set to standby");
-        assertEq(registry.isESIMWalletValid(address(eSIMWallet1)), address(0), "Device wallet associated with the eSIM wallet should have been set to address(0)");
-        assertEq(deviceWallet.canPullETH(address(eSIMWallet1)), false, "ESIM wallet should not be allowed to pull ETH");
-        assertEq(deviceWallet.isValidESIMWallet(address(eSIMWallet1)), false, "ESIM wallet should have been set to invalid for the device wallet");
+        _assertESIMWalletBinding(deviceWallet, eSIMWallet1, true, address(0), false, false);
     }
 
     function test_toggleAccessToETH_unauthorised() public {
@@ -626,10 +637,7 @@ contract DeviceWalletTest is DeployerBase {
         assertEq(address(deviceWallet).balance, 11 ether, "Device wallet balance should have increased to 11 ETH");
         assertEq(address(eSIMWallet1).balance, 0, "eSIM wallet balance should have decreased to 0 ETH");
 
-        assertEq(registry.isESIMWalletOnStandby(address(eSIMWallet1)), true, "eSIM wallet should have been set to standby");
-        assertEq(registry.isESIMWalletValid(address(eSIMWallet1)), address(0), "Device wallet associated with the eSIM wallet should have been set to address(0)");
-        assertEq(deviceWallet.canPullETH(address(eSIMWallet1)), false, "ESIM wallet should not be allowed to pull ETH");
-        assertEq(deviceWallet.isValidESIMWallet(address(eSIMWallet1)), false, "ESIM wallet should have been set to invalid for the device wallet");
+        _assertESIMWalletBinding(deviceWallet, eSIMWallet1, true, address(0), false, false);
         
         vm.startPrank(currentOwner);
         vm.expectRevert("Unauthorised caller");
@@ -667,10 +675,7 @@ contract DeviceWalletTest is DeployerBase {
         assertEq(address(deviceWallet2).balance, 5 ether, "Device wallet balance should have been the same");
         assertEq(address(eSIMWallet1).balance, 0, "eSIM wallet balance should have decreased to 0 ETH");
 
-        assertEq(registry.isESIMWalletOnStandby(address(eSIMWallet1)), false, "eSIM wallet should have no longer been set as standby");
-        assertEq(registry.isESIMWalletValid(address(eSIMWallet1)), address(deviceWallet2), "Device wallet associated with the eSIM wallet should have been set to address(0)");
-        assertEq(deviceWallet2.canPullETH(address(eSIMWallet1)), false, "ESIM wallet should not be allowed to pull ETH from deviceWallet2");
-        assertEq(deviceWallet2.isValidESIMWallet(address(eSIMWallet1)), true, "ESIM wallet should have been set to valid for the deviceWallet2");
+        _assertESIMWalletBinding(deviceWallet2, eSIMWallet1, false, address(deviceWallet2), false, true);
 
         // 5. deviceWallet2 grants access to eSIMWallet1 to pull ETH (This could also be done in a single step during addESIMWallet function call)
         vm.startPrank(address(deviceWallet2));
@@ -735,10 +740,7 @@ contract DeviceWalletTest is DeployerBase {
         assertEq(address(deviceWallet).balance, 11 ether, "Device wallet balance should have increased to 11 ETH");
         assertEq(address(eSIMWallet1).balance, 0, "eSIM wallet balance should have decreased to 0 ETH");
 
-        assertEq(registry.isESIMWalletOnStandby(address(eSIMWallet1)), true, "eSIM wallet should have been set to standby");
-        assertEq(registry.isESIMWalletValid(address(eSIMWallet1)), address(0), "Device wallet associated with the eSIM wallet should have been set to address(0)");
-        assertEq(deviceWallet.canPullETH(address(eSIMWallet1)), false, "ESIM wallet should not be allowed to pull ETH");
-        assertEq(deviceWallet.isValidESIMWallet(address(eSIMWallet1)), false, "ESIM wallet should have been set to invalid for the device wallet");
+        _assertESIMWalletBinding(deviceWallet, eSIMWallet1, true, address(0), false, false);
 
         // 3. Carol (deviceWallet3) tries to steal standby eSIMWallet (eSIMWallet1)
         vm.startPrank(address(deviceWallet3));
@@ -772,10 +774,7 @@ contract DeviceWalletTest is DeployerBase {
         assertEq(address(deviceWallet2).balance, 5 ether, "Device wallet balance should have been the same");
         assertEq(address(eSIMWallet1).balance, 0, "eSIM wallet balance should have decreased to 0 ETH");
 
-        assertEq(registry.isESIMWalletOnStandby(address(eSIMWallet1)), false, "eSIM wallet should have no longer been set as standby");
-        assertEq(registry.isESIMWalletValid(address(eSIMWallet1)), address(deviceWallet2), "Device wallet associated with the eSIM wallet should have been set to address(0)");
-        assertEq(deviceWallet2.canPullETH(address(eSIMWallet1)), false, "ESIM wallet should not be allowed to pull ETH from deviceWallet2");
-        assertEq(deviceWallet2.isValidESIMWallet(address(eSIMWallet1)), true, "ESIM wallet should have been set to valid for the deviceWallet2");
+        _assertESIMWalletBinding(deviceWallet2, eSIMWallet1, false, address(deviceWallet2), false, true);
 
         // 6. deviceWallet2 grants access to eSIMWallet1 to pull ETH (This could also be done in a single step during addESIMWallet function call)
         vm.startPrank(address(deviceWallet2));

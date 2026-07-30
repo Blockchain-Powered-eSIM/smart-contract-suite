@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.25;
+pragma solidity 0.8.36;
 
 import {FCL_ecdsa} from "FreshCryptoLib/FCL_ecdsa.sol";
 import {FCL_Elliptic_ZZ} from "FreshCryptoLib/FCL_elliptic.sol";
