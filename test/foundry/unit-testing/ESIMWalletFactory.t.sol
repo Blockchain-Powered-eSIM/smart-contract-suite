@@ -101,6 +101,23 @@ contract ESIMWalletFactoryTest is DeployerBase {
         );
     }
 
+    /// @notice The same salt with the same owner names an address that is already taken
+    /// @dev CREATE2 reverts with no data in that case, so without the check the caller cannot
+    ///      tell a reused salt apart from any other failure inside the deployment.
+    function test_deployESIMWallet_revertsWhenTheSameOwnerReusesASalt() public {
+        vm.startPrank(address(registry));
+        address first = eSIMWalletFactory.deployESIMWallet(user2, 431);
+
+        vm.expectRevert(abi.encodeWithSelector(Errors.SaltAlreadyUsed.selector, user2, uint256(431)));
+        eSIMWalletFactory.deployESIMWallet(user2, 431);
+        vm.stopPrank();
+
+        assertTrue(
+            eSIMWalletFactory.isESIMWalletDeployed(first),
+            "The wallet deployed at that salt should still be registered"
+        );
+    }
+
     /// @notice The same salt with two different owners already resolves to two addresses
     /// @dev The owner sits in the encoded initialize call, which is a constructor argument and so
     ///      part of the CREATE2 init code. The salt alone does not determine the address.

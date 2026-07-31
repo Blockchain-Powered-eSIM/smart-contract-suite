@@ -3,6 +3,7 @@ pragma solidity 0.8.36;
 // SPDX-License-Identifier: MIT
 
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
+import {Create2} from "@openzeppelin/contracts/utils/Create2.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 import {BeaconProxy} from "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
@@ -146,6 +147,19 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgrad
             revert Errors.OnlyDeployForSelf();
         }
 
+        bytes memory initialisation = abi.encodeCall(
+            ESIMWallet.initialize,
+            (address(this), _deviceWalletAddress)
+        );
+
+        // CREATE2 reverts with no data when something already sits at the address, which leaves
+        // the caller nothing to go on. The salt is its own input, so name it back.
+        address predicted = Create2.computeAddress(
+            bytes32(_salt),
+            keccak256(abi.encodePacked(type(BeaconProxy).creationCode, abi.encode(address(beacon), initialisation)))
+        );
+        if(predicted.code.length > 0) revert Errors.SaltAlreadyUsed(_deviceWalletAddress, _salt);
+
         // Beacon Proxy deploys all the proxies which interact with the
         // beacon contract to get the implementation (logic) contract address
         // of the eSIM wallet. This way, the eSIM wallet implementation contract update
@@ -155,10 +169,7 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgrad
             payable(
                 new BeaconProxy{salt : bytes32(_salt)}(
                     address(beacon),
-                    abi.encodeCall(
-                        ESIMWallet.initialize,
-                        (address(this), _deviceWalletAddress)
-                    )
+                    initialisation
                 )
             )
         );

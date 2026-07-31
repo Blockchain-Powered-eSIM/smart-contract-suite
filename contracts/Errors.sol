@@ -27,6 +27,7 @@ interface Errors {
     // ESIMWalletFactory
     error OnlyRegistryOrDeviceWalletFactoryOrDeviceWallet();
     error OnlyDeployForSelf();
+    error SaltAlreadyUsed(address deviceWallet, uint256 salt);
 
     // DeviceWalletFactory
     error OnlyAdmin();
