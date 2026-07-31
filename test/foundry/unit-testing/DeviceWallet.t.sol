@@ -1135,6 +1135,57 @@ contract DeviceWalletTest is DeployerBase {
         );
     }
 
+    /// @notice Both co-ordinates are non-zero and inside the field, and the pair still fails
+    /// y^2 = x^3 - 3x + b
+    function _offCurveKey() internal pure returns (bytes32[2] memory) {
+        return [bytes32(uint256(1)), bytes32(uint256(1))];
+    }
+
+    /// @notice Asserts that a rejected rotation left the wallet and the registry on the old key
+    function _assertStillOnDeploymentKey() internal view {
+        bytes32[2] memory held = deviceWallet.getOwner();
+        assertEq(held[0], pubKey1[0], "The wallet must still hold its deployment key");
+        assertEq(
+            registry.registeredP256Keys(_keyHash(pubKey1)),
+            address(deviceWallet),
+            "The registry must still resolve the deployment key to the wallet"
+        );
+    }
+
+    /// @notice A key off the curve can never verify a signature, so rotating onto one takes the
+    /// wallet beyond reach for good: this path is only callable through execute, which needs a
+    /// signature, so there is no rotating back and no reaching the balance.
+    function test_transferOwnership_rejectsAnOffCurveKey() public {
+        deployWallets();
+
+        vm.expectRevert(Errors.InvalidDeviceWalletOwnerKey.selector);
+        _rotateOwnerKey(deviceWallet, _offCurveKey());
+
+        _assertStillOnDeploymentKey();
+    }
+
+    /// @notice A co-ordinate at or above the field prime is refused rather than reduced into the
+    /// field, matching what the deploy paths do with the same key.
+    function test_transferOwnership_rejectsAnOutOfFieldKey() public {
+        deployWallets();
+
+        vm.expectRevert(Errors.InvalidDeviceWalletOwnerKey.selector);
+        _rotateOwnerKey(deviceWallet, [bytes32(type(uint256).max), pubKey1[1]]);
+
+        _assertStillOnDeploymentKey();
+    }
+
+    /// @notice The zero key is the point at infinity, which the deploy paths already reject. It is
+    /// worth its own case because it is what an empty calldata slot decodes to.
+    function test_transferOwnership_rejectsTheZeroKey() public {
+        deployWallets();
+
+        vm.expectRevert(Errors.InvalidDeviceWalletOwnerKey.selector);
+        _rotateOwnerKey(deviceWallet, [bytes32(0), bytes32(0)]);
+
+        _assertStillOnDeploymentKey();
+    }
+
     /// @notice A signature too short to carry a header and a challenge must fail the operation,
     /// not the bundle. validateUserOp returns packed validationData whose low 160 bits the
     /// EntryPoint reads as an authorizer, so anything other than 0 or SIG_VALIDATION_FAILED names

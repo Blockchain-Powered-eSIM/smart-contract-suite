@@ -2,6 +2,8 @@ pragma solidity 0.8.36;
 
 // SPDX-License-Identifier: MIT
 
+import {FCL_Elliptic_ZZ} from "FreshCryptoLib/FCL_elliptic.sol";
+
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
@@ -144,15 +146,37 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         __ReentrancyGuard_init();
     }
 
+    /// @notice Rejects a P256 public key that is not a point on the curve
+    /// @dev Same predicate the three deploy paths apply, repeated here because the factory holds
+    ///      its own copy privately and this contract is not in its inheritance chain. Sharing one
+    ///      copy would mean an external call on a path that must stay self-contained. The
+    ///      predicate also covers a key outside the field and the point at infinity.
+    /// @param _deviceWalletOwnerKey X,Y co-ordinates of the P256 key to check
+    function _requireValidOwnerKey(bytes32[2] memory _deviceWalletOwnerKey) private pure {
+        if(
+            !FCL_Elliptic_ZZ.ecAff_isOnCurve(
+                uint256(_deviceWalletOwnerKey[0]),
+                uint256(_deviceWalletOwnerKey[1])
+            )
+        ) revert Errors.InvalidDeviceWalletOwnerKey();
+    }
+
     /// @inheritdoc Account4337
     /// @dev The registry holds its own record of which key owns this wallet, and the deploy paths
     ///      keep one key to one wallet. Rotating without telling it leaves the retired key named
     ///      as the owner and leaves the key taking over unregistered, free for a second wallet to
-    ///      claim. `super` runs first because it carries the `onlySelf` guard and because the
-    ///      registry call is an external one, so the local write has to land before it.
+    ///      claim. `super` runs after the key check because it carries the `onlySelf` guard and
+    ///      because the registry call is an external one, so the local write has to land before it.
+    ///
+    ///      A key that cannot verify a signature bricks the wallet for good: this function is
+    ///      reachable only through `execute`, which needs a signature, so there is no rotating
+    ///      back and no reaching the balance. The deploy paths reject such a key and this path
+    ///      writes the same storage, so it has to reject it too.
     function transferOwnership(
         bytes32[2] memory newOwner
     ) public override returns (bytes32[2] memory) {
+        _requireValidOwnerKey(newOwner);
+
         bytes32[2] memory updatedOwner = super.transferOwnership(newOwner);
         registry.updateDeviceWalletOwnerKey(newOwner);
 
