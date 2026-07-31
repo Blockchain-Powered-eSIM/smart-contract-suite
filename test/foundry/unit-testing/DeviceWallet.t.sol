@@ -1034,39 +1034,4 @@ contract DeviceWalletTest is DeployerBase {
             "Failure must carry no validity window, otherwise the EntryPoint reads a time range"
         );
     }
-
-    // function test_validateUserOp() public {
-    //     // User defined variables for testing real-world scenarios
-    //     string memory _deviceIdentifier = "Device_App";
-    //     bytes32 _x = hex"2e9f87d9a52247a6da6d6b54156f0138e16cf6673b0502c90726e51ea18285c9";
-    //     bytes32 _y = hex"ed4e24fc7575ad469c5bda809cb7f3d3d8338a7c6935ce0d957414c5b0bbfa27";
-    //     uint256 _salt = 25042025;
-    //     deployCustomWallet(_deviceIdentifier, _x, _y, _salt);
-
-    //     PackedUserOperation memory packedUserOp = PackedUserOperation(
-    //         address(0xF5DD77d5579D77a1b687AF12276787e33b5F671f), //address sender
-    //         0, // uint256 nonce
-    //         hex"48312180efF845F005CBA0ef1834a7F001F65d27ed2c4d4d00000000000000000000000000000000000000000000000000000000000000a09865bdfd072b59a9f10849151bd6dff8383ded979ba3132af2e71dde2000c309d1e34ea04bf225807829cf28078a37923a1846beeb07c4fdbab12e49cb397a8f00000000000000000000000000000000000000000000000000000000017e1c690000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000a4465766963655f41707000000000000000000000000000000000000000000000", // bytes initCode
-    //         hex"5c1c6dcd0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000f5dd77d5579d77a1b687af12276787e33b5f671f000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000600000000000000000000000000000000000000000000000000000000000000000", // bytes callData
-    //         hex"000000000000000000000000000F42400000000000000000000000000000238c", // bytes32 accountGasLimits
-    //         64084, // uint256 preVerificationGas
-    //         hex"000000000000000000000000000f4240000000000000000000000000076eb112", // bytes32 gasFees
-    //         hex"2cc0c7981D846b9F2a16276556f6e8cb52BfB63300000000000000000000000000007097000000000000000000000000000000000000000000000000681dc71d1bcffeec25ad99543198a19f7799cd9ab2cc200665b0d313e39ecd8e206293ec3619820461cda0ec56a88d5b8b67fb1198259b71bd915c74a7dddb35d18032c01b", //bytes paymasterAndData
-    //         hex"" // bytes signature
-    //     );
-
-    //     bytes32 userOphash = hex"58b8d7709fddec0110ae7eda02a4d0eb3b5f152f514536facba1a455a3639493";
-
-    //     address entryPoint = address(deviceWallet.entryPoint());
-
-    //     vm.startPrank(entryPoint);
-    //     console.logAddress(entryPoint);
-    //     uint256 validationData = userDeviceWallet.validateUserOp(
-    //         packedUserOp,
-    //         userOphash,
-    //         0
-    //     );
-    //     console.logUint(validationData);
-    //     vm.stopPrank();
-    // }
 }
