@@ -26,6 +26,10 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
     ///      `requestAdminUpdate` and `acceptAdminUpdate`, so a rotation left every reader here
     ///      authorising the retired key. Nothing reads this now. It stays because `vault` and
     ///      `upgradeManager` occupy the slots after it on the deployed proxies.
+    ///
+    ///      Do not delete it and do not make it `constant`. Slither asks for both, as
+    ///      `unused-state` and `constable-states`, and either one takes the slot out of storage and
+    ///      pulls `vault` and `upgradeManager` down a slot on every live proxy.
     address private supersededESIMWalletAdmin;
 
     /// @notice Address of the vault that receives payments for the eSIM data bundles
