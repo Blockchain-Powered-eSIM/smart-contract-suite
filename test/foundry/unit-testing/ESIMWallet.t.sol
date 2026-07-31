@@ -20,12 +20,12 @@ contract ESIMWalletTest is DeployerBase {
     ///      able to drain wallets and leaves the new key unable to do its job.
     function test_buyDataBundle_followsTheRotatedAdmin() public {
         deployWallets();
-        address retiredAdmin = deviceWalletFactory.eSIMWalletAdmin();
+        address retiredAdmin = registry.eSIMWalletAdmin();
 
         vm.prank(retiredAdmin);
-        deviceWalletFactory.requestAdminUpdate(user3);
+        registry.requestAdminUpdate(user3);
         vm.prank(user3);
-        deviceWalletFactory.acceptAdminUpdate();
+        registry.acceptAdminUpdate();
 
         vm.deal(address(deviceWallet), 1 ether);
 

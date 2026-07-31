@@ -18,7 +18,6 @@ interface Errors {
 
     // RegistryHelper
     error OnlyLazyWalletRegistry();
-    error ESIMWalletAdminMismatch(address provided, address deviceWalletFactoryAdmin);
     error DeviceIdentifierAlreadyRegistered(string deviceIdentifier);
     error OwnerKeyAlreadyRegistered(bytes32 ownerKeyHash);
 

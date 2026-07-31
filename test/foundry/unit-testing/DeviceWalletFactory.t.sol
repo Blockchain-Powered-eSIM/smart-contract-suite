@@ -16,15 +16,25 @@ import "test/utils/mocks/MockESIMWallet.sol";
 
 contract DeviceWalletFactoryTest is DeployerBase {
 
-    function test_addRegistryAddress_withoutAdmin() public {
+    function test_addRegistryAddress_withoutOwner() public {
         vm.startPrank(user1);
-        vm.expectRevert(bytes4(keccak256("OnlyAdmin()")));
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", user1));
+        deviceWalletFactory.addRegistryAddress(address(registry));
+        vm.stopPrank();
+    }
+
+    /// @notice The admin cannot wire up the registry, because the admin is read out of it
+    /// @dev Gating this on the admin would be circular: with no registry set there is no admin to
+    ///      check the caller against, so the call could never be made.
+    function test_addRegistryAddress_withoutAdmin() public {
+        vm.startPrank(deviceWalletFactory.eSIMWalletAdmin());
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", eSIMWalletAdmin));
         deviceWalletFactory.addRegistryAddress(address(registry));
         vm.stopPrank();
     }
 
     function test_addRegistryAddress_onlyOnce() public {
-        vm.startPrank(eSIMWalletAdmin);
+        vm.startPrank(deviceWalletFactory.owner());
         vm.expectRevert("Already added");
         deviceWalletFactory.addRegistryAddress(address(registry));
         vm.stopPrank();
@@ -67,90 +77,6 @@ contract DeviceWalletFactoryTest is DeployerBase {
 
         address newVault = deviceWalletFactory.vault();
         assertEq(newVault, user2, "Vault should have updated");
-    }
-
-    function test_requestAdminUpdate_withoutAdmin() public {
-        address currentAdmin = deviceWalletFactory.eSIMWalletAdmin();
-        assertEq(currentAdmin, eSIMWalletAdmin, "Admin should have been eSIMWalletAdmin");
-
-        vm.startPrank(user1);
-        vm.expectRevert(bytes4(keccak256("OnlyAdmin()")));
-        deviceWalletFactory.requestAdminUpdate(user2);
-        vm.stopPrank();
-    }
-
-    function test_requestAdminUpdate() public {
-        address currentAdmin = deviceWalletFactory.eSIMWalletAdmin();
-        assertEq(currentAdmin, eSIMWalletAdmin, "Admin should have been eSIMWalletAdmin");
-
-        vm.startPrank(eSIMWalletAdmin);
-        deviceWalletFactory.requestAdminUpdate(user2);
-        vm.stopPrank();
-
-        assertEq(deviceWalletFactory.newRequestedAdmin(), user2, "newRequestedAdmin should have been updated");
-
-        currentAdmin = deviceWalletFactory.eSIMWalletAdmin();
-        assertEq(currentAdmin, eSIMWalletAdmin, "Admin should not havechanged yet");
-    }
-
-    function test_requestAdminUpdate_revoke() public {
-        test_requestAdminUpdate();
-
-        vm.startPrank(eSIMWalletAdmin);
-        deviceWalletFactory.requestAdminUpdate(eSIMWalletAdmin);
-        vm.stopPrank();
-
-        assertEq(deviceWalletFactory.newRequestedAdmin(), address(0), "newRequestedAdmin should be reset to address(0)");
-
-        address currentAdmin = deviceWalletFactory.eSIMWalletAdmin();
-        assertEq(currentAdmin, eSIMWalletAdmin, "Admin should not have changed yet");
-    }
-
-    function test_acceptAdminUpdate_withoutRequest() public {
-        address newAdmin = user2;
-        vm.startPrank(newAdmin);
-        vm.expectRevert("Unauthorised");
-        deviceWalletFactory.acceptAdminUpdate();
-        vm.stopPrank();
-    }
-
-    function test_acceptAdminUpdate_currentAdmin() public {
-        test_requestAdminUpdate();
-
-        address currentAdmin = deviceWalletFactory.eSIMWalletAdmin();
-        vm.startPrank(currentAdmin);
-        vm.expectRevert("Unauthorised");
-        deviceWalletFactory.acceptAdminUpdate();
-        vm.stopPrank();
-    }
-
-    function test_acceptAdminUpdate() public {
-        test_requestAdminUpdate();
-
-        address requestedAdmin = deviceWalletFactory.newRequestedAdmin();
-
-        vm.startPrank(requestedAdmin);
-        deviceWalletFactory.acceptAdminUpdate();
-        vm.stopPrank();
-
-        address newAdmin = deviceWalletFactory.eSIMWalletAdmin();
-        assertEq(newAdmin, requestedAdmin, "newAdmin should have accepted the admin role");
-
-        requestedAdmin = deviceWalletFactory.newRequestedAdmin();
-        assertEq(requestedAdmin, address(0), "newRequestedAdmin should have reset to address(0)");
-    }
-
-    function test_acceptAdminUpdate_afterRevoke() public {
-        address requestedAdmin = user2;
-        test_requestAdminUpdate_revoke();
-
-        vm.startPrank(requestedAdmin);
-        vm.expectRevert("Unauthorised");
-        deviceWalletFactory.acceptAdminUpdate();
-        vm.stopPrank();
-
-        address admin = deviceWalletFactory.eSIMWalletAdmin();
-        assertEq(admin, eSIMWalletAdmin, "Admin should not have updated");
     }
 
     function test_updateDeviceWalletImplementation_admin() public {

@@ -118,7 +118,7 @@ contract DeployerBase is Test {
             address(deviceWalletFactoryImpl),
             abi.encodeCall(
                 deviceWalletFactoryImpl.initialize,
-                (address(deviceWalletImpl), eSIMWalletAdmin, vault, upgradeManager, address(eSIMWalletFactoryProxy), typeCastEntryPoint, p256Verifier)
+                (address(deviceWalletImpl), vault, upgradeManager, address(eSIMWalletFactoryProxy), typeCastEntryPoint, p256Verifier)
             )
         );
         deviceWalletFactory = DeviceWalletFactory(address(deviceWalletFactoryProxy));
@@ -157,11 +157,8 @@ contract DeployerBase is Test {
         registry.addOrUpdateLazyWalletRegistryAddress(address(lazyWalletRegistry));
         vm.stopPrank();
 
-        vm.startPrank(eSIMWalletAdmin);
-        deviceWalletFactory.addRegistryAddress(address(registry));
-        vm.stopPrank();
-
         vm.startPrank(upgradeManager);
+        deviceWalletFactory.addRegistryAddress(address(registry));
         eSIMWalletFactory.addRegistryAddress(address(registry));
         vm.stopPrank();
 

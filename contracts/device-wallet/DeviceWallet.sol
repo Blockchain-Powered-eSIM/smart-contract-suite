@@ -92,7 +92,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
 
     function _onlyESIMWalletAdminOrRegistry() private view {
         if (
-            msg.sender != registry.deviceWalletFactory().eSIMWalletAdmin() &&
+            msg.sender != registry.eSIMWalletAdmin() &&
             msg.sender != address(registry)
         ) {
             revert Errors.OnlyESIMWalletAdminOrRegistry();
@@ -114,9 +114,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     }
 
     modifier onlyESIMWalletAdmin() {
-        if(
-            msg.sender != registry.deviceWalletFactory().eSIMWalletAdmin()
-        ) {
+        if(msg.sender != registry.eSIMWalletAdmin()) {
             revert Errors.OnlyESIMWalletAdmin();
         }
         _;

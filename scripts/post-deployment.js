@@ -15,7 +15,6 @@ async function main() {
     const vaultAddress = process.env.VAULT;
 
     const upgradeManagerSigner = new ethers.Wallet(process.env.PRIVATE_KEY_1, provider);
-    const eSIMWalletAdminSigner = new ethers.Wallet(process.env.PRIVATE_KEY_3, provider);
 
     const registryAddress = ADDRESS[network.config.name].RegistryProxy;
     const deviceWalletFactoryAddress = ADDRESS[network.config.name].DeviceWalletFactoryProxy;
@@ -36,9 +35,9 @@ async function main() {
     await tx1.wait();
     console.log("LazyWalletRegistry address set in Registry");
 
-    // 2. Set Registry address in DeviceWalletFactory (as eSIMWalletAdmin)
+    // 2. Set Registry address in DeviceWalletFactory (as upgradeManager)
     console.log("Setting Registry address in DeviceWalletFactory...");
-    const tx2 = await deviceWalletFactory.connect(eSIMWalletAdminSigner).addRegistryAddress(registryAddress);
+    const tx2 = await deviceWalletFactory.connect(upgradeManagerSigner).addRegistryAddress(registryAddress);
     await tx2.wait();
     console.log("Registry address set in DeviceWalletFactory");
 

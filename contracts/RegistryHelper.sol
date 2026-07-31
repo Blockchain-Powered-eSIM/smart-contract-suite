@@ -44,6 +44,15 @@ contract RegistryHelper {
         address indexed _eSIMWalletFactory
     );
 
+    /// @notice Emitted when the current admin requests to transfer the admin role to a new address
+    event AdminUpdateRequested(address indexed eSIMWalletAdmin, address indexed _newAdmin);
+
+    /// @notice Emitted when the newly requested admin accepts the role
+    event AdminUpdated(address indexed _newAdmin);
+
+    /// @notice Emitted when the current admin revokes the transfer of the admin role
+    event AdminUpdateRevoked(address indexed _currentAdmin, address indexed _revokedAddress);
+
     event ESIMWalletSetOnStandby(
         address indexed _eSIMWalletAddress,
         bool _isOnStandby,

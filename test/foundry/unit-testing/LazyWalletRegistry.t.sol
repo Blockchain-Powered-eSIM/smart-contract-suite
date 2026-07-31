@@ -46,12 +46,12 @@ contract LazyWalletRegistryTest is DeployerBase {
     /// @dev The admin address used to be held in two places, and only the factory's copy could be
     ///      rotated, so retiring a key left it holding every function gated on this modifier.
     function test_batchPopulateHistory_followsTheRotatedAdmin() public {
-        address retiredAdmin = deviceWalletFactory.eSIMWalletAdmin();
+        address retiredAdmin = registry.eSIMWalletAdmin();
 
         vm.prank(retiredAdmin);
-        deviceWalletFactory.requestAdminUpdate(user3);
+        registry.requestAdminUpdate(user3);
         vm.prank(user3);
-        deviceWalletFactory.acceptAdminUpdate();
+        registry.acceptAdminUpdate();
 
         vm.prank(retiredAdmin);
         vm.expectRevert("Only eSIM wallet admin");

@@ -21,22 +21,23 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
     /// @notice Entry point contract address (one entryPoint per chain)
     IEntryPoint public entryPoint;
 
-    /// @dev Was a second copy of the admin address. `initialize` set it once and nothing could
-    ///      ever update it, while `DeviceWalletFactory` rotated its own through
-    ///      `requestAdminUpdate` and `acceptAdminUpdate`, so a rotation left every reader here
-    ///      authorising the retired key. Nothing reads this now. It stays because `vault` and
-    ///      `upgradeManager` occupy the slots after it on the deployed proxies.
-    ///
-    ///      Do not delete it and do not make it `constant`. Slither asks for both, as
-    ///      `unused-state` and `constable-states`, and either one takes the slot out of storage and
-    ///      pulls `vault` and `upgradeManager` down a slot on every live proxy.
-    address private supersededESIMWalletAdmin;
+    /// @notice Admin address of the eSIM wallet project
+    /// @dev The only copy in the protocol. `DeviceWalletFactory`, `DeviceWallet`, `ESIMWallet` and
+    ///      `LazyWalletRegistry` all read it from here, so rotating it below reaches every one of
+    ///      them in the same transaction. Holding it in more than one place is what previously let
+    ///      a rotation update some readers and leave the rest authorising the retired key.
+    address public eSIMWalletAdmin;
 
     /// @notice Address of the vault that receives payments for the eSIM data bundles
     address public vault;
 
     /// @notice Address (owned/controlled by eSIM wallet project) that can upgrade contracts
     address public upgradeManager;
+
+    /// @notice Address of the admin to be appointed
+    /// @dev Only the current admin can request the transfer. The nominated address has to accept
+    ///      it, and this resets once they do.
+    address public newRequestedAdmin;
 
     modifier onlyDeviceWallet() {
         if(isDeviceWalletValid[msg.sender] != true) revert Errors.OnlyDeviceWallet();
@@ -45,6 +46,11 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
 
     modifier onlyDeviceWalletFactory() {
         if(msg.sender != address(deviceWalletFactory)) revert Errors.OnlyDeviceWalletFactory();
+        _;
+    }
+
+    modifier onlyESIMWalletAdmin() {
+        if(msg.sender != eSIMWalletAdmin) revert Errors.OnlyAdmin();
         _;
     }
 
@@ -93,13 +99,7 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
         if(_deviceWalletFactory == address(0)) revert Errors.ZeroAddress("_deviceWalletFactory");
         if(_eSIMWalletFactory == address(0)) revert Errors.ZeroAddress("_eSIMWalletFactory");
 
-        // The factory owns the admin address. Taking it as a parameter and storing it here
-        // separately is what let the two drift apart, so it is checked rather than kept.
-        address factoryAdmin = DeviceWalletFactory(_deviceWalletFactory).eSIMWalletAdmin();
-        if(_eSIMWalletAdmin != factoryAdmin) {
-            revert Errors.ESIMWalletAdminMismatch(_eSIMWalletAdmin, factoryAdmin);
-        }
-
+        eSIMWalletAdmin = _eSIMWalletAdmin;
         entryPoint = _entryPoint;
         vault = _vault;
         upgradeManager = _upgradeManager;
@@ -119,12 +119,37 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
         );
     }
 
-    /// @notice Admin address of the eSIM wallet project
-    /// @dev Reads through to `DeviceWalletFactory`, the only contract that can rotate the admin,
-    ///      so a rotation there reaches `LazyWalletRegistry` and `ESIMWallet` in the same
-    ///      transaction. Both authorise against this.
-    function eSIMWalletAdmin() public view returns (address) {
-        return deviceWalletFactory.eSIMWalletAdmin();
+    /// @notice 2-step admin update. The current admin nominates, the nominee accepts.
+    /// @dev Deliberately does not check for an existing request. If the current admin nominates an
+    ///      unintended address, calling this again overrides it. Nominating the current admin
+    ///      revokes any outstanding request.
+    /// @param _newAdmin Address of the recipient to receive the admin role
+    function requestAdminUpdate(address _newAdmin) external onlyESIMWalletAdmin {
+        require(_newAdmin != address(0), "Admin address cannot be zero");
+
+        if(_newAdmin == eSIMWalletAdmin) {
+            address revokedAddress = newRequestedAdmin;
+            newRequestedAdmin = address(0);
+            emit AdminUpdateRevoked(msg.sender, revokedAddress);
+        }
+        else {
+            newRequestedAdmin = _newAdmin;
+            emit AdminUpdateRequested(eSIMWalletAdmin, _newAdmin);
+        }
+    }
+
+    /// @notice Function to update the admin address
+    /// @return Address of the new admin
+    function acceptAdminUpdate() external returns (address) {
+        require(msg.sender == newRequestedAdmin, "Unauthorised");
+
+        eSIMWalletAdmin = msg.sender;
+        emit AdminUpdated(msg.sender);
+
+        // Reset the requested admin to address(0) for further role transfer
+        newRequestedAdmin = address(0);
+
+        return eSIMWalletAdmin;
     }
 
     /// @notice Function to add or update the lazy wallet registry address

@@ -166,20 +166,27 @@ contract StorageLayoutTest is DeployerBase {
     }
 
     /// @notice Registry's own state starts at slot 59, immediately after RegistryHelper's 50 slot
-    /// gap. These four are what that gap is protecting, and they move if it is ever resized.
+    /// gap. These five are what that gap is protecting, and they move if it is ever resized.
     function _assertRegistryOwnSlots(address _target) private {
         vm.store(_target, bytes32(uint256(59)), bytes32(uint256(uint160(SENTINEL))));
         assertEq(address(registry.entryPoint()), SENTINEL, "Registry.entryPoint must read slot 59");
 
-        // Slot 60 held a second copy of the admin address. It is deliberately kept occupied and
-        // unread, so no getter can reach it. What pins it is vault and upgradeManager still
-        // answering at 61 and 62: reclaiming 60 would pull both of them down a slot.
+        vm.store(_target, bytes32(uint256(60)), bytes32(uint256(uint160(SENTINEL))));
+        assertEq(registry.eSIMWalletAdmin(), SENTINEL, "Registry.eSIMWalletAdmin must read slot 60");
 
         vm.store(_target, bytes32(uint256(61)), bytes32(uint256(uint160(SENTINEL))));
         assertEq(registry.vault(), SENTINEL, "Registry.vault must read slot 61");
 
+        _assertRegistryLastSlots(_target);
+    }
+
+    /// @dev Split out because the assertions are cumulative on the stack.
+    function _assertRegistryLastSlots(address _target) private {
         vm.store(_target, bytes32(uint256(62)), bytes32(uint256(uint160(SENTINEL))));
         assertEq(registry.upgradeManager(), SENTINEL, "Registry.upgradeManager must read slot 62");
+
+        vm.store(_target, bytes32(uint256(63)), bytes32(uint256(uint160(SENTINEL))));
+        assertEq(registry.newRequestedAdmin(), SENTINEL, "Registry.newRequestedAdmin must read slot 63");
     }
 
     function test_layout_lazyWalletRegistrySlotsAreUnchanged() public {
@@ -224,27 +231,12 @@ contract StorageLayoutTest is DeployerBase {
         );
 
         vm.store(_target, bytes32(uint256(5)), bytes32(uint256(uint160(SENTINEL))));
-        assertEq(deviceWalletFactory.eSIMWalletAdmin(), SENTINEL, "DeviceWalletFactory.eSIMWalletAdmin must read slot 5");
+        assertEq(deviceWalletFactory.vault(), SENTINEL, "DeviceWalletFactory.vault must read slot 5");
 
-        vm.store(_target, bytes32(uint256(6)), bytes32(uint256(uint160(SENTINEL))));
-        assertEq(deviceWalletFactory.vault(), SENTINEL, "DeviceWalletFactory.vault must read slot 6");
-
-        _assertDeviceWalletFactoryLastSlots(_target);
-    }
-
-    /// @dev Split out of the test body because the assertions are cumulative on the stack.
-    function _assertDeviceWalletFactoryLastSlots(address _target) private {
-        vm.store(_target, bytes32(uint256(7)), bytes32(uint256(uint160(SENTINEL))));
-        assertEq(
-            deviceWalletFactory.newRequestedAdmin(),
-            SENTINEL,
-            "DeviceWalletFactory.newRequestedAdmin must read slot 7"
-        );
-
-        vm.store(_target, _entry(SENTINEL, 8), bytes32(uint256(1)));
+        vm.store(_target, _entry(SENTINEL, 6), bytes32(uint256(1)));
         assertTrue(
             deviceWalletFactory.deviceWalletInfoAdded(SENTINEL),
-            "DeviceWalletFactory.deviceWalletInfoAdded must read slot 8"
+            "DeviceWalletFactory.deviceWalletInfoAdded must read slot 6"
         );
     }
 

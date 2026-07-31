@@ -25,9 +25,8 @@ import "../CustomStructs.sol";
 /// @notice Contract for deploying a new eSIM wallet
 contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable {
 
-    /// @notice Emitted when factory is deployed and admin is set
+    /// @notice Emitted when factory is deployed
     event DeviceWalletFactoryDeployed(
-        address _admin,
         address _vault,
         address indexed _upgradeManager,
         address indexed _deviceWalletImplementation,
@@ -43,15 +42,6 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         address indexed _eSIMWalletAddress,
         bytes32[2] _deviceWalletOwnerKey
     );
-
-    /// @notice Emitted when the current admin requests to transfer admin role to a new address
-    event AdminUpdateRequested(address indexed eSIMWalletAdmin, address indexed _newAdmin);
-
-    /// @notice Emitted when the newly requested admin accepts the role
-    event AdminUpdated(address indexed _newAdmin);
-
-    /// @notice Emitted when the current admin revokes the transfer of ownership
-    event AdminUpdateRevoked(address indexed _currentAdmin, address indexed _revokedAddress);
 
     /// @notice Emitted when the device wallet implementation is updated
     event DeviceWalletImplementationUpdated(address indexed _newDeviceImplementation);
@@ -74,22 +64,24 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     /// @notice eSIM wallet factory contract instance
     ESIMWalletFactory public eSIMWalletFactory;
 
-    /// @notice Admin address of the eSIM wallet project
-    address public eSIMWalletAdmin;
-
     /// @notice Vault address that receives payments for eSIM data bundles
     address public vault;
-
-    /// @notice Address of the admin to be appointed
-    /// @dev Only the current admin can send the request to transfer admin role
-    ///      The new admin should accept the role, once accepted, this variable should be reset
-    address public newRequestedAdmin;
 
     /// @notice Tracks all the device wallets that have their data added into the registry upon deployment
     mapping(address deviceWallet => bool isAdded) public deviceWalletInfoAdded;
 
+    /// @notice Admin address of the eSIM wallet project
+    /// @dev Held by the registry, which is where it is rotated, so this contract cannot fall
+    ///      behind the rest of the protocol after a rotation. Answers address(0) before the
+    ///      registry is wired up, which no caller can match, so admin functions stay closed until
+    ///      then rather than reverting on a call into address(0).
+    function eSIMWalletAdmin() public view returns (address) {
+        if(address(registry) == address(0)) return address(0);
+        return registry.eSIMWalletAdmin();
+    }
+
     function _onlyAdmin() private view {
-        if (msg.sender != eSIMWalletAdmin) revert Errors.OnlyAdmin();
+        if (msg.sender != eSIMWalletAdmin()) revert Errors.OnlyAdmin();
     }
 
     modifier onlyAdmin() {
@@ -99,7 +91,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
 
     function _onlyAdminOrRegistry() private view {
         if (
-            msg.sender != eSIMWalletAdmin &&
+            msg.sender != eSIMWalletAdmin() &&
             msg.sender != address(registry)
         ) revert Errors.OnlyAdminOrRegistry();
     }
@@ -138,23 +130,21 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         revert Errors.OwnershipCannotBeRenounced();
     }
 
-    /// @param _eSIMWalletAdmin Admin address of the eSIM wallet project
     /// @param _vault Address of the vault that receives payments for the data bundles
     /// @param _upgradeManager Admin address responsible for upgrading contracts
+    /// @dev The admin is not taken here. It comes from the registry, which is added afterwards
+    ///      through addRegistryAddress, so admin functions stay closed until that is done.
     function initialize(
         address _deviceWalletImplementation,
-        address _eSIMWalletAdmin,
         address _vault,
         address _upgradeManager,
         address _eSIMWalletFactoryAddress,
         IEntryPoint _entryPoint,
         P256Verifier _verifier
     ) external initializer {
-        require(_eSIMWalletAdmin != address(0), "Admin cannot be zero address");
         require(_vault != address(0), "Vault address cannot be zero");
         require(_upgradeManager != address(0), "_upgradeManager cannot be zero");
 
-        eSIMWalletAdmin = _eSIMWalletAdmin;
         vault = _vault;
         entryPoint = _entryPoint;
         verifier = _verifier;
@@ -164,7 +154,6 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         beacon = new UpgradeableBeacon(_deviceWalletImplementation, address(this));
 
         emit DeviceWalletFactoryDeployed(
-            _eSIMWalletAdmin,
             _vault,
             _upgradeManager,
             getCurrentDeviceWalletImplementation(),
@@ -176,10 +165,13 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         __UUPSUpgradeable_init();
     }
 
-    /// @notice Allow admin to add registry contract after it has been deployed
+    /// @notice Allow the owner to add the registry contract after it has been deployed
+    /// @dev The owner and not the admin, because the admin is read from the registry and there is
+    ///      no admin to check against until this call lands. Matches ESIMWalletFactory, which has
+    ///      always gated its own version on the owner.
     function addRegistryAddress(
         address _registryContractAddress
-    ) external onlyAdmin returns (address) {
+    ) external onlyOwner returns (address) {
         require(_registryContractAddress != address(0), "_registryContractAddress 0");
         require(address(registry) == address(0), "Already added");
 
@@ -200,39 +192,6 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         emit VaultAddressUpdated(vault);
 
         return vault;
-    }
-
-    /// @notice 2-step admin update function. Current admin sends request to for the new admin to accept the role
-    /// @dev The function deliberately doesn't check for any existing requests
-    ///      In case the current admin sends request to an unintended address, the admin can override 
-    ///      the request to a new (intended) address by calling this function again.
-    /// @param _newAdmin Address of the recipient to recieve the admin role
-    function requestAdminUpdate(address _newAdmin) external onlyAdmin {
-        require(_newAdmin != address(0), "Admin address cannot be zero");
-
-        if(_newAdmin == eSIMWalletAdmin) {
-            address revokedAdmin = newRequestedAdmin;
-            newRequestedAdmin = address(0);
-            emit AdminUpdateRevoked(msg.sender, revokedAdmin);
-        }
-        else {
-            newRequestedAdmin = _newAdmin;
-            emit AdminUpdateRequested(eSIMWalletAdmin, _newAdmin);
-        }
-    }
-
-    /// @notice Function to update admin address
-    /// @return Address of the new admin
-    function acceptAdminUpdate() external returns (address) {
-        require(msg.sender == newRequestedAdmin, "Unauthorised");
-
-        eSIMWalletAdmin = msg.sender;
-        emit AdminUpdated(msg.sender);
-
-        // Reset the requested admin to address(0) for further role transfer
-        newRequestedAdmin = address(0);
-
-        return eSIMWalletAdmin;
     }
 
     /// @notice Function to update the device wallet implementation
