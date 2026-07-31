@@ -377,6 +377,65 @@ contract DeviceWalletFactoryTest is DeployerBase {
         assertEq(address(deviceWallet2), address(deviceWallet), "New device wallet should not have been deployed again");
     }
 
+    /// @notice ETH sent with createAccount belongs to the wallet, not to the entry point. Held as a
+    /// deposit it would only ever pay for gas, which defeats sending it in the first place: the
+    /// owner cannot spend it on a data bundle, a transfer or anything else.
+    function test_createAccount_fundsTheWalletAndNotTheDeposit() public {
+        uint256 salt = 1001;
+
+        vm.deal(user1, 1 ether);
+        vm.prank(user1);
+        address deviceWallet = address(deviceWalletFactory.createAccount{value: 1 ether}(
+            customDeviceUniqueIdentifiers[0],
+            pubKey1,
+            salt
+        ));
+
+        _assertDepositHeldByWallet(deviceWallet, 1 ether);
+        assertEq(address(deviceWalletFactory).balance, 0, "Factory must not retain any ETH");
+    }
+
+    /// @notice The wallet is only deployed on the first call, and the second returns early. Funding
+    /// used to happen before that check, so it has to be repeated on the early return or the ETH is
+    /// stranded in the factory, which has no function that can send it anywhere.
+    function test_createAccount_forwardsValueToAnAlreadyDeployedWallet() public {
+        uint256 salt = 1002;
+
+        vm.deal(user1, 3 ether);
+        vm.startPrank(user1);
+        address deviceWallet = address(deviceWalletFactory.createAccount{value: 1 ether}(
+            customDeviceUniqueIdentifiers[0],
+            pubKey1,
+            salt
+        ));
+
+        address sameWallet = address(deviceWalletFactory.createAccount{value: 2 ether}(
+            customDeviceUniqueIdentifiers[0],
+            pubKey1,
+            salt
+        ));
+        vm.stopPrank();
+
+        assertEq(sameWallet, deviceWallet, "The second call must return the wallet already deployed");
+        _assertDepositHeldByWallet(deviceWallet, 3 ether);
+        assertEq(address(deviceWalletFactory).balance, 0, "Factory must not retain any ETH");
+    }
+
+    /// @notice The EntryPoint calls the factory with no value on the deployment path, so the funding
+    /// branch has to stay skippable. A wallet deployed that way holds nothing anywhere.
+    function test_createAccount_withoutValueLeavesTheWalletUnfunded() public {
+        uint256 salt = 1003;
+
+        vm.prank(address(typeCastEntryPoint));
+        address deviceWallet = address(deviceWalletFactory.createAccount(
+            customDeviceUniqueIdentifiers[0],
+            pubKey1,
+            salt
+        ));
+
+        _assertDepositHeldByWallet(deviceWallet, 0);
+    }
+
     function test_deployDeviceWalletForUsers_withoutAdminOrRegistry() public {
         uint256[] memory salts = new uint256[](5);
         uint256[] memory deposits = new uint256[](5);
@@ -425,7 +484,7 @@ contract DeviceWalletFactoryTest is DeployerBase {
 
             assertNotEq(address(deviceWallet), address(0), "Device wallet address cannot be address(0)");
             assertNotEq(address(eSIMWallet), address(0), "ESIM wallet address cannot be address(0)");
-            _assertDepositHeldByEntryPoint(address(deviceWallet), (i+1) * oneEther);
+            _assertDepositHeldByWallet(address(deviceWallet), (i+1) * oneEther);
 
             // Check storage variables in registry
             bytes32 keyHash = keccak256(abi.encode(listOfOwnerKeys[i][0], listOfOwnerKeys[i][1]));
@@ -569,8 +628,9 @@ contract DeviceWalletFactoryTest is DeployerBase {
         );
     }
 
-    /// @notice The happy path still forwards the full deposit, asserted against the EntryPoint's own
-    /// accounting rather than the wallet balance, which the mock reaches by forwarding the ETH on.
+    /// @notice The happy path forwards the full deposit into the wallet's own balance, and refunds
+    /// the rest. The requested amount and the surplus have to be accounted separately, so a batch
+    /// that funds less than msg.value must not leave the difference in the factory.
     function test_deployDeviceWalletForUsers_depositsAndRefundsExactly() public {
         (
             string[] memory identifiers,
@@ -588,13 +648,14 @@ contract DeviceWalletFactoryTest is DeployerBase {
             deposits
         );
 
-        assertEq(entryPoint.balanceOf(wallets[0].deviceWallet), 2 ether, "Full deposit should have reached the EntryPoint");
+        _assertDepositHeldByWallet(wallets[0].deviceWallet, 2 ether);
         assertEq(address(deviceWalletFactory).balance, 0, "Factory must not retain any ETH");
         assertEq(eSIMWalletAdmin.balance, 1 ether, "Admin should have been refunded the surplus");
     }
 
-    /// @notice A zero deposit inside a funded batch must not reach the EntryPoint at all.
-    /// The guard has to read the per-wallet amount, not the batch total in msg.value.
+    /// @notice A zero deposit inside a funded batch must leave the wallet unfunded and the entry
+    /// point untouched. The guard has to read the per-wallet amount, not the batch total in
+    /// msg.value, otherwise a wallet asking for nothing would receive the whole batch.
     function test_deployDeviceWalletForUsers_zeroDepositSkipsEntryPoint() public {
         uint256 salt = 779;
         (
@@ -624,7 +685,7 @@ contract DeviceWalletFactoryTest is DeployerBase {
             deposits
         );
 
-        assertEq(entryPoint.balanceOf(wallets[0].deviceWallet), 0, "A zero deposit should not create an EntryPoint balance");
+        _assertDepositHeldByWallet(wallets[0].deviceWallet, 0);
         assertEq(address(deviceWalletFactory).balance, 0, "Factory must not retain any ETH");
         assertEq(eSIMWalletAdmin.balance, 5 ether, "Admin should have been refunded everything");
     }
@@ -818,15 +879,15 @@ contract DeviceWalletFactoryTest is DeployerBase {
         deposits[0] = _deposit;
     }
 
-    /// @notice A deposit made on a wallet's behalf is held by the entry point, not by the wallet
-    /// @dev The wallet only reaches this ETH by spending it on an operation or withdrawing it,
-    ///      so a balance on the wallet itself would mean the deposit never happened.
-    function _assertDepositHeldByEntryPoint(address _deviceWallet, uint256 _deposit) internal view {
-        assertEq(_deviceWallet.balance, 0, "The wallet should not hold the deposit itself");
+    /// @notice A deposit made on a wallet's behalf is held by the wallet, not by the entry point
+    /// @dev An entry point balance here would mean the ETH is reserved for gas and unreachable for
+    ///      everything else the owner wants to spend it on, which is the behaviour this replaced.
+    function _assertDepositHeldByWallet(address _deviceWallet, uint256 _deposit) internal view {
+        assertEq(_deviceWallet.balance, _deposit, "The wallet should hold the deposit itself");
         assertEq(
             entryPoint.balanceOf(_deviceWallet),
-            _deposit,
-            "The entry point should hold the deposit made for the wallet"
+            0,
+            "The entry point should hold no deposit for the wallet"
         );
     }
 }

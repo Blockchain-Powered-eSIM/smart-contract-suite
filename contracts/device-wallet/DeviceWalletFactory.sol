@@ -260,7 +260,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     /// @param _deviceWalletOwnerKey User's P256 public key (owner of the device wallet and respective eSIM wallets)
     /// @param _depositAmount Amount of ETH to be deposited into the device wallet
     /// @return Deployed device wallet address
-    /// @return ETH actually forwarded to the EntryPoint, zero if an existing wallet was returned
+    /// @return ETH actually forwarded to the wallet, zero if an existing wallet was returned
     function _deployDeviceWallet(
         string memory _deviceUniqueIdentifier,
         bytes32[2] memory _deviceWalletOwnerKey,
@@ -300,9 +300,9 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         ) revert Errors.InvalidDeviceWalletOwnerKey();
     }
 
-    /// @dev Returns the ETH actually forwarded to the EntryPoint, which is zero whenever an
-    ///      existing wallet is returned instead of a new one being deployed. Callers holding a
-    ///      budget must decrement by this value, not by the requested deposit.
+    /// @dev Returns the ETH actually forwarded to the wallet, which is zero whenever an existing
+    ///      wallet is returned instead of a new one being deployed. Callers holding a budget must
+    ///      decrement by this value, not by the requested deposit.
     function _createAccountForUser(
         string memory _deviceUniqueIdentifier,
         bytes32[2] memory _deviceWalletOwnerKey,
@@ -347,14 +347,6 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
             return (DeviceWallet(payable(addr)), 0);
         }
 
-        // Prefund the account with its own share of the ETH sent
-        if (_depositAmount > 0) {
-            // The ERC4337 wallet MUST have a stake in EntryPoint in order to interact using userops,
-            // regardless of it being deployed by an EOA or EntryPoint
-            entryPoint.depositTo{value: _depositAmount}(addr);
-            spentETH = _depositAmount;
-        }
-
         deviceWallet = DeviceWallet(
             payable(
                 new BeaconProxy{salt : bytes32(_salt)}(
@@ -369,6 +361,26 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
 
         registry.updateDeviceWalletInfo(address(deviceWallet), _deviceUniqueIdentifier, _deviceWalletOwnerKey);
         deviceWalletInfoAdded[address(deviceWallet)] = true;
+
+        // Funded last, after every storage write, because this hands control to the wallet
+        if (_depositAmount > 0) {
+            _fundDeviceWallet(address(deviceWallet), _depositAmount);
+            spentETH = _depositAmount;
+        }
+    }
+
+    /// @notice Sends ETH to a device wallet so that it lands in the wallet's own balance
+    /// @dev No EntryPoint deposit is created. A wallet holding no deposit still transacts: the
+    ///      EntryPoint reports the whole prefund as missing during validation and the account pays
+    ///      it out of this balance. Until an operation needs it, the ETH is spendable for anything
+    ///      else the owner wants to do. Gas the EntryPoint does not consume is refunded into the
+    ///      wallet's EntryPoint deposit rather than back here, so the balance drains slowly and
+    ///      the owner reclaims it with withdrawDepositTo.
+    /// @param _deviceWallet Wallet to receive the ETH
+    /// @param _amount Amount of ETH to send
+    function _fundDeviceWallet(address _deviceWallet, uint256 _amount) private {
+        (bool success, ) = _deviceWallet.call{value: _amount}("");
+        require(success, "Wallet funding failed");
     }
 
     /// @notice Checks that all the input params needed for deploying a fresh device wallet are valid
@@ -426,13 +438,14 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
             _salt
         );
 
-        // Prefund the account with msg.value
-        if (msg.value > 0) {
-            entryPoint.depositTo{value: msg.value}(addr);
-        }
-
         uint256 codeSize = addr.code.length;
         if (codeSize > 0) {
+            // The wallet is already deployed, so the ETH has to follow it. Keeping it here would
+            // strand it in the factory, which has no way to send it anywhere.
+            if (msg.value > 0) {
+                _fundDeviceWallet(addr, msg.value);
+            }
+
             return DeviceWallet(payable(addr));
         }
 
@@ -441,12 +454,17 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
                 new BeaconProxy{salt : bytes32(_salt)}(
                     address(beacon),
                     abi.encodeCall(
-                        DeviceWallet.init, 
+                        DeviceWallet.init,
                         (address(registry), _deviceWalletOwnerKey, _deviceUniqueIdentifier, address(eSIMWalletFactory))
                     )
                 )
             )
         );
+
+        // Funding has to come after deployment, since the wallet does not exist before this point
+        if (msg.value > 0) {
+            _fundDeviceWallet(address(deviceWallet), msg.value);
+        }
     }
 
     /// @notice Update the respective storage after createAccount was called via EntryPoint
