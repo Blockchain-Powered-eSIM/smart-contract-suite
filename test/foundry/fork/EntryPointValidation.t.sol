@@ -34,6 +34,12 @@ contract EntryPointValidationForkTest is Test {
     address private beneficiary = makeAddr("beneficiary");
 
     function _fork(string memory _rpcVariable, uint256 _blockNumber) internal returns (bool) {
+        return _fork(_rpcVariable, _blockNumber, 1 ether);
+    }
+
+    /// @param _deposit ETH to place in the wallet's EntryPoint deposit. Zero leaves the wallet
+    ///        holding none, which is the state the factories now deploy it in.
+    function _fork(string memory _rpcVariable, uint256 _blockNumber, uint256 _deposit) internal returns (bool) {
         string memory rpcUrl = vm.envOr(_rpcVariable, string(""));
         if (bytes(rpcUrl).length == 0) {
             return false;
@@ -58,7 +64,9 @@ contract EntryPointValidationForkTest is Test {
         );
 
         vm.deal(address(this), 10 ether);
-        ENTRY_POINT.depositTo{value: 1 ether}(address(wallet));
+        if (_deposit > 0) {
+            ENTRY_POINT.depositTo{value: _deposit}(address(wallet));
+        }
 
         return true;
     }
@@ -139,6 +147,50 @@ contract EntryPointValidationForkTest is Test {
     function test_fork_baseSepolia_rejectsATamperedOperation() public {
         if (!_fork("ALCHEMY_BASE_SEPOLIA_HTTPS", BASE_SEPOLIA_BLOCK)) return;
         _assertTamperedOperationIsRejected();
+    }
+
+    /// @notice A wallet holding no deposit still transacts, paying for its own gas out of the
+    /// balance it holds. This is what lets the factories fund the wallet directly instead of
+    /// reserving the ETH inside the EntryPoint where nothing but gas can reach it.
+    /// @dev The mock cannot answer this either. It never charges an operation, so a wallet with no
+    ///      deposit passes there whether or not the account paid anything.
+    function test_fork_baseSepolia_paysThePrefundFromTheWalletBalance() public {
+        if (!_fork("ALCHEMY_BASE_SEPOLIA_HTTPS", BASE_SEPOLIA_BLOCK, 0)) return;
+
+        vm.deal(address(wallet), 1 ether);
+        assertEq(ENTRY_POINT.balanceOf(address(wallet)), 0, "The wallet must start with no deposit");
+
+        PackedUserOperation[] memory ops = new PackedUserOperation[](1);
+        ops[0] = _operation(uint48(block.timestamp + 1 days));
+
+        ENTRY_POINT.handleOps(ops, payable(beneficiary));
+
+        assertLt(address(wallet).balance, 1 ether, "The prefund must have come out of the wallet balance");
+        assertEq(ENTRY_POINT.getNonce(address(wallet), 0), 1, "The nonce must advance once");
+        // Gas the EntryPoint did not consume comes back as deposit rather than as balance, so ETH
+        // drifts one way and only withdrawDepositTo returns it
+        assertGt(
+            ENTRY_POINT.balanceOf(address(wallet)),
+            0,
+            "Unused prefund must be refunded into the wallet deposit"
+        );
+    }
+
+    /// @notice With neither a deposit nor a balance there is nothing to pay with, and the EntryPoint
+    /// rejects the operation during validation rather than executing it unpaid. This is the failure
+    /// an underfunded wallet gives, and it is the same one an empty deposit always gave.
+    function test_fork_baseSepolia_revertsWhenTheWalletCannotCoverThePrefund() public {
+        if (!_fork("ALCHEMY_BASE_SEPOLIA_HTTPS", BASE_SEPOLIA_BLOCK, 0)) return;
+
+        assertEq(address(wallet).balance, 0, "The wallet must start empty");
+
+        PackedUserOperation[] memory ops = new PackedUserOperation[](1);
+        ops[0] = _operation(uint48(block.timestamp + 1 days));
+
+        vm.expectRevert(
+            abi.encodeWithSelector(IEntryPoint.FailedOp.selector, 0, "AA21 didn't pay prefund")
+        );
+        ENTRY_POINT.handleOps(ops, payable(beneficiary));
     }
 
     /// @notice The user operation path binds the chain without naming it. The precursor the wallet
