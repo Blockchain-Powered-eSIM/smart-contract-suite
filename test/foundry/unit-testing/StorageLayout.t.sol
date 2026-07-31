@@ -182,8 +182,15 @@ contract StorageLayoutTest is DeployerBase {
 
     /// @dev Split out because the assertions are cumulative on the stack.
     function _assertRegistryLastSlots(address _target) private {
+        // Slot 62 is a reserved placeholder. No getter reads it, so it is pinned by loading it
+        // directly, and `upgradeManager()` has to stay indifferent to whatever it holds.
         vm.store(_target, bytes32(uint256(62)), bytes32(uint256(uint160(SENTINEL))));
-        assertEq(registry.upgradeManager(), SENTINEL, "Registry.upgradeManager must read slot 62");
+        assertEq(
+            address(uint160(uint256(vm.load(_target, bytes32(uint256(62)))))),
+            SENTINEL,
+            "Registry slot 62 must still be reserved"
+        );
+        assertEq(registry.upgradeManager(), registry.owner(), "Registry.upgradeManager must not read slot 62");
 
         vm.store(_target, bytes32(uint256(63)), bytes32(uint256(uint160(SENTINEL))));
         assertEq(registry.newRequestedAdmin(), SENTINEL, "Registry.newRequestedAdmin must read slot 63");
@@ -192,8 +199,19 @@ contract StorageLayoutTest is DeployerBase {
     function test_layout_lazyWalletRegistrySlotsAreUnchanged() public {
         address target = address(lazyWalletRegistry);
 
+        // Slot 0 is a reserved placeholder. No getter reads it, so it is pinned by loading it
+        // directly, and `upgradeManager()` has to stay indifferent to whatever it holds.
         vm.store(target, bytes32(uint256(0)), bytes32(uint256(uint160(SENTINEL))));
-        assertEq(lazyWalletRegistry.upgradeManager(), SENTINEL, "LazyWalletRegistry.upgradeManager must read slot 0");
+        assertEq(
+            address(uint160(uint256(vm.load(target, bytes32(uint256(0)))))),
+            SENTINEL,
+            "LazyWalletRegistry slot 0 must still be reserved"
+        );
+        assertEq(
+            lazyWalletRegistry.upgradeManager(),
+            lazyWalletRegistry.owner(),
+            "LazyWalletRegistry.upgradeManager must not read slot 0"
+        );
 
         vm.store(target, bytes32(uint256(1)), bytes32(uint256(uint160(SENTINEL))));
         assertEq(address(lazyWalletRegistry.registry()), SENTINEL, "LazyWalletRegistry.registry must read slot 1");

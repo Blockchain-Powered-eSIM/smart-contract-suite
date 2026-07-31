@@ -31,8 +31,15 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
     /// @notice Address of the vault that receives payments for the eSIM data bundles
     address public vault;
 
-    /// @notice Address (owned/controlled by eSIM wallet project) that can upgrade contracts
-    address public upgradeManager;
+    /// @dev Slot that used to hold a copy of the upgrade authority. It was written once in
+    ///      `initialize` and had no setter, so it kept naming the deploy-time address once
+    ///      ownership moved on. Kept so nothing below it shifts on the live proxies. Never read;
+    ///      `upgradeManager()` returns `owner()` instead.
+    ///
+    ///      Slither raises `unused-state` and `constable-states` here. Both are false: occupying
+    ///      the slot is the whole job, and either change takes it out of storage and moves every
+    ///      variable below it.
+    address private _retiredUpgradeManager;
 
     /// @notice Address of the admin to be appointed
     /// @dev Only the current admin can request the transfer. The nominated address has to accept
@@ -84,6 +91,14 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
         revert Errors.OwnershipCannotBeRenounced();
     }
 
+    /// @notice Address (owned/controlled by eSIM wallet project) that can upgrade contracts
+    /// @dev Reads through to the owner rather than holding its own copy. `_authorizeUpgrade` is
+    ///      gated on `onlyOwner`, so the owner is the upgrade authority by definition and a second
+    ///      copy could only ever disagree with it.
+    function upgradeManager() public view returns (address) {
+        return owner();
+    }
+
     /// @param _eSIMWalletAdmin Admin address of the eSIM wallet project
     /// @param _vault Address of the vault that receives payments for the data bundles
     /// @param _upgradeManager Admin address responsible for upgrading contracts
@@ -109,7 +124,6 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
         eSIMWalletAdmin = _eSIMWalletAdmin;
         entryPoint = _entryPoint;
         vault = _vault;
-        upgradeManager = _upgradeManager;
 
         deviceWalletFactory = DeviceWalletFactory(_deviceWalletFactory);
         eSIMWalletFactory = ESIMWalletFactory(_eSIMWalletFactory);

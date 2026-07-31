@@ -83,8 +83,15 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
     ///      keccak cost of the linear scan the switch path runs over the whole list.
     uint256 private constant MAX_IDENTIFIER_LENGTH = 64;
 
-    /// @notice Address (owned/controlled by eSIM wallet project) that can upgrade contracts
-    address public upgradeManager;
+    /// @dev Slot that used to hold a copy of the upgrade authority. It was written once in
+    ///      `initialize` and had no setter, so it kept naming the deploy-time address once
+    ///      ownership moved on. Kept so nothing below it shifts on the live proxies. Never read;
+    ///      `upgradeManager()` returns `owner()` instead.
+    ///
+    ///      Slither raises `unused-state` and `constable-states` here. Both are false: occupying
+    ///      the slot is the whole job, and either change takes it out of storage and moves every
+    ///      variable below it.
+    address private _retiredUpgradeManager;
 
     /// @notice Registry contract instance
     Registry public registry;
@@ -128,15 +135,22 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         revert Errors.OwnershipCannotBeRenounced();
     }
 
+    /// @notice Address (owned/controlled by eSIM wallet project) that can upgrade contracts
+    /// @dev Reads through to the owner rather than holding its own copy. `_authorizeUpgrade` is
+    ///      gated on `onlyOwner`, so the owner is the upgrade authority by definition and a second
+    ///      copy could only ever disagree with it.
+    function upgradeManager() public view returns (address) {
+        return owner();
+    }
+
     function initialize(
         address _registry,
         address _upgradeManager
     ) external initializer {
         require(_registry != address(0), "Registry 0");
         require(_upgradeManager != address(0), "Manager 0");
-        
+
         registry = Registry(_registry);
-        upgradeManager = _upgradeManager;
 
         __Ownable2Step_init();
         __Ownable_init(_upgradeManager);
