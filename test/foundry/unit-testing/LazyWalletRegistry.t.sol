@@ -562,6 +562,99 @@ contract LazyWalletRegistryTest is DeployerBase {
     /// @notice Binds one named eSIM identifier to one named device in a single admin call
     /// @param _device Device identifier to bind against
     /// @param _eSIM eSIM identifier to bind
+    /// @notice Gives one eSIM `_purchases` history entries, named so the tail is identifiable.
+    function _addPurchases(string memory _device, string memory _eSIM, uint256 _purchases) internal {
+        string[] memory devices = new string[](1);
+        devices[0] = _device;
+
+        string[][] memory eSIMs = new string[][](1);
+        eSIMs[0] = new string[](1);
+        eSIMs[0][0] = _eSIM;
+
+        for(uint256 i=0; i<_purchases; ++i) {
+            DataBundleDetails[][] memory bundles = new DataBundleDetails[][](1);
+            bundles[0] = new DataBundleDetails[](1);
+            bundles[0][0] = DataBundleDetails(string.concat("DB_", vm.toString(i)), i + 1);
+
+            vm.prank(eSIMWalletAdmin);
+            lazyWalletRegistry.batchPopulateHistory(devices, eSIMs, bundles);
+        }
+    }
+
+    /// @notice Deploys the device and hands back the history its first eSIM wallet received.
+    function _deployAndReadCarriedHistory(
+        string memory _device,
+        uint256 _salt
+    ) internal returns (DataBundleDetails[] memory) {
+        vm.prank(eSIMWalletAdmin);
+        (, address[] memory eSIMWallets) = lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(
+            pubKey1,
+            _device,
+            _salt,
+            0
+        );
+
+        return MockESIMWallet(payable(eSIMWallets[0])).getTransactionHistory();
+    }
+
+    /// @notice A history longer than a deployment can carry is trimmed, not refused, and this
+    /// registry keeps every entry.
+    /// @dev The deployment writes every entry of every eSIM in one transaction, so an unbounded
+    ///      history eventually cannot fit in a block and the device could never be deployed at all.
+    ///      Trimming is what keeps a heavy user deployable.
+    function test_deployLazyWalletAndSetESIMIdentifier_trimsHistoryToTheCarriedLimit() public {
+        string memory device = customDeviceUniqueIdentifiers[0];
+        _addPurchases(device, "trim_esim", 8);
+
+        DataBundleDetails[] memory carried = _deployAndReadCarriedHistory(device, 4242);
+
+        assertEq(carried.length, 5, "The wallet must receive only what a deployment can carry");
+        assertEq(
+            lazyWalletRegistry.getDeviceIdentifierToESIMDetails(device, "trim_esim").length,
+            8,
+            "Trimming must leave this registry's record whole"
+        );
+    }
+
+    /// @notice The entries carried are the most recent ones.
+    function test_deployLazyWalletAndSetESIMIdentifier_carriesTheMostRecentEntries() public {
+        string memory device = customDeviceUniqueIdentifiers[0];
+        _addPurchases(device, "recent_esim", 8);
+
+        DataBundleDetails[] memory carried = _deployAndReadCarriedHistory(device, 4243);
+
+        assertEq(carried[0].dataBundleID, "DB_3", "The oldest carried entry must be the fourth purchase");
+        assertEq(carried[4].dataBundleID, "DB_7", "The newest carried entry must be the last purchase");
+    }
+
+    /// @notice A history inside the limit arrives whole, which is every ordinary user.
+    function test_deployLazyWalletAndSetESIMIdentifier_carriesAShortHistoryWhole() public {
+        string memory device = customDeviceUniqueIdentifiers[0];
+        _addPurchases(device, "short_esim", 2);
+
+        DataBundleDetails[] memory carried = _deployAndReadCarriedHistory(device, 4244);
+
+        assertEq(carried.length, 2, "A history inside the limit must not be touched");
+        assertEq(carried[0].dataBundleID, "DB_0", "The first purchase must survive");
+    }
+
+    /// @notice A device at both limits at once still deploys inside a block.
+    /// @dev The two dimensions multiply. Capping the eSIM count alone left the depth free to grow,
+    ///      and this is the pair of them at their worst together.
+    function test_deployLazyWalletAndSetESIMIdentifier_staysInsideABlockAtBothLimits() public {
+        string memory device = customDeviceUniqueIdentifiers[0];
+        for(uint256 round=0; round<10; ++round) {
+            _bindESIMs(device, 30, "worst_");
+        }
+
+        vm.prank(eSIMWalletAdmin);
+        uint256 gasBefore = gasleft();
+        lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(pubKey1, device, 4245, 0);
+        uint256 gasUsed = gasBefore - gasleft();
+
+        assertLt(gasUsed, 25_000_000, "A deployment at both limits must fit inside a block");
+    }
+
     function _bindESIMsNamed(string memory _device, string memory _eSIM) internal {
         string[] memory devices = new string[](1);
         devices[0] = _device;
