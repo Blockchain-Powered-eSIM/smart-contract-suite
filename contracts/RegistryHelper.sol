@@ -82,7 +82,9 @@ contract RegistryHelper {
     ///         If bool is `true`, it means that the eSIM wallet has no device wallet associated to it yet
     mapping(address eSIMWalletAddress => bool isOnStandby) public isESIMWalletOnStandby;
 
-    // Reserved storage gap for future upgrades
+    /// @dev Registry inherits this contract and its own state begins directly after this gap, so
+    ///      a new variable here has to consume gap slots rather than follow them. One appended
+    ///      below moves every Registry variable on the deployed proxies.
     uint256[50] private __gap;
 
     modifier onlyLazyWalletRegistry() {

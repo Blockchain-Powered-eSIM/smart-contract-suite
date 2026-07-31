@@ -23,6 +23,11 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
     using MessageHashUtils for bytes32;
     using ECDSA for bytes32;
 
+    /// @dev DeviceWallet inherits this contract, and base storage comes first, so its own
+    ///      variables begin immediately after this one. A state variable added here moves all of
+    ///      them on wallets that are already deployed, which then read back as zero. Anything
+    ///      this contract needs later belongs in its own ERC-7201 namespace, not in a slot
+    ///      following `owner`.
     bytes32[2] public owner;
 
     /// The ERC-4337 entry point singleton
