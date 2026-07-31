@@ -553,4 +553,28 @@ contract ESIMWalletTest is DeployerBase {
         assertEq(address(eSIMWallet1).balance, 0 ether, "eSIM wallet balance should have gone down to 0 ETH");
         assertEq(address(newDeviceWallet).balance, 1 ether, "New device wallet balance should have increased to 1 ETH");
     }
+
+    /// @notice buyDataBundle pulls whatever price it is given out of the device wallet and sends it
+    /// to the vault, on the admin's say-so alone, which is the largest ETH exit in the protocol.
+    function test_buyDataBundle_revertsWhilePaused() public {
+        deployWallets();
+        vm.deal(address(deviceWallet), 1 ether);
+
+        vm.prank(registry.eSIMWalletAdmin());
+        registry.pause();
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(Errors.ProtocolPaused.selector);
+        eSIMWallet1.buyDataBundle(DataBundleDetails("DB_ID_1", 0.1 ether));
+
+        assertEq(vault.balance, 0, "The vault must receive nothing while paused");
+        assertEq(address(deviceWallet).balance, 1 ether, "The device wallet must keep its ETH");
+
+        vm.prank(registry.owner());
+        registry.unpause();
+
+        vm.prank(eSIMWalletAdmin);
+        eSIMWallet1.buyDataBundle(DataBundleDetails("DB_ID_1", 0.1 ether));
+        assertEq(vault.balance, 0.1 ether, "The release must restore the path");
+    }
 }

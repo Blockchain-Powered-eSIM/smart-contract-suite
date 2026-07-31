@@ -1209,4 +1209,60 @@ contract DeviceWalletTest is DeployerBase {
             "Failure must carry no validity window, otherwise the EntryPoint reads a time range"
         );
     }
+
+    /// @notice An associated eSIM wallet can drain the device wallet through pullETH, so a live
+    /// incident needs a lever that does not wait on a beacon upgrade.
+    function test_pullETH_revertsWhilePaused() public {
+        deployWallets();
+        vm.deal(address(deviceWallet), 2 ether);
+
+        vm.prank(registry.eSIMWalletAdmin());
+        registry.pause();
+
+        vm.prank(address(eSIMWallet1));
+        vm.expectRevert(Errors.ProtocolPaused.selector);
+        deviceWallet.pullETH(1 ether);
+
+        assertEq(address(deviceWallet).balance, 2 ether, "No ETH may leave while paused");
+
+        vm.prank(registry.owner());
+        registry.unpause();
+
+        vm.prank(address(eSIMWallet1));
+        deviceWallet.pullETH(1 ether);
+        assertEq(address(deviceWallet).balance, 1 ether, "The release must restore the path");
+    }
+
+    /// @notice The other eSIM-driven exit sends straight to the vault, so it needs the same lever
+    function test_payETHForDataBundles_revertsWhilePaused() public {
+        deployWallets();
+        vm.deal(address(deviceWallet), 1 ether);
+
+        vm.prank(registry.eSIMWalletAdmin());
+        registry.pause();
+
+        vm.prank(address(eSIMWallet1));
+        vm.expectRevert(Errors.ProtocolPaused.selector);
+        deviceWallet.payETHForDataBundles(0.1 ether);
+
+        assertEq(vault.balance, 0, "The vault must receive nothing while paused");
+    }
+
+    /// @notice A pause stops the admin-driven and eSIM-driven flows, never an owner spending their
+    /// own ETH. Blocking execute would hand the admin key a freeze on user funds, which is worse
+    /// than what the pause defends against.
+    function test_execute_stillMovesOwnerETHWhilePaused() public {
+        deployWallets();
+        vm.deal(address(deviceWallet), 1 ether);
+
+        vm.prank(registry.eSIMWalletAdmin());
+        registry.pause();
+
+        uint256 balanceBefore = user2.balance;
+
+        vm.prank(address(entryPoint));
+        deviceWallet.execute(Call({dest: user2, value: 0.5 ether, data: ""}));
+
+        assertEq(user2.balance - balanceBefore, 0.5 ether, "The owner must still reach their own ETH");
+    }
 }

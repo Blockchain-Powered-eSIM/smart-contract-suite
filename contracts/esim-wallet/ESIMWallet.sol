@@ -125,6 +125,7 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     function buyDataBundle(
         DataBundleDetails memory _dataBundleDetail
     ) public payable onlyDeviceWalletOrESIMWalletAdmin nonReentrant returns (bool) {
+        deviceWallet.registry().requireNotPaused();
         require(bytes(_dataBundleDetail.dataBundleID).length > 0, "Data bundle ID cannot be empty");
         require(_dataBundleDetail.dataBundlePrice > 0, "Price cannot be zero");
 

@@ -118,4 +118,81 @@ contract RegistryTest is DeployerBase {
         deviceWalletFactory.updateVaultAddress(user4);
         assertEq(deviceWalletFactory.vault(), user4, "The rotated admin's write must have landed");
     }
+
+    /// @notice The admin trips the pause, so an operator watching the backend can act without
+    /// waiting on the upgrade key. Nobody else can, including the owner.
+    function test_pause_onlyTheAdminCanTripIt() public {
+        vm.prank(registry.owner());
+        vm.expectRevert(Errors.OnlyAdmin.selector);
+        registry.pause();
+
+        vm.prank(user1);
+        vm.expectRevert(Errors.OnlyAdmin.selector);
+        registry.pause();
+
+        assertEq(registry.paused(), false, "The rejected calls must leave the protocol running");
+
+        vm.prank(registry.eSIMWalletAdmin());
+        registry.pause();
+        assertEq(registry.paused(), true, "The admin's call must have tripped the pause");
+    }
+
+    /// @notice Release is the owner's, not the admin's. The admin key signs backend batches all
+    /// day, and holding both ends would let one hot key freeze user funds indefinitely.
+    function test_unpause_onlyTheOwnerCanReleaseIt() public {
+        // Read outside the prank. A view call here would consume it before unpause is reached.
+        address admin = registry.eSIMWalletAdmin();
+
+        vm.prank(admin);
+        registry.pause();
+
+        vm.prank(admin);
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", admin));
+        registry.unpause();
+
+        assertEq(registry.paused(), true, "The admin must not be able to release its own pause");
+
+        vm.prank(registry.owner());
+        registry.unpause();
+        assertEq(registry.paused(), false, "The owner's call must have released the pause");
+    }
+
+    /// @notice The flag has to survive an admin rotation, and the incoming admin has to inherit the
+    /// ability to trip it.
+    function test_pause_survivesAnAdminRotation() public {
+        address retiredAdmin = registry.eSIMWalletAdmin();
+
+        vm.prank(retiredAdmin);
+        registry.pause();
+
+        vm.prank(retiredAdmin);
+        registry.requestAdminUpdate(user3);
+        vm.prank(user3);
+        registry.acceptAdminUpdate();
+
+        assertEq(registry.paused(), true, "The rotation must not have cleared the pause");
+
+        vm.prank(registry.owner());
+        registry.unpause();
+
+        vm.prank(retiredAdmin);
+        vm.expectRevert(Errors.OnlyAdmin.selector);
+        registry.pause();
+
+        vm.prank(user3);
+        registry.pause();
+        assertEq(registry.paused(), true, "The incoming admin must be able to trip it");
+    }
+
+    /// @notice requireNotPaused is what the wallets call, so it has to carry the same named revert
+    /// wherever it is reached from.
+    function test_requireNotPaused_revertsOnlyWhilePaused() public {
+        registry.requireNotPaused();
+
+        vm.prank(registry.eSIMWalletAdmin());
+        registry.pause();
+
+        vm.expectRevert(Errors.ProtocolPaused.selector);
+        registry.requireNotPaused();
+    }
 }

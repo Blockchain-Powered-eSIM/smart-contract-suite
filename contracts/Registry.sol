@@ -39,6 +39,13 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
     ///      it, and this resets once they do.
     address public newRequestedAdmin;
 
+    /// @notice True while the ETH-moving paths are stopped protocol-wide
+    /// @dev Held here for the same reason the admin address is: device wallets and eSIM wallets are
+    ///      beacon proxies tracked by a mapping with no enumerable list, so there is no way to
+    ///      write a flag into each of them. Both already read this contract on their guarded paths,
+    ///      so one write here reaches every wallet in the same transaction.
+    bool public paused;
+
     modifier onlyDeviceWallet() {
         if(isDeviceWalletValid[msg.sender] != true) revert Errors.OnlyDeviceWallet();
         _;
@@ -150,6 +157,30 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
         newRequestedAdmin = address(0);
 
         return eSIMWalletAdmin;
+    }
+
+    /// @notice Stops the ETH-moving paths on every device wallet and eSIM wallet
+    /// @dev The admin trips this and the owner clears it. The admin key signs backend batches all
+    ///      day and is the one watching, so it needs to act without waiting; giving it the release
+    ///      as well would let a single hot key hold user funds indefinitely. Neither key can reach
+    ///      an owner's own `execute`, so a pause never stops someone spending their own ETH.
+    function pause() external onlyESIMWalletAdmin {
+        paused = true;
+        emit Paused(msg.sender);
+    }
+
+    /// @notice Releases the pause
+    /// @dev Owner only, see `pause`
+    function unpause() external onlyOwner {
+        paused = false;
+        emit Unpaused(msg.sender);
+    }
+
+    /// @notice Reverts while the protocol is paused
+    /// @dev Device wallets and eSIM wallets call this rather than reading `paused` and reverting
+    ///      themselves, so the revert reason is the same wherever it comes from.
+    function requireNotPaused() external view {
+        if(paused) revert Errors.ProtocolPaused();
     }
 
     /// @notice Function to add or update the lazy wallet registry address

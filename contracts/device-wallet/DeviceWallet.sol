@@ -223,6 +223,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     /// NOTE This function is not yet being used by the eSIM wallet. If not needed, this might be removed in future
     /// @param _amount Amount of ETH to pull
     function payETHForDataBundles(uint256 _amount) external onlyAssociatedESIMWallets nonReentrant returns (uint256) {
+        registry.requireNotPaused();
         require(_amount > 0, "_amount 0");
         require(canPullETH[msg.sender] == true, "Access revoked");
 
@@ -237,6 +238,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     /// @notice Allow the eSIM wallets associated with this device wallet to pull ETH (for data bundles)
     /// @param _amount Amount of ETH to pull
     function pullETH(uint256 _amount) external onlyAssociatedESIMWallets nonReentrant returns (uint256) {
+        registry.requireNotPaused();
         require(_amount > 0, "_amount 0");
         require(canPullETH[msg.sender] == true, "Access revoked");
 

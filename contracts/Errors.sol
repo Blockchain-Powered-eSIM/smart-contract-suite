@@ -16,6 +16,9 @@ interface Errors {
     // Registry
     error OnlyDeviceWalletFactory();
 
+    // Registry, DeviceWallet and ESIMWallet
+    error ProtocolPaused();
+
     // RegistryHelper
     error OnlyLazyWalletRegistry();
     error DeviceIdentifierAlreadyRegistered(string deviceIdentifier);

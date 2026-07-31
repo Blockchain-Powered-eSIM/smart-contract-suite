@@ -60,6 +60,12 @@ contract RegistryHelper {
     /// @notice Emitted when the current admin revokes the transfer of the admin role
     event AdminUpdateRevoked(address indexed _currentAdmin, address indexed _revokedAddress);
 
+    /// @notice Emitted when the admin stops the ETH-moving paths protocol-wide
+    event Paused(address indexed _admin);
+
+    /// @notice Emitted when the owner releases the pause
+    event Unpaused(address indexed _owner);
+
     event ESIMWalletSetOnStandby(
         address indexed _eSIMWalletAddress,
         bool _isOnStandby,
