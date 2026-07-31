@@ -847,56 +847,84 @@ contract DeviceWalletTest is DeployerBase {
         assertEq(history[0].dataBundlePrice, 1 ether, "Transaction history's data bundle price should have been correct");
     }
 
-    function test_isValidSignature() public {
-        // User defined variables for testing real-world scenarios
-        string memory _deviceIdentifier = "Device_App";
-        bytes32 _x = hex"827b60c4e33f9796284180b39a6e02d7442b2d5189eb3c7d21f384e787104655";
-        bytes32 _y = hex"0dbb6683c742e4d0a03c004e55a0c7c1c241ac30bf59711f7c8d2d51cf41f4df";
-        uint256 _salt = 25042025;
-        deployCustomWallet(_deviceIdentifier, _x, _y, _salt);
-
-        vm.startPrank(user1);
-        // Input params are sample values used after off-chain calculation and signing
-        bytes4 returnValue = userDeviceWallet.isValidSignature(
-            // messageHash,
-            // encodePackedSignature
-            hex"2ba342b171cb73e64a88467bb396919112147bff00f61bc5ec3407a1dfa192ac",
-            hex"01000068262370000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000c00000000000000000000000000000000000000000000000000000000000000120000000000000000000000000000000000000000000000000000000000000001700000000000000000000000000000000000000000000000000000000000000016e45bdb082f70af9ae84d4fe8a7d1bf69e59389ca10b52504d6abb7fa664ba137051a8ff68e294989e5287df16f036f581d838468abf2680611ea9bc18386943000000000000000000000000000000000000000000000000000000000000002593613e408a25dbfc09d33b17fdc30d43e4b61f59a2ff388f28dd4e073ba058fb1d0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000be7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a224b364e437358484c632d5a4b69455a37733561526b524955655f384139687646374451486f642d686b7177222c226f726967696e223a22616e64726f69643a61706b2d6b65792d686173683a53447852554851355957742d6475656744537a4766515f4757455f4146314556796e6d2d6b73544e474755222c22616e64726f69645061636b6167654e616d65223a226170702e6b6f6b696f227d0000"
+    /// @notice A real assertion captured from a device, checked against the verifier directly.
+    /// It is the only evidence the client data checks agree with what authenticators actually
+    /// emit: challengeIndex 23 lands on the real `"challenge":"` key, the type field sits where
+    /// the library expects it, and the flags byte carries user verification. It cannot go through
+    /// isValidSignature, whose challenge is derived from the message rather than being it, because
+    /// the key that signed this is not in the repo and the assertion cannot be remade.
+    function test_verifySignature_acceptsACapturedDeviceAssertion() public view {
+        WebAuthnSignature memory assertion = abi.decode(
+            hex"000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000c00000000000000000000000000000000000000000000000000000000000000120000000000000000000000000000000000000000000000000000000000000001700000000000000000000000000000000000000000000000000000000000000016e45bdb082f70af9ae84d4fe8a7d1bf69e59389ca10b52504d6abb7fa664ba137051a8ff68e294989e5287df16f036f581d838468abf2680611ea9bc18386943000000000000000000000000000000000000000000000000000000000000002593613e408a25dbfc09d33b17fdc30d43e4b61f59a2ff388f28dd4e073ba058fb1d0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000be7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a224b364e437358484c632d5a4b69455a37733561526b524955655f384139687646374451486f642d686b7177222c226f726967696e223a22616e64726f69643a61706b2d6b65792d686173683a53447852554851355957742d6475656744537a4766515f4757455f4146314556796e6d2d6b73544e474755222c22616e64726f69645061636b6167654e616d65223a226170702e6b6f6b696f227d0000",
+            (WebAuthnSignature)
         );
-        vm.stopPrank();
-        assertEq(hex"1626ba7e", returnValue, "Signature is valid");
+
+        bool valid = p256Verifier.verifySignature({
+            message: hex"2ba342b171cb73e64a88467bb396919112147bff00f61bc5ec3407a1dfa192ac",
+            requireUserVerification: true,
+            webAuthnSignature: assertion,
+            x: uint256(bytes32(hex"827b60c4e33f9796284180b39a6e02d7442b2d5189eb3c7d21f384e787104655")),
+            y: uint256(bytes32(hex"0dbb6683c742e4d0a03c004e55a0c7c1c241ac30bf59711f7c8d2d51cf41f4df"))
+        });
+
+        assertTrue(valid, "A real device assertion must verify");
     }
 
-    /// @notice A second positive control, signed during the test rather than replayed from a
-    /// captured assertion. The fixture above is pinned to one message hash, because the challenge
-    /// sits inside the clientDataJSON that the P256 signature covers, so it cannot be reused to
-    /// check a challenge derived any other way.
+    /// @notice The challenge the wallet expects for a given message, chain and expiry. A test that
+    /// signs has to derive this the same way the wallet does, which is the point: the two
+    /// derivations agreeing is what the format guarantees.
+    function _erc1271Challenge(
+        address _wallet,
+        uint48 _validUntil,
+        bytes32 _messageHash
+    ) internal view returns (bytes memory) {
+        return abi.encodePacked(
+            keccak256(
+                abi.encodePacked(
+                    "\x19Ethereum Signed Message:\n91",
+                    uint8(1),
+                    _validUntil,
+                    block.chainid,
+                    _wallet,
+                    _messageHash
+                )
+            )
+        );
+    }
+
     function test_isValidSignature_acceptsAnAssertionSignedForThisMessage() public {
         bytes32[2] memory ownerKey = WebAuthnSigner.publicKey();
         deployCustomWallet("Device_Harness", ownerKey[0], ownerKey[1], 25042025);
 
         bytes32 messageHash = keccak256("a message the wallet was asked to sign");
+        uint48 validUntil = uint48(block.timestamp + 1 days);
         bytes memory signature = abi.encodePacked(
             uint8(1),
-            uint48(block.timestamp + 1 days),
-            WebAuthnSigner.sign(abi.encodePacked(messageHash))
+            validUntil,
+            WebAuthnSigner.sign(_erc1271Challenge(address(userDeviceWallet), validUntil, messageHash))
         );
 
         bytes4 returnValue = userDeviceWallet.isValidSignature(messageHash, signature);
         assertEq(hex"1626ba7e", returnValue, "An assertion signed for this message hash must be accepted");
     }
 
-    /// @notice The harness must not be trusted just because it holds the owner key. An assertion
-    /// made for a different message carries a different challenge in its clientDataJSON, and the
-    /// onchain comparison has to catch that.
+    /// @notice Holding the owner key is not enough. An assertion made for a different message
+    /// carries a different challenge in its clientDataJSON, and the comparison has to catch that.
     function test_isValidSignature_rejectsAnAssertionSignedForAnotherMessage() public {
         bytes32[2] memory ownerKey = WebAuthnSigner.publicKey();
         deployCustomWallet("Device_Harness", ownerKey[0], ownerKey[1], 25042025);
 
+        uint48 validUntil = uint48(block.timestamp + 1 days);
         bytes memory signature = abi.encodePacked(
             uint8(1),
-            uint48(block.timestamp + 1 days),
-            WebAuthnSigner.sign(abi.encodePacked(keccak256("a message the wallet was never asked about")))
+            validUntil,
+            WebAuthnSigner.sign(
+                _erc1271Challenge(
+                    address(userDeviceWallet),
+                    validUntil,
+                    keccak256("a message the wallet was never asked about")
+                )
+            )
         );
 
         bytes4 returnValue = userDeviceWallet.isValidSignature(
@@ -904,6 +932,61 @@ contract DeviceWalletTest is DeployerBase {
             signature
         );
         assertEq(hex"ffffffff", returnValue, "An assertion made for another message must be rejected");
+    }
+
+    /// @notice validUntil is checked against the clock but was not part of what the authenticator
+    /// signed, so rewriting those six bytes used to extend any expired signature indefinitely.
+    function test_isValidSignature_rejectsATamperedValidUntil() public {
+        bytes32[2] memory ownerKey = WebAuthnSigner.publicKey();
+        deployCustomWallet("Device_Harness", ownerKey[0], ownerKey[1], 25042025);
+
+        bytes32 messageHash = keccak256("a message the wallet was asked to sign");
+        uint48 validUntil = uint48(block.timestamp + 1 days);
+        bytes memory assertion = WebAuthnSigner.sign(
+            _erc1271Challenge(address(userDeviceWallet), validUntil, messageHash)
+        );
+
+        assertEq(
+            hex"1626ba7e",
+            userDeviceWallet.isValidSignature(messageHash, abi.encodePacked(uint8(1), validUntil, assertion)),
+            "The expiry it was made under must be accepted"
+        );
+        assertEq(
+            hex"ffffffff",
+            // The same assertion, presented with a later expiry than the one it was made under
+            userDeviceWallet.isValidSignature(messageHash, abi.encodePacked(uint8(1), validUntil + 1 days, assertion)),
+            "A rewritten expiry must invalidate the signature"
+        );
+    }
+
+    /// @notice createAccount is public and does not touch the registry, so a second wallet can be
+    /// deployed at another salt holding the same owner key. Its address has to be part of what was
+    /// signed, otherwise one wallet's signatures are accepted by the other.
+    function test_isValidSignature_rejectsASignatureMadeForAnotherWallet() public {
+        bytes32[2] memory ownerKey = WebAuthnSigner.publicKey();
+        deployCustomWallet("Device_Harness", ownerKey[0], ownerKey[1], 25042025);
+
+        DeviceWallet siblingWallet = deviceWalletFactory.createAccount("Device_Sibling", ownerKey, 25042026);
+        assertTrue(address(siblingWallet) != address(userDeviceWallet), "The two wallets must be distinct");
+
+        bytes32 messageHash = keccak256("a message the wallet was asked to sign");
+        uint48 validUntil = uint48(block.timestamp + 1 days);
+        bytes memory signature = abi.encodePacked(
+            uint8(1),
+            validUntil,
+            WebAuthnSigner.sign(_erc1271Challenge(address(userDeviceWallet), validUntil, messageHash))
+        );
+
+        assertEq(
+            hex"1626ba7e",
+            userDeviceWallet.isValidSignature(messageHash, signature),
+            "The wallet it was signed for must accept it"
+        );
+        assertEq(
+            hex"ffffffff",
+            siblingWallet.isValidSignature(messageHash, signature),
+            "A sibling holding the same owner key must reject it"
+        );
     }
 
     function test_webAuthn_encodeDecode() public {
