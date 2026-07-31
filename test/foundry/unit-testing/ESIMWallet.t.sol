@@ -577,4 +577,87 @@ contract ESIMWalletTest is DeployerBase {
         eSIMWallet1.buyDataBundle(DataBundleDetails("DB_ID_1", 0.1 ether));
         assertEq(vault.balance, 0.1 ether, "The release must restore the path");
     }
+
+    /// @notice A wallet that sets its own ceiling is held to it, whatever the admin asks for.
+    function test_buyDataBundle_revertsAboveTheWalletCap() public {
+        deployWallets();
+        vm.deal(address(deviceWallet), 5 ether);
+
+        vm.prank(address(deviceWallet));
+        eSIMWallet1.setDataBundlePriceCap(0.2 ether);
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(abi.encodeWithSelector(Errors.DataBundlePriceAboveCap.selector, 0.3 ether, 0.2 ether));
+        eSIMWallet1.buyDataBundle(DataBundleDetails("DB_ID_1", 0.3 ether));
+
+        assertEq(vault.balance, 0, "The vault must receive nothing above the cap");
+        assertEq(address(deviceWallet).balance, 5 ether, "The device wallet must keep its ETH");
+    }
+
+    /// @notice A wallet holding no ceiling of its own falls back to the registry's.
+    /// @dev This is the case that matters for wallets already deployed. They read zero, so the
+    ///      registry is the only place a limit can reach them from.
+    function test_buyDataBundle_revertsAboveTheRegistryDefault() public {
+        deployWallets();
+        vm.deal(address(deviceWallet), 5 ether);
+
+        vm.prank(registry.owner());
+        registry.setDefaultDataBundlePriceCap(0.2 ether);
+
+        assertEq(eSIMWallet1.dataBundlePriceCap(), 0, "The wallet must hold no ceiling of its own");
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(abi.encodeWithSelector(Errors.DataBundlePriceAboveCap.selector, 0.3 ether, 0.2 ether));
+        eSIMWallet1.buyDataBundle(DataBundleDetails("DB_ID_1", 0.3 ether));
+
+        assertEq(vault.balance, 0, "The vault must receive nothing above the default");
+    }
+
+    /// @notice A wallet's own ceiling wins over the registry default, in both directions.
+    function test_buyDataBundle_theWalletCapOverridesTheRegistryDefault() public {
+        deployWallets();
+        vm.deal(address(deviceWallet), 5 ether);
+
+        vm.prank(registry.owner());
+        registry.setDefaultDataBundlePriceCap(0.1 ether);
+
+        vm.prank(address(deviceWallet));
+        eSIMWallet1.setDataBundlePriceCap(1 ether);
+
+        vm.prank(eSIMWalletAdmin);
+        eSIMWallet1.buyDataBundle(DataBundleDetails("DB_ID_1", 0.5 ether));
+        assertEq(vault.balance, 0.5 ether, "A wallet raising its own ceiling must be able to spend to it");
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(abi.encodeWithSelector(Errors.DataBundlePriceAboveCap.selector, 2 ether, 1 ether));
+        eSIMWallet1.buyDataBundle(DataBundleDetails("DB_ID_2", 2 ether));
+    }
+
+    /// @notice With no ceiling set anywhere the wallet spends as it always did.
+    /// @dev Deliberate. Both variables read zero on every wallet and registry already deployed, so
+    ///      zero has to keep meaning unlimited or an upgrade would stop existing wallets buying
+    ///      anything. Setting the registry default is the single action that closes the exposure.
+    function test_buyDataBundle_isUncappedUntilADefaultIsSet() public {
+        deployWallets();
+        vm.deal(address(deviceWallet), 5 ether);
+
+        assertEq(registry.defaultDataBundlePriceCap(), 0, "The registry must start with no default");
+        assertEq(eSIMWallet1.dataBundlePriceCap(), 0, "The wallet must start with no ceiling");
+
+        vm.prank(eSIMWalletAdmin);
+        eSIMWallet1.buyDataBundle(DataBundleDetails("DB_ID_1", 3 ether));
+
+        assertEq(vault.balance, 3 ether, "Without a ceiling anywhere the admin still sets the price");
+    }
+
+    /// @notice The admin names the price, so it must not also be able to raise the ceiling.
+    function test_setDataBundlePriceCap_rejectsTheAdmin() public {
+        deployWallets();
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(Errors.OnlyDeviceWallet.selector);
+        eSIMWallet1.setDataBundlePriceCap(100 ether);
+
+        assertEq(eSIMWallet1.dataBundlePriceCap(), 0, "The admin must not be able to set a ceiling");
+    }
 }

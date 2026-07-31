@@ -66,6 +66,9 @@ contract RegistryHelper {
     /// @notice Emitted when the owner releases the pause
     event Unpaused(address indexed _owner);
 
+    /// @notice Emitted when the owner changes the price ceiling eSIM wallets fall back to
+    event DefaultDataBundlePriceCapUpdated(uint256 _cap);
+
     event ESIMWalletSetOnStandby(
         address indexed _eSIMWalletAddress,
         bool _isOnStandby,

@@ -53,6 +53,13 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
     ///      so one write here reaches every wallet in the same transaction.
     bool public paused;
 
+    /// @notice Most an eSIM wallet may be charged for one data bundle unless it sets its own limit
+    /// @dev Held here rather than only on each wallet because a wallet deployed before this existed
+    ///      reads zero, and there is no enumerable list to write a value into. Zero here means no
+    ///      ceiling, which is what every wallet had before, so setting this once is what closes the
+    ///      exposure for all of them at the same time.
+    uint256 public defaultDataBundlePriceCap;
+
     modifier onlyDeviceWallet() {
         if(isDeviceWalletValid[msg.sender] != true) revert Errors.OnlyDeviceWallet();
         _;
@@ -195,6 +202,16 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
     ///      themselves, so the revert reason is the same wherever it comes from.
     function requireNotPaused() external view {
         if(paused) revert Errors.ProtocolPaused();
+    }
+
+    /// @notice Sets the price ceiling eSIM wallets fall back to when they hold none of their own
+    /// @dev Owner and not admin, deliberately. The admin is the party this ceiling constrains, so
+    ///      letting it raise its own limit would leave the ceiling meaningless. Setting zero
+    ///      restores the unlimited behaviour for every wallet that has not set its own.
+    /// @param _cap Maximum price in wei, or zero for no ceiling
+    function setDefaultDataBundlePriceCap(uint256 _cap) external onlyOwner {
+        defaultDataBundlePriceCap = _cap;
+        emit DefaultDataBundlePriceCapUpdated(_cap);
     }
 
     /// @notice Function to add or update the lazy wallet registry address

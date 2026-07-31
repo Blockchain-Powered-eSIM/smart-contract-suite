@@ -195,4 +195,21 @@ contract RegistryTest is DeployerBase {
         vm.expectRevert(Errors.ProtocolPaused.selector);
         registry.requireNotPaused();
     }
+
+    /// @notice The fallback price ceiling is the owner's to set, not the admin's.
+    /// @dev The admin names the price on every purchase, so an admin that could also raise the
+    /// ceiling would be constrained by nothing.
+    function test_setDefaultDataBundlePriceCap_rejectsTheAdmin() public {
+        address admin = registry.eSIMWalletAdmin();
+
+        vm.prank(admin);
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", admin));
+        registry.setDefaultDataBundlePriceCap(100 ether);
+
+        assertEq(registry.defaultDataBundlePriceCap(), 0, "The admin must not be able to set the ceiling");
+
+        vm.prank(registry.owner());
+        registry.setDefaultDataBundlePriceCap(1 ether);
+        assertEq(registry.defaultDataBundlePriceCap(), 1 ether, "The owner must be able to set it");
+    }
 }

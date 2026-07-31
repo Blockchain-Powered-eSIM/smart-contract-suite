@@ -43,6 +43,9 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     /// @notice Emitted when the current owner revoked the ownership transfer request
     event OwnershipTransferRevoked(address indexed _currentOwner, address indexed _revokedOwner);
 
+    /// @notice Emitted when the owner sets this wallet's own price ceiling
+    event DataBundlePriceCapUpdated(uint256 _cap);
+
     /// @notice Address of the eSIM wallet factory contract
     address public eSIMWalletFactory;
 
@@ -57,6 +60,12 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
 
     /// @notice Address of the owner (device wallet) that becomes the new owner
     address public newRequestedOwner;
+
+    /// @notice Most this wallet may be charged for one data bundle, or zero to follow the registry
+    /// @dev Appended, and this contract is a leaf, so the slot lands past everything a live proxy
+    ///      already holds and reads zero there. Zero has to keep meaning "no limit of my own" for
+    ///      that reason, which is why the fallback lives on the registry rather than here.
+    uint256 public dataBundlePriceCap;
 
     modifier onlyDeviceWallet() {
         if (msg.sender != address(deviceWallet)) revert Errors.OnlyDeviceWallet();
@@ -125,9 +134,11 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     function buyDataBundle(
         DataBundleDetails memory _dataBundleDetail
     ) public payable onlyDeviceWalletOrESIMWalletAdmin nonReentrant returns (bool) {
-        deviceWallet.registry().requireNotPaused();
+        Registry registry = deviceWallet.registry();
+        registry.requireNotPaused();
         require(bytes(_dataBundleDetail.dataBundleID).length > 0, "Data bundle ID cannot be empty");
         require(_dataBundleDetail.dataBundlePrice > 0, "Price cannot be zero");
+        _requirePriceWithinCap(_dataBundleDetail.dataBundlePrice, registry);
 
         // 1. msg.value is received by contract
         // 2. if wallet balance is less than dataBundlePrice, pull ETH from device wallet
@@ -147,6 +158,34 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         emit DataBundleBought(_dataBundleDetail.dataBundleID, _dataBundleDetail.dataBundlePrice, msg.value);
 
         return true;
+    }
+
+    /// @notice Sets the most this wallet may be charged for one data bundle
+    /// @dev Only the owning device wallet, which means the person holding its P256 key: reaching
+    ///      this needs a device wallet `execute`, and that needs a signature. The admin names the
+    ///      price on `buyDataBundle`, so it must not also be able to raise the ceiling on that
+    ///      price. Setting zero hands the wallet back to the registry's ceiling.
+    /// @param _cap Maximum price in wei, or zero to follow the registry
+    function setDataBundlePriceCap(uint256 _cap) external onlyDeviceWallet {
+        dataBundlePriceCap = _cap;
+        emit DataBundlePriceCapUpdated(_cap);
+    }
+
+    /// @notice Rejects a price above whichever ceiling applies to this wallet
+    /// @dev The wallet's own ceiling wins when it has one. Zero is not a ceiling of zero, because
+    ///      every wallet deployed before this existed reads zero and would otherwise be unable to
+    ///      buy anything.
+    /// @param _price Price being charged
+    /// @param _registry Registry holding the fallback ceiling
+    function _requirePriceWithinCap(uint256 _price, Registry _registry) private view {
+        uint256 cap = dataBundlePriceCap;
+        if (cap == 0) {
+            cap = _registry.defaultDataBundlePriceCap();
+        }
+
+        if (cap != 0 && _price > cap) {
+            revert Errors.DataBundlePriceAboveCap(_price, cap);
+        }
     }
 
     /// @notice Function to populate history for lazy wallets. Can only be called once, by lazy wallet registry

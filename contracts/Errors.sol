@@ -46,6 +46,7 @@ interface Errors {
     // ESIMWallet
     error OnlyRegistry();
     error OnlyDeviceWalletOrESIMWalletAdmin();
+    error DataBundlePriceAboveCap(uint256 price, uint256 cap);
 
     // DeviceWallet
     error OnlyRegistryOrDeviceWalletFactoryOrOwner();
