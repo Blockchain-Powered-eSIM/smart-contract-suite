@@ -322,7 +322,4 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
 
     // solhint-disable-next-line no-empty-blocks
     receive() external payable {}
-
-    // solhint-disable-next-line no-empty-blocks
-    fallback() external payable {}
 }

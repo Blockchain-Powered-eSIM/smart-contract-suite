@@ -989,26 +989,21 @@ contract DeviceWalletTest is DeployerBase {
         );
     }
 
-    function test_webAuthn_encodeDecode() public {
-        // WebAuthnSignature memory webAuthnSignatureData = WebAuthnSignature(
-        //     "0x93613e408a25dbfc09d33b17fdc30d43e4b61f59a2ff388f28dd4e073ba058fb1d00000000",
-        //     '{"type":"webauthn.get","challenge":"MTgyNmU2NmUxMzI0ZWVjNTk5M2E2OGE5YTZmMDdhMzIwNWM5MjVhMmVhMDNhYWEzMTI1MzEwZjQwM2E1MzVjZA","origin":"android:apk-key-hash:SDxRUHQ5YWt-duegDSzGfQ_GWE_AF1EVynm-ksTNGGU","androidPackageName":"app.kokio"}',
-        //     23,
-        //     1,
-        //     45961455800004125052396584148558921233963633569227808536744376686154150690997,
-        //     21146418585897763519974678241940796266068219257824371122281587248552492377525
-        // );
-        
-        // bytes memory encodedData = abi.encode(webAuthnSignatureData);
-        // console.logBytes(encodedData);
+    /// @notice Naming a function the wallet does not have must revert, while plain ETH still lands
+    /// @dev A payable fallback answered every unknown selector with success, so a mistyped call,
+    ///      or one naming a function a later implementation no longer has, looked like it worked.
+    function test_deviceWallet_rejectsACallToAFunctionItDoesNotHave() public {
+        deployWallets();
+        vm.deal(user1, 1 ether);
 
-        // WebAuthnSignature memory decodedWebAuthn = abi.decode(encodedData, (WebAuthnSignature));
-        // console.logBytes(decodedWebAuthn.authenticatorData);
-        // console.logString(decodedWebAuthn.clientDataJSON);
-        // console.logUint(decodedWebAuthn.challengeIndex);
-        // console.logUint(decodedWebAuthn.typeIndex);
-        // console.logUint(decodedWebAuthn.r);
-        // console.logUint(decodedWebAuthn.s);
+        vm.prank(user1);
+        (bool acceptedETH, ) = address(deviceWallet).call{value: 1 ether}("");
+        assertTrue(acceptedETH, "Plain ETH must still be accepted");
+        assertEq(address(deviceWallet).balance, 1 ether, "The wallet must hold the ETH it accepted");
+
+        vm.prank(user1);
+        (bool acceptedCall, ) = address(deviceWallet).call(abi.encodeWithSignature("noSuchFunction()"));
+        assertFalse(acceptedCall, "A call naming a function the wallet does not have must revert");
     }
 
     /// @notice A signature too short to carry a header and a challenge must fail the operation,
