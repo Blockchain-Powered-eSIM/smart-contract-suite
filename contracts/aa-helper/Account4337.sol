@@ -4,8 +4,6 @@ pragma solidity 0.8.36;
 
 // import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
-import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import "@account-abstraction/contracts/interfaces/IAccount.sol";
@@ -20,8 +18,6 @@ import "../CustomStructs.sol";
 
 contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 {
     using UserOperationLib for PackedUserOperation;
-    using MessageHashUtils for bytes32;
-    using ECDSA for bytes32;
 
     /// @dev DeviceWallet inherits this contract, and base storage comes first, so its own
     ///      variables begin immediately after this one. A state variable added here moves all of

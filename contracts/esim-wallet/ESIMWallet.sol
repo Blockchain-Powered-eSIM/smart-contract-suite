@@ -58,10 +58,6 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     /// @notice Address of the owner (device wallet) that becomes the new owner
     address public newRequestedOwner;
 
-    /// @dev A map from owner and spender to transfer approval. Determines whether
-    ///      the spender can transfer this wallet from the owner.
-    // mapping(address => mapping(address => bool)) internal _isTransferApproved;
-
     modifier onlyDeviceWallet() {
         if (msg.sender != address(deviceWallet)) revert Errors.OnlyDeviceWallet();
         _;

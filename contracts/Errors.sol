@@ -40,15 +40,12 @@ interface Errors {
 
     // ESIMWallet
     error OnlyRegistry();
-    error OnlyESIMWalletAdminOrESIMWalletfactoryOrDeviceWallet();
     error OnlyDeviceWalletOrESIMWalletAdmin();
 
     // DeviceWallet
     error OnlyRegistryOrDeviceWalletFactoryOrOwner();
     error OnlySelfOrAssociatedESIMWallet();
     error OnlyESIMWalletAdminOrRegistry();
-    error OnlyESIMWalletAdminOrDeviceWalletOwner();
-    error OnlyESIMWalletAdminOrDeviceWalletFactory();
     error OnlyAssociatedESIMWallets();
     error OnlyESIMWalletAdmin();
 }

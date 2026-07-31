@@ -305,8 +305,5 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         }
     }
 
-    // receive function already exists in the Account4337.sol
-    // receive() external payable {
-    //     receive ETH
-    // }
+    // ETH is received through the receive function Account4337 declares
 }
