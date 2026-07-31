@@ -23,6 +23,8 @@ interface Errors {
 
     // LazyWalletRegistry
     error LazyWalletAlreadyDeployed(string deviceIdentifier);
+    error TooManyESIMsForDevice(string deviceIdentifier, uint256 cap);
+    error IdentifierTooLong(string identifier, uint256 maxLength);
 
     // ESIMWalletFactory
     error OnlyRegistryOrDeviceWalletFactoryOrDeviceWallet();
