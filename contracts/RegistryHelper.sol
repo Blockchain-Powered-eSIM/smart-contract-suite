@@ -27,6 +27,13 @@ contract RegistryHelper {
         bytes32[2] _deviceWalletOwnerKey
     );
 
+    /// @notice Emitted when a device wallet rotates the P256 key that owns it
+    event DeviceWalletOwnerKeyUpdated(
+        address indexed _deviceWallet,
+        bytes32[2] _oldOwnerKey,
+        bytes32[2] _newOwnerKey
+    );
+
     event UpdatedDeviceWalletassociatedWithESIMWallet(
         address indexed _eSIMWalletAddress,
         address indexed _deviceWalletAddress
@@ -201,5 +208,33 @@ contract RegistryHelper {
         registeredP256Keys[keyHash] = _deviceWallet;
 
         emit DeviceWalletInfoUpdated(_deviceWallet, _deviceUniqueIdentifier, _deviceWalletOwnerKey);
+    }
+
+    /// @notice Moves a device wallet's registry bindings from its current owner key to a new one
+    /// @dev The retired key comes from `deviceWalletToOwner` rather than from the caller, so a
+    ///      wallet cannot name a key it never held and free someone else's reservation. Clearing
+    ///      the old hash before checking the new one is what lets a wallet rotate onto the key it
+    ///      already holds: the clear removes its own reservation, so the check sees a free slot.
+    /// @param _deviceWallet Wallet whose owner key is rotating
+    /// @param _newOwnerKey X,Y co-ordinates of the P256 key taking over
+    function _updateDeviceWalletOwnerKey(
+        address _deviceWallet,
+        bytes32[2] memory _newOwnerKey
+    ) internal {
+        bytes32[2] memory oldOwnerKey = deviceWalletToOwner[_deviceWallet];
+        delete registeredP256Keys[keccak256(abi.encode(oldOwnerKey[0], oldOwnerKey[1]))];
+
+        // The deploy paths keep one key to one wallet. Leaving the rotation unchecked would let a
+        // wallet take a key another wallet is already registered under, and the mapping can only
+        // name one of the two from then on.
+        bytes32 newKeyHash = keccak256(abi.encode(_newOwnerKey[0], _newOwnerKey[1]));
+        if(registeredP256Keys[newKeyHash] != address(0)) {
+            revert Errors.OwnerKeyAlreadyRegistered(newKeyHash);
+        }
+
+        registeredP256Keys[newKeyHash] = _deviceWallet;
+        deviceWalletToOwner[_deviceWallet] = _newOwnerKey;
+
+        emit DeviceWalletOwnerKeyUpdated(_deviceWallet, oldOwnerKey, _newOwnerKey);
     }
 }

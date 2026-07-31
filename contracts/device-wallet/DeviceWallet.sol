@@ -144,6 +144,21 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         __ReentrancyGuard_init();
     }
 
+    /// @inheritdoc Account4337
+    /// @dev The registry holds its own record of which key owns this wallet, and the deploy paths
+    ///      keep one key to one wallet. Rotating without telling it leaves the retired key named
+    ///      as the owner and leaves the key taking over unregistered, free for a second wallet to
+    ///      claim. `super` runs first because it carries the `onlySelf` guard and because the
+    ///      registry call is an external one, so the local write has to land before it.
+    function transferOwnership(
+        bytes32[2] memory newOwner
+    ) public override returns (bytes32[2] memory) {
+        bytes32[2] memory updatedOwner = super.transferOwnership(newOwner);
+        registry.updateDeviceWalletOwnerKey(newOwner);
+
+        return updatedOwner;
+    }
+
     /// @notice Allow eSIMWalletAdmin to deploy new eSIM wallet whenever new eSIM is installed
     /// @dev Don't forget to call setESIMUniqueIdentifierForAnESIMWallet function after deploying eSIM wallet
     /// @param _hasAccessToETH Set to true if the eSIM wallet is allowed to pull ETH from this wallet.

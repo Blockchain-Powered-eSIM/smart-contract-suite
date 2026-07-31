@@ -203,6 +203,16 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
         _updateDeviceWalletInfo(_deviceWallet, _deviceUniqueIdentifier, _deviceWalletOwnerKey);
     }
 
+    /// @notice Called by a device wallet when the P256 key that owns it is replaced
+    /// @dev Only the wallet itself can move its own bindings, so `msg.sender` is the subject
+    ///      rather than a parameter. Without this the registry keeps naming the retired key after
+    ///      a rotation, and the key taking over stays unregistered and can be claimed by a second
+    ///      wallet, which breaks the one key to one wallet rule the deploy paths enforce.
+    /// @param _newOwnerKey X,Y co-ordinates of the P256 key taking over
+    function updateDeviceWalletOwnerKey(bytes32[2] memory _newOwnerKey) external onlyDeviceWallet {
+        _updateDeviceWalletOwnerKey(msg.sender, _newOwnerKey);
+    }
+
     /// @notice Update eSIM standby status when being moved from one device wallet to another
     /// @param _eSIMWalletAddress Address of the eSIM wallet
     /// @param _isOnStandby Set to true when no device wallet is associated, false otherwise

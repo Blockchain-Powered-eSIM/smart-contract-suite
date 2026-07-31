@@ -84,7 +84,14 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
         emit Account4337Initialized(entryPoint, owner);
     }
 
-    function transferOwnership(bytes32[2] memory newOwner) onlySelf public returns (bytes32[2] memory) {
+    /// @notice Replaces the P256 key that owns this account
+    /// @dev Reachable only through `execute` or `executeBatch` with this account as the target, so
+    ///      the current owner has to sign for it. Nothing outside this contract is told: a
+    ///      subclass holding its own record of the owner has to override this and keep that record
+    ///      in step.
+    /// @param newOwner X,Y co-ordinates of the P256 key taking over
+    /// @return The owner key now in force
+    function transferOwnership(bytes32[2] memory newOwner) onlySelf public virtual returns (bytes32[2] memory) {
         owner = newOwner;
         emit AccountOwnershipTransferred(newOwner);
         return owner;

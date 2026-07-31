@@ -1006,6 +1006,135 @@ contract DeviceWalletTest is DeployerBase {
         assertFalse(acceptedCall, "A call naming a function the wallet does not have must revert");
     }
 
+    /// @notice Rotates a device wallet's owner key the only way it can be reached, through the
+    /// wallet calling itself
+    /// @dev The entry point address is read from the fixture rather than from the wallet, because
+    ///      a call to the wallet here would absorb any vm.expectRevert set by the caller.
+    function _rotateOwnerKey(MockDeviceWallet _wallet, bytes32[2] memory _newOwnerKey) internal {
+        vm.prank(address(entryPoint));
+        _wallet.execute(Call({
+            dest: address(_wallet),
+            value: 0,
+            data: abi.encodeCall(Account4337.transferOwnership, (_newOwnerKey))
+        }));
+    }
+
+    function _keyHash(bytes32[2] memory _ownerKey) internal pure returns (bytes32) {
+        return keccak256(abi.encode(_ownerKey[0], _ownerKey[1]));
+    }
+
+    /// @notice Rotating the owner key has to move the registry with it. The registry is the only
+    /// onchain record of which key owns a wallet, and it is what the deploy paths check to keep one
+    /// key to one wallet. Left behind, it names a key that can no longer authorise anything and
+    /// leaves the key taking over free for a second wallet to claim.
+    function test_transferOwnership_movesTheRegistryBindingToTheNewKey() public {
+        deployWallets();
+
+        assertEq(
+            registry.registeredP256Keys(_keyHash(pubKey1)),
+            address(deviceWallet),
+            "The wallet must start registered under its deployment key"
+        );
+
+        _rotateOwnerKey(deviceWallet, pubKey4);
+
+        assertEq(
+            registry.registeredP256Keys(_keyHash(pubKey4)),
+            address(deviceWallet),
+            "The key taking over must resolve to the wallet"
+        );
+        assertEq(
+            registry.registeredP256Keys(_keyHash(pubKey1)),
+            address(0),
+            "The retired key must no longer resolve to anything"
+        );
+
+        bytes32[2] memory recorded = registry.getDeviceWalletToOwner(address(deviceWallet));
+        assertEq(recorded[0], pubKey4[0], "The registry must record the new X co-ordinate");
+        assertEq(recorded[1], pubKey4[1], "The registry must record the new Y co-ordinate");
+
+        bytes32[2] memory held = deviceWallet.getOwner();
+        assertEq(held[0], pubKey4[0], "The wallet must hold the new X co-ordinate");
+        assertEq(held[1], pubKey4[1], "The wallet must hold the new Y co-ordinate");
+    }
+
+    /// @notice A key already registered to another wallet cannot be rotated onto. One key to one
+    /// wallet is checked on every deploy path, and an unchecked rotation is a way around it that
+    /// leaves the mapping able to name only one of the two wallets the key would then control.
+    function test_transferOwnership_rejectsAKeyAnotherWalletHolds() public {
+        deployWallets();
+
+        assertEq(
+            registry.registeredP256Keys(_keyHash(pubKey2)),
+            address(deviceWallet2),
+            "The second wallet must hold the key this test tries to take"
+        );
+
+        vm.expectRevert(
+            abi.encodeWithSelector(Errors.OwnerKeyAlreadyRegistered.selector, _keyHash(pubKey2))
+        );
+        _rotateOwnerKey(deviceWallet, pubKey2);
+
+        bytes32[2] memory held = deviceWallet.getOwner();
+        assertEq(held[0], pubKey1[0], "The rejected rotation must leave the wallet on its own key");
+        assertEq(
+            registry.registeredP256Keys(_keyHash(pubKey2)),
+            address(deviceWallet2),
+            "The rejected rotation must leave the other wallet's registration alone"
+        );
+    }
+
+    /// @notice The retired key becomes free again, so the same key can be brought back on a new
+    /// wallet. Without the delete it stays reserved against a wallet that no longer answers to it,
+    /// and nothing can ever register it again.
+    function test_transferOwnership_freesTheRetiredKeyForANewWallet() public {
+        deployWallets();
+        _rotateOwnerKey(deviceWallet, pubKey4);
+
+        deployCustomWallet("Device_Rotated", pubKey1[0], pubKey1[1], 4242);
+
+        assertEq(
+            registry.registeredP256Keys(_keyHash(pubKey1)),
+            address(userDeviceWallet),
+            "The freed key must register against the wallet that claims it next"
+        );
+    }
+
+    /// @notice Rotating onto the key already held is a no-op that must not revert. The retired
+    /// registration is cleared before the new one is checked, so the wallet is not caught by its
+    /// own reservation.
+    function test_transferOwnership_acceptsARotationOntoTheSameKey() public {
+        deployWallets();
+
+        _rotateOwnerKey(deviceWallet, pubKey1);
+
+        assertEq(
+            registry.registeredP256Keys(_keyHash(pubKey1)),
+            address(deviceWallet),
+            "The wallet must still be registered under the key it kept"
+        );
+
+        bytes32[2] memory recorded = registry.getDeviceWalletToOwner(address(deviceWallet));
+        assertEq(recorded[0], pubKey1[0], "The registry must still record the X co-ordinate");
+        assertEq(recorded[1], pubKey1[1], "The registry must still record the Y co-ordinate");
+    }
+
+    /// @notice The override must not widen who can rotate the key. Only the wallet calling itself
+    /// can, which means the owner signed for it.
+    function test_transferOwnership_rejectsACallerOtherThanTheWalletItself() public {
+        deployWallets();
+
+        vm.prank(user1);
+        vm.expectRevert("Only self");
+        deviceWallet.transferOwnership(pubKey4);
+
+        assertEq(
+            registry.registeredP256Keys(_keyHash(pubKey1)),
+            address(deviceWallet),
+            "The rejected call must leave the registration where it was"
+        );
+    }
+
     /// @notice A signature too short to carry a header and a challenge must fail the operation,
     /// not the bundle. validateUserOp returns packed validationData whose low 160 bits the
     /// EntryPoint reads as an authorizer, so anything other than 0 or SIG_VALIDATION_FAILED names
