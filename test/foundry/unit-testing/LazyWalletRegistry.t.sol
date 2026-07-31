@@ -218,7 +218,12 @@ contract LazyWalletRegistryTest is DeployerBase {
         vm.stopPrank();
 
         MockDeviceWallet deviceWallet = MockDeviceWallet(payable(deviceWalletAddress));
-        assertEq(address(deviceWallet).balance, 2 ether, "Incorrect wallet balance");
+        assertEq(address(deviceWallet).balance, 0, "The wallet should not hold the deposit itself");
+        assertEq(
+            entryPoint.balanceOf(deviceWalletAddress),
+            2 ether,
+            "The entry point should hold the deposit made for the wallet"
+        );
 
         // Check storage variables in registry
         bytes32[2] memory storedKey = registry.getDeviceWalletToOwner(deviceWalletAddress);

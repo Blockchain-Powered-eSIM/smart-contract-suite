@@ -40,11 +40,10 @@ contract MockStakeManager is IStakeManager {
      * @param account The account to add to.
      */
     function depositTo(address account) public payable override {
+        // The ETH stays here. The real EntryPoint holds a deposit until the account withdraws it
+        // or an operation spends it, so forwarding it on would credit the deposit and hand the
+        // account the money as well, and leave withdrawTo spending ETH this contract never kept.
         deposits[account].deposit += msg.value;
-
-        // Transfer the amount of ETH directly to the specified account
-        (bool success, ) = account.call{value: msg.value}("");
-        require(success, "ETH transfer failed");
 
         emit Deposited(account, deposits[account].deposit);
     }

@@ -499,7 +499,7 @@ contract DeviceWalletFactoryTest is DeployerBase {
 
             assertNotEq(address(deviceWallet), address(0), "Device wallet address cannot be address(0)");
             assertNotEq(address(eSIMWallet), address(0), "ESIM wallet address cannot be address(0)");
-            assertEq(address(deviceWallet).balance, (i+1) * oneEther, "Device wallet balance should have been non zero");
+            _assertDepositHeldByEntryPoint(address(deviceWallet), (i+1) * oneEther);
 
             // Check storage variables in registry
             bytes32 keyHash = keccak256(abi.encode(listOfOwnerKeys[i][0], listOfOwnerKeys[i][1]));
@@ -890,5 +890,17 @@ contract DeviceWalletFactoryTest is DeployerBase {
         keys[0] = _key;
         salts[0] = _salt;
         deposits[0] = _deposit;
+    }
+
+    /// @notice A deposit made on a wallet's behalf is held by the entry point, not by the wallet
+    /// @dev The wallet only reaches this ETH by spending it on an operation or withdrawing it,
+    ///      so a balance on the wallet itself would mean the deposit never happened.
+    function _assertDepositHeldByEntryPoint(address _deviceWallet, uint256 _deposit) internal view {
+        assertEq(_deviceWallet.balance, 0, "The wallet should not hold the deposit itself");
+        assertEq(
+            entryPoint.balanceOf(_deviceWallet),
+            _deposit,
+            "The entry point should hold the deposit made for the wallet"
+        );
     }
 }
