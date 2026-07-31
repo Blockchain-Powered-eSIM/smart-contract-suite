@@ -36,6 +36,8 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
     /// Length of the packed data: version (1) + validUntil (6) + userOpHash (32) = 39
     /// Defined as string because it is concatenated along with EIP191_PREFIX before hashing
     string private constant USEROP_PRECURSOR_LENGTH = "39";
+    /// Length of the packed data: version (1) + validUntil (6) + chain id (32) + wallet (20) + messageHash (32) = 91
+    string private constant ERC1271_PRECURSOR_LENGTH = "91";
     /// version (uint8) + validUntil (uint48)
     uint256 private constant SIGNATURE_HEADER_LENGTH = 7;
 
@@ -115,8 +117,9 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
      * @notice Validates a signature according to EIP-1271 using the WebAuthn verifier.
      * @dev Assumes the `_signature` bytes were encoded off-chain using the `_encodeSignature`
      *      TypeScript function format: `abi.encodePacked(version, validUntil, abi.encode(WebAuthnSigData))`.
-     *      Assumes the `_messageHash` provided is the EIP-191 digest that was embedded as the challenge
-     *      in the `clientDataJSON` during off-chain signing (i.e., `_messageHash = hashMessage(originalMessage)`).
+     *      The challenge embedded in the `clientDataJSON` is not `_messageHash` itself. It is
+     *      `keccak256("\x19Ethereum Signed Message:\n91" + version + validUntil + chainId + wallet + _messageHash)`,
+     *      so the off-chain signer needs the chain id and the wallet address as well as the message.
      * @param _messageHash The EIP-191 digest of the original message (`keccak256("\x19Ethereum Signed Message:\n" + len(message) + message)`).
      * @param _signature The packed signature bytes including version, validUntil, and ABI-encoded WebAuthn data.
      * @return magicValue `0x1626ba7e` if the signature is valid and timely, `0xffffffff` otherwise.
@@ -140,8 +143,29 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
                 return 0xffffffff;
             }
 
-            // The challenge expected by WebAuthn.sol is the EIP-191 digest itself in bytes format
-            bytes memory challengeBytes = abi.encodePacked(_messageHash);
+            // Everything the caller can see has to be inside what was signed, otherwise it can be
+            // edited after the fact. validUntil is checked just above but was not part of the
+            // challenge, so an expired signature could be revived by rewriting those six bytes.
+            // The chain id and this address are here because neither is implied by the message:
+            // wallets sit at the same CREATE2 address on every chain, and createAccount will deploy
+            // a second wallet at another salt holding the same owner key.
+            bytes memory precursorBytes = abi.encodePacked(
+                version,
+                validUntil,
+                block.chainid,
+                address(this),
+                _messageHash
+            );
+            // keccak256("\x19Ethereum Signed Message:\n91" + precursorBytes)
+            bytes32 challengeDigest = keccak256(
+                abi.encodePacked(
+                    EIP191_PREFIX,
+                    ERC1271_PRECURSOR_LENGTH,
+                    precursorBytes
+                )
+            );
+            // The challenge expected by WebAuthn.sol is in bytes format
+            bytes memory challengeBytes = abi.encodePacked(challengeDigest);
             if(_validateSignature(challengeBytes, webAuthnSignatureBytes)) {
                 return IERC1271(this).isValidSignature.selector;    // magic value: `0x1626ba7e`
             }
