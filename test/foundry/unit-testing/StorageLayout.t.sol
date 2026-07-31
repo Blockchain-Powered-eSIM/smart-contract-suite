@@ -171,8 +171,9 @@ contract StorageLayoutTest is DeployerBase {
         vm.store(_target, bytes32(uint256(59)), bytes32(uint256(uint160(SENTINEL))));
         assertEq(address(registry.entryPoint()), SENTINEL, "Registry.entryPoint must read slot 59");
 
-        vm.store(_target, bytes32(uint256(60)), bytes32(uint256(uint160(SENTINEL))));
-        assertEq(registry.eSIMWalletAdmin(), SENTINEL, "Registry.eSIMWalletAdmin must read slot 60");
+        // Slot 60 held a second copy of the admin address. It is deliberately kept occupied and
+        // unread, so no getter can reach it. What pins it is vault and upgradeManager still
+        // answering at 61 and 62: reclaiming 60 would pull both of them down a slot.
 
         vm.store(_target, bytes32(uint256(61)), bytes32(uint256(uint160(SENTINEL))));
         assertEq(registry.vault(), SENTINEL, "Registry.vault must read slot 61");

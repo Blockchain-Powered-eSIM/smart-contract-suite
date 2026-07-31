@@ -36,7 +36,13 @@ contract ImplementationLocksTest is Test {
         );
 
         assertEq(implementation.owner(), address(0), "Implementation must have no owner");
-        assertEq(implementation.eSIMWalletAdmin(), address(0), "Implementation must have no admin");
+        // The admin is read through the factory, and an uninitialised implementation has none,
+        // so a missing factory is what says no admin is reachable here
+        assertEq(
+            address(implementation.deviceWalletFactory()),
+            address(0),
+            "Implementation must have no factory, and so no admin to read"
+        );
     }
 
     /// @notice The lazy wallet registry implementation must reject a direct initialize call.

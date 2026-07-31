@@ -6,12 +6,39 @@ import "forge-std/Test.sol";
 import "forge-std/console.sol";
 
 import "contracts/CustomStructs.sol";
+import {Errors} from "contracts/Errors.sol";
 
 import "test/utils/DeployerBase.sol";
 import "test/utils/mocks/MockESIMWallet.sol";
 import "test/utils/mocks/MockDeviceWallet.sol";
 
 contract ESIMWalletTest is DeployerBase {
+
+    /// @notice A rotated admin has to reach buyDataBundle, which the factory alone does not
+    /// @dev This path pulls whatever price it is given out of the device wallet and sends it to
+    ///      the vault, so an admin address that changes only on the factory leaves the retired key
+    ///      able to drain wallets and leaves the new key unable to do its job.
+    function test_buyDataBundle_followsTheRotatedAdmin() public {
+        deployWallets();
+        address retiredAdmin = deviceWalletFactory.eSIMWalletAdmin();
+
+        vm.prank(retiredAdmin);
+        deviceWalletFactory.requestAdminUpdate(user3);
+        vm.prank(user3);
+        deviceWalletFactory.acceptAdminUpdate();
+
+        vm.deal(address(deviceWallet), 1 ether);
+
+        vm.prank(retiredAdmin);
+        vm.expectRevert(Errors.OnlyDeviceWalletOrESIMWalletAdmin.selector);
+        eSIMWallet1.buyDataBundle(DataBundleDetails("DB_ID_1", 1));
+
+        vm.prank(user3);
+        eSIMWallet1.buyDataBundle(DataBundleDetails("DB_ID_1", 1));
+
+        (, uint256 price) = eSIMWallet1.transactionHistory(0);
+        assertEq(price, 1, "The purchase made by the rotated admin must be recorded");
+    }
 
     MockDeviceWallet deviceWallet;
     MockDeviceWallet deviceWallet2;

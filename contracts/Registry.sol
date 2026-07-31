@@ -21,8 +21,12 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
     /// @notice Entry point contract address (one entryPoint per chain)
     IEntryPoint public entryPoint;
 
-    ///@notice eSIM wallet project admin address
-    address public eSIMWalletAdmin;
+    /// @dev Was a second copy of the admin address. `initialize` set it once and nothing could
+    ///      ever update it, while `DeviceWalletFactory` rotated its own through
+    ///      `requestAdminUpdate` and `acceptAdminUpdate`, so a rotation left every reader here
+    ///      authorising the retired key. Nothing reads this now. It stays because `vault` and
+    ///      `upgradeManager` occupy the slots after it on the deployed proxies.
+    address private supersededESIMWalletAdmin;
 
     /// @notice Address of the vault that receives payments for the eSIM data bundles
     address public vault;
@@ -85,8 +89,14 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
         if(_deviceWalletFactory == address(0)) revert Errors.ZeroAddress("_deviceWalletFactory");
         if(_eSIMWalletFactory == address(0)) revert Errors.ZeroAddress("_eSIMWalletFactory");
 
+        // The factory owns the admin address. Taking it as a parameter and storing it here
+        // separately is what let the two drift apart, so it is checked rather than kept.
+        address factoryAdmin = DeviceWalletFactory(_deviceWalletFactory).eSIMWalletAdmin();
+        if(_eSIMWalletAdmin != factoryAdmin) {
+            revert Errors.ESIMWalletAdminMismatch(_eSIMWalletAdmin, factoryAdmin);
+        }
+
         entryPoint = _entryPoint;
-        eSIMWalletAdmin = _eSIMWalletAdmin;
         vault = _vault;
         upgradeManager = _upgradeManager;
 
@@ -103,6 +113,14 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
             address(deviceWalletFactory),
             address(eSIMWalletFactory)
         );
+    }
+
+    /// @notice Admin address of the eSIM wallet project
+    /// @dev Reads through to `DeviceWalletFactory`, the only contract that can rotate the admin,
+    ///      so a rotation there reaches `LazyWalletRegistry` and `ESIMWallet` in the same
+    ///      transaction. Both authorise against this.
+    function eSIMWalletAdmin() public view returns (address) {
+        return deviceWalletFactory.eSIMWalletAdmin();
     }
 
     /// @notice Function to add or update the lazy wallet registry address

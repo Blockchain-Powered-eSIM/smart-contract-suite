@@ -42,6 +42,39 @@ contract LazyWalletRegistryTest is DeployerBase {
         assertEq(storedData[0].dataBundlePrice, 21);
     }
 
+    /// @notice A rotated admin has to reach this registry, which the factory alone does not
+    /// @dev The admin address used to be held in two places, and only the factory's copy could be
+    ///      rotated, so retiring a key left it holding every function gated on this modifier.
+    function test_batchPopulateHistory_followsTheRotatedAdmin() public {
+        address retiredAdmin = deviceWalletFactory.eSIMWalletAdmin();
+
+        vm.prank(retiredAdmin);
+        deviceWalletFactory.requestAdminUpdate(user3);
+        vm.prank(user3);
+        deviceWalletFactory.acceptAdminUpdate();
+
+        vm.prank(retiredAdmin);
+        vm.expectRevert("Only eSIM wallet admin");
+        lazyWalletRegistry.batchPopulateHistory(
+            customDeviceUniqueIdentifiers,
+            customESIMUniqueIdentifiers,
+            customDataBundleDetails
+        );
+
+        vm.prank(user3);
+        lazyWalletRegistry.batchPopulateHistory(
+            customDeviceUniqueIdentifiers,
+            customESIMUniqueIdentifiers,
+            customDataBundleDetails
+        );
+
+        DataBundleDetails[] memory storedData = lazyWalletRegistry.getDeviceIdentifierToESIMDetails(
+            customDeviceUniqueIdentifiers[0],
+            customESIMUniqueIdentifiers[0][1]
+        );
+        assertEq(storedData.length, 1, "The rotated admin's write must have landed");
+    }
+
     function test_batchPopulateHistory_duplicateData() public {
         vm.startPrank(eSIMWalletAdmin);
         lazyWalletRegistry.batchPopulateHistory(
