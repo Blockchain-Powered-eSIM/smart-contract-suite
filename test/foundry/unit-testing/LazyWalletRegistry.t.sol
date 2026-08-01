@@ -428,95 +428,6 @@ contract LazyWalletRegistryTest is DeployerBase {
         lazyWalletRegistry.batchPopulateHistory(devices, eSIMs, bundles);
     }
 
-    /// @notice A device that grows without limit eventually cannot be deployed at all, because
-    /// deployLazyWalletAndSetESIMIdentifier deploys one eSIM wallet per identifier in a single
-    /// transaction. Its identifiers stay bound to it, so nothing releases them either.
-    function test_batchPopulateHistory_capsESIMIdentifiersPerDevice() public {
-        _bindESIMs(customDeviceUniqueIdentifiers[0], 30, "capped_");
-
-        assertEq(
-            lazyWalletRegistry.getESIMIdentifiersAssociatedWithDeviceIdentifier(customDeviceUniqueIdentifiers[0]).length,
-            30,
-            "The device must hold exactly the cap before the next insert"
-        );
-
-        vm.expectRevert(
-            abi.encodeWithSelector(Errors.TooManyESIMsForDevice.selector, customDeviceUniqueIdentifiers[0], 30)
-        );
-        _bindESIMs(customDeviceUniqueIdentifiers[0], 1, "overflow_");
-
-        assertEq(
-            lazyWalletRegistry.getESIMIdentifiersAssociatedWithDeviceIdentifier(customDeviceUniqueIdentifiers[0]).length,
-            30,
-            "The rejected insert must leave the list at the cap"
-        );
-    }
-
-    /// @notice A purchase against an eSIM the device already holds is not a new binding, so it
-    /// must keep working once the device sits at the cap.
-    function test_batchPopulateHistory_allowsMorePurchasesAtTheCap() public {
-        _bindESIMs(customDeviceUniqueIdentifiers[0], 30, "capped_");
-        _bindESIMs(customDeviceUniqueIdentifiers[0], 30, "capped_");
-
-        DataBundleDetails[] memory stored = lazyWalletRegistry.getDeviceIdentifierToESIMDetails(
-            customDeviceUniqueIdentifiers[0],
-            "capped_0"
-        );
-        assertEq(stored.length, 2, "The second purchase against an existing eSIM must be recorded");
-    }
-
-    /// @notice The switch path grows the receiving device's list too, so it has to honour the same
-    /// cap or a device can be filled past it one identifier at a time.
-    function test_switchESIMIdentifierToNewDeviceIdentifier_honoursTheCap() public {
-        _bindESIMs(customDeviceUniqueIdentifiers[0], 30, "capped_");
-        _bindESIMs(customDeviceUniqueIdentifiers[1], 1, "mover_");
-
-        vm.prank(eSIMWalletAdmin);
-        vm.expectRevert(
-            abi.encodeWithSelector(Errors.TooManyESIMsForDevice.selector, customDeviceUniqueIdentifiers[0], 30)
-        );
-        lazyWalletRegistry.switchESIMIdentifierToNewDeviceIdentifier(
-            "mover_0",
-            customDeviceUniqueIdentifiers[1],
-            customDeviceUniqueIdentifiers[0]
-        );
-
-        assertEq(
-            lazyWalletRegistry.eSIMIdentifierToDeviceIdentifier("mover_0"),
-            customDeviceUniqueIdentifiers[1],
-            "The rejected switch must leave the eSIM on its original device"
-        );
-    }
-
-    /// @notice The cap bounds the linear scan the switch runs over the source device's whole list,
-    /// and moving an eSIM off a full device has to keep working, since that is how a device at the
-    /// cap makes room. Worst case: the identifier being moved sits last, so the scan runs the
-    /// whole length.
-    function test_switchESIMIdentifierToNewDeviceIdentifier_atTheCap() public {
-        _bindESIMs(customDeviceUniqueIdentifiers[0], 30, "capped_");
-
-        uint256 gasBefore = gasleft();
-        vm.prank(eSIMWalletAdmin);
-        lazyWalletRegistry.switchESIMIdentifierToNewDeviceIdentifier(
-            "capped_29",
-            customDeviceUniqueIdentifiers[0],
-            customDeviceUniqueIdentifiers[1]
-        );
-        uint256 gasUsed = gasBefore - gasleft();
-
-        assertLt(gasUsed, 500_000, "A switch off a device at the cap must stay well inside a block");
-        assertEq(
-            lazyWalletRegistry.getESIMIdentifiersAssociatedWithDeviceIdentifier(customDeviceUniqueIdentifiers[0]).length,
-            29,
-            "The source device must have released the identifier"
-        );
-        assertEq(
-            lazyWalletRegistry.eSIMIdentifierToDeviceIdentifier("capped_29"),
-            customDeviceUniqueIdentifiers[1],
-            "The identifier must now name the receiving device"
-        );
-    }
-
     /// @notice An eSIM identifier is a UUID v4 in string form. An unbounded one inflates every
     /// keccak in the linear scan the switch path runs over the whole list.
     function test_batchPopulateHistory_rejectsAnOverLongESIMIdentifier() public {
@@ -638,10 +549,11 @@ contract LazyWalletRegistryTest is DeployerBase {
         assertEq(carried[0].dataBundleID, "DB_0", "The first purchase must survive");
     }
 
-    /// @notice A device at both limits at once still deploys inside a block.
-    /// @dev The two dimensions multiply. Capping the eSIM count alone left the depth free to grow,
-    ///      and this is the pair of them at their worst together.
-    function test_deployLazyWalletAndSetESIMIdentifier_staysInsideABlockAtBothLimits() public {
+    /// @notice Thirty eSIMs, each with a history past the carried limit, still deploys inside a block.
+    /// @dev Nothing bounds the eSIM count, so this is a measured reference point rather than a
+    ///      ceiling the contract enforces. A device is deployable only while its list stays near
+    ///      this size, and the two dimensions multiply.
+    function test_deployLazyWalletAndSetESIMIdentifier_staysInsideABlockAtThirtyESIMs() public {
         string memory device = customDeviceUniqueIdentifiers[0];
         for(uint256 round=0; round<10; ++round) {
             _bindESIMs(device, 30, "worst_");

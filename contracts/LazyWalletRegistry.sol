@@ -69,14 +69,6 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         string[] _eSIMIdentifierOfNewDevice
     );
 
-    /// @notice Most eSIM identifiers one device identifier may accumulate before deployment
-    /// @dev deployLazyWalletAndSetESIMIdentifier deploys one eSIM wallet per entry in a single
-    ///      transaction, at roughly 420,000 gas each on top of the device wallet's own cost, so an
-    ///      unbounded list eventually cannot fit in a block. The device could then never be
-    ///      deployed, and its identifiers stay bound to it until the admin switches them off one
-    ///      at a time. At this cap the deploy stays near 14,300,000 gas, inside any L2 block.
-    uint256 private constant MAX_ESIMS_PER_DEVICE = 30;
-
     /// @notice Longest device or eSIM identifier accepted when a new binding is created
     /// @dev An eSIM identifier is a UUID v4 in string form, so 36 bytes. This leaves room for a
     ///      longer device identifier while keeping both inside two storage words, which bounds the
@@ -273,7 +265,6 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
                 eSIMIdentifierToDeviceIdentifier[eSIMUniqueIdentifier] = _deviceUniqueIdentifier;
 
                 string[] storage associatedESIMIdentifiers = eSIMIdentifiersAssociatedWithDeviceIdentifier[_deviceUniqueIdentifier];
-                _requireRoomForAnotherESIM(_deviceUniqueIdentifier, associatedESIMIdentifiers.length);
                 associatedESIMIdentifiers.push(eSIMUniqueIdentifier);
 
                 emit ESIMBindedWithDevice(eSIMUniqueIdentifier, _deviceUniqueIdentifier);
@@ -392,7 +383,6 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
 
         // Add eSIM identifier to new device identifier
         string[] storage eSIMIdentifierOfNewDevice = eSIMIdentifiersAssociatedWithDeviceIdentifier[_newDeviceIdentifier];
-        _requireRoomForAnotherESIM(_newDeviceIdentifier, eSIMIdentifierOfNewDevice.length);
         eSIMIdentifierOfNewDevice.push(_eSIMIdentifier);
         emit ESIMIdentifierAddedToNewDeviceIdentifier(_newDeviceIdentifier, _eSIMIdentifier, eSIMIdentifierOfNewDevice);
     }
@@ -427,18 +417,6 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
     function _requireBoundedIdentifier(string calldata _identifier) private pure {
         if(bytes(_identifier).length > MAX_IDENTIFIER_LENGTH) {
             revert Errors.IdentifierTooLong(_identifier, MAX_IDENTIFIER_LENGTH);
-        }
-    }
-
-    /// @notice Rejects an eSIM identifier that would push a device past the cap
-    /// @dev Checked where the list grows rather than where it is read. A device already over the
-    ///      cap keeps deploying, since refusing it at deploy time would strand exactly the wallets
-    ///      this limit exists to protect.
-    /// @param _deviceIdentifier Device identifier gaining the eSIM identifier
-    /// @param _currentCount Number of eSIM identifiers the device already holds
-    function _requireRoomForAnotherESIM(string calldata _deviceIdentifier, uint256 _currentCount) private pure {
-        if(_currentCount >= MAX_ESIMS_PER_DEVICE) {
-            revert Errors.TooManyESIMsForDevice(_deviceIdentifier, MAX_ESIMS_PER_DEVICE);
         }
     }
 }
