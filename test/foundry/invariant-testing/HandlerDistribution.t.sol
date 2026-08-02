@@ -62,6 +62,7 @@ contract HandlerDistributionTest is CampaignBase {
             attackerHandler.donateToSingleton(round, 1 ether);
             adminHandler.deployESIMWalletForDevice(round, true, seed + 2000);
             walletHandler.toggleAccessToETH(round, true);
+            walletHandler.setESIMWalletPriceCap(round, round);
             adminHandler.buyDataBundle(round, 1 gwei);
             walletHandler.pullETH(round, 1 gwei);
             // Removal comes before the transfer pair on purpose. Requesting a transfer detaches
@@ -117,6 +118,7 @@ contract HandlerDistributionTest is CampaignBase {
         _assertExercised("pauseProtocol");
         _assertExercised("unpauseProtocol");
         _assertExercised("setDefaultPriceCap");
+        _assertExercised("setESIMWalletPriceCap");
         _assertExercised("upgradeDeviceWalletBeacon");
         _assertExercised("upgradeESIMWalletBeacon");
     }

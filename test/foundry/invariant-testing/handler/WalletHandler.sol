@@ -187,4 +187,31 @@ contract WalletHandler is HandlerBase {
             state.recordRevert("pullETH");
         }
     }
+
+    /// @notice The wallet owner sets the most this eSIM wallet may be charged for one bundle
+    /// @dev The ceiling comes off a ladder, so zero is reached. Zero is the value that hands the
+    ///      wallet back to the registry's fallback rather than a ceiling of zero, and a range wide
+    ///      enough to sit above what the admin charges would never land on it.
+    /// @param eSIMIndex Which eSIM wallet gets the ceiling
+    /// @param seed Chooses the ceiling
+    function setESIMWalletPriceCap(uint256 eSIMIndex, uint256 seed) external counted {
+        address wallet = _pickESIMWallet(eSIMIndex);
+        if (wallet == address(0)) {
+            state.recordRevert("setESIMWalletPriceCap");
+            return;
+        }
+        address device = registry.isESIMWalletValid(wallet);
+        if (device == address(0)) {
+            state.recordRevert("setESIMWalletPriceCap");
+            return;
+        }
+        uint256[4] memory ladder = [uint256(0), 1 gwei, 1 ether, 100 ether];
+
+        vm.prank(device);
+        try ESIMWallet(payable(wallet)).setDataBundlePriceCap(ladder[bound(seed, 0, 3)]) {
+            state.recordCall("setESIMWalletPriceCap");
+        } catch {
+            state.recordRevert("setESIMWalletPriceCap");
+        }
+    }
 }

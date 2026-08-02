@@ -122,6 +122,16 @@ contract AdminHandler is HandlerBase {
         try ESIMWallet(payable(wallet)).buyDataBundle(
             DataBundleDetails({dataBundleID: "bundle", dataBundlePrice: price})
         ) {
+            // Asserted here rather than as an invariant because the ceiling is a property of the
+            // charge and not of any state left behind. Both ceilings move during a run, so a
+            // purchase that was inside the ceiling when it went through can sit above the one the
+            // next invariant call would read
+            uint256 cap = ESIMWallet(payable(wallet)).dataBundlePriceCap();
+            if (cap == 0) cap = registry.defaultDataBundlePriceCap();
+            if (cap != 0) {
+                assertLe(price, cap, "A purchase went through above the ceiling that applied to it");
+            }
+
             state.recordCall("buyDataBundle");
         } catch {
             state.recordRevert("buyDataBundle");
