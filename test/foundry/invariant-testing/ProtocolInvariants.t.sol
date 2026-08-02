@@ -4,6 +4,7 @@ pragma solidity 0.8.36;
 
 import "test/foundry/invariant-testing/InvariantBase.sol";
 import {Handler} from "test/foundry/invariant-testing/Handler.sol";
+import {ESIMWallet} from "contracts/esim-wallet/ESIMWallet.sol";
 
 /// @notice Properties that must hold after any sequence of calls the protocol allows.
 /// @dev The handler is the only target. Pointing the runner at the protocol contracts is the
@@ -18,7 +19,7 @@ contract ProtocolInvariantsTest is InvariantBase {
     uint256 internal constant ADMIN_BUDGET = 600 ether;
 
     /// @notice How many times the distribution test drives each entry point
-    uint256 internal constant DRIVE_ROUNDS = 25;
+    uint256 internal constant DRIVE_ROUNDS = 40;
 
     /// @notice Successful executions each entry point has to reach in that drive
     uint256 internal constant MIN_SUCCESSES = 20;
@@ -95,7 +96,6 @@ contract ProtocolInvariantsTest is InvariantBase {
         }
 
         assertEq(held, handler.accountedETH(), "ETH left the accounted set");
-        assertEq(held, handler.accountedETH(), "ETH left the accounted set");
     }
 
     /// @notice None of the four singletons ever holds ETH between transactions
@@ -117,6 +117,75 @@ contract ProtocolInvariantsTest is InvariantBase {
         assertEq(address(eSIMWalletFactory).balance, 0, "eSIM wallet factory is holding ETH");
         assertEq(address(registry).balance, 0, "Registry is holding ETH");
         assertEq(address(lazyWalletRegistry).balance, 0, "Lazy wallet registry is holding ETH");
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // Associations
+    // ------------------------------------------------------------------------------------------
+
+    /// @notice All three contracts agree on which device wallet owns each eSIM wallet
+    /// @dev The association is written in three places that no single call updates together: the
+    ///      registry's mapping, the device wallet's own list, and the eSIM wallet's owner. They
+    ///      are only consistent because every path that changes one changes the others in the
+    ///      same transaction, which is exactly the kind of agreement a long sequence breaks.
+    /// forge-config: default.invariant.runs = 256
+    /// forge-config: default.invariant.depth = 500
+    /// forge-config: default.invariant.fail-on-revert = false
+    function invariant_associationsAgree() public view {
+        uint256 count = handler.eSIMWalletCount();
+        for (uint256 i = 0; i < count; ++i) {
+            address wallet = handler.eSIMWallets(i);
+            address device = registry.isESIMWalletValid(wallet);
+            if (device == address(0)) continue;
+
+            assertTrue(
+                MockDeviceWallet(payable(device)).isValidESIMWallet(wallet),
+                "Registry names a device wallet that does not claim the eSIM wallet"
+            );
+            assertEq(
+                ESIMWallet(payable(wallet)).owner(),
+                device,
+                "Registry and the eSIM wallet disagree about the owner"
+            );
+        }
+    }
+
+    /// @notice An eSIM wallet is on standby exactly while no device wallet holds it
+    /// @dev Two separate calls set these, so nothing in the code ties them together. The comment
+    ///      at the standby toggle assumes the pairing rather than enforcing it, which makes this
+    ///      the only thing checking it.
+    /// forge-config: default.invariant.runs = 256
+    /// forge-config: default.invariant.depth = 500
+    /// forge-config: default.invariant.fail-on-revert = false
+    function invariant_standbyMatchesDetachment() public view {
+        uint256 count = handler.eSIMWalletCount();
+        for (uint256 i = 0; i < count; ++i) {
+            address wallet = handler.eSIMWallets(i);
+            if (!registry.isESIMWalletOnStandby(wallet)) continue;
+
+            assertEq(
+                registry.isESIMWalletValid(wallet),
+                address(0),
+                "An eSIM wallet is on standby while a device wallet still holds it"
+            );
+        }
+    }
+
+    /// @notice An eSIM wallet never ends up ownerless
+    /// @dev Ownership cannot be renounced and cannot be transferred in one step, so there is no
+    ///      sequence that should leave one with no owner. An ownerless wallet holds whatever ETH
+    ///      it had with nobody able to move it.
+    /// forge-config: default.invariant.runs = 256
+    /// forge-config: default.invariant.depth = 500
+    /// forge-config: default.invariant.fail-on-revert = false
+    function invariant_eSIMWalletsKeepAnOwner() public view {
+        uint256 count = handler.eSIMWalletCount();
+        for (uint256 i = 0; i < count; ++i) {
+            assertTrue(
+                ESIMWallet(payable(handler.eSIMWallets(i))).owner() != address(0),
+                "An eSIM wallet has no owner"
+            );
+        }
     }
 
     // ------------------------------------------------------------------------------------------
@@ -146,6 +215,16 @@ contract ProtocolInvariantsTest is InvariantBase {
             handler.postCreateAccount(round);
             handler.donateETH(round, 1 ether);
             handler.donateToSingleton(round, 1 ether);
+            handler.deployESIMWalletForDevice(round, true, seed + 2000);
+            handler.toggleAccessToETH(round, true);
+            handler.buyDataBundle(round, 1 gwei);
+            handler.pullETH(round, 1 gwei);
+            // Removal comes before the transfer pair on purpose. Requesting a transfer detaches
+            // the wallet on its way through, so a removal after it has nothing left to remove
+            handler.removeESIMWallet(round, true, false);
+            handler.addESIMWallet(round, round);
+            handler.requestTransferOwnership(round, round + 1);
+            handler.acceptOwnershipTransfer(round);
         }
 
         _assertExercised("deployDeviceWalletBatch");
@@ -153,11 +232,33 @@ contract ProtocolInvariantsTest is InvariantBase {
         _assertExercised("postCreateAccount");
         _assertExercised("donateETH");
         _assertExercised("donateToSingleton");
+        _assertExercised("deployESIMWalletForDevice");
+        _assertExercised("toggleAccessToETH");
+        _assertExercised("buyDataBundle");
+        _assertExercised("pullETH");
+        _assertExercised("requestTransferOwnership");
+        _assertExercised("acceptOwnershipTransfer");
+        _assertExercised("removeESIMWallet");
     }
 
     /// @notice Fails if an entry point never got through
     /// @param name Entry point to check
     function _assertExercised(bytes32 name) internal view {
-        assertGe(handler.calls(name), MIN_SUCCESSES, "Entry point never reached the protocol");
+        assertGe(
+            handler.calls(name),
+            MIN_SUCCESSES,
+            string.concat("Entry point never reached the protocol: ", _name(name))
+        );
+    }
+
+    /// @notice Renders a padded entry point name for a failure message
+    /// @param name Entry point name, right-padded with zero bytes
+    /// @return The name without its padding
+    function _name(bytes32 name) internal pure returns (string memory) {
+        uint256 length;
+        while (length < 32 && name[length] != 0) ++length;
+        bytes memory trimmed = new bytes(length);
+        for (uint256 i = 0; i < length; ++i) trimmed[i] = name[i];
+        return string(trimmed);
     }
 }

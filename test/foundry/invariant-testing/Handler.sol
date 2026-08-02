@@ -74,6 +74,11 @@ contract Handler is Test {
     /// @notice The device wallet the handler believes owns each key hash
     mapping(bytes32 keyHash => address deviceWallet) public ghost_keyHashToDevice;
 
+    /// @notice The device wallet the handler believes each eSIM wallet belongs to
+    /// @dev Kept alongside the registry's own view so the two can be compared. Zero means the
+    ///      wallet is detached, which is the state standby is supposed to mirror.
+    mapping(address eSIMWallet => address deviceWallet) public ghost_esimToDevice;
+
     mapping(address wallet => bool known) public isKnownDeviceWallet;
     mapping(address wallet => bool known) public isKnownESIMWallet;
 
@@ -166,6 +171,7 @@ contract Handler is Test {
             for (uint256 i = 0; i < deployed.length; ++i) {
                 _recordDeviceWallet(deployed[i].deviceWallet, identifiers[i], ownerKeys[i]);
                 _recordESIMWallet(deployed[i].eSIMWallet);
+                ghost_esimToDevice[deployed[i].eSIMWallet] = deployed[i].deviceWallet;
             }
             calls["deployDeviceWalletBatch"]++;
         } catch {
@@ -276,6 +282,206 @@ contract Handler is Test {
         }
 
         calls["donateToSingleton"]++;
+    }
+
+
+    /// @notice The admin adds another eSIM wallet to a device wallet that already exists
+    /// @param deviceIndex Which device wallet gets the new eSIM wallet
+    /// @param hasAccessToETH Whether the new wallet may pull ETH from its device wallet
+    /// @param salt CREATE2 salt, kept small so collisions are reached rather than assumed away
+    function deployESIMWalletForDevice(uint256 deviceIndex, bool hasAccessToETH, uint256 salt)
+        external
+        counted
+    {
+        if (deviceWallets.length == 0) {
+            reverts["deployESIMWalletForDevice"]++;
+            return;
+        }
+        address device = deviceWallets[bound(deviceIndex, 0, deviceWallets.length - 1)];
+        salt = bound(salt, 0, 1000);
+
+        vm.prank(admin);
+        try DeviceWallet(payable(device)).deployESIMWallet(hasAccessToETH, salt) returns (address wallet) {
+            _recordESIMWallet(wallet);
+            ghost_esimToDevice[wallet] = device;
+            calls["deployESIMWalletForDevice"]++;
+        } catch {
+            reverts["deployESIMWalletForDevice"]++;
+        }
+    }
+
+    /// @notice An eSIM wallet is detached from its device wallet
+    /// @dev The caller alternates between the owning device wallet and the eSIM wallet itself,
+    ///      which is the pair the removal gate admits. A sibling eSIM wallet attempting the same
+    ///      removal is what a cross-wallet bug would show up in, so the index is picked
+    ///      independently of the caller.
+    /// @param eSIMIndex Which eSIM wallet to remove
+    /// @param callBackETH Whether to pull the wallet's remaining ETH back on the way out
+    /// @param viaESIMWallet Whether the eSIM wallet removes itself instead of the device wallet
+    function removeESIMWallet(uint256 eSIMIndex, bool callBackETH, bool viaESIMWallet)
+        external
+        counted
+    {
+        if (eSIMWallets.length == 0) {
+            reverts["removeESIMWallet"]++;
+            return;
+        }
+        address wallet = eSIMWallets[bound(eSIMIndex, 0, eSIMWallets.length - 1)];
+        address device = registry.isESIMWalletValid(wallet);
+        if (device == address(0)) {
+            reverts["removeESIMWallet"]++;
+            return;
+        }
+
+        vm.prank(viaESIMWallet ? wallet : device);
+        try DeviceWallet(payable(device)).removeESIMWallet(wallet, callBackETH) {
+            ghost_esimToDevice[wallet] = address(0);
+            calls["removeESIMWallet"]++;
+        } catch {
+            reverts["removeESIMWallet"]++;
+        }
+    }
+
+    /// @notice A device wallet offers one of its eSIM wallets to another device wallet
+    /// @param eSIMIndex Which eSIM wallet to hand over
+    /// @param deviceIndex Which device wallet is being offered it
+    function requestTransferOwnership(uint256 eSIMIndex, uint256 deviceIndex) external counted {
+        if (eSIMWallets.length == 0 || deviceWallets.length == 0) {
+            reverts["requestTransferOwnership"]++;
+            return;
+        }
+        address wallet = eSIMWallets[bound(eSIMIndex, 0, eSIMWallets.length - 1)];
+        address newOwner = deviceWallets[bound(deviceIndex, 0, deviceWallets.length - 1)];
+        address currentOwner = ESIMWallet(payable(wallet)).owner();
+        if (currentOwner == address(0)) {
+            reverts["requestTransferOwnership"]++;
+            return;
+        }
+
+        vm.prank(currentOwner);
+        try ESIMWallet(payable(wallet)).requestTransferOwnership(newOwner) {
+            // The request detaches the wallet from its current device on the way through
+            ghost_esimToDevice[wallet] = registry.isESIMWalletValid(wallet);
+            calls["requestTransferOwnership"]++;
+        } catch {
+            reverts["requestTransferOwnership"]++;
+        }
+    }
+
+    /// @notice The device wallet that was offered an eSIM wallet takes it
+    /// @param eSIMIndex Which eSIM wallet to accept
+    function acceptOwnershipTransfer(uint256 eSIMIndex) external counted {
+        if (eSIMWallets.length == 0) {
+            reverts["acceptOwnershipTransfer"]++;
+            return;
+        }
+        address wallet = eSIMWallets[bound(eSIMIndex, 0, eSIMWallets.length - 1)];
+        address requested = ESIMWallet(payable(wallet)).newRequestedOwner();
+        if (requested == address(0)) {
+            reverts["acceptOwnershipTransfer"]++;
+            return;
+        }
+
+        vm.prank(requested);
+        try ESIMWallet(payable(wallet)).acceptOwnershipTransfer() {
+            calls["acceptOwnershipTransfer"]++;
+        } catch {
+            reverts["acceptOwnershipTransfer"]++;
+        }
+    }
+
+    /// @notice A device wallet binds an eSIM wallet it has just been given ownership of
+    /// @param deviceIndex Which device wallet makes the claim
+    /// @param eSIMIndex Which eSIM wallet it claims
+    function addESIMWallet(uint256 deviceIndex, uint256 eSIMIndex) external counted {
+        if (deviceWallets.length == 0 || eSIMWallets.length == 0) {
+            reverts["addESIMWallet"]++;
+            return;
+        }
+        address device = deviceWallets[bound(deviceIndex, 0, deviceWallets.length - 1)];
+        address wallet = eSIMWallets[bound(eSIMIndex, 0, eSIMWallets.length - 1)];
+
+        vm.prank(device);
+        try DeviceWallet(payable(device)).addESIMWallet(wallet, true) {
+            ghost_esimToDevice[wallet] = device;
+            calls["addESIMWallet"]++;
+        } catch {
+            reverts["addESIMWallet"]++;
+        }
+    }
+
+    /// @notice The wallet owner revokes or restores an eSIM wallet's right to pull ETH
+    /// @dev Reachable only through the device wallet's own `execute`, so the caller is the wallet
+    ///      itself. Impersonating it stands in for the owner holding the P256 key.
+    /// @param eSIMIndex Which eSIM wallet to toggle
+    /// @param hasAccessToETH The access it should end up with
+    function toggleAccessToETH(uint256 eSIMIndex, bool hasAccessToETH) external counted {
+        if (eSIMWallets.length == 0) {
+            reverts["toggleAccessToETH"]++;
+            return;
+        }
+        address wallet = eSIMWallets[bound(eSIMIndex, 0, eSIMWallets.length - 1)];
+        address device = registry.isESIMWalletValid(wallet);
+        if (device == address(0)) {
+            reverts["toggleAccessToETH"]++;
+            return;
+        }
+
+        vm.prank(device);
+        try DeviceWallet(payable(device)).toggleAccessToETH(wallet, hasAccessToETH) {
+            calls["toggleAccessToETH"]++;
+        } catch {
+            reverts["toggleAccessToETH"]++;
+        }
+    }
+
+    /// @notice An eSIM wallet pulls ETH from the device wallet that owns it
+    /// @dev The amount is allowed to exceed the device wallet's balance, which is the case the
+    ///      transfer guard has to refuse rather than partially serve.
+    /// @param eSIMIndex Which eSIM wallet pulls
+    /// @param amount How much it asks for
+    function pullETH(uint256 eSIMIndex, uint256 amount) external counted {
+        if (eSIMWallets.length == 0) {
+            reverts["pullETH"]++;
+            return;
+        }
+        address wallet = eSIMWallets[bound(eSIMIndex, 0, eSIMWallets.length - 1)];
+        address device = registry.isESIMWalletValid(wallet);
+        if (device == address(0)) {
+            reverts["pullETH"]++;
+            return;
+        }
+        amount = bound(amount, 0, 20 ether);
+
+        vm.prank(wallet);
+        try DeviceWallet(payable(device)).pullETH(amount) {
+            calls["pullETH"]++;
+        } catch {
+            reverts["pullETH"]++;
+        }
+    }
+
+    /// @notice The admin charges an eSIM wallet for a data bundle
+    /// @dev The price is unbounded upward on purpose. The ceiling is the only thing standing
+    ///      between the admin and a wallet's whole balance, so a run has to reach past it.
+    /// @param eSIMIndex Which eSIM wallet pays
+    /// @param price What it is charged
+    function buyDataBundle(uint256 eSIMIndex, uint256 price) external counted {
+        if (eSIMWallets.length == 0) {
+            reverts["buyDataBundle"]++;
+            return;
+        }
+        address wallet = eSIMWallets[bound(eSIMIndex, 0, eSIMWallets.length - 1)];
+        price = bound(price, 1, 100 ether);
+
+        vm.prank(admin);
+        try ESIMWallet(payable(wallet)).buyDataBundle(
+            DataBundleDetails({dataBundleID: "bundle", dataBundlePrice: price})
+        ) {
+            calls["buyDataBundle"]++;
+        } catch {
+            reverts["buyDataBundle"]++;
+        }
     }
 
     // ----------------------------------------------------------------------------------------
