@@ -29,6 +29,10 @@ contract Account4337Test is DeployerBase {
     ///      is refused by the version and not by the length check above it.
     uint256 constant PARSEABLE_SIGNATURE_LENGTH = 100;
 
+    /// @dev A shortfall the entry point claims back during validation. Any non-zero value works;
+    ///      this one is small enough to leave the wallet solvent afterwards.
+    uint256 constant MISSING_PREFUND = 0.25 ether;
+
     DeviceWallet wallet;
     address recipient = address(0xBEEF01);
     address otherRecipient = address(0xBEEF02);
@@ -217,6 +221,31 @@ contract Account4337Test is DeployerBase {
             wallet.isValidSignature(keccak256("any message"), new bytes(39)),
             bytes4(0xffffffff),
             "A signature too short to parse must not return the magic value"
+        );
+    }
+
+    /// @notice Validation forwards the shortfall the entry point asked for out of the wallet balance
+    /// @dev Every other validation test passes a zero prefund, which skips this transfer entirely.
+    ///      It runs whatever the signature check decided, so a wallet pays for a bundled operation
+    ///      even when that operation's signature is refused. The amount goes to `msg.sender` rather
+    ///      than to a stored address, which is why the caller gate above it is load-bearing.
+    function test_validateUserOp_forwardsTheMissingPrefundToTheEntryPoint() public {
+        _deployWallet();
+        vm.deal(address(wallet), 1 ether);
+        uint256 entryPointBalanceBefore = address(entryPoint).balance;
+
+        PackedUserOperation memory operation;
+        operation.sender = address(wallet);
+        operation.signature = _unknownVersionSignature();
+
+        vm.prank(address(entryPoint));
+        wallet.validateUserOp(operation, bytes32(uint256(1)), MISSING_PREFUND);
+
+        assertEq(address(wallet).balance, 1 ether - MISSING_PREFUND, "The wallet must have paid the shortfall");
+        assertEq(
+            address(entryPoint).balance - entryPointBalanceBefore,
+            MISSING_PREFUND,
+            "The entry point must have received exactly the amount it asked for"
         );
     }
 
