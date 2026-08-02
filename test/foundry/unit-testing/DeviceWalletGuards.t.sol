@@ -9,7 +9,16 @@ import {BeaconProxy} from "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol"
 import "contracts/CustomStructs.sol";
 import {Errors} from "contracts/Errors.sol";
 
+import {ESIMWallet} from "contracts/esim-wallet/ESIMWallet.sol";
+
 import "test/utils/DeployerBase.sol";
+
+/// @notice An account that refuses every payment sent to it
+contract ETHRefuser {
+    fallback() external payable {
+        revert("No ETH accepted");
+    }
+}
 
 /// @notice Covers the reject arms on `DeviceWallet` that the existing suite reaches past on its way
 ///         to a happy path.
@@ -170,4 +179,53 @@ contract DeviceWalletGuardsTest is DeployerBase {
             "The registry must still associate the eSIM wallet with this device"
         );
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // ETH that cannot be delivered
+    // ---------------------------------------------------------------------------------------------
+
+    /// @notice A payment the vault refuses takes the whole call down rather than being written off
+    /// @dev The low-level call returns false instead of reverting, so without the check the wallet
+    ///      would emit nothing, return normally, and report a data bundle as paid for while the ETH
+    ///      stayed put. The vault is an EOA today, but it is a settable address and could become a
+    ///      contract that reverts on receipt.
+    function test_payETHForDataBundles_revertsWhenTheVaultRefusesTheETH() public {
+        _deployWallet(customDeviceUniqueIdentifiers[0], pubKey1, 8009);
+        vm.deal(address(wallet), 1 ether);
+        vm.etch(vault, address(new ETHRefuser()).code);
+
+        vm.prank(eSIMWallet);
+        vm.expectRevert(Errors.FailedToTransfer.selector);
+        wallet.payETHForDataBundles(1 ether);
+
+        assertEq(address(wallet).balance, 1 ether, "A refused payment must leave the balance alone");
+    }
+
+    /// @notice A removal completes even when the eSIM wallet cannot hand its ETH back
+    /// @dev The callback is wrapped in try/catch on purpose. Every eSIM wallet shares one beacon,
+    ///      so the logic reached here is not fixed for the life of the protocol, and a wallet whose
+    ///      implementation reverts must not be able to pin itself to a device by refusing to leave.
+    ///      The bindings are cleared before the callback runs, so the catch arm loses nothing.
+    function test_removeESIMWallet_completesWhenTheETHCallbackReverts() public {
+        _deployWallet(customDeviceUniqueIdentifiers[0], pubKey1, 8010);
+        vm.deal(eSIMWallet, 1 ether);
+
+        vm.mockCallRevert(
+            eSIMWallet,
+            abi.encodeWithSelector(ESIMWallet.sendETHToDeviceWallet.selector),
+            "the wallet refuses to release its ETH"
+        );
+
+        vm.expectEmit(false, false, false, false, address(wallet));
+        emit NoETHToCallback();
+
+        vm.prank(address(wallet));
+        wallet.removeESIMWallet(eSIMWallet, true);
+
+        assertEq(wallet.isValidESIMWallet(eSIMWallet), false, "The eSIM wallet must be unbound from the device");
+        assertEq(registry.isESIMWalletValid(eSIMWallet), address(0), "The registry association must be cleared");
+    }
+
+    /// @dev Mirrors `DeviceWallet.NoETHToCallback`, so `expectEmit` has a selector to match
+    event NoETHToCallback();
 }

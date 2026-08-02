@@ -12,6 +12,13 @@ import {Errors} from "contracts/Errors.sol";
 
 import "test/utils/DeployerBase.sol";
 
+/// @notice An account that refuses every payment sent to it
+contract ETHRefuser {
+    fallback() external payable {
+        revert("No ETH accepted");
+    }
+}
+
 /// @notice Covers the reject arms on `ESIMWallet` and the one price cap transition the existing
 ///         suite does not make.
 /// @dev The purchase and ownership transfer behaviour is covered in `ESIMWallet.t.sol`.
@@ -166,6 +173,25 @@ contract ESIMWalletGuardsTest is DeployerBase {
         vm.prank(address(deviceWallet));
         vm.expectRevert("Not enough ETH");
         eSIMWallet.sendETHToDeviceWallet(1 ether + 1);
+
+        assertEq(address(eSIMWallet).balance, 1 ether, "A refused callback must leave the balance alone");
+    }
+
+    /// @notice A callback the device wallet cannot receive reverts rather than reporting success
+    /// @dev The low-level call returns false instead of reverting, so without the check the eSIM
+    ///      wallet would return the amount as if it had been sent and the removal on the other side
+    ///      would emit `ETHCalledBack` for ETH that never moved. The device wallet declares a
+    ///      `receive`, so reaching this needs its code replaced, which is what a beacon upgrade to
+    ///      a broken implementation would amount to.
+    function test_sendETHToDeviceWallet_revertsWhenTheDeviceWalletRefusesTheETH() public {
+        _deployWallets(9006);
+        vm.deal(address(eSIMWallet), 1 ether);
+        address deviceWalletAddress = address(deviceWallet);
+        vm.etch(deviceWalletAddress, address(new ETHRefuser()).code);
+
+        vm.prank(deviceWalletAddress);
+        vm.expectRevert(Errors.FailedToTransfer.selector);
+        eSIMWallet.sendETHToDeviceWallet(1 ether);
 
         assertEq(address(eSIMWallet).balance, 1 ether, "A refused callback must leave the balance alone");
     }
