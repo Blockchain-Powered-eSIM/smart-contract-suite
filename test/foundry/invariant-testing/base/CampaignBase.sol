@@ -27,6 +27,9 @@ abstract contract CampaignBase is InvariantBase {
     /// @notice Share held by the address the admin role rotates onto
     uint256 internal constant ADMIN_SUCCESSOR_BUDGET = 100 ether;
 
+    /// @notice The block timestamp the campaign started at
+    uint256 internal campaignStartTime;
+
     ProtocolState internal state;
     AdminHandler internal adminHandler;
     WalletHandler internal walletHandler;
@@ -37,6 +40,7 @@ abstract contract CampaignBase is InvariantBase {
     function setUp() public virtual {
         _deployProtocol();
 
+        campaignStartTime = block.timestamp;
         state = new ProtocolState();
 
         HandlerConfig memory config = HandlerConfig({
