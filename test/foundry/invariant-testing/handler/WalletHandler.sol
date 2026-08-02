@@ -64,6 +64,27 @@ contract WalletHandler is HandlerBase {
 
         vm.prank(viaESIMWallet ? wallet : device);
         try DeviceWallet(payable(device)).removeESIMWallet(wallet, callBackETH) {
+            // Four writes across two contracts, and nothing in the code ties them together. A
+            // removal that left any one of them set is a detached wallet that some path still
+            // treats as attached
+            assertFalse(
+                DeviceWallet(payable(device)).isValidESIMWallet(wallet),
+                "A removed eSIM wallet is still claimed by its device wallet"
+            );
+            assertFalse(
+                DeviceWallet(payable(device)).canPullETH(wallet),
+                "A removed eSIM wallet kept its right to pull ETH"
+            );
+            assertEq(
+                registry.isESIMWalletValid(wallet),
+                address(0),
+                "A removed eSIM wallet is still associated in the registry"
+            );
+            assertTrue(
+                registry.isESIMWalletOnStandby(wallet),
+                "A removed eSIM wallet was not put on standby"
+            );
+
             state.setESIMOwner(wallet, address(0));
             state.recordCall("removeESIMWallet");
         } catch {
@@ -113,6 +134,19 @@ contract WalletHandler is HandlerBase {
 
         vm.prank(requested);
         try ESIMWallet(payable(wallet)).acceptOwnershipTransfer() {
+            // A transfer that completed while leaving the offer standing would let the same
+            // address take the wallet again after it had moved on to someone else
+            assertEq(
+                ESIMWallet(payable(wallet)).owner(),
+                requested,
+                "The accepted transfer did not move the wallet to the address that accepted it"
+            );
+            assertEq(
+                ESIMWallet(payable(wallet)).newRequestedOwner(),
+                address(0),
+                "An accepted transfer left its offer outstanding"
+            );
+
             state.recordCall("acceptOwnershipTransfer");
         } catch {
             state.recordRevert("acceptOwnershipTransfer");
@@ -132,6 +166,23 @@ contract WalletHandler is HandlerBase {
 
         vm.prank(device);
         try DeviceWallet(payable(device)).addESIMWallet(wallet, true) {
+            // The mirror of the removal check. Three writes go in together, and a wallet that
+            // arrived with only some of them set is one the two contracts disagree about from the
+            // moment it is added
+            assertTrue(
+                DeviceWallet(payable(device)).isValidESIMWallet(wallet),
+                "An added eSIM wallet is not claimed by the device wallet that added it"
+            );
+            assertTrue(
+                DeviceWallet(payable(device)).canPullETH(wallet),
+                "An added eSIM wallet did not receive the access it was added with"
+            );
+            assertEq(
+                registry.isESIMWalletValid(wallet),
+                device,
+                "An added eSIM wallet is not associated in the registry"
+            );
+
             state.setESIMOwner(wallet, device);
             state.recordCall("addESIMWallet");
         } catch {

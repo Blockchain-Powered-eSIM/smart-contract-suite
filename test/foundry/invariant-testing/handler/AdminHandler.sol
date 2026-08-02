@@ -7,6 +7,7 @@ import {DeviceWallet} from "contracts/device-wallet/DeviceWallet.sol";
 import {ESIMWallet} from "contracts/esim-wallet/ESIMWallet.sol";
 
 import {HandlerBase, HandlerConfig} from "test/foundry/invariant-testing/handler/HandlerBase.sol";
+import {MockESIMWallet} from "test/utils/mocks/MockESIMWallet.sol";
 
 /// @notice Everything the eSIM wallet admin is allowed to do.
 /// @dev The widest actor in the protocol by a distance. It deploys wallets on a user's behalf,
@@ -118,6 +119,11 @@ contract AdminHandler is HandlerBase {
         }
         price = bound(price, 1, 100 ether);
 
+        address device = registry.isESIMWalletValid(wallet);
+        uint256 vaultBefore = vault.balance;
+        uint256 walletsBefore = wallet.balance + device.balance;
+        uint256 historyBefore = MockESIMWallet(payable(wallet)).getTransactionHistory().length;
+
         vm.prank(_currentAdmin());
         try ESIMWallet(payable(wallet)).buyDataBundle(
             DataBundleDetails({dataBundleID: "bundle", dataBundlePrice: price})
@@ -131,6 +137,23 @@ contract AdminHandler is HandlerBase {
             if (cap != 0) {
                 assertLe(price, cap, "A purchase went through above the ceiling that applied to it");
             }
+
+            // The wallet pays out of its own balance and pulls the shortfall from the device
+            // wallet, so neither balance alone says what a purchase cost. Their sum does, and it
+            // has to fall by exactly what the vault gained
+            assertEq(
+                vault.balance - vaultBefore, price, "The vault received something other than the price"
+            );
+            assertEq(
+                walletsBefore - (wallet.balance + device.balance),
+                price,
+                "A purchase moved a different amount out of the wallets than it sent to the vault"
+            );
+            assertEq(
+                MockESIMWallet(payable(wallet)).getTransactionHistory().length,
+                historyBefore + 1,
+                "A purchase did not leave exactly one entry behind"
+            );
 
             state.recordCall("buyDataBundle");
         } catch {
