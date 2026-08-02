@@ -23,7 +23,7 @@ contract AdminHandler is HandlerBase {
     /// @param deposit Total ETH offered for the batch, which may be less than the deposits ask for
     function deployDeviceWalletBatch(uint256 count, uint256 seed, uint256 deposit) external counted {
         count = bound(count, 1, 3);
-        deposit = bound(deposit, 0, _spendable(admin, 10 ether));
+        deposit = bound(deposit, 0, _spendable(_currentAdmin(), 10 ether));
 
         string[] memory identifiers = new string[](count);
         bytes32[2][] memory ownerKeys = new bytes32[2][](count);
@@ -38,7 +38,7 @@ contract AdminHandler is HandlerBase {
             deposits[i] = perWallet;
         }
 
-        vm.prank(admin);
+        vm.prank(_currentAdmin());
         try deviceWalletFactory.deployDeviceWalletForUsers{value: deposit}(
             identifiers, ownerKeys, salts, deposits
         ) returns (Wallets[] memory deployed) {
@@ -69,7 +69,7 @@ contract AdminHandler is HandlerBase {
             state.unregisteredOwnerKeys(index, 1)
         ];
 
-        vm.prank(admin);
+        vm.prank(_currentAdmin());
         try deviceWalletFactory.postCreateAccount(wallet, identifier, ownerKey) {
             state.recordDeviceWallet(wallet, identifier, ownerKey);
             state.removePending(index);
@@ -94,7 +94,7 @@ contract AdminHandler is HandlerBase {
         }
         salt = bound(salt, 0, 1000);
 
-        vm.prank(admin);
+        vm.prank(_currentAdmin());
         try DeviceWallet(payable(device)).deployESIMWallet(hasAccessToETH, salt) returns (
             address wallet
         ) {
@@ -118,7 +118,7 @@ contract AdminHandler is HandlerBase {
         }
         price = bound(price, 1, 100 ether);
 
-        vm.prank(admin);
+        vm.prank(_currentAdmin());
         try ESIMWallet(payable(wallet)).buyDataBundle(
             DataBundleDetails({dataBundleID: "bundle", dataBundlePrice: price})
         ) {
@@ -157,7 +157,7 @@ contract AdminHandler is HandlerBase {
             bundles[0][i] = DataBundleDetails({dataBundleID: "bundle", dataBundlePrice: 1 gwei});
         }
 
-        vm.prank(admin);
+        vm.prank(_currentAdmin());
         try lazyWalletRegistry.batchPopulateHistory(deviceIdentifiers, eSIMIdentifiers, bundles) {
             state.recordLazyDevice(deviceIdentifier);
             for (uint256 i = 0; i < eSIMCount; ++i) {
@@ -184,11 +184,11 @@ contract AdminHandler is HandlerBase {
         }
         string memory deviceIdentifier = state.lazyDeviceIdentifiers(bound(index, 0, lazyDevices - 1));
         salt = bound(salt, 0, 1000);
-        deposit = bound(deposit, 0, _spendable(admin, 5 ether));
+        deposit = bound(deposit, 0, _spendable(_currentAdmin(), 5 ether));
 
         bytes32[2] memory ownerKey = _ownerKey(uint256(keccak256(bytes(deviceIdentifier))));
 
-        vm.prank(admin);
+        vm.prank(_currentAdmin());
         try lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier{value: deposit}(
             ownerKey, deviceIdentifier, salt, deposit
         ) returns (address device, address[] memory wallets) {
@@ -225,7 +225,7 @@ contract AdminHandler is HandlerBase {
             ? state.lazyDeviceIdentifiers(seed % lazyDevices)
             : _lazyIdentifier(seed);
 
-        vm.prank(admin);
+        vm.prank(_currentAdmin());
         try lazyWalletRegistry.switchESIMIdentifierToNewDeviceIdentifier(
             eSIMIdentifier, oldDevice, newDevice
         ) returns (bool) {
@@ -234,6 +234,39 @@ contract AdminHandler is HandlerBase {
             state.recordCall("switchESIMIdentifier");
         } catch {
             state.recordRevert("switchESIMIdentifier");
+        }
+    }
+
+    /// @notice The admin nominates its successor, or withdraws an outstanding nomination
+    /// @dev The nomination alternates between the two admin addresses rather than picking a fresh
+    ///      one, so the role can travel and come back. A one-way rotation onto an address that
+    ///      never hands it back would leave every admin path unreachable for the rest of the run.
+    /// @param revoke Whether to nominate the sitting admin, which withdraws any outstanding request
+    function requestAdminUpdate(bool revoke) external counted {
+        address current = _currentAdmin();
+        address nominee = revoke ? current : (current == admin ? adminSuccessor : admin);
+
+        vm.prank(current);
+        try registry.requestAdminUpdate(nominee) {
+            state.recordCall("requestAdminUpdate");
+        } catch {
+            state.recordRevert("requestAdminUpdate");
+        }
+    }
+
+    /// @notice The nominated successor takes the admin role
+    function acceptAdminUpdate() external counted {
+        address nominee = registry.newRequestedAdmin();
+        if (nominee == address(0)) {
+            state.recordRevert("acceptAdminUpdate");
+            return;
+        }
+
+        vm.prank(nominee);
+        try registry.acceptAdminUpdate() returns (address) {
+            state.recordCall("acceptAdminUpdate");
+        } catch {
+            state.recordRevert("acceptAdminUpdate");
         }
     }
 }

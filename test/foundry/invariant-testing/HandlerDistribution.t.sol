@@ -70,6 +70,15 @@ contract HandlerDistributionTest is CampaignBase {
             walletHandler.addESIMWallet(round, round);
             walletHandler.requestTransferOwnership(round, round + 1);
             walletHandler.acceptOwnershipTransfer(round);
+
+            // The role has to travel and come back inside one round. Leaving it with the successor
+            // would put every admin call in the next round through an address holding a different
+            // budget, which is a case the campaign covers but would make this drive's deposits
+            // depend on which round they landed in
+            adminHandler.requestAdminUpdate(false);
+            adminHandler.acceptAdminUpdate();
+            adminHandler.requestAdminUpdate(false);
+            adminHandler.acceptAdminUpdate();
         }
 
         _assertExercised("deployDeviceWalletBatch");
@@ -89,6 +98,8 @@ contract HandlerDistributionTest is CampaignBase {
         _assertExercised("addESIMWallet");
         _assertExercised("requestTransferOwnership");
         _assertExercised("acceptOwnershipTransfer");
+        _assertExercised("requestAdminUpdate");
+        _assertExercised("acceptAdminUpdate");
     }
 
     /// @notice Fails if an entry point never got through

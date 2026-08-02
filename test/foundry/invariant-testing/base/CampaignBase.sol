@@ -15,8 +15,11 @@ import {AttackerHandler} from "test/foundry/invariant-testing/handler/AttackerHa
 ///      wiring per file, which is why it lives here.
 abstract contract CampaignBase is InvariantBase {
 
-    /// @notice Share of the campaign budget the admin holds, the rest going to the attacker
-    uint256 internal constant ADMIN_BUDGET = 600 ether;
+    /// @notice Share of the campaign budget the sitting admin holds
+    uint256 internal constant ADMIN_BUDGET = 500 ether;
+
+    /// @notice Share held by the address the admin role rotates onto
+    uint256 internal constant ADMIN_SUCCESSOR_BUDGET = 100 ether;
 
     ProtocolState internal state;
     AdminHandler internal adminHandler;
@@ -37,6 +40,7 @@ abstract contract CampaignBase is InvariantBase {
             lazyWalletRegistry: lazyWalletRegistry,
             entryPoint: address(entryPoint),
             admin: ADMIN,
+            adminSuccessor: ADMIN_SUCCESSOR,
             upgradeManager: UPGRADE_MANAGER,
             vault: VAULT,
             attacker: ATTACKER
@@ -50,7 +54,8 @@ abstract contract CampaignBase is InvariantBase {
         // actors that pay for anything rather than with a handler. Both are inside the accounted
         // set, so the conservation sum is unchanged by where it starts
         vm.deal(ADMIN, ADMIN_BUDGET);
-        vm.deal(ATTACKER, state.TOTAL_ETH() - ADMIN_BUDGET);
+        vm.deal(ADMIN_SUCCESSOR, ADMIN_SUCCESSOR_BUDGET);
+        vm.deal(ATTACKER, state.TOTAL_ETH() - ADMIN_BUDGET - ADMIN_SUCCESSOR_BUDGET);
 
         targetContract(address(adminHandler));
         targetContract(address(walletHandler));
@@ -75,6 +80,7 @@ abstract contract CampaignBase is InvariantBase {
         // them is a term in the conservation sum, and leaving them in reported a 355 ether loss
         // that no call in the sequence had caused
         excludeSender(ADMIN);
+        excludeSender(ADMIN_SUCCESSOR);
         excludeSender(UPGRADE_MANAGER);
         excludeSender(VAULT);
         excludeSender(ATTACKER);
@@ -87,7 +93,8 @@ abstract contract CampaignBase is InvariantBase {
     /// @return Total balance across every address the campaign has touched
     function _heldETH() internal view returns (uint256) {
         uint256 held = address(adminHandler).balance + address(walletHandler).balance
-            + address(attackerHandler).balance + ADMIN.balance + UPGRADE_MANAGER.balance
+            + address(attackerHandler).balance + ADMIN.balance + ADMIN_SUCCESSOR.balance
+            + UPGRADE_MANAGER.balance
             + VAULT.balance + ATTACKER.balance + address(deviceWalletFactory).balance
             + address(eSIMWalletFactory).balance + address(registry).balance
             + address(lazyWalletRegistry).balance + address(entryPoint).balance;

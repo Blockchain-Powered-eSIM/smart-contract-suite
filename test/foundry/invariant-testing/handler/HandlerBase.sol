@@ -25,6 +25,7 @@ struct HandlerConfig {
     LazyWalletRegistry lazyWalletRegistry;
     address entryPoint;
     address admin;
+    address adminSuccessor;
     address upgradeManager;
     address vault;
     address attacker;
@@ -44,6 +45,7 @@ abstract contract HandlerBase is Test {
     ProtocolState internal immutable state;
 
     address internal immutable admin;
+    address internal immutable adminSuccessor;
     address internal immutable upgradeManager;
     address internal immutable vault;
     address internal immutable attacker;
@@ -62,6 +64,7 @@ abstract contract HandlerBase is Test {
         lazyWalletRegistry = config.lazyWalletRegistry;
         entryPoint = config.entryPoint;
         admin = config.admin;
+        adminSuccessor = config.adminSuccessor;
         upgradeManager = config.upgradeManager;
         vault = config.vault;
         attacker = config.attacker;
@@ -71,6 +74,15 @@ abstract contract HandlerBase is Test {
     modifier counted() {
         state.recordInvocation();
         _;
+    }
+
+    /// @notice Whoever currently holds the admin role
+    /// @dev Read out of the registry on every call rather than fixed at construction. Every admin
+    ///      check in the protocol resolves through this one field, so a handler that kept its own
+    ///      copy would go on impersonating an address the protocol has already demoted, and every
+    ///      admin path would sit dead for the rest of the run once a rotation went through.
+    function _currentAdmin() internal view returns (address) {
+        return registry.eSIMWalletAdmin();
     }
 
     /// @notice Caps a bound at what the actor making the call can actually pay

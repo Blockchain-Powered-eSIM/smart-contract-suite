@@ -39,6 +39,13 @@ contract InvariantBase is Test {
     address internal constant VAULT = address(0x78731D3Ca6b7E34aC0F824c42a7cC18A495cabaB);
     address internal constant ATTACKER = address(0xbADc0DE000000000000000000000000000000001);
 
+    /// @notice The address the admin role rotates onto, and back off
+    /// @dev Carries a budget of its own. Every admin path reads the role out of the registry, so
+    ///      once the role moves the successor is the one paying for deposits, and an unfunded
+    ///      successor would turn every remaining admin deploy into a zero-value one.
+    address internal constant ADMIN_SUCCESSOR =
+        address(0xaDD1E55000000000000000000000000000000001);
+
     MockEntryPoint internal entryPoint;
     P256Verifier internal p256Verifier;
 
