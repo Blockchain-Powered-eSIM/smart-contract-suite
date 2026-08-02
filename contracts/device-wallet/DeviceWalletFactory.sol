@@ -101,11 +101,6 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         _;
     }
 
-    modifier onlyEntryPoint() {
-        if(msg.sender != address(entryPoint)) revert Errors.OnlyEntryPoint();
-        _;
-    }
-
     /// @dev Locks the implementation contract itself. Without this, anyone can call initialize
     ///      directly on the implementation, own it, and make it deploy a beacon it controls. The
     ///      proxy is unaffected either way, but an owned implementation is a trap for any later
