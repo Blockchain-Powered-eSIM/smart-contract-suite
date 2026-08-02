@@ -74,7 +74,7 @@ contract DeployerBase is Test {
     MockDeviceWallet deviceWalletImpl;
     MockESIMWallet eSIMWalletImpl;
 
-    function setUp() public {
+    function setUp() public virtual {
         // 1.a. Deploy Mock Entry Point
         entryPoint = new MockEntryPoint();
         // 1.b. Typecast for further use
