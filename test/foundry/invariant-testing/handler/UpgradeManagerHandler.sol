@@ -1,0 +1,97 @@
+// SPDX-License-Identifier: MIT
+
+pragma solidity 0.8.36;
+
+import {HandlerBase, HandlerConfig} from "test/foundry/invariant-testing/handler/HandlerBase.sol";
+
+/// @notice Everything the upgrade manager is allowed to do.
+/// @dev One key owns all four singletons and both factories, and a factory owns the beacon its
+///      wallets point at, so this actor can move every wallet in the protocol in one call. The
+///      campaign gives it the two beacons, the pause release and the price ceiling, which is the
+///      part of that reach a running protocol would actually use.
+///
+///      Each beacon entry point swaps to a second implementation and back. Both alternatives
+///      subclass the production contract and add a view helper, so what a wallet runs afterwards
+///      is the same logic on the same storage. The point is not that the new implementation
+///      behaves differently, it is that a live wallet keeps its state and its bindings across the
+///      swap and that every invariant still holds on the other side of one.
+contract UpgradeManagerHandler is HandlerBase {
+
+    /// @notice Implementation the device wallet beacon starts on
+    address internal immutable deviceWalletImplV1;
+
+    /// @notice Implementation the device wallet beacon swaps to
+    address internal immutable deviceWalletImplV2;
+
+    /// @notice Implementation the eSIM wallet beacon starts on
+    address internal immutable eSIMWalletImplV1;
+
+    /// @notice Implementation the eSIM wallet beacon swaps to
+    address internal immutable eSIMWalletImplV2;
+
+    /// @param config What every handler shares
+    /// @param _deviceWalletImplV2 Second device wallet implementation to swap between
+    /// @param _eSIMWalletImplV2 Second eSIM wallet implementation to swap between
+    constructor(HandlerConfig memory config, address _deviceWalletImplV2, address _eSIMWalletImplV2)
+        HandlerBase(config)
+    {
+        deviceWalletImplV1 = config.deviceWalletFactory.getCurrentDeviceWalletImplementation();
+        eSIMWalletImplV1 = config.eSIMWalletFactory.getCurrentESIMWalletImplementation();
+        deviceWalletImplV2 = _deviceWalletImplV2;
+        eSIMWalletImplV2 = _eSIMWalletImplV2;
+    }
+
+    /// @notice The upgrade manager releases a pause the admin tripped
+    function unpauseProtocol() external counted {
+        vm.prank(upgradeManager);
+        try registry.unpause() {
+            state.recordCall("unpauseProtocol");
+        } catch {
+            state.recordRevert("unpauseProtocol");
+        }
+    }
+
+    /// @notice The upgrade manager sets the ceiling wallets fall back to when they hold none
+    /// @dev Picked off a ladder rather than bounded over a range, because zero is the value that
+    ///      means unlimited and a range wide enough to be interesting would never land on it. The
+    ///      top of the ladder sits above what the admin can charge, so the ceiling is sometimes
+    ///      binding and sometimes not.
+    /// @param seed Chooses the ceiling
+    function setDefaultPriceCap(uint256 seed) external counted {
+        uint256[4] memory ladder = [uint256(0), 1 gwei, 1 ether, 100 ether];
+        uint256 cap = ladder[bound(seed, 0, 3)];
+
+        vm.prank(upgradeManager);
+        try registry.setDefaultDataBundlePriceCap(cap) {
+            state.recordCall("setDefaultPriceCap");
+        } catch {
+            state.recordRevert("setDefaultPriceCap");
+        }
+    }
+
+    /// @notice Every device wallet in the protocol moves to the other implementation at once
+    /// @param toV2 Which of the two implementations to point the beacon at
+    function upgradeDeviceWalletBeacon(bool toV2) external counted {
+        address target = toV2 ? deviceWalletImplV2 : deviceWalletImplV1;
+
+        vm.prank(upgradeManager);
+        try deviceWalletFactory.updateDeviceWalletImplementation(target) returns (address) {
+            state.recordCall("upgradeDeviceWalletBeacon");
+        } catch {
+            state.recordRevert("upgradeDeviceWalletBeacon");
+        }
+    }
+
+    /// @notice Every eSIM wallet in the protocol moves to the other implementation at once
+    /// @param toV2 Which of the two implementations to point the beacon at
+    function upgradeESIMWalletBeacon(bool toV2) external counted {
+        address target = toV2 ? eSIMWalletImplV2 : eSIMWalletImplV1;
+
+        vm.prank(upgradeManager);
+        try eSIMWalletFactory.updateESIMWalletImplementation(target) returns (address) {
+            state.recordCall("upgradeESIMWalletBeacon");
+        } catch {
+            state.recordRevert("upgradeESIMWalletBeacon");
+        }
+    }
+}

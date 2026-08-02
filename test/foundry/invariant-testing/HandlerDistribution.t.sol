@@ -79,6 +79,20 @@ contract HandlerDistributionTest is CampaignBase {
             adminHandler.acceptAdminUpdate();
             adminHandler.requestAdminUpdate(false);
             adminHandler.acceptAdminUpdate();
+
+            // Both beacons go to the second implementation and back inside the round. Leaving
+            // either on the alternative would have the next round's deploys run against a
+            // different implementation than the one this drive started from
+            upgradeManagerHandler.upgradeDeviceWalletBeacon(true);
+            upgradeManagerHandler.upgradeDeviceWalletBeacon(false);
+            upgradeManagerHandler.upgradeESIMWalletBeacon(true);
+            upgradeManagerHandler.upgradeESIMWalletBeacon(false);
+            upgradeManagerHandler.setDefaultPriceCap(round);
+
+            // The release has to follow the pause in the same round, or every ETH path in the
+            // rounds after this one would be refused and would never reach its own count
+            adminHandler.pauseProtocol(0);
+            upgradeManagerHandler.unpauseProtocol();
         }
 
         _assertExercised("deployDeviceWalletBatch");
@@ -100,6 +114,11 @@ contract HandlerDistributionTest is CampaignBase {
         _assertExercised("acceptOwnershipTransfer");
         _assertExercised("requestAdminUpdate");
         _assertExercised("acceptAdminUpdate");
+        _assertExercised("pauseProtocol");
+        _assertExercised("unpauseProtocol");
+        _assertExercised("setDefaultPriceCap");
+        _assertExercised("upgradeDeviceWalletBeacon");
+        _assertExercised("upgradeESIMWalletBeacon");
     }
 
     /// @notice Fails if an entry point never got through

@@ -3,11 +3,17 @@
 pragma solidity 0.8.36;
 
 import "test/foundry/invariant-testing/base/InvariantBase.sol";
+
+import {MockDeviceWalletV2} from "test/utils/mocks/MockDeviceWalletV2.sol";
+import {MockESIMWalletV2} from "test/utils/mocks/MockESIMWalletV2.sol";
+
 import {ProtocolState} from "test/foundry/invariant-testing/base/ProtocolState.sol";
 import {HandlerConfig} from "test/foundry/invariant-testing/handler/HandlerBase.sol";
 import {AdminHandler} from "test/foundry/invariant-testing/handler/AdminHandler.sol";
 import {WalletHandler} from "test/foundry/invariant-testing/handler/WalletHandler.sol";
 import {AttackerHandler} from "test/foundry/invariant-testing/handler/AttackerHandler.sol";
+import {UpgradeManagerHandler} from
+    "test/foundry/invariant-testing/handler/UpgradeManagerHandler.sol";
 
 /// @notice The campaign every invariant file runs against.
 /// @dev Each invariant function is its own campaign with its own `setUp`, so splitting the
@@ -25,6 +31,7 @@ abstract contract CampaignBase is InvariantBase {
     AdminHandler internal adminHandler;
     WalletHandler internal walletHandler;
     AttackerHandler internal attackerHandler;
+    UpgradeManagerHandler internal upgradeManagerHandler;
 
     /// @notice Deploys the protocol, wires the three handlers to it and funds the campaign
     function setUp() public virtual {
@@ -50,6 +57,14 @@ abstract contract CampaignBase is InvariantBase {
         walletHandler = new WalletHandler(config);
         attackerHandler = new AttackerHandler(config);
 
+        // The second implementations are built here rather than inside the handler so the beacon
+        // swap starts from the same wallet logic the campaign deployed against
+        upgradeManagerHandler = new UpgradeManagerHandler(
+            config,
+            address(new MockDeviceWalletV2(IEntryPoint(address(entryPoint)), p256Verifier)),
+            address(new MockESIMWalletV2())
+        );
+
         // The value on a pranked call leaves the pranked account, so the budget sits with the two
         // actors that pay for anything rather than with a handler. Both are inside the accounted
         // set, so the conservation sum is unchanged by where it starts
@@ -60,6 +75,7 @@ abstract contract CampaignBase is InvariantBase {
         targetContract(address(adminHandler));
         targetContract(address(walletHandler));
         targetContract(address(attackerHandler));
+        targetContract(address(upgradeManagerHandler));
 
         // Several modifiers admit `address(registry)` or `address(this)`, so a random sender that
         // lands on one of these passes access control by accident and reports a violation that
@@ -73,6 +89,7 @@ abstract contract CampaignBase is InvariantBase {
         excludeSender(address(adminHandler));
         excludeSender(address(walletHandler));
         excludeSender(address(attackerHandler));
+        excludeSender(address(upgradeManagerHandler));
 
         // The four actors are excluded for a different reason, and it is not optional. The runner
         // adjusts the balance of whichever address it picks as sender, so an actor used as a
@@ -93,7 +110,8 @@ abstract contract CampaignBase is InvariantBase {
     /// @return Total balance across every address the campaign has touched
     function _heldETH() internal view returns (uint256) {
         uint256 held = address(adminHandler).balance + address(walletHandler).balance
-            + address(attackerHandler).balance + ADMIN.balance + ADMIN_SUCCESSOR.balance
+            + address(attackerHandler).balance + address(upgradeManagerHandler).balance
+            + ADMIN.balance + ADMIN_SUCCESSOR.balance
             + UPGRADE_MANAGER.balance
             + VAULT.balance + ATTACKER.balance + address(deviceWalletFactory).balance
             + address(eSIMWalletFactory).balance + address(registry).balance

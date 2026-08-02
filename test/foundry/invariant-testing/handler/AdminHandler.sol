@@ -237,6 +237,26 @@ contract AdminHandler is HandlerBase {
         }
     }
 
+    /// @notice The admin stops every ETH-moving path in the protocol
+    /// @dev Tripped on a quarter of the calls rather than all of them. Pause and release are one
+    ///      entry point each and the runner picks between them evenly, so an unconditional pause
+    ///      would leave the protocol halted for about half the sequence and take the ETH paths
+    ///      down with it. A quarter still trips several times in a five hundred call run.
+    /// @param seed Decides whether this call is one of the ones that trips it
+    function pauseProtocol(uint256 seed) external counted {
+        if (seed % 4 != 0) {
+            state.recordRevert("pauseProtocol");
+            return;
+        }
+
+        vm.prank(_currentAdmin());
+        try registry.pause() {
+            state.recordCall("pauseProtocol");
+        } catch {
+            state.recordRevert("pauseProtocol");
+        }
+    }
+
     /// @notice The admin nominates its successor, or withdraws an outstanding nomination
     /// @dev The nomination alternates between the two admin addresses rather than picking a fresh
     ///      one, so the role can travel and come back. A one-way rotation onto an address that
