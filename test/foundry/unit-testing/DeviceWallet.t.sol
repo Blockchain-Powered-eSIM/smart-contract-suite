@@ -959,6 +959,39 @@ contract DeviceWalletTest is DeployerBase {
         );
     }
 
+    /// @notice A genuine assertion stops being accepted once its own expiry has passed
+    /// @dev The pair with the test above. That one holds the clock still and rewrites the expiry;
+    /// this one leaves the signature untouched and moves the clock, which is the case the field
+    /// exists for. Both have to hold, because the check and the binding are separate mechanisms:
+    /// the binding alone would accept a signature forever, and the check alone could be edited away.
+    function test_isValidSignature_rejectsAnAssertionPastItsExpiry() public {
+        bytes32[2] memory ownerKey = WebAuthnSigner.publicKey();
+        deployCustomWallet("Device_Harness", ownerKey[0], ownerKey[1], 25042025);
+
+        bytes32 messageHash = keccak256("a message the wallet was asked to sign");
+        uint48 validUntil = uint48(block.timestamp + 1 days);
+        bytes memory signature = abi.encodePacked(
+            uint8(1),
+            validUntil,
+            WebAuthnSigner.sign(_erc1271Challenge(address(userDeviceWallet), validUntil, messageHash))
+        );
+
+        assertEq(
+            hex"1626ba7e",
+            userDeviceWallet.isValidSignature(messageHash, signature),
+            "The signature must be accepted while it is still current"
+        );
+
+        // One second past the expiry, which is the first moment the check refuses
+        vm.warp(uint256(validUntil) + 1);
+
+        assertEq(
+            hex"ffffffff",
+            userDeviceWallet.isValidSignature(messageHash, signature),
+            "The same signature must be refused once its expiry has passed"
+        );
+    }
+
     /// @notice createAccount is public and does not touch the registry, so a second wallet can be
     /// deployed at another salt holding the same owner key. Its address has to be part of what was
     /// signed, otherwise one wallet's signatures are accepted by the other.
