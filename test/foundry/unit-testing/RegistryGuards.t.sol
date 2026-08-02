@@ -7,6 +7,7 @@ import "forge-std/Test.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
+import "contracts/CustomStructs.sol";
 import {Errors} from "contracts/Errors.sol";
 
 import "test/utils/DeployerBase.sol";
@@ -132,5 +133,23 @@ contract RegistryGuardsTest is DeployerBase {
         vm.prank(user1);
         vm.expectRevert(Errors.OnlyDeviceWallet.selector);
         registry.updateDeviceWalletAssociatedWithESIMWallet(user2, user1);
+    }
+
+    /// @notice Only the lazy wallet registry may deploy a wallet on a user's behalf
+    /// @dev This is the one entry point that mints a device wallet and its eSIM wallets from an
+    ///      identifier alone, with no owner signature anywhere in the call. The gate is the whole
+    ///      authorisation, so an open one would let anyone deploy a wallet against any identifier
+    ///      and claim the purchase history attached to it.
+    function test_deployLazyWallet_rejectsACallerOtherThanTheLazyWalletRegistry() public {
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(Errors.OnlyLazyWalletRegistry.selector);
+        registry.deployLazyWallet(
+            pubKey1,
+            customDeviceUniqueIdentifiers[0],
+            7001,
+            new string[](0),
+            new DataBundleDetails[][](0),
+            0
+        );
     }
 }
