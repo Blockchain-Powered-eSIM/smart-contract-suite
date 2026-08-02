@@ -58,6 +58,78 @@ contract WalletInvariantsTest is CampaignBase {
         }
     }
 
+    /// @notice Nothing may pull ETH from a device wallet that the device wallet does not hold
+    /// @dev The pair is set together on the way in and cleared together on the way out, so the
+    ///      only way to separate them is a path that clears one and not the other. A detached
+    ///      wallet that kept its right to pull would be reaching into someone else's balance.
+    /// forge-config: default.invariant.runs = 256
+    /// forge-config: default.invariant.depth = 500
+    /// forge-config: default.invariant.fail-on-revert = false
+    function invariant_onlyHeldWalletsCanPullETH() public view {
+        uint256 count = state.eSIMWalletCount();
+        for (uint256 i = 0; i < count; ++i) {
+            address wallet = state.eSIMWallets(i);
+            address device = state.ghost_lastDevice(wallet);
+            if (device == address(0)) continue;
+
+            if (MockDeviceWallet(payable(device)).canPullETH(wallet)) {
+                assertTrue(
+                    MockDeviceWallet(payable(device)).isValidESIMWallet(wallet),
+                    "An eSIM wallet may pull ETH from a device wallet that does not hold it"
+                );
+            }
+        }
+    }
+
+    /// @notice A device wallet only claims eSIM wallets that name it as their owner
+    /// @dev The opposite direction to the association check above, which starts from the registry.
+    ///      A device wallet holding a claim the eSIM wallet does not recognise is what a transfer
+    ///      that moved one side without the other would leave behind.
+    /// forge-config: default.invariant.runs = 256
+    /// forge-config: default.invariant.depth = 500
+    /// forge-config: default.invariant.fail-on-revert = false
+    function invariant_claimedWalletsNameTheirClaimant() public view {
+        uint256 count = state.eSIMWalletCount();
+        for (uint256 i = 0; i < count; ++i) {
+            address wallet = state.eSIMWallets(i);
+            address device = state.ghost_lastDevice(wallet);
+            if (device == address(0)) continue;
+            if (!MockDeviceWallet(payable(device)).isValidESIMWallet(wallet)) continue;
+
+            assertEq(
+                ESIMWallet(payable(wallet)).owner(),
+                device,
+                "A device wallet claims an eSIM wallet that names a different owner"
+            );
+        }
+    }
+
+    /// @notice An outstanding transfer offer always names a real device wallet, and never the
+    ///         one that already owns it
+    /// @dev The second half is what stops a wallet sitting with an offer nobody can act on. The
+    ///      setter returns early on a self-offer rather than reverting, so the guard is a branch
+    ///      and not a check, which is the kind that goes missing in a refactor.
+    /// forge-config: default.invariant.runs = 256
+    /// forge-config: default.invariant.depth = 500
+    /// forge-config: default.invariant.fail-on-revert = false
+    function invariant_transferOffersNameAnotherDeviceWallet() public view {
+        uint256 count = state.eSIMWalletCount();
+        for (uint256 i = 0; i < count; ++i) {
+            ESIMWallet wallet = ESIMWallet(payable(state.eSIMWallets(i)));
+            address requested = wallet.newRequestedOwner();
+            if (requested == address(0)) continue;
+
+            assertTrue(
+                registry.isDeviceWalletValid(requested),
+                "An eSIM wallet is offered to an address the registry does not know as a device wallet"
+            );
+            assertTrue(
+                requested != wallet.owner(),
+                "An eSIM wallet is offered to the device wallet that already owns it"
+            );
+        }
+    }
+
     /// @notice An eSIM wallet never ends up ownerless
     /// @dev Ownership cannot be renounced and cannot be transferred in one step, so there is no
     ///      sequence that should leave one with no owner. An ownerless wallet holds whatever ETH

@@ -36,6 +36,13 @@ contract ProtocolState {
     ///      wallet is detached, which is the state standby is supposed to mirror.
     mapping(address eSIMWallet => address deviceWallet) public ghost_esimToDevice;
 
+    /// @notice The last device wallet that held each eSIM wallet, kept after a detachment
+    /// @dev The mapping above goes back to zero when a wallet is removed, which loses the one
+    ///      address worth checking afterwards. A removal that cleared the association but left the
+    ///      right to pull ETH behind would leave the leftover on the wallet that just let go, and
+    ///      finding it any other way means comparing every device wallet against every eSIM wallet.
+    mapping(address eSIMWallet => address deviceWallet) public ghost_lastDevice;
+
     // ----------------------------------------------------------------------------------------
     // Wallets deployed but not yet bound
     // ----------------------------------------------------------------------------------------
@@ -167,12 +174,12 @@ contract ProtocolState {
             isKnownESIMWallet[wallet] = true;
             eSIMWallets.push(wallet);
         }
-        ghost_esimToDevice[wallet] = device;
+        _setESIMOwner(wallet, device);
     }
 
     /// @notice Records which device wallet now holds an eSIM wallet, zero meaning detached
     function setESIMOwner(address wallet, address device) external {
-        ghost_esimToDevice[wallet] = device;
+        _setESIMOwner(wallet, device);
     }
 
     /// @notice Records the key a wallet now answers to, keeping the retired one in history
@@ -308,6 +315,14 @@ contract ProtocolState {
     // ----------------------------------------------------------------------------------------
     // Internals
     // ----------------------------------------------------------------------------------------
+
+    /// @notice Points an eSIM wallet at its holder, remembering the last non-zero one
+    function _setESIMOwner(address wallet, address device) internal {
+        ghost_esimToDevice[wallet] = device;
+        if (device != address(0)) {
+            ghost_lastDevice[wallet] = device;
+        }
+    }
 
     function _recordKey(address wallet, bytes32[2] memory ownerKey) internal {
         bytes32 keyHash = keccak256(abi.encode(ownerKey[0], ownerKey[1]));
