@@ -1,0 +1,239 @@
+// SPDX-License-Identifier: MIT
+
+pragma solidity 0.8.36;
+
+import "contracts/CustomStructs.sol";
+import {DeviceWallet} from "contracts/device-wallet/DeviceWallet.sol";
+import {ESIMWallet} from "contracts/esim-wallet/ESIMWallet.sol";
+
+import {HandlerBase, HandlerConfig} from "test/foundry/invariant-testing/handler/HandlerBase.sol";
+
+/// @notice Everything the eSIM wallet admin is allowed to do.
+/// @dev The widest actor in the protocol by a distance. It deploys wallets on a user's behalf,
+///      records purchase history before any wallet exists, moves an eSIM between devices while it
+///      is still only a record, and charges a wallet for a data bundle. Most of what the campaign
+///      is checking is whether that reach stops where the contracts say it stops.
+contract AdminHandler is HandlerBase {
+
+    constructor(HandlerConfig memory config) HandlerBase(config) {}
+
+    /// @notice The admin deploys a batch of device wallets, each with one eSIM wallet
+    /// @param count How many wallets the batch asks for
+    /// @param seed Drives the identifiers, owner keys and salts
+    /// @param deposit Total ETH offered for the batch, which may be less than the deposits ask for
+    function deployDeviceWalletBatch(uint256 count, uint256 seed, uint256 deposit) external counted {
+        count = bound(count, 1, 3);
+        deposit = bound(deposit, 0, _spendable(admin, 10 ether));
+
+        string[] memory identifiers = new string[](count);
+        bytes32[2][] memory ownerKeys = new bytes32[2][](count);
+        uint256[] memory salts = new uint256[](count);
+        uint256[] memory deposits = new uint256[](count);
+
+        uint256 perWallet = deposit / count;
+        for (uint256 i = 0; i < count; ++i) {
+            identifiers[i] = _identifier(seed + i);
+            ownerKeys[i] = _ownerKey(seed + i);
+            salts[i] = bound(uint256(keccak256(abi.encode(seed, i))), 0, 1000);
+            deposits[i] = perWallet;
+        }
+
+        vm.prank(admin);
+        try deviceWalletFactory.deployDeviceWalletForUsers{value: deposit}(
+            identifiers, ownerKeys, salts, deposits
+        ) returns (Wallets[] memory deployed) {
+            for (uint256 i = 0; i < deployed.length; ++i) {
+                state.recordDeviceWallet(deployed[i].deviceWallet, identifiers[i], ownerKeys[i]);
+                state.recordESIMWallet(deployed[i].eSIMWallet, deployed[i].deviceWallet);
+            }
+            state.recordCall("deployDeviceWalletBatch");
+        } catch {
+            state.recordRevert("deployDeviceWalletBatch");
+        }
+    }
+
+    /// @notice The admin binds a wallet the permissionless path left unregistered
+    /// @param index Which pending wallet to bind
+    function postCreateAccount(uint256 index) external counted {
+        uint256 pending = state.unregisteredCount();
+        if (pending == 0) {
+            state.recordRevert("postCreateAccount");
+            return;
+        }
+        index = bound(index, 0, pending - 1);
+
+        address wallet = state.unregisteredDeviceWallets(index);
+        string memory identifier = state.unregisteredIdentifiers(index);
+        bytes32[2] memory ownerKey = [
+            state.unregisteredOwnerKeys(index, 0),
+            state.unregisteredOwnerKeys(index, 1)
+        ];
+
+        vm.prank(admin);
+        try deviceWalletFactory.postCreateAccount(wallet, identifier, ownerKey) {
+            state.recordDeviceWallet(wallet, identifier, ownerKey);
+            state.removePending(index);
+            state.recordCall("postCreateAccount");
+        } catch {
+            state.recordRevert("postCreateAccount");
+        }
+    }
+
+    /// @notice The admin adds another eSIM wallet to a device wallet that already exists
+    /// @param deviceIndex Which device wallet gets the new eSIM wallet
+    /// @param hasAccessToETH Whether the new wallet may pull ETH from its device wallet
+    /// @param salt CREATE2 salt, kept small so collisions are reached rather than assumed away
+    function deployESIMWalletForDevice(uint256 deviceIndex, bool hasAccessToETH, uint256 salt)
+        external
+        counted
+    {
+        address device = _pickDeviceWallet(deviceIndex);
+        if (device == address(0)) {
+            state.recordRevert("deployESIMWalletForDevice");
+            return;
+        }
+        salt = bound(salt, 0, 1000);
+
+        vm.prank(admin);
+        try DeviceWallet(payable(device)).deployESIMWallet(hasAccessToETH, salt) returns (
+            address wallet
+        ) {
+            state.recordESIMWallet(wallet, device);
+            state.recordCall("deployESIMWalletForDevice");
+        } catch {
+            state.recordRevert("deployESIMWalletForDevice");
+        }
+    }
+
+    /// @notice The admin charges an eSIM wallet for a data bundle
+    /// @dev The price is unbounded upward on purpose. The ceiling is the only thing standing
+    ///      between the admin and a wallet's whole balance, so a run has to reach past it.
+    /// @param eSIMIndex Which eSIM wallet pays
+    /// @param price What it is charged
+    function buyDataBundle(uint256 eSIMIndex, uint256 price) external counted {
+        address wallet = _pickESIMWallet(eSIMIndex);
+        if (wallet == address(0)) {
+            state.recordRevert("buyDataBundle");
+            return;
+        }
+        price = bound(price, 1, 100 ether);
+
+        vm.prank(admin);
+        try ESIMWallet(payable(wallet)).buyDataBundle(
+            DataBundleDetails({dataBundleID: "bundle", dataBundlePrice: price})
+        ) {
+            state.recordCall("buyDataBundle");
+        } catch {
+            state.recordRevert("buyDataBundle");
+        }
+    }
+
+    /// @notice The admin records purchase history against a device identifier with no wallet yet
+    /// @dev The reuse branch presents an identifier that already carries history. That is two
+    ///      guards in one: appending to a device still waiting to be deployed has to work, and
+    ///      appending to one that has since been deployed has to be refused.
+    /// @param seed Drives the device and eSIM identifiers
+    /// @param eSIMCount How many eSIM identifiers the batch carries
+    /// @param reuseDevice Whether to present an identifier that already has history
+    function populateLazyHistory(uint256 seed, uint256 eSIMCount, bool reuseDevice) external counted {
+        eSIMCount = bound(eSIMCount, 1, 3);
+
+        uint256 lazyDevices = state.lazyDeviceIdentifierCount();
+        string memory deviceIdentifier = reuseDevice && lazyDevices > 0
+            ? state.lazyDeviceIdentifiers(seed % lazyDevices)
+            : _lazyIdentifier(seed);
+
+        string[] memory deviceIdentifiers = new string[](1);
+        deviceIdentifiers[0] = deviceIdentifier;
+
+        string[][] memory eSIMIdentifiers = new string[][](1);
+        eSIMIdentifiers[0] = new string[](eSIMCount);
+
+        DataBundleDetails[][] memory bundles = new DataBundleDetails[][](1);
+        bundles[0] = new DataBundleDetails[](eSIMCount);
+
+        for (uint256 i = 0; i < eSIMCount; ++i) {
+            eSIMIdentifiers[0][i] = _eSIMIdentifier(seed + i);
+            bundles[0][i] = DataBundleDetails({dataBundleID: "bundle", dataBundlePrice: 1 gwei});
+        }
+
+        vm.prank(admin);
+        try lazyWalletRegistry.batchPopulateHistory(deviceIdentifiers, eSIMIdentifiers, bundles) {
+            state.recordLazyDevice(deviceIdentifier);
+            for (uint256 i = 0; i < eSIMCount; ++i) {
+                state.recordLazyESIM(eSIMIdentifiers[0][i], deviceIdentifier);
+            }
+            state.recordCall("populateLazyHistory");
+        } catch {
+            state.recordRevert("populateLazyHistory");
+        }
+    }
+
+    /// @notice The admin turns a device identifier's recorded history into real wallets
+    /// @dev The owner key comes from the identifier rather than from the fuzzer, so a retry after
+    ///      a failed deploy presents the same key the first attempt did. A fresh key each time
+    ///      would make every retry look like a new device and hide the redeploy guard.
+    /// @param index Which populated device identifier to deploy
+    /// @param salt CREATE2 salt, kept small so collisions are reached
+    /// @param deposit ETH to seed the new device wallet with
+    function deployLazyWallet(uint256 index, uint256 salt, uint256 deposit) external counted {
+        uint256 lazyDevices = state.lazyDeviceIdentifierCount();
+        if (lazyDevices == 0) {
+            state.recordRevert("deployLazyWallet");
+            return;
+        }
+        string memory deviceIdentifier = state.lazyDeviceIdentifiers(bound(index, 0, lazyDevices - 1));
+        salt = bound(salt, 0, 1000);
+        deposit = bound(deposit, 0, _spendable(admin, 5 ether));
+
+        bytes32[2] memory ownerKey = _ownerKey(uint256(keccak256(bytes(deviceIdentifier))));
+
+        vm.prank(admin);
+        try lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier{value: deposit}(
+            ownerKey, deviceIdentifier, salt, deposit
+        ) returns (address device, address[] memory wallets) {
+            state.recordDeviceWallet(device, deviceIdentifier, ownerKey);
+            for (uint256 i = 0; i < wallets.length; ++i) {
+                state.recordESIMWallet(wallets[i], device);
+            }
+            state.recordCall("deployLazyWallet");
+        } catch {
+            state.recordRevert("deployLazyWallet");
+        }
+    }
+
+    /// @notice The admin moves an eSIM identifier to a different device identifier
+    /// @dev Only reachable while neither side has been deployed. Pointing it at an identifier that
+    ///      has a wallet is the case that would orphan an eSIM, so the run presents that too.
+    /// @param eSIMIndex Which eSIM identifier to move
+    /// @param seed Drives the destination identifier
+    /// @param toExistingDevice Whether to move it onto an identifier that already has history
+    function switchESIMIdentifier(uint256 eSIMIndex, uint256 seed, bool toExistingDevice)
+        external
+        counted
+    {
+        uint256 lazyESIMs = state.lazyESIMIdentifierCount();
+        if (lazyESIMs == 0) {
+            state.recordRevert("switchESIMIdentifier");
+            return;
+        }
+        string memory eSIMIdentifier = state.lazyESIMIdentifiers(bound(eSIMIndex, 0, lazyESIMs - 1));
+        string memory oldDevice = state.ghost_eSIMIdentifierToDeviceIdentifier(eSIMIdentifier);
+
+        uint256 lazyDevices = state.lazyDeviceIdentifierCount();
+        string memory newDevice = toExistingDevice && lazyDevices > 0
+            ? state.lazyDeviceIdentifiers(seed % lazyDevices)
+            : _lazyIdentifier(seed);
+
+        vm.prank(admin);
+        try lazyWalletRegistry.switchESIMIdentifierToNewDeviceIdentifier(
+            eSIMIdentifier, oldDevice, newDevice
+        ) returns (bool) {
+            state.recordLazyESIM(eSIMIdentifier, newDevice);
+            state.recordLazyDevice(newDevice);
+            state.recordCall("switchESIMIdentifier");
+        } catch {
+            state.recordRevert("switchESIMIdentifier");
+        }
+    }
+}
