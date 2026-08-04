@@ -101,7 +101,7 @@ contract DeviceWalletETHTest is DeviceWalletFixture {
         assertEq(deviceWallet.canPullETH(address(eSIMWallet1)), true, "eSIMWallet1 should be able to pull ETH");
 
         vm.startPrank(user1);
-        vm.expectRevert("Only self");
+        vm.expectRevert(Errors.OnlySelf.selector);
         deviceWallet.toggleAccessToETH(
             address(eSIMWallet1),
             false

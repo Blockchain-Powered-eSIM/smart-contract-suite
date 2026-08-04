@@ -15,6 +15,10 @@ interface Errors {
 
     // Registry
     error OnlyDeviceWalletFactory();
+    error OnlyRequestedAdmin(address requestedAdmin);
+    error NotTheESIMWalletOwnerOrItsDeviceWallet(address eSIMWallet);
+    error ESIMWalletOwnershipTransferPending(address eSIMWallet, address newRequestedOwner);
+    error NotTheAssociatedDeviceWallet(address eSIMWallet, address associatedDeviceWallet);
 
     // Registry, DeviceWallet and ESIMWallet
     error ProtocolPaused();
@@ -23,6 +27,8 @@ interface Errors {
     error OnlyLazyWalletRegistry();
     error DeviceIdentifierAlreadyRegistered(string deviceIdentifier);
     error OwnerKeyAlreadyRegistered(bytes32 ownerKeyHash);
+    error SaltTooHigh(uint256 salt, uint256 count);
+    error DeviceWalletAlreadyExists(string deviceIdentifier, address deviceWallet);
 
     // LazyWalletRegistry
     error LazyWalletAlreadyDeployed(string deviceIdentifier);
@@ -42,6 +48,10 @@ interface Errors {
     error OnlyAdminOrRegistry();
     error OnlyEntryPoint();
     error InvalidDeviceWalletOwnerKey();
+
+    // Account4337, and so DeviceWallet through it
+    error OnlySelf();
+    error OnlyEntryPointOrSelf();
 
     // ESIMWallet and DeviceWallet
     error FailedToTransfer();

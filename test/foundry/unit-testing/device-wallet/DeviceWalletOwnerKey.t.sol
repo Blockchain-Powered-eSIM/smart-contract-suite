@@ -153,7 +153,7 @@ contract DeviceWalletOwnerKeyTest is DeviceWalletFixture {
         deployWallets();
 
         vm.prank(user1);
-        vm.expectRevert("Only self");
+        vm.expectRevert(Errors.OnlySelf.selector);
         deviceWallet.transferOwnership(pubKey4);
 
         assertEq(

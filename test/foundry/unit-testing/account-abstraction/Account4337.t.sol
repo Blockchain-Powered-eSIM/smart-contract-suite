@@ -75,7 +75,7 @@ contract Account4337Test is DeployerBase {
         vm.deal(address(wallet), 1 ether);
 
         vm.prank(user1);
-        vm.expectRevert("account: not Owner or EntryPoint");
+        vm.expectRevert(Errors.OnlyEntryPointOrSelf.selector);
         wallet.execute(_call(recipient, 1 ether));
     }
 
@@ -89,7 +89,7 @@ contract Account4337Test is DeployerBase {
         calls[0] = _call(recipient, 1 ether);
 
         vm.prank(user1);
-        vm.expectRevert("account: not Owner or EntryPoint");
+        vm.expectRevert(Errors.OnlyEntryPointOrSelf.selector);
         wallet.executeBatch(calls);
     }
 
@@ -101,7 +101,7 @@ contract Account4337Test is DeployerBase {
         vm.deal(address(wallet), 1 ether);
 
         vm.prank(eSIMWalletAdmin);
-        vm.expectRevert("account: not Owner or EntryPoint");
+        vm.expectRevert(Errors.OnlyEntryPointOrSelf.selector);
         wallet.execute(_call(recipient, 1 ether));
     }
 
@@ -182,7 +182,7 @@ contract Account4337Test is DeployerBase {
         operation.sender = address(wallet);
 
         vm.prank(user1);
-        vm.expectRevert("Only entry point");
+        vm.expectRevert(Errors.OnlyEntryPoint.selector);
         wallet.validateUserOp(operation, bytes32(uint256(1)), 0);
     }
 
@@ -273,7 +273,7 @@ contract Account4337Test is DeployerBase {
         _fundDeposit(1 ether);
 
         vm.prank(user1);
-        vm.expectRevert("Only self");
+        vm.expectRevert(Errors.OnlySelf.selector);
         wallet.withdrawDepositTo(payable(user1), 1 ether);
     }
 
@@ -283,7 +283,7 @@ contract Account4337Test is DeployerBase {
         _fundDeposit(1 ether);
 
         vm.prank(address(wallet));
-        vm.expectRevert("Cannot withdraw to address(0)");
+        vm.expectRevert(abi.encodeWithSelector(Errors.ZeroAddress.selector, "withdrawAddress"));
         wallet.withdrawDepositTo(payable(address(0)), 1 ether);
     }
 

@@ -14,6 +14,7 @@ import "@account-abstraction/contracts/core/UserOperationLib.sol";
 import {TokenCallbackHandler} from "@account-abstraction/contracts/accounts/callback/TokenCallbackHandler.sol";
 import {P256Verifier} from "../P256Verifier.sol";
 import {WebAuthn} from "../WebAuthn.sol";
+import {Errors} from "../Errors.sol";
 import "../CustomStructs.sol";
 
 contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 {
@@ -47,12 +48,12 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
     event AccountOwnershipTransferred(bytes32[2] newOwner);
 
     modifier onlySelf() {
-        require(msg.sender == address(this), "Only self");
+        if(msg.sender != address(this)) revert Errors.OnlySelf();
         _;
     }
 
     modifier onlyEntryPoint() {
-        require(msg.sender == address(entryPoint), "Only entry point");
+        if(msg.sender != address(entryPoint)) revert Errors.OnlyEntryPoint();
         _;
     }
 
@@ -246,10 +247,9 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
 
     // Require the function call went through EntryPoint or owner
     function _requireFromEntryPointOrOwner() internal view {
-        require(
-            msg.sender == address(entryPoint) || msg.sender == address(this),
-            "account: not Owner or EntryPoint"
-        );
+        if(msg.sender != address(entryPoint) && msg.sender != address(this)) {
+            revert Errors.OnlyEntryPointOrSelf();
+        }
     }
 
     /**
@@ -319,7 +319,7 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
      * @param amount to withdraw
      */
     function withdrawDepositTo(address payable withdrawAddress, uint256 amount) public onlySelf {
-        require(withdrawAddress != address(0), "Cannot withdraw to address(0)");
+        if(withdrawAddress == address(0)) revert Errors.ZeroAddress("withdrawAddress");
         entryPoint.withdrawTo(withdrawAddress, amount);
     }
 
