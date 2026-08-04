@@ -296,6 +296,84 @@ contract LazyWalletRegistryTest is DeployerBase {
         }
     }
 
+    /// @notice A funded lazy deployment can be blocked by anyone deploying its wallet first.
+    /// @dev createAccount is permissionless and the address it lands on depends only on the owner
+    ///      key, the device identifier and the salt, all three of which sit in the admin's pending
+    ///      transaction. Deploying that address first makes the factory adopt it and forward
+    ///      nothing, so the whole deposit is left over and refunded to the caller. On this path the
+    ///      caller is the Registry proxy, which declares neither a receive nor a fallback, so the
+    ///      plain send delegates empty calldata to an implementation with nothing to match and
+    ///      reverts. The refund guard then takes the whole deployment down.
+    function test_deployLazyWalletAndSetESIMIdentifier_fundedDeployIsBlockedByAFrontRun() public {
+        test_batchPopulateHistory();
+
+        string memory deviceIdentifier = customDeviceUniqueIdentifiers[0];
+        uint256 salt = 8801;
+
+        // Anyone reading the pending transaction can deploy the same address
+        vm.prank(user2);
+        address frontRunWallet = address(deviceWalletFactory.createAccount(
+            deviceIdentifier,
+            pubKey1,
+            salt
+        ));
+        assertEq(
+            registry.isDeviceWalletValid(frontRunWallet),
+            false,
+            "The front-run wallet must hold no registry record"
+        );
+
+        vm.deal(eSIMWalletAdmin, 2 ether);
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert("ETH return failed");
+        lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier{value: 2 ether}(
+            pubKey1,
+            deviceIdentifier,
+            salt,
+            2 ether
+        );
+
+        assertEq(
+            registry.uniqueIdentifierToDeviceWallet(deviceIdentifier),
+            address(0),
+            "The refused deployment must leave the identifier unbound"
+        );
+    }
+
+    /// @notice The same front-run leaves an unfunded deployment untouched.
+    /// @dev This is what makes the failure above a denial of service on the deposit rather than on
+    ///      the deployment. Nothing is left over when the deposit is zero, so the refund never
+    ///      runs and the adoption completes. The admin's only route past the block is to give up
+    ///      the deposit.
+    function test_deployLazyWalletAndSetESIMIdentifier_unfundedDeploySurvivesAFrontRun() public {
+        test_batchPopulateHistory();
+
+        string memory deviceIdentifier = customDeviceUniqueIdentifiers[0];
+        uint256 salt = 8802;
+
+        vm.prank(user2);
+        address frontRunWallet = address(deviceWalletFactory.createAccount(
+            deviceIdentifier,
+            pubKey1,
+            salt
+        ));
+
+        vm.prank(eSIMWalletAdmin);
+        (address deviceWalletAddress,) = lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(
+            pubKey1,
+            deviceIdentifier,
+            salt,
+            0
+        );
+
+        assertEq(deviceWalletAddress, frontRunWallet, "The deployment must adopt the front-run wallet");
+        assertEq(
+            registry.uniqueIdentifierToDeviceWallet(deviceIdentifier),
+            frontRunWallet,
+            "The identifier must resolve to the adopted wallet"
+        );
+    }
+
     function test_batchPopulateHistory_afterDeployment() public {
         test_deployLazyWalletAndSetESIMIdentifier();
 
