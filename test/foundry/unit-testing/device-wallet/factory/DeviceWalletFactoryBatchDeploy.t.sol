@@ -6,6 +6,7 @@ import "forge-std/Test.sol";
 import {IStakeManager} from "@account-abstraction/contracts/interfaces/IStakeManager.sol";
 
 import "contracts/CustomStructs.sol";
+import {Errors} from "contracts/Errors.sol";
 
 import {DeviceWalletFactoryFixture} from "test/foundry/unit-testing/device-wallet/base/DeviceWalletFactoryFixture.sol";
 import "test/utils/mocks/MockDeviceWallet.sol";
@@ -248,5 +249,101 @@ contract DeviceWalletFactoryBatchDeployTest is DeviceWalletFactoryFixture {
         assertEq(frontRunWallet.balance, 1 ether, "Adopted wallet should hold the deposit");
         assertEq(address(deviceWalletFactory).balance, 0, "Factory must not retain any ETH");
         assertEq(eSIMWalletAdmin.balance, 0, "Nothing should have come back to the admin");
+    }
+
+    /// @notice Replaying an entry the batch already deployed reverts on the eSIM wallet salt.
+    /// @dev The device wallet address binds the owner key, the identifier and the salt together, so
+    ///      the registry lookup can only return the recorded wallet when the salt is the original
+    ///      one. That salt has already produced an eSIM wallet, and the batch does not stop at the
+    ///      existing device wallet: it goes on to deploy an eSIM wallet against the same salt. The
+    ///      collision is what makes a replay loud instead of a silent success, so it is pinned here.
+    function test_deployDeviceWalletForUsers_rejectsAReplayOfTheSameEntry() public {
+        uint256 salt = 781;
+        (
+            string[] memory identifiers,
+            bytes32[2][] memory keys,
+            uint256[] memory salts,
+            uint256[] memory deposits
+        ) = _singleEntryBatch(customDeviceUniqueIdentifiers[0], pubKey1, salt, 0);
+
+        vm.prank(eSIMWalletAdmin);
+        Wallets[] memory wallets = deviceWalletFactory.deployDeviceWalletForUsers(
+            identifiers,
+            keys,
+            salts,
+            deposits
+        );
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(
+            abi.encodeWithSelector(Errors.SaltAlreadyUsed.selector, wallets[0].deviceWallet, salt)
+        );
+        deviceWalletFactory.deployDeviceWalletForUsers(identifiers, keys, salts, deposits);
+    }
+
+    /// @notice Retrying a deployed entry under a fresh salt is refused by the identifier check.
+    /// @dev This is the shape an admin retry takes after a batch reverted partway. A new salt moves
+    ///      the counterfactual address away from the wallet the registry holds, so the identifier
+    ///      arm rejects it. The message names a different owner even though the key is unchanged,
+    ///      which is worth knowing before reading a failed retry as a key collision.
+    function test_deployDeviceWalletForUsers_rejectsARetryUnderANewSalt() public {
+        (
+            string[] memory identifiers,
+            bytes32[2][] memory keys,
+            uint256[] memory salts,
+            uint256[] memory deposits
+        ) = _singleEntryBatch(customDeviceUniqueIdentifiers[0], pubKey1, uint256(782), 0);
+
+        vm.prank(eSIMWalletAdmin);
+        deviceWalletFactory.deployDeviceWalletForUsers(identifiers, keys, salts, deposits);
+
+        salts[0] = 783;
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert("Wallet already exists with different owner");
+        deviceWalletFactory.deployDeviceWalletForUsers(identifiers, keys, salts, deposits);
+    }
+
+    /// @notice A wallet registered without an eSIM wallet gets one from the batch.
+    /// @dev createAccount followed by postCreateAccount leaves a registered device wallet whose
+    ///      salt was never spent on an eSIM wallet. The batch returns that device wallet untouched
+    ///      and still deploys the eSIM wallet, which is the reason the deploy does not stop at the
+    ///      existing-wallet return. Without this the path would hand back a device wallet and an
+    ///      eSIM wallet address that nothing binds together.
+    function test_deployDeviceWalletForUsers_bindsAnESIMWalletToAnAlreadyRegisteredWallet() public {
+        uint256 salt = 784;
+
+        vm.prank(user1);
+        address deployedWallet = address(deviceWalletFactory.createAccount(
+            customDeviceUniqueIdentifiers[0],
+            pubKey1,
+            salt
+        ));
+
+        vm.prank(eSIMWalletAdmin);
+        deviceWalletFactory.postCreateAccount(deployedWallet, customDeviceUniqueIdentifiers[0], pubKey1);
+
+        (
+            string[] memory identifiers,
+            bytes32[2][] memory keys,
+            uint256[] memory salts,
+            uint256[] memory deposits
+        ) = _singleEntryBatch(customDeviceUniqueIdentifiers[0], pubKey1, salt, 0);
+
+        vm.prank(eSIMWalletAdmin);
+        Wallets[] memory wallets = deviceWalletFactory.deployDeviceWalletForUsers(
+            identifiers,
+            keys,
+            salts,
+            deposits
+        );
+
+        MockESIMWallet eSIMWallet = MockESIMWallet(payable(wallets[0].eSIMWallet));
+
+        assertEq(wallets[0].deviceWallet, deployedWallet, "Batch should have returned the registered wallet");
+        assertEq(eSIMWalletFactory.isESIMWalletDeployed(address(eSIMWallet)), true, "ESIM wallet should be known to its factory");
+        assertEq(registry.isESIMWalletValid(address(eSIMWallet)), deployedWallet, "Registry should bind the eSIM wallet to the device wallet");
+        assertEq(MockDeviceWallet(payable(deployedWallet)).isValidESIMWallet(address(eSIMWallet)), true, "Device wallet should hold the eSIM wallet");
+        assertEq(eSIMWallet.owner(), deployedWallet, "ESIM wallet owner should be the device wallet");
     }
 }
