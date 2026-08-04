@@ -17,7 +17,7 @@ contract ESIMWalletFactoryTest is DeployerBase {
 
     function test_addRegistryAddress_withoutOwner() public {
         vm.startPrank(eSIMWalletAdmin);
-        vm.expectRevert("Only Owner");
+        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, eSIMWalletAdmin));
         eSIMWalletFactory.addRegistryAddress(user2);
         vm.stopPrank();
     }
@@ -25,7 +25,7 @@ contract ESIMWalletFactoryTest is DeployerBase {
     function test_addRegistryAddress_onlyOnce() public {
         address owner = eSIMWalletFactory.owner();
         vm.startPrank(owner);
-        vm.expectRevert("Already added");
+        vm.expectRevert(abi.encodeWithSelector(Errors.RegistryAlreadySet.selector, address(registry)));
         eSIMWalletFactory.addRegistryAddress(address(registry));
         vm.stopPrank();
 

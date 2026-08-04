@@ -97,7 +97,7 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgrad
         address _eSIMWalletImplementation,
         address _upgradeManager
     ) external initializer {
-        require(_upgradeManager != address(0), "Address cannot be zero");
+        if(_upgradeManager == address(0)) revert Errors.ZeroAddress("_upgradeManager");
 
         // Upgradable beacon for eSIM wallet implementation contract
         // Make the eSIM wallet factory the owner of the beacon
@@ -119,10 +119,9 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgrad
     /// @notice Allow owner to add registry contract after it's been deployed
     function addRegistryAddress(
         address _registryContractAddress
-    ) external returns (address) {
-        require(msg.sender == owner(), "Only Owner");
-        require(_registryContractAddress != address(0), "_registryContractAddress 0");
-        require(address(registry) == address(0), "Already added");
+    ) external onlyOwner returns (address) {
+        if(_registryContractAddress == address(0)) revert Errors.ZeroAddress("_registryContractAddress");
+        if(address(registry) != address(0)) revert Errors.RegistryAlreadySet(address(registry));
 
         registry = Registry(_registryContractAddress);
         emit AddedRegistry(address(registry));
@@ -191,8 +190,8 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgrad
     function updateESIMWalletImplementation(
         address _eSIMWalletImpl
     ) external onlyOwner returns (address) {
-        require(_eSIMWalletImpl != address(0), "_eSIMWalletImpl 0");
-        require(_eSIMWalletImpl != getCurrentESIMWalletImplementation(), "Same implementation");
+        if(_eSIMWalletImpl == address(0)) revert Errors.ZeroAddress("_eSIMWalletImpl");
+        if(_eSIMWalletImpl == getCurrentESIMWalletImplementation()) revert Errors.ImplementationUnchanged(_eSIMWalletImpl);
 
         beacon.upgradeTo(_eSIMWalletImpl);
 

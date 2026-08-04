@@ -33,6 +33,10 @@ interface Errors {
     error OnlyDeployForSelf();
     error SaltAlreadyUsed(address deviceWallet, uint256 salt);
 
+    // Any factory holding a beacon: ESIMWalletFactory and DeviceWalletFactory
+    error RegistryAlreadySet(address registry);
+    error ImplementationUnchanged(address implementation);
+
     // DeviceWalletFactory
     error OnlyAdmin();
     error OnlyAdminOrRegistry();
