@@ -161,7 +161,7 @@ contract ETHAmountsTest is FuzzBase {
         uint256 walletBefore = address(fuzzESIMWallet).balance;
 
         vm.prank(address(fuzzESIMWallet));
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(Errors.InsufficientBalance.selector, balance, amount));
         fuzzDeviceWallet.pullETH(amount);
 
         assertEq(address(fuzzDeviceWallet).balance, balance, "A failed pull must leave the balance alone");

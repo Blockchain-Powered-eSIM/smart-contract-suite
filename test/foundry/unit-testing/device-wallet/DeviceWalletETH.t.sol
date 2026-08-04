@@ -36,7 +36,7 @@ contract DeviceWalletETHTest is DeviceWalletFixture {
         deployWallets();
 
         vm.startPrank(address(eSIMWallet1));
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(Errors.InsufficientBalance.selector, 0, 0.1 ether));
         deviceWallet.payETHForDataBundles(100000000000000000);  // 0.1 ETH
         vm.stopPrank();
     }

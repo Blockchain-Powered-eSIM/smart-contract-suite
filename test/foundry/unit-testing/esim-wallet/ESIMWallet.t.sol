@@ -440,7 +440,8 @@ contract ESIMWalletTest is DeployerBase {
 
         vm.deal(address(eSIMWallet1), 0.03 ether);
         vm.startPrank(eSIMWalletAdmin);
-        vm.expectRevert();
+        // The wallet covers 0.03 of the 0.1 and pulls the rest from an empty device wallet
+        vm.expectRevert(abi.encodeWithSelector(Errors.InsufficientBalance.selector, 0, 0.07 ether));
         eSIMWallet1.buyDataBundle(_dataBundleDetail);
         vm.stopPrank();
 

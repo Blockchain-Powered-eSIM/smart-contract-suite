@@ -161,7 +161,9 @@ contract ESIMWalletFactoryTest is DeployerBase {
 
     function test_updateESIMWalletImplementation_unauthorised() public {
         vm.startPrank(eSIMWalletAdmin);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(
+            OwnableUpgradeable.OwnableUnauthorizedAccount.selector, eSIMWalletAdmin
+        ));
         eSIMWalletFactory.updateESIMWalletImplementation(user2);
         vm.stopPrank();
     }

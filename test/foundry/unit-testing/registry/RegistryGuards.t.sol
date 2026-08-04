@@ -152,4 +152,63 @@ contract RegistryGuardsTest is DeployerBase {
             0
         );
     }
+
+    /// @notice A salt with no room left for the eSIM wallets below it is refused
+    /// @dev Each eSIM wallet is deployed at the device salt plus its index, so a salt within the
+    ///      list length of the maximum would wrap and land the last eSIM wallet on an address
+    ///      another device already holds.
+    function test_deployLazyWallet_rejectsASaltWithNoRoomForTheESIMWallets() public {
+        string[] memory eSIMIdentifiers = new string[](1);
+        eSIMIdentifiers[0] = "eSIM_Salt_1";
+        uint256 salt = type(uint256).max - 1;
+
+        vm.prank(address(lazyWalletRegistry));
+        vm.expectRevert(abi.encodeWithSelector(Errors.SaltTooHigh.selector, salt, eSIMIdentifiers.length));
+        registry.deployLazyWallet(
+            pubKey1,
+            customDeviceUniqueIdentifiers[0],
+            salt,
+            eSIMIdentifiers,
+            new DataBundleDetails[][](1),
+            0
+        );
+    }
+
+    /// @notice A device identifier that already has a wallet cannot be deployed again
+    /// @dev A second deployment would overwrite the registry's record of a live wallet, leaving the
+    ///      first one's eSIM wallets bound to a device nothing points at.
+    function test_deployLazyWallet_rejectsADeviceIdentifierThatAlreadyHasAWallet() public {
+        string[] memory identifiers = new string[](1);
+        bytes32[2][] memory keys = new bytes32[2][](1);
+        uint256[] memory salts = new uint256[](1);
+
+        identifiers[0] = customDeviceUniqueIdentifiers[0];
+        keys[0] = pubKey1;
+        salts[0] = 7002;
+
+        vm.prank(eSIMWalletAdmin);
+        deviceWalletFactory.deployDeviceWalletForUsers(identifiers, keys, salts, new uint256[](1));
+
+        address existing = registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[0]);
+        assertNotEq(existing, address(0), "The first deployment must have registered a wallet");
+
+        vm.prank(address(lazyWalletRegistry));
+        vm.expectRevert(abi.encodeWithSelector(
+            Errors.DeviceWalletAlreadyExists.selector, customDeviceUniqueIdentifiers[0], existing
+        ));
+        registry.deployLazyWallet(
+            pubKey2,
+            customDeviceUniqueIdentifiers[0],
+            7003,
+            new string[](0),
+            new DataBundleDetails[][](0),
+            0
+        );
+
+        assertEq(
+            registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[0]),
+            existing,
+            "A refused deployment must leave the first wallet bound"
+        );
+    }
 }

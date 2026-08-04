@@ -81,7 +81,7 @@ contract DeviceWalletFactoryConfigTest is DeviceWalletFactoryFixture {
         address admin = deviceWalletFactory.eSIMWalletAdmin();
 
         vm.startPrank(admin);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, admin));
         deviceWalletFactory.updateDeviceWalletImplementation(user2);
         vm.stopPrank();
     }
