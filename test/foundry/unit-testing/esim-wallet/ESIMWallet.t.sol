@@ -137,7 +137,7 @@ contract ESIMWalletTest is DeployerBase {
         deployWallets();
 
         vm.startPrank(address(deviceWallet));
-        vm.expectRevert("Already initialised");
+        vm.expectRevert(abi.encodeWithSelector(Errors.ESIMIdentifierAlreadySet.selector, eSIMWallet1.eSIMUniqueIdentifier()));
         eSIMWallet1.setESIMUniqueIdentifier("ESIM_0_2");
         vm.stopPrank();
     }
@@ -178,7 +178,7 @@ contract ESIMWalletTest is DeployerBase {
         assertNotEq(eSIMWallet1.getTransactionHistory().length, 0, "Transaction history should have neen non-zero");
 
         vm.startPrank(address(registry));
-        vm.expectRevert("Wallet already in use");
+        vm.expectRevert(Errors.TransactionHistoryNotEmpty.selector);
         eSIMWallet1.populateHistory(
             customDataBundleDetails[0]
         );
@@ -209,7 +209,7 @@ contract ESIMWalletTest is DeployerBase {
         assertEq(currentOwner, address(deviceWallet), "Owner should have been device wallet");
 
         vm.startPrank(currentOwner);
-        vm.expectRevert("Invalid _newOwner");
+        vm.expectRevert(abi.encodeWithSelector(Errors.NotADeviceWallet.selector, user1));
         eSIMWallet1.requestTransferOwnership(user1);
         vm.stopPrank();
     }
@@ -280,7 +280,7 @@ contract ESIMWalletTest is DeployerBase {
         deployWallets();
 
         vm.startPrank(user2);
-        vm.expectRevert("Not approved");
+        vm.expectRevert(abi.encodeWithSelector(Errors.OnlyRequestedOwner.selector, eSIMWallet1.newRequestedOwner()));
         eSIMWallet1.acceptOwnershipTransfer();
         vm.stopPrank();
     }
@@ -290,7 +290,7 @@ contract ESIMWalletTest is DeployerBase {
 
         address currentOwner = eSIMWallet1.owner();
         vm.startPrank(currentOwner);
-        vm.expectRevert("Not approved");
+        vm.expectRevert(abi.encodeWithSelector(Errors.OnlyRequestedOwner.selector, eSIMWallet1.newRequestedOwner()));
         eSIMWallet1.acceptOwnershipTransfer();
         vm.stopPrank();
     }
@@ -316,7 +316,7 @@ contract ESIMWalletTest is DeployerBase {
 
         // Previous requested owner tries to accept ownership after revocation
         vm.startPrank(address(deviceWallet2));
-        vm.expectRevert("Not approved");
+        vm.expectRevert(abi.encodeWithSelector(Errors.OnlyRequestedOwner.selector, eSIMWallet1.newRequestedOwner()));
         eSIMWallet1.acceptOwnershipTransfer();
         vm.stopPrank();
 
@@ -328,7 +328,7 @@ contract ESIMWalletTest is DeployerBase {
         deployWallets();
 
         vm.startPrank(user1);
-        vm.expectRevert("Use acceptOwnershipTransfer instead.");
+        vm.expectRevert(Errors.UseAcceptOwnershipTransfer.selector);
         eSIMWallet1.transferOwnership(user1);
         vm.stopPrank();
     }

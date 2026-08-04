@@ -103,8 +103,8 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         address _eSIMWalletFactoryAddress,
         address _deviceWalletAddress
     ) external initializer {
-        require(_eSIMWalletFactoryAddress != address(0), "_eSIMWalletFactoryAddress 0");
-        require(_deviceWalletAddress != address(0), "_deviceWalletAddress 0");
+        if(_eSIMWalletFactoryAddress == address(0)) revert Errors.ZeroAddress("_eSIMWalletFactoryAddress");
+        if(_deviceWalletAddress == address(0)) revert Errors.ZeroAddress("_deviceWalletAddress");
 
         eSIMWalletFactory = _eSIMWalletFactoryAddress;
         deviceWallet = DeviceWallet(payable(_deviceWalletAddress));
@@ -120,8 +120,10 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     /// @dev This function can only be called once
     /// @param _eSIMUniqueIdentifier String that uniquely identifies eSIM wallet
     function setESIMUniqueIdentifier(string calldata _eSIMUniqueIdentifier) external onlyDeviceWallet {
-        require(bytes(eSIMUniqueIdentifier).length == 0, "Already initialised");
-        require(bytes(_eSIMUniqueIdentifier).length != 0, "_eSIMUniqueIdentifier 0");
+        // Read the identifier itself only on the failing branch, so setting one for the first time
+        // pays for the length slot alone
+        if(bytes(eSIMUniqueIdentifier).length != 0) revert Errors.ESIMIdentifierAlreadySet(eSIMUniqueIdentifier);
+        if(bytes(_eSIMUniqueIdentifier).length == 0) revert Errors.EmptyESIMIdentifier();
 
         eSIMUniqueIdentifier = _eSIMUniqueIdentifier;
 
@@ -136,8 +138,8 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     ) public payable onlyDeviceWalletOrESIMWalletAdmin nonReentrant returns (bool) {
         Registry registry = deviceWallet.registry();
         registry.requireNotPaused();
-        require(bytes(_dataBundleDetail.dataBundleID).length > 0, "Data bundle ID cannot be empty");
-        require(_dataBundleDetail.dataBundlePrice > 0, "Price cannot be zero");
+        if(bytes(_dataBundleDetail.dataBundleID).length == 0) revert Errors.EmptyDataBundleID();
+        if(_dataBundleDetail.dataBundlePrice == 0) revert Errors.ZeroDataBundlePrice();
         _requirePriceWithinCap(_dataBundleDetail.dataBundlePrice, registry);
 
         // 1. msg.value is received by contract
@@ -191,7 +193,7 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     /// @notice Function to populate history for lazy wallets. Can only be called once, by lazy wallet registry
     /// @param _dataBundleDetails Array of all the data bundle purchase details before the wallet was deployed
     function populateHistory(DataBundleDetails[] calldata _dataBundleDetails) external onlyRegistry returns (bool) {
-        require(transactionHistory.length == 0, "Wallet already in use");
+        if(transactionHistory.length != 0) revert Errors.TransactionHistoryNotEmpty();
 
         // Using transactionHistory = _dataBundleDetails; would be gas efficient
         // but it is not yet supported for struct types, hence using the loop
@@ -226,7 +228,7 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     */
     function requestTransferOwnership(address _newOwner) external onlyDeviceWallet nonReentrant {
         Registry registry = deviceWallet.registry();
-        require(registry.isDeviceWalletValid(_newOwner), "Invalid _newOwner");
+        if(!registry.isDeviceWalletValid(_newOwner)) revert Errors.NotADeviceWallet(_newOwner);
 
         // If the owner wants to retain the ownership of the contract, 
         // they simply revoke the request by requesting a transfer to themselves
@@ -250,7 +252,8 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
 
     /// @notice Function to be called by the new owner to accept the ownership
     function acceptOwnershipTransfer() external {
-        require(msg.sender == newRequestedOwner, "Not approved");
+        address requestedOwner = newRequestedOwner;
+        if(msg.sender != requestedOwner) revert Errors.OnlyRequestedOwner(requestedOwner);
 
         _secureTransferOwnership();
     }
@@ -266,7 +269,7 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     function sendETHToDeviceWallet(
         uint256 _amount
     ) external onlyDeviceWallet returns (uint256) {
-        require(owner() != address(0), "owner 0");
+        if(owner() == address(0)) revert Errors.ZeroAddress("owner");
 
         _transferETH(owner(), _amount);
 
@@ -277,7 +280,7 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     /// The owner should first call requestTransferOwnership and specify the recipient (new owner)
     /// The recipient (new owner) should accept the ownership using acceptOwnershipTransfer
     function transferOwnership(address) public pure override {
-        require(false, "Use acceptOwnershipTransfer instead.");
+        revert Errors.UseAcceptOwnershipTransfer();
     }
 
     /// @notice An eSIM wallet always belongs to a device wallet, so ownership is never renounced
@@ -302,8 +305,9 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
 
     /// @dev Internal function to send ETH from this contract
     function _transferETH(address _recipient, uint256 _amount) internal virtual {
-        require(address(this).balance >= _amount, "Not enough ETH");
-        require(_recipient != address(0), "_recipient 0");
+        uint256 balance = address(this).balance;
+        if(balance < _amount) revert Errors.InsufficientBalance(balance, _amount);
+        if(_recipient == address(0)) revert Errors.ZeroAddress("_recipient");
 
         if (_amount > 0) {
             (bool success,) = _recipient.call{value: _amount}("");

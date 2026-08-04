@@ -55,11 +55,20 @@ interface Errors {
 
     // ESIMWallet and DeviceWallet
     error FailedToTransfer();
+    error InsufficientBalance(uint256 balance, uint256 amount);
 
     // ESIMWallet
     error OnlyRegistry();
     error OnlyDeviceWalletOrESIMWalletAdmin();
     error DataBundlePriceAboveCap(uint256 price, uint256 cap);
+    error ESIMIdentifierAlreadySet(string eSIMUniqueIdentifier);
+    error EmptyESIMIdentifier();
+    error EmptyDataBundleID();
+    error ZeroDataBundlePrice();
+    error TransactionHistoryNotEmpty();
+    error NotADeviceWallet(address account);
+    error OnlyRequestedOwner(address newRequestedOwner);
+    error UseAcceptOwnershipTransfer();
 
     // DeviceWallet
     error OnlyRegistryOrDeviceWalletFactoryOrOwner();

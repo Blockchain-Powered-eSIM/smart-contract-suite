@@ -22,7 +22,7 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
         deployWallets();
 
         vm.startPrank(eSIMWalletAdmin);
-        vm.expectRevert("_eSIMUniqueIdentifier 0");
+        vm.expectRevert(Errors.EmptyESIMIdentifier.selector);
         deviceWallet.setESIMUniqueIdentifierForAnESIMWallet(
             address(eSIMWallet2),
             ""

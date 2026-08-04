@@ -74,7 +74,7 @@ contract ESIMWalletGuardsTest is DeployerBase {
     function test_initialize_rejectsAZeroFactory() public {
         address beacon = address(eSIMWalletFactory.beacon());
 
-        vm.expectRevert("_eSIMWalletFactoryAddress 0");
+        vm.expectRevert(abi.encodeWithSelector(Errors.ZeroAddress.selector, "_eSIMWalletFactoryAddress"));
         _initialiseDirectly(beacon, address(0), address(this));
     }
 
@@ -84,7 +84,7 @@ contract ESIMWalletGuardsTest is DeployerBase {
     function test_initialize_rejectsAZeroDeviceWallet() public {
         address beacon = address(eSIMWalletFactory.beacon());
 
-        vm.expectRevert("_deviceWalletAddress 0");
+        vm.expectRevert(abi.encodeWithSelector(Errors.ZeroAddress.selector, "_deviceWalletAddress"));
         _initialiseDirectly(beacon, address(eSIMWalletFactory), address(0));
     }
 
@@ -100,7 +100,7 @@ contract ESIMWalletGuardsTest is DeployerBase {
         vm.deal(address(deviceWallet), 1 ether);
 
         vm.prank(eSIMWalletAdmin);
-        vm.expectRevert("Data bundle ID cannot be empty");
+        vm.expectRevert(Errors.EmptyDataBundleID.selector);
         eSIMWallet.buyDataBundle(DataBundleDetails("", 1));
     }
 
@@ -110,7 +110,7 @@ contract ESIMWalletGuardsTest is DeployerBase {
         vm.deal(address(deviceWallet), 1 ether);
 
         vm.prank(eSIMWalletAdmin);
-        vm.expectRevert("Price cannot be zero");
+        vm.expectRevert(Errors.ZeroDataBundlePrice.selector);
         eSIMWallet.buyDataBundle(DataBundleDetails("DB_ID_1", 0));
     }
 
@@ -171,7 +171,7 @@ contract ESIMWalletGuardsTest is DeployerBase {
         vm.deal(address(eSIMWallet), 1 ether);
 
         vm.prank(address(deviceWallet));
-        vm.expectRevert("Not enough ETH");
+        vm.expectRevert(abi.encodeWithSelector(Errors.InsufficientBalance.selector, 1 ether, 1 ether + 1));
         eSIMWallet.sendETHToDeviceWallet(1 ether + 1);
 
         assertEq(address(eSIMWallet).balance, 1 ether, "A refused callback must leave the balance alone");
