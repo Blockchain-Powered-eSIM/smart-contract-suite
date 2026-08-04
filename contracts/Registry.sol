@@ -117,10 +117,10 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
         address _eSIMWalletFactory,
         IEntryPoint _entryPoint
     ) external initializer {
-        require(_eSIMWalletAdmin != address(0), "_eSIMWalletAdmin 0");
-        require(_vault != address(0), "_vault 0");
-        require(_upgradeManager != address(0), "_upgradeManager 0");
-        require(address(_entryPoint) != address(0), "_entryPoint 0");
+        if(_eSIMWalletAdmin == address(0)) revert Errors.ZeroAddress("_eSIMWalletAdmin");
+        if(_vault == address(0)) revert Errors.ZeroAddress("_vault");
+        if(_upgradeManager == address(0)) revert Errors.ZeroAddress("_upgradeManager");
+        if(address(_entryPoint) == address(0)) revert Errors.ZeroAddress("_entryPoint");
         // Neither factory has a setter anywhere in the protocol, so a zero here is permanent.
         // It would leave deployLazyWalletAndSetESIMIdentifier calling into address(0),
         // onlyDeviceWalletFactory unable to match any sender, and the factory branch of
@@ -153,7 +153,7 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
     ///      revokes any outstanding request.
     /// @param _newAdmin Address of the recipient to receive the admin role
     function requestAdminUpdate(address _newAdmin) external onlyESIMWalletAdmin {
-        require(_newAdmin != address(0), "Admin address cannot be zero");
+        if(_newAdmin == address(0)) revert Errors.ZeroAddress("_newAdmin");
 
         if(_newAdmin == eSIMWalletAdmin) {
             address revokedAddress = newRequestedAdmin;
@@ -169,7 +169,7 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
     /// @notice Function to update the admin address
     /// @return Address of the new admin
     function acceptAdminUpdate() external returns (address) {
-        require(msg.sender == newRequestedAdmin, "Unauthorised");
+        if(msg.sender != newRequestedAdmin) revert Errors.OnlyRequestedAdmin(newRequestedAdmin);
 
         eSIMWalletAdmin = msg.sender;
         emit AdminUpdated(msg.sender);
@@ -218,7 +218,7 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
     function addOrUpdateLazyWalletRegistryAddress(
         address _lazyWalletRegistry
     ) public onlyOwner returns (address) {
-        require(_lazyWalletRegistry != address(0), "_lazyWalletRegistry 0");
+        if(_lazyWalletRegistry == address(0)) revert Errors.ZeroAddress("_lazyWalletRegistry");
 
         lazyWalletRegistry = _lazyWalletRegistry;
 
@@ -231,23 +231,25 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
         address _eSIMWalletAddress,
         address _deviceWalletAddress
     ) external onlyDeviceWallet {
-        require(
-            ESIMWallet(payable(_eSIMWalletAddress)).owner() == msg.sender ||
-            isESIMWalletValid[_eSIMWalletAddress] == msg.sender,
-            "Unauthorise caller or already assigned"
-        );
+        if(
+            ESIMWallet(payable(_eSIMWalletAddress)).owner() != msg.sender &&
+            isESIMWalletValid[_eSIMWalletAddress] != msg.sender
+        ) {
+            revert Errors.NotTheESIMWalletOwnerOrItsDeviceWallet(_eSIMWalletAddress);
+        }
+
         // address(0) => owner removed eSIM wallet from device wallet
         // msg.sender => new device wallet added the eSIM wallet
         // any other address => Unauthorised: user is trying to change owner without initiating transfer of ownership
-        require(
-            _deviceWalletAddress == address(0) || _deviceWalletAddress == msg.sender,
-            "Transfer ownership first"
-        );
+        if(_deviceWalletAddress != address(0) && _deviceWalletAddress != msg.sender) {
+            revert Errors.NotTheAssociatedDeviceWallet(_eSIMWalletAddress, _deviceWalletAddress);
+        }
+
         // Owner cannot change device wallet address in the middle of ownership transfer
-        require(
-            ESIMWallet(payable(_eSIMWalletAddress)).newRequestedOwner() == address(0),
-            "Unauthorised action"
-        );
+        address pendingOwner = ESIMWallet(payable(_eSIMWalletAddress)).newRequestedOwner();
+        if(pendingOwner != address(0)) {
+            revert Errors.ESIMWalletOwnershipTransferPending(_eSIMWalletAddress, pendingOwner);
+        }
 
         isESIMWalletValid[_eSIMWalletAddress] = _deviceWalletAddress;
         emit UpdatedDeviceWalletassociatedWithESIMWallet(_eSIMWalletAddress, _deviceWalletAddress);
@@ -282,7 +284,10 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
         address _eSIMWalletAddress,
         bool _isOnStandby
     ) public onlyDeviceWallet {
-        require(isESIMWalletValid[_eSIMWalletAddress] == msg.sender, "Unauthorised caller");
+        address associated = isESIMWalletValid[_eSIMWalletAddress];
+        if(associated != msg.sender) {
+            revert Errors.NotTheAssociatedDeviceWallet(_eSIMWalletAddress, associated);
+        }
 
         isESIMWalletOnStandby[_eSIMWalletAddress] = _isOnStandby;
         emit ESIMWalletSetOnStandby(_eSIMWalletAddress, _isOnStandby, msg.sender);

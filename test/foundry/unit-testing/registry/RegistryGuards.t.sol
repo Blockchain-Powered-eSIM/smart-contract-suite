@@ -19,24 +19,24 @@ import "test/utils/mocks/MockRegistry.sol";
 ///      remaining initialiser arguments and every gate that refuses a caller.
 contract RegistryGuardsTest is DeployerBase {
 
-    /// @notice Calls initialize with the given arguments, expecting the given revert string
+    /// @notice Calls initialize with the given arguments, expecting a ZeroAddress revert
     /// @param _admin The admin address to pass
     /// @param _vault The vault address to pass
     /// @param _upgradeManager The upgrade manager address to pass
     /// @param _entryPoint The entry point to pass
-    /// @param _reason The revert string expected
+    /// @param _parameter Name of the parameter the revert should name back
     function _expectInitializeToRevert(
         address _admin,
         address _vault,
         address _upgradeManager,
         IEntryPoint _entryPoint,
-        string memory _reason
+        string memory _parameter
     ) internal {
         MockRegistry implementation = new MockRegistry();
         address deviceFactory = address(deviceWalletFactory);
         address eSIMFactory = address(eSIMWalletFactory);
 
-        vm.expectRevert(bytes(_reason));
+        vm.expectRevert(abi.encodeWithSelector(Errors.ZeroAddress.selector, _parameter));
         new ERC1967Proxy(
             address(implementation),
             abi.encodeCall(
@@ -54,23 +54,23 @@ contract RegistryGuardsTest is DeployerBase {
     /// @dev The admin is the only address that can nominate a successor, so a zero here leaves the
     ///      role permanently vacant and every admin gated path in the protocol closed.
     function test_initialize_rejectsAZeroAdmin() public {
-        _expectInitializeToRevert(address(0), vault, upgradeManager, typeCastEntryPoint, "_eSIMWalletAdmin 0");
+        _expectInitializeToRevert(address(0), vault, upgradeManager, typeCastEntryPoint, "_eSIMWalletAdmin");
     }
 
     /// @notice A registry cannot be initialised without a vault
     /// @dev Every data bundle payment is sent here, so a zero would burn each one.
     function test_initialize_rejectsAZeroVault() public {
-        _expectInitializeToRevert(eSIMWalletAdmin, address(0), upgradeManager, typeCastEntryPoint, "_vault 0");
+        _expectInitializeToRevert(eSIMWalletAdmin, address(0), upgradeManager, typeCastEntryPoint, "_vault");
     }
 
     /// @notice A registry cannot be initialised without an owner
     function test_initialize_rejectsAZeroUpgradeManager() public {
-        _expectInitializeToRevert(eSIMWalletAdmin, vault, address(0), typeCastEntryPoint, "_upgradeManager 0");
+        _expectInitializeToRevert(eSIMWalletAdmin, vault, address(0), typeCastEntryPoint, "_upgradeManager");
     }
 
     /// @notice A registry cannot be initialised without an entry point
     function test_initialize_rejectsAZeroEntryPoint() public {
-        _expectInitializeToRevert(eSIMWalletAdmin, vault, upgradeManager, IEntryPoint(address(0)), "_entryPoint 0");
+        _expectInitializeToRevert(eSIMWalletAdmin, vault, upgradeManager, IEntryPoint(address(0)), "_entryPoint");
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -82,7 +82,7 @@ contract RegistryGuardsTest is DeployerBase {
     ///      still leave the deployment path unreachable until someone noticed.
     function test_addOrUpdateLazyWalletRegistryAddress_rejectsTheZeroAddress() public {
         vm.prank(upgradeManager);
-        vm.expectRevert("_lazyWalletRegistry 0");
+        vm.expectRevert(abi.encodeWithSelector(Errors.ZeroAddress.selector, "_lazyWalletRegistry"));
         registry.addOrUpdateLazyWalletRegistryAddress(address(0));
     }
 

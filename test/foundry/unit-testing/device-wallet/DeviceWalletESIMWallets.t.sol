@@ -200,10 +200,16 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
         _assertESIMWalletBinding(deviceWallet, eSIMWallet1, true, address(0), false, false);
 
         vm.startPrank(currentOwner);
-        vm.expectRevert("Unauthorised caller");
+        vm.expectRevert(abi.encodeWithSelector(
+            Errors.NotTheAssociatedDeviceWallet.selector, address(eSIMWallet1), address(0)
+        ));
         registry.toggleESIMWalletStandbyStatus(address(eSIMWallet1), false);
 
-        vm.expectRevert("Unauthorised action");
+        vm.expectRevert(abi.encodeWithSelector(
+            Errors.ESIMWalletOwnershipTransferPending.selector,
+            address(eSIMWallet1),
+            eSIMWallet1.newRequestedOwner()
+        ));
         registry.updateDeviceWalletAssociatedWithESIMWallet(address(eSIMWallet1), currentOwner);
         vm.stopPrank();
 
@@ -304,7 +310,9 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
 
         // 3. Carol (deviceWallet3) tries to steal standby eSIMWallet (eSIMWallet1)
         vm.startPrank(address(deviceWallet3));
-        vm.expectRevert("Unauthorise caller or already assigned");
+        vm.expectRevert(abi.encodeWithSelector(
+            Errors.NotTheESIMWalletOwnerOrItsDeviceWallet.selector, address(eSIMWallet1)
+        ));
         registry.updateDeviceWalletAssociatedWithESIMWallet(
             address(eSIMWallet1),
             address(deviceWallet3)

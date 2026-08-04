@@ -22,7 +22,7 @@ contract RegistryTest is DeployerBase {
 
     function test_requestAdminUpdate_zeroAddress() public {
         vm.startPrank(eSIMWalletAdmin);
-        vm.expectRevert("Admin address cannot be zero");
+        vm.expectRevert(abi.encodeWithSelector(Errors.ZeroAddress.selector, "_newAdmin"));
         registry.requestAdminUpdate(address(0));
         vm.stopPrank();
     }
@@ -51,7 +51,7 @@ contract RegistryTest is DeployerBase {
 
     function test_acceptAdminUpdate_withoutRequest() public {
         vm.startPrank(user2);
-        vm.expectRevert("Unauthorised");
+        vm.expectRevert(abi.encodeWithSelector(Errors.OnlyRequestedAdmin.selector, registry.newRequestedAdmin()));
         registry.acceptAdminUpdate();
         vm.stopPrank();
     }
@@ -60,7 +60,7 @@ contract RegistryTest is DeployerBase {
         test_requestAdminUpdate();
 
         vm.startPrank(registry.eSIMWalletAdmin());
-        vm.expectRevert("Unauthorised");
+        vm.expectRevert(abi.encodeWithSelector(Errors.OnlyRequestedAdmin.selector, registry.newRequestedAdmin()));
         registry.acceptAdminUpdate();
         vm.stopPrank();
     }
@@ -82,7 +82,7 @@ contract RegistryTest is DeployerBase {
         test_requestAdminUpdate_revoke();
 
         vm.startPrank(user2);
-        vm.expectRevert("Unauthorised");
+        vm.expectRevert(abi.encodeWithSelector(Errors.OnlyRequestedAdmin.selector, registry.newRequestedAdmin()));
         registry.acceptAdminUpdate();
         vm.stopPrank();
 
