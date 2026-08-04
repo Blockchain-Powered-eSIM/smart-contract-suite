@@ -129,11 +129,14 @@ contract RegistryHelper {
         DataBundleDetails[][] calldata _dataBundleDetails,
         uint256 _depositAmount
     ) external payable onlyLazyWalletRegistry returns (address, address[] memory) {
-        require(_eSIMUniqueIdentifiers.length + _salt < type(uint256).max, "Salt value too high");
-        require(
-            uniqueIdentifierToDeviceWallet[_deviceUniqueIdentifier] == address(0),
-            "Device wallet already exists"
-        );
+        if(_eSIMUniqueIdentifiers.length + _salt >= type(uint256).max) {
+            revert Errors.SaltTooHigh(_salt, _eSIMUniqueIdentifiers.length);
+        }
+
+        address existing = uniqueIdentifierToDeviceWallet[_deviceUniqueIdentifier];
+        if(existing != address(0)) {
+            revert Errors.DeviceWalletAlreadyExists(_deviceUniqueIdentifier, existing);
+        }
 
         string[] memory deviceUniqueIdentifier = new string[](1);
         bytes32[2][] memory deviceWalletOwnersKey = new bytes32[2][](1);
