@@ -92,10 +92,14 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         _;
     }
 
+    /// @dev The registry is checked first because its address is already in a warm slot, while
+    ///      reading the admin off it costs a cold proxy hop. The registry is also the caller that
+    ///      reaches here most, through the lazy wallet deployment path, so short-circuiting on it
+    ///      skips the hop entirely on the common case.
     function _onlyESIMWalletAdminOrRegistry() private view {
         if (
-            msg.sender != registry.eSIMWalletAdmin() &&
-            msg.sender != address(registry)
+            msg.sender != address(registry) &&
+            msg.sender != registry.eSIMWalletAdmin()
         ) {
             revert Errors.OnlyESIMWalletAdminOrRegistry();
         }
