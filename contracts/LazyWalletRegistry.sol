@@ -116,7 +116,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
     mapping(string deviceIdentifier => string[] associatedESIMIdentifiers) public eSIMIdentifiersAssociatedWithDeviceIdentifier;
 
     modifier onlyESIMWalletAdmin() {
-        require(msg.sender == registry.eSIMWalletAdmin(), "Only eSIM wallet admin");
+        if(msg.sender != registry.eSIMWalletAdmin()) revert Errors.OnlyESIMWalletAdmin();
         _;
     }
 
@@ -155,8 +155,8 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         address _registry,
         address _upgradeManager
     ) external initializer {
-        require(_registry != address(0), "Registry 0");
-        require(_upgradeManager != address(0), "Manager 0");
+        if(_registry == address(0)) revert Errors.ZeroAddress("_registry");
+        if(_upgradeManager == address(0)) revert Errors.ZeroAddress("_upgradeManager");
 
         registry = Registry(_registry);
 
@@ -184,8 +184,12 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         DataBundleDetails[][] calldata _dataBundleDetails
     ) external onlyESIMWalletAdmin {
         uint256 len = _deviceUniqueIdentifiers.length;
-        require(len == _eSIMUniqueIdentifiers.length, "Unequal array provided");
-        require(len == _dataBundleDetails.length, "Unequal array provided");
+        if(len != _eSIMUniqueIdentifiers.length) {
+            revert Errors.ArrayLengthMismatch(len, _eSIMUniqueIdentifiers.length);
+        }
+        if(len != _dataBundleDetails.length) {
+            revert Errors.ArrayLengthMismatch(len, _dataBundleDetails.length);
+        }
 
         for(uint256 i=0; i<len; ++i) {
             _populateHistory(_deviceUniqueIdentifiers[i], _eSIMUniqueIdentifiers[i], _dataBundleDetails[i]);
@@ -204,13 +208,17 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         uint256 _salt,
         uint256 _depositAmount
     ) external payable onlyESIMWalletAdmin returns (address, address[] memory) {
-        require(_depositAmount == msg.value, "Incorrect ETH");
-        require(isLazyWalletDeployed(_deviceUniqueIdentifier) == false, "Already deployed");
+        if(_depositAmount != msg.value) revert Errors.DepositDoesNotMatchValue(_depositAmount, msg.value);
+        if(isLazyWalletDeployed(_deviceUniqueIdentifier)) {
+            revert Errors.LazyWalletAlreadyDeployed(_deviceUniqueIdentifier);
+        }
 
         address deviceWallet;
 
         string[] memory eSIMUniqueIdentifiers = eSIMIdentifiersAssociatedWithDeviceIdentifier[_deviceUniqueIdentifier];
-        require(eSIMUniqueIdentifiers.length > 0, "No eSIM identifier found");
+        if(eSIMUniqueIdentifiers.length == 0) {
+            revert Errors.NoESIMIdentifiersForDevice(_deviceUniqueIdentifier);
+        }
 
         address[] memory eSIMWallets = new address[](eSIMUniqueIdentifiers.length);
         DataBundleDetails[][] memory listOfDataBundleDetails = new DataBundleDetails[][](eSIMUniqueIdentifiers.length);
@@ -246,16 +254,20 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         string[] calldata _eSIMUniqueIdentifiers,
         DataBundleDetails[] calldata _dataBundleDetails
     ) internal {
-        require(bytes(_deviceUniqueIdentifier).length >= 1, "Device identifier 0");
+        if(bytes(_deviceUniqueIdentifier).length == 0) revert Errors.EmptyDeviceIdentifier();
         _requireBoundedIdentifier(_deviceUniqueIdentifier);
-        require(isLazyWalletDeployed(_deviceUniqueIdentifier) == false, "Already deployed");
+        if(isLazyWalletDeployed(_deviceUniqueIdentifier)) {
+            revert Errors.LazyWalletAlreadyDeployed(_deviceUniqueIdentifier);
+        }
 
         uint256 len = _eSIMUniqueIdentifiers.length;
-        require(len == _dataBundleDetails.length, "Unequal array provided");
+        if(len != _dataBundleDetails.length) {
+            revert Errors.ArrayLengthMismatch(len, _dataBundleDetails.length);
+        }
 
         for(uint256 i=0; i<len; ++i) {
             string calldata eSIMUniqueIdentifier = _eSIMUniqueIdentifiers[i];
-            require(bytes(eSIMUniqueIdentifier).length >= 1, "eSIM identifier 0");
+            if(bytes(eSIMUniqueIdentifier).length == 0) revert Errors.EmptyESIMIdentifier();
 
             string memory deviceUniqueIdentifier = eSIMIdentifierToDeviceIdentifier[eSIMUniqueIdentifier];
 
@@ -270,7 +282,9 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
                 emit ESIMBindedWithDevice(eSIMUniqueIdentifier, _deviceUniqueIdentifier);
             }
             else {
-                require(keccak256(bytes(deviceUniqueIdentifier)) == keccak256(bytes(_deviceUniqueIdentifier)), "Invalid _deviceUniqueIdentifier");
+                if(keccak256(bytes(deviceUniqueIdentifier)) != keccak256(bytes(_deviceUniqueIdentifier))) {
+                    revert Errors.ESIMBoundToADifferentDevice(eSIMUniqueIdentifier, deviceUniqueIdentifier);
+                }
             }
 
             DataBundleDetails[] storage dataBundleDetails = deviceIdentifierToESIMDetails[_deviceUniqueIdentifier][eSIMUniqueIdentifier];
@@ -294,27 +308,25 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         string calldata _oldDeviceIdentifier,
         string calldata _newDeviceIdentifier
     ) external onlyESIMWalletAdmin returns (bool) {
-        require(bytes( _eSIMIdentifier).length > 0, "_eSIMIdentifier 0");
-        require(bytes( _newDeviceIdentifier).length > 0, "_newDeviceIdentifier 0");
+        if(bytes(_eSIMIdentifier).length == 0) revert Errors.EmptyESIMIdentifier();
+        if(bytes(_newDeviceIdentifier).length == 0) revert Errors.EmptyDeviceIdentifier();
         // Only the incoming device identifier is bounded. Bounding the eSIM identifier too would
         // block moving an over-length one off a device, which is how a device that predates this
         // limit gets unwound.
         _requireBoundedIdentifier(_newDeviceIdentifier);
 
         string memory currentDeviceIdentifier = eSIMIdentifierToDeviceIdentifier[_eSIMIdentifier];
-        require(bytes(currentDeviceIdentifier).length > 0, "Unknown _eSIMIdentifier");
-        require(
-            bytes(currentDeviceIdentifier).length == bytes(_oldDeviceIdentifier).length,
-            "Incorrect device identifier"
-        );
-        require(
-            keccak256(bytes(currentDeviceIdentifier)) == keccak256(bytes(_oldDeviceIdentifier)),
-            "Incorrect device identifier"
-        );
-        require(
-            keccak256(bytes(_newDeviceIdentifier)) != keccak256(bytes(currentDeviceIdentifier)),
-            "Cannot switch to same device"
-        );
+        if(bytes(currentDeviceIdentifier).length == 0) revert Errors.UnknownESIMIdentifier(_eSIMIdentifier);
+        // The length check is a cheap filter ahead of the hash, not a separate condition
+        if(
+            bytes(currentDeviceIdentifier).length != bytes(_oldDeviceIdentifier).length ||
+            keccak256(bytes(currentDeviceIdentifier)) != keccak256(bytes(_oldDeviceIdentifier))
+        ) {
+            revert Errors.ESIMBoundToADifferentDevice(_eSIMIdentifier, currentDeviceIdentifier);
+        }
+        if(keccak256(bytes(_newDeviceIdentifier)) == keccak256(bytes(currentDeviceIdentifier))) {
+            revert Errors.CannotSwitchToTheSameDevice(currentDeviceIdentifier);
+        }
         // Once a wallet exists onchain, the onchain graph is the authoritative record of which eSIM
         // belongs to which device, and nothing here reads back into it. Switching the old device
         // would leave the deployed eSIM wallet owned by it while deleting its purchase history.

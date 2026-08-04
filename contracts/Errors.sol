@@ -30,9 +30,19 @@ interface Errors {
     error SaltTooHigh(uint256 salt, uint256 count);
     error DeviceWalletAlreadyExists(string deviceIdentifier, address deviceWallet);
 
+    // Any contract rejecting an identifier it was handed empty
+    error EmptyDeviceIdentifier();
+    error EmptyESIMIdentifier();
+
     // LazyWalletRegistry
     error LazyWalletAlreadyDeployed(string deviceIdentifier);
     error IdentifierTooLong(string identifier, uint256 maxLength);
+    error ArrayLengthMismatch(uint256 expected, uint256 actual);
+    error DepositDoesNotMatchValue(uint256 depositAmount, uint256 value);
+    error NoESIMIdentifiersForDevice(string deviceIdentifier);
+    error UnknownESIMIdentifier(string eSIMIdentifier);
+    error ESIMBoundToADifferentDevice(string eSIMIdentifier, string boundDeviceIdentifier);
+    error CannotSwitchToTheSameDevice(string deviceIdentifier);
 
     // ESIMWalletFactory
     error OnlyRegistryOrDeviceWalletFactoryOrDeviceWallet();
@@ -62,7 +72,6 @@ interface Errors {
     error OnlyDeviceWalletOrESIMWalletAdmin();
     error DataBundlePriceAboveCap(uint256 price, uint256 cap);
     error ESIMIdentifierAlreadySet(string eSIMUniqueIdentifier);
-    error EmptyESIMIdentifier();
     error EmptyDataBundleID();
     error ZeroDataBundlePrice();
     error TransactionHistoryNotEmpty();
@@ -71,7 +80,6 @@ interface Errors {
     error UseAcceptOwnershipTransfer();
 
     // DeviceWallet
-    error EmptyDeviceIdentifier();
     error UnknownESIMWallet(address eSIMWallet);
     error ZeroAmount();
     error ETHAccessRevoked(address eSIMWallet);

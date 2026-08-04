@@ -7,6 +7,7 @@ import "forge-std/Test.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 import "contracts/CustomStructs.sol";
+import {Errors} from "contracts/Errors.sol";
 
 import "test/utils/DeployerBase.sol";
 import "test/utils/mocks/MockLazyWalletRegistry.sol";
@@ -41,15 +42,15 @@ contract LazyWalletRegistryGuardsTest is DeployerBase {
     /// @param _deviceCount Length of the device identifier array
     /// @param _eSIMCount Length of the outer eSIM identifier array
     /// @param _bundleCount Length of the outer data bundle array
-    /// @param _reason The revert string expected
+    /// @param _error The encoded error expected
     function _expectBatchToRevert(
         uint256 _deviceCount,
         uint256 _eSIMCount,
         uint256 _bundleCount,
-        string memory _reason
+        bytes memory _error
     ) internal {
         vm.prank(eSIMWalletAdmin);
-        vm.expectRevert(bytes(_reason));
+        vm.expectRevert(_error);
         lazyWalletRegistry.batchPopulateHistory(
             new string[](_deviceCount), new string[][](_eSIMCount), new DataBundleDetails[][](_bundleCount)
         );
@@ -59,15 +60,15 @@ contract LazyWalletRegistryGuardsTest is DeployerBase {
     /// @param _eSIM The eSIM identifier to move
     /// @param _oldDevice The device it is claimed to be on
     /// @param _newDevice The device it should move to
-    /// @param _reason The revert string expected
+    /// @param _error The encoded error expected
     function _expectSwitchToRevert(
         string memory _eSIM,
         string memory _oldDevice,
         string memory _newDevice,
-        string memory _reason
+        bytes memory _error
     ) internal {
         vm.prank(eSIMWalletAdmin);
-        vm.expectRevert(bytes(_reason));
+        vm.expectRevert(_error);
         lazyWalletRegistry.switchESIMIdentifierToNewDeviceIdentifier(_eSIM, _oldDevice, _newDevice);
     }
 
@@ -80,7 +81,7 @@ contract LazyWalletRegistryGuardsTest is DeployerBase {
     function test_initialize_rejectsAZeroRegistry() public {
         MockLazyWalletRegistry implementation = new MockLazyWalletRegistry();
 
-        vm.expectRevert("Registry 0");
+        vm.expectRevert(abi.encodeWithSelector(Errors.ZeroAddress.selector, "_registry"));
         new ERC1967Proxy(
             address(implementation), abi.encodeCall(implementation.initialize, (address(0), upgradeManager))
         );
@@ -91,7 +92,7 @@ contract LazyWalletRegistryGuardsTest is DeployerBase {
         MockLazyWalletRegistry implementation = new MockLazyWalletRegistry();
         address registryAddress = address(registry);
 
-        vm.expectRevert("Manager 0");
+        vm.expectRevert(abi.encodeWithSelector(Errors.ZeroAddress.selector, "_upgradeManager"));
         new ERC1967Proxy(
             address(implementation), abi.encodeCall(implementation.initialize, (registryAddress, address(0)))
         );
@@ -104,12 +105,12 @@ contract LazyWalletRegistryGuardsTest is DeployerBase {
     /// @notice Fewer eSIM identifier lists than devices is refused
     /// @dev Each device gets one list. A mismatch here pairs one device's eSIMs with another's.
     function test_batchPopulateHistory_rejectsAShortESIMIdentifierArray() public {
-        _expectBatchToRevert(2, 1, 2, "Unequal array provided");
+        _expectBatchToRevert(2, 1, 2, abi.encodeWithSelector(Errors.ArrayLengthMismatch.selector, 2, 1));
     }
 
     /// @notice Fewer data bundle lists than devices is refused
     function test_batchPopulateHistory_rejectsAShortDataBundleArray() public {
-        _expectBatchToRevert(2, 2, 1, "Unequal array provided");
+        _expectBatchToRevert(2, 2, 1, abi.encodeWithSelector(Errors.ArrayLengthMismatch.selector, 2, 1));
     }
 
     /// @notice A device with more eSIM identifiers than purchase records is refused
@@ -122,7 +123,7 @@ contract LazyWalletRegistryGuardsTest is DeployerBase {
         eSIMs[0] = new string[](2);
 
         vm.prank(eSIMWalletAdmin);
-        vm.expectRevert("Unequal array provided");
+        vm.expectRevert(abi.encodeWithSelector(Errors.ArrayLengthMismatch.selector, 2, 0));
         lazyWalletRegistry.batchPopulateHistory(devices, eSIMs, new DataBundleDetails[][](1));
     }
 
@@ -134,7 +135,7 @@ contract LazyWalletRegistryGuardsTest is DeployerBase {
     /// @dev Every empty identifier resolves to the same storage slot, so one accepted here would
     ///      pool unrelated devices' eSIMs together.
     function test_batchPopulateHistory_rejectsAnEmptyDeviceIdentifier() public {
-        _expectBatchToRevert(1, 1, 1, "Device identifier 0");
+        _expectBatchToRevert(1, 1, 1, abi.encodeWithSelector(Errors.EmptyDeviceIdentifier.selector));
     }
 
     /// @notice An eSIM identifier cannot be empty
@@ -148,7 +149,7 @@ contract LazyWalletRegistryGuardsTest is DeployerBase {
         bundles[0] = new DataBundleDetails[](1);
 
         vm.prank(eSIMWalletAdmin);
-        vm.expectRevert("eSIM identifier 0");
+        vm.expectRevert(Errors.EmptyESIMIdentifier.selector);
         lazyWalletRegistry.batchPopulateHistory(devices, eSIMs, bundles);
     }
 
@@ -164,7 +165,7 @@ contract LazyWalletRegistryGuardsTest is DeployerBase {
         vm.deal(eSIMWalletAdmin, 1 ether);
 
         vm.prank(eSIMWalletAdmin);
-        vm.expectRevert("Incorrect ETH");
+        vm.expectRevert(abi.encodeWithSelector(Errors.DepositDoesNotMatchValue.selector, 2 ether, 1 ether));
         lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier{value: 1 ether}(pubKey1, DEVICE, 11001, 2 ether);
     }
 
@@ -174,12 +175,12 @@ contract LazyWalletRegistryGuardsTest is DeployerBase {
 
     /// @notice An eSIM identifier has to be named to be moved
     function test_switchESIMIdentifierToNewDeviceIdentifier_rejectsAnEmptyESIMIdentifier() public {
-        _expectSwitchToRevert("", DEVICE, OTHER_DEVICE, "_eSIMIdentifier 0");
+        _expectSwitchToRevert("", DEVICE, OTHER_DEVICE, abi.encodeWithSelector(Errors.EmptyESIMIdentifier.selector));
     }
 
     /// @notice A destination device has to be named
     function test_switchESIMIdentifierToNewDeviceIdentifier_rejectsAnEmptyNewDeviceIdentifier() public {
-        _expectSwitchToRevert(ESIM, DEVICE, "", "_newDeviceIdentifier 0");
+        _expectSwitchToRevert(ESIM, DEVICE, "", abi.encodeWithSelector(Errors.EmptyDeviceIdentifier.selector));
     }
 
     /// @notice The caller has to name the device the eSIM is actually on
@@ -187,7 +188,7 @@ contract LazyWalletRegistryGuardsTest is DeployerBase {
     function test_switchESIMIdentifierToNewDeviceIdentifier_rejectsAnOldDeviceOfADifferentLength() public {
         _bindOneESIM();
 
-        _expectSwitchToRevert(ESIM, "Short", OTHER_DEVICE, "Incorrect device identifier");
+        _expectSwitchToRevert(ESIM, "Short", OTHER_DEVICE, abi.encodeWithSelector(Errors.ESIMBoundToADifferentDevice.selector, ESIM, DEVICE));
     }
 
     /// @notice A device of the right length but the wrong name is refused too
@@ -196,7 +197,7 @@ contract LazyWalletRegistryGuardsTest is DeployerBase {
     function test_switchESIMIdentifierToNewDeviceIdentifier_rejectsAnOldDeviceOfTheSameLength() public {
         _bindOneESIM();
 
-        _expectSwitchToRevert(ESIM, "Device_GuardeX", OTHER_DEVICE, "Incorrect device identifier");
+        _expectSwitchToRevert(ESIM, "Device_GuardeX", OTHER_DEVICE, abi.encodeWithSelector(Errors.ESIMBoundToADifferentDevice.selector, ESIM, DEVICE));
     }
 
     /// @notice Moving an eSIM to the device it is already on is refused
@@ -206,6 +207,6 @@ contract LazyWalletRegistryGuardsTest is DeployerBase {
     function test_switchESIMIdentifierToNewDeviceIdentifier_rejectsSwitchingToTheSameDevice() public {
         _bindOneESIM();
 
-        _expectSwitchToRevert(ESIM, DEVICE, DEVICE, "Cannot switch to same device");
+        _expectSwitchToRevert(ESIM, DEVICE, DEVICE, abi.encodeWithSelector(Errors.CannotSwitchToTheSameDevice.selector, DEVICE));
     }
 }

@@ -6,6 +6,7 @@ import "forge-std/Test.sol";
 import "forge-std/console.sol";
 
 import "contracts/CustomStructs.sol";
+import {Errors} from "contracts/Errors.sol";
 
 import "test/utils/DeployerBase.sol";
 import "test/utils/mocks/MockLazyWalletRegistry.sol";
@@ -15,7 +16,7 @@ contract LazyWalletRegistryTest is DeployerBase {
 
     function test_batchPopulateHistory_withoutAdmin() public {
         vm.startPrank(user1);
-        vm.expectRevert("Only eSIM wallet admin");
+        vm.expectRevert(Errors.OnlyESIMWalletAdmin.selector);
         lazyWalletRegistry.batchPopulateHistory(
             customDeviceUniqueIdentifiers,
             customESIMUniqueIdentifiers,
@@ -54,7 +55,7 @@ contract LazyWalletRegistryTest is DeployerBase {
         registry.acceptAdminUpdate();
 
         vm.prank(retiredAdmin);
-        vm.expectRevert("Only eSIM wallet admin");
+        vm.expectRevert(Errors.OnlyESIMWalletAdmin.selector);
         lazyWalletRegistry.batchPopulateHistory(
             customDeviceUniqueIdentifiers,
             customESIMUniqueIdentifiers,
@@ -125,8 +126,14 @@ contract LazyWalletRegistryTest is DeployerBase {
         // First populate the history
         test_batchPopulateHistory();
 
+        string memory movedESIM = modifiedESIMUniqueIdentifiers[0][0];
+
         vm.startPrank(eSIMWalletAdmin);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(
+            Errors.ESIMBoundToADifferentDevice.selector,
+            movedESIM,
+            lazyWalletRegistry.eSIMIdentifierToDeviceIdentifier(movedESIM)
+        ));
         lazyWalletRegistry.batchPopulateHistory(
             modifiedDeviceUniqueIdentifiers,
             modifiedESIMUniqueIdentifiers,
@@ -137,7 +144,7 @@ contract LazyWalletRegistryTest is DeployerBase {
 
     function test_switchESIMIdentifierToNewDeviceIdentifier_withoutAdmin() public {
         vm.startPrank(user1);
-        vm.expectRevert("Only eSIM wallet admin");
+        vm.expectRevert(Errors.OnlyESIMWalletAdmin.selector);
         lazyWalletRegistry.switchESIMIdentifierToNewDeviceIdentifier(
             "eSIM_0_0",
             "Device_0",
@@ -148,7 +155,7 @@ contract LazyWalletRegistryTest is DeployerBase {
 
     function test_switchESIMIdentifierToNewDeviceIdentifier_unregistered() public {
         vm.startPrank(eSIMWalletAdmin);
-        vm.expectRevert("Unknown _eSIMIdentifier");
+        vm.expectRevert(abi.encodeWithSelector(Errors.UnknownESIMIdentifier.selector, "eSIM_0_0"));
         lazyWalletRegistry.switchESIMIdentifierToNewDeviceIdentifier(
             "eSIM_0_0",
             "Device_0",
@@ -213,7 +220,7 @@ contract LazyWalletRegistryTest is DeployerBase {
 
     function test_deployLazyWalletAndSetESIMIdentifier_withoutAdmin() public {
         vm.startPrank(user1);
-        vm.expectRevert("Only eSIM wallet admin");
+        vm.expectRevert(Errors.OnlyESIMWalletAdmin.selector);
         lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(
             pubKey1,
             customDeviceUniqueIdentifiers[0],
@@ -225,7 +232,7 @@ contract LazyWalletRegistryTest is DeployerBase {
 
     function test_deployLazyWalletAndSetESIMIdentifier_withoutESIMIdentifier() public {
         vm.startPrank(eSIMWalletAdmin);
-        vm.expectRevert("No eSIM identifier found");
+        vm.expectRevert(abi.encodeWithSelector(Errors.NoESIMIdentifiersForDevice.selector, customDeviceUniqueIdentifiers[0]));
         lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(
             pubKey1,
             customDeviceUniqueIdentifiers[0],
@@ -379,7 +386,7 @@ contract LazyWalletRegistryTest is DeployerBase {
         test_deployLazyWalletAndSetESIMIdentifier();
 
         vm.startPrank(eSIMWalletAdmin);
-        vm.expectRevert("Already deployed");
+        vm.expectRevert(abi.encodeWithSelector(Errors.LazyWalletAlreadyDeployed.selector, customDeviceUniqueIdentifiers[0]));
         lazyWalletRegistry.batchPopulateHistory(
             customDeviceUniqueIdentifiers,
             customESIMUniqueIdentifiers,

@@ -96,10 +96,10 @@ contract IdentifiersAndArraysTest is FuzzBase {
     /// @dev Zero length is not the same case as too long. An empty device identifier would key
     ///      every unbound eSIM identifier to the same entry.
     function test_populateHistory_refusesEmptyIdentifiers() public {
-        vm.expectRevert("Device identifier 0");
+        vm.expectRevert(Errors.EmptyDeviceIdentifier.selector);
         _populateOne("", "ESIM_FUZZ", 1 ether);
 
-        vm.expectRevert("eSIM identifier 0");
+        vm.expectRevert(Errors.EmptyESIMIdentifier.selector);
         _populateOne("DEVICE_FUZZ", "", 1 ether);
     }
 
@@ -134,8 +134,14 @@ contract IdentifiersAndArraysTest is FuzzBase {
             details[i][0] = DataBundleDetails("DB_FUZZ", 1 ether);
         }
 
+        // The device count is checked against the eSIM lists first, so that pair is what the error
+        // names whenever it is the one that disagrees
+        bytes memory expectedError = deviceCount != eSIMCount
+            ? abi.encodeWithSelector(Errors.ArrayLengthMismatch.selector, deviceCount, eSIMCount)
+            : abi.encodeWithSelector(Errors.ArrayLengthMismatch.selector, deviceCount, detailCount);
+
         vm.prank(eSIMWalletAdmin);
-        vm.expectRevert("Unequal array provided");
+        vm.expectRevert(expectedError);
         lazyWalletRegistry.batchPopulateHistory(devices, eSIMs, details);
     }
 
@@ -167,7 +173,7 @@ contract IdentifiersAndArraysTest is FuzzBase {
         }
 
         vm.prank(eSIMWalletAdmin);
-        vm.expectRevert("Unequal array provided");
+        vm.expectRevert(abi.encodeWithSelector(Errors.ArrayLengthMismatch.selector, eSIMCount, detailCount));
         lazyWalletRegistry.batchPopulateHistory(devices, eSIMs, details);
     }
 
