@@ -147,16 +147,25 @@ contract ProtocolState {
     // ----------------------------------------------------------------------------------------
 
     /// @notice Records a device wallet, the identifier it answers to and the key that owns it
+    /// @dev The bindings are written only the first time a wallet is seen. Every deploy entry point
+    ///      returns an already-deployed wallet untouched when the counterfactual address it
+    ///      computes is occupied, and the arguments that produced that address are the ones the
+    ///      wallet was deployed with, so a later call carrying the same arguments must not restate
+    ///      them. The wallet's own key may have moved since, through a rotation, and the caller of
+    ///      a deploy has no say in that. Overwriting here would hand the invariants the deploy
+    ///      arguments as truth and hide the rotation. Adoption is unaffected: a wallet the
+    ///      permissionless path left behind is only ever pending, never known, until the call that
+    ///      binds it.
     function recordDeviceWallet(
         address wallet,
         string memory identifier,
         bytes32[2] memory ownerKey
     ) external {
         account(wallet);
-        if (!isKnownDeviceWallet[wallet]) {
-            isKnownDeviceWallet[wallet] = true;
-            deviceWallets.push(wallet);
-        }
+        if (isKnownDeviceWallet[wallet]) return;
+
+        isKnownDeviceWallet[wallet] = true;
+        deviceWallets.push(wallet);
 
         if (ghost_identifierToDevice[identifier] == address(0)) {
             usedIdentifiers.push(identifier);
