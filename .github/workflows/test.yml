@@ -20,15 +20,36 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:
-          version: nightly
+          version: v1.7.1
+
+      # The signature tests shell out to test/utils/ffi/webauthn-signer.js, which imports ethers
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install node dependencies
+        run: npm ci
 
       - name: Run Forge build
         run: |
           forge --version
-          forge build --sizes
+          forge build --via-ir --sizes
         id: build
 
       - name: Run Forge tests
         run: |
-          forge test -vvv
+          forge test --via-ir -vvv
         id: test
+
+      # Fuzz and invariant runs draw a fresh seed each time, and the malleable twin case verifies a
+      # signature generated offchain per run, so all three report a different figure every time.
+      # They are left out of the baseline rather than given a tolerance, so what remains is checked
+      # exactly.
+      - name: Check gas snapshot
+        run: |
+          forge snapshot --check --via-ir \
+            --no-match-path "test/foundry/{fuzz-testing,invariant-testing,fork}/*" \
+            --no-match-test "test_verifySignature_rejectsTheMalleableTwinOfARealAssertion"
+        id: snapshot
