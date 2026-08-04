@@ -71,6 +71,12 @@ interface Errors {
     error UseAcceptOwnershipTransfer();
 
     // DeviceWallet
+    error EmptyDeviceIdentifier();
+    error UnknownESIMWallet(address eSIMWallet);
+    error ZeroAmount();
+    error ETHAccessRevoked(address eSIMWallet);
+    error ESIMWalletAlreadyAdded(address eSIMWallet);
+    error ESIMWalletNotOwnedByThisDeviceWallet(address eSIMWallet, address eSIMWalletOwner);
     error OnlyRegistryOrDeviceWalletFactoryOrOwner();
     error OnlySelfOrAssociatedESIMWallet();
     error OnlyESIMWalletAdminOrRegistry();

@@ -209,11 +209,11 @@ contract ETHAmountsTest is FuzzBase {
         vm.deal(address(fuzzDeviceWallet), 1 ether);
 
         vm.prank(address(fuzzESIMWallet));
-        vm.expectRevert("_amount 0");
+        vm.expectRevert(Errors.ZeroAmount.selector);
         fuzzDeviceWallet.pullETH(0);
 
         vm.prank(address(fuzzESIMWallet));
-        vm.expectRevert("_amount 0");
+        vm.expectRevert(Errors.ZeroAmount.selector);
         fuzzDeviceWallet.payETHForDataBundles(0);
 
         assertEq(address(fuzzDeviceWallet).balance, 1 ether, "No ETH may move on a refused call");

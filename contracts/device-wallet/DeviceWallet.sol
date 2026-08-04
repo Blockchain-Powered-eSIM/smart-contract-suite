@@ -139,8 +139,8 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         string memory _deviceUniqueIdentifier,
         address _eSIMWalletFactory
     ) external initializer {
-        require(_registry != address(0), "Registry contract cannot be zero");
-        require(bytes(_deviceUniqueIdentifier).length != 0, "Device identifier cannot be zero");
+        if(_registry == address(0)) revert Errors.ZeroAddress("_registry");
+        if(bytes(_deviceUniqueIdentifier).length == 0) revert Errors.EmptyDeviceIdentifier();
 
         registry = Registry(_registry);
         deviceUniqueIdentifier = _deviceUniqueIdentifier;
@@ -210,10 +210,9 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         address _eSIMWalletAddress,
         string calldata _eSIMUniqueIdentifier
     ) public onlyESIMWalletAdminOrRegistry returns (string memory) {
-        require(
-            registry.isESIMWalletValid(_eSIMWalletAddress) != address(0),
-            "Unknown eSIM wallet address"
-        );
+        if(registry.isESIMWalletValid(_eSIMWalletAddress) == address(0)) {
+            revert Errors.UnknownESIMWallet(_eSIMWalletAddress);
+        }
 
         ESIMWallet eSIMWallet = ESIMWallet(payable(_eSIMWalletAddress));
         eSIMWallet.setESIMUniqueIdentifier(_eSIMUniqueIdentifier);
@@ -228,8 +227,8 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     /// @param _amount Amount of ETH to pull
     function payETHForDataBundles(uint256 _amount) external onlyAssociatedESIMWallets nonReentrant returns (uint256) {
         registry.requireNotPaused();
-        require(_amount > 0, "_amount 0");
-        require(canPullETH[msg.sender] == true, "Access revoked");
+        if(_amount == 0) revert Errors.ZeroAmount();
+        if(!canPullETH[msg.sender]) revert Errors.ETHAccessRevoked(msg.sender);
 
         address vault = getVaultAddress();
         _transferETH(vault, _amount);
@@ -243,8 +242,8 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     /// @param _amount Amount of ETH to pull
     function pullETH(uint256 _amount) external onlyAssociatedESIMWallets nonReentrant returns (uint256) {
         registry.requireNotPaused();
-        require(_amount > 0, "_amount 0");
-        require(canPullETH[msg.sender] == true, "Access revoked");
+        if(_amount == 0) revert Errors.ZeroAmount();
+        if(!canPullETH[msg.sender]) revert Errors.ETHAccessRevoked(msg.sender);
 
         _transferETH(msg.sender, _amount);
 
@@ -261,7 +260,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     /// @param _eSIMWalletAddress Address of the eSIM wallet to toggle ETH access for
     /// @param _hasAccessToETH Set to true to give access, false to revoke access
     function toggleAccessToETH(address _eSIMWalletAddress, bool _hasAccessToETH) public onlySelf {
-        require(isValidESIMWallet[_eSIMWalletAddress], "Unknown _eSIMWalletAddress");
+        if(!isValidESIMWallet[_eSIMWalletAddress]) revert Errors.UnknownESIMWallet(_eSIMWalletAddress);
 
         canPullETH[_eSIMWalletAddress] = _hasAccessToETH;
 
@@ -269,8 +268,9 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     }
 
     function _transferETH(address _recipient, uint256 _amount) internal virtual {
-        require(_amount <= address(this).balance, "Not enough ETH");
-        require(_recipient != address(0), "_recipient 0");
+        uint256 balance = address(this).balance;
+        if(_amount > balance) revert Errors.InsufficientBalance(balance, _amount);
+        if(_recipient == address(0)) revert Errors.ZeroAddress("_recipient");
 
         if (_amount > 0) {
             (bool success,) = _recipient.call{value: _amount}("");
@@ -294,13 +294,16 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         address _eSIMWalletAddress,
         bool _hasAccessToETH
     ) internal {
-        require(isValidESIMWallet[_eSIMWalletAddress] == false, "ESIM wallet already owned");
+        if(isValidESIMWallet[_eSIMWalletAddress]) revert Errors.ESIMWalletAlreadyAdded(_eSIMWalletAddress);
         // If the eSIM wallet is a newly deployed one, then the owner will definitely be set
         // during initialisation. This device wallet will be the owner.
         // If the eSIM wallet already existed, then the previous owner (device wallet)
         // must transfer the ownership to the eSIM wallet, and mark its status as standby. 
         // And this device wallet must accept the ownership before calling the addESIMWallet function
-        require(ESIMWallet(payable(_eSIMWalletAddress)).owner() == address(this), "Accept ownership first");
+        address eSIMWalletOwner = ESIMWallet(payable(_eSIMWalletAddress)).owner();
+        if(eSIMWalletOwner != address(this)) {
+            revert Errors.ESIMWalletNotOwnedByThisDeviceWallet(_eSIMWalletAddress, eSIMWalletOwner);
+        }
 
         isValidESIMWallet[_eSIMWalletAddress] = true;
         canPullETH[_eSIMWalletAddress] = _hasAccessToETH;
@@ -322,7 +325,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         address _eSIMWalletAddress,
         bool _callBackETH
     ) public onlySelfOrESIMWalletBeingRemoved(_eSIMWalletAddress) nonReentrant {
-        require(isValidESIMWallet[_eSIMWalletAddress] == true, "Unknown eSIM wallet");
+        if(!isValidESIMWallet[_eSIMWalletAddress]) revert Errors.UnknownESIMWallet(_eSIMWalletAddress);
 
         isValidESIMWallet[_eSIMWalletAddress] = false;
         canPullETH[_eSIMWalletAddress] = false;

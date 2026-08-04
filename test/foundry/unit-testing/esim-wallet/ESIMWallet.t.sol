@@ -342,7 +342,7 @@ contract ESIMWalletTest is DeployerBase {
 
         // Should revert as eSIM wallet has already been removed in previous step
         vm.startPrank(address(deviceWallet));
-        vm.expectRevert("Unknown eSIM wallet");
+        vm.expectRevert(abi.encodeWithSelector(Errors.UnknownESIMWallet.selector, address(eSIMWallet1)));
         deviceWallet.removeESIMWallet(address(eSIMWallet1), true);
         vm.stopPrank();
         assertEq(registry.isESIMWalletOnStandby(address(eSIMWallet1)), true, "ESIMWallet1 should have been on standBy");
@@ -411,7 +411,8 @@ contract ESIMWalletTest is DeployerBase {
         );
 
         vm.startPrank(eSIMWalletAdmin);
-        vm.expectRevert("Not enough ETH");
+        // The shortfall is pulled from the device wallet, which holds nothing
+        vm.expectRevert(abi.encodeWithSelector(Errors.InsufficientBalance.selector, 0, 0.1 ether));
         eSIMWallet1.buyDataBundle(_dataBundleDetail);
         vm.stopPrank();
 
@@ -470,7 +471,8 @@ contract ESIMWalletTest is DeployerBase {
         vm.deal(address(eSIMWallet1), 0.03 ether);  // 0.03 ETH to be used from eSIM wallet
 
         vm.startPrank(eSIMWalletAdmin);
-        vm.expectRevert("Not enough ETH");          // revert from Device wallet, needed 0.03 ETH, found 0 ETH
+        // Revert from the device wallet, needed 0.03 ETH, found 0 ETH
+        vm.expectRevert(abi.encodeWithSelector(Errors.InsufficientBalance.selector, 0, 0.03 ether));
         eSIMWallet1.buyDataBundle{value: 0.04 ether}(_dataBundleDetail);
         vm.stopPrank();
 

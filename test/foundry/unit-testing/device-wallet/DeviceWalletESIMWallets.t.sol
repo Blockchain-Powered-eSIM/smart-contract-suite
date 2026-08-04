@@ -155,7 +155,9 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
         deployWallets();
 
         vm.startPrank(address(deviceWallet));
-        vm.expectRevert("Accept ownership first");
+        vm.expectRevert(abi.encodeWithSelector(
+            Errors.ESIMWalletNotOwnedByThisDeviceWallet.selector, address(eSIMWallet3), eSIMWallet3.owner()
+        ));
         deviceWallet.addESIMWallet(
             address(eSIMWallet3),
             true
@@ -167,7 +169,7 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
         deployWallets();
 
         vm.startPrank(address(deviceWallet));
-        vm.expectRevert("ESIM wallet already owned");
+        vm.expectRevert(abi.encodeWithSelector(Errors.ESIMWalletAlreadyAdded.selector, address(eSIMWallet1)));
         deviceWallet.addESIMWallet(
             address(eSIMWallet1),
             true
@@ -217,7 +219,7 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
 
         // Since the eSIM wallet was already removed, the user cannot do the operation again
         vm.startPrank(address(deviceWallet));
-        vm.expectRevert("Unknown eSIM wallet");
+        vm.expectRevert(abi.encodeWithSelector(Errors.UnknownESIMWallet.selector, address(eSIMWallet1)));
         deviceWallet.removeESIMWallet(address(eSIMWallet1), true);
         vm.stopPrank();
 
@@ -299,7 +301,7 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
         assertEq(currentOwner, address(deviceWallet), "Owner should not have changed yet");
 
         vm.startPrank(address(deviceWallet));
-        vm.expectRevert("Unknown eSIM wallet");
+        vm.expectRevert(abi.encodeWithSelector(Errors.UnknownESIMWallet.selector, address(eSIMWallet1)));
         deviceWallet.removeESIMWallet(address(eSIMWallet1), true);
         vm.stopPrank();
 

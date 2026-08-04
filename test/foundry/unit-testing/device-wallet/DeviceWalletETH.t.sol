@@ -27,7 +27,7 @@ contract DeviceWalletETHTest is DeviceWalletFixture {
 
         vm.deal(address(deviceWallet), 0.1 ether);
         vm.startPrank(address(eSIMWallet2));
-        vm.expectRevert("Access revoked");
+        vm.expectRevert(abi.encodeWithSelector(Errors.ETHAccessRevoked.selector, address(eSIMWallet2)));
         deviceWallet.payETHForDataBundles(100000000000000000);  // 0.1 ETH
         vm.stopPrank();
     }
@@ -68,7 +68,7 @@ contract DeviceWalletETHTest is DeviceWalletFixture {
 
         vm.deal(address(deviceWallet), 2 ether);
         vm.startPrank(address(eSIMWallet2));
-        vm.expectRevert("Access revoked");
+        vm.expectRevert(abi.encodeWithSelector(Errors.ETHAccessRevoked.selector, address(eSIMWallet2)));
         deviceWallet.pullETH(1000000000000000000);  // 1 ETH
         vm.stopPrank();
     }
@@ -130,7 +130,7 @@ contract DeviceWalletETHTest is DeviceWalletFixture {
 
         vm.deal(address(deviceWallet), 1 ether);
         vm.startPrank(eSIMWalletAdmin);
-        vm.expectRevert("Access revoked");
+        vm.expectRevert(abi.encodeWithSelector(Errors.ETHAccessRevoked.selector, address(eSIMWallet1)));
         eSIMWallet1.buyDataBundle(_dataBundleDetail);
         vm.stopPrank();
     }

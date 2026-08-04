@@ -72,7 +72,7 @@ contract DeviceWalletGuardsTest is DeployerBase {
     function test_init_rejectsAZeroRegistry() public {
         address beacon = address(deviceWalletFactory.beacon());
 
-        vm.expectRevert("Registry contract cannot be zero");
+        vm.expectRevert(abi.encodeWithSelector(Errors.ZeroAddress.selector, "_registry"));
         _initialiseDirectly(beacon, address(0), customDeviceUniqueIdentifiers[0]);
     }
 
@@ -80,7 +80,7 @@ contract DeviceWalletGuardsTest is DeployerBase {
     function test_init_rejectsAnEmptyDeviceIdentifier() public {
         address beacon = address(deviceWalletFactory.beacon());
 
-        vm.expectRevert("Device identifier cannot be zero");
+        vm.expectRevert(Errors.EmptyDeviceIdentifier.selector);
         _initialiseDirectly(beacon, address(registry), "");
     }
 
@@ -106,7 +106,7 @@ contract DeviceWalletGuardsTest is DeployerBase {
         _deployWallet(customDeviceUniqueIdentifiers[0], pubKey1, 8003);
 
         vm.prank(eSIMWalletAdmin);
-        vm.expectRevert("Unknown eSIM wallet address");
+        vm.expectRevert(abi.encodeWithSelector(Errors.UnknownESIMWallet.selector, user1));
         wallet.setESIMUniqueIdentifierForAnESIMWallet(user1, "eSIM_unknown");
     }
 
@@ -120,7 +120,7 @@ contract DeviceWalletGuardsTest is DeployerBase {
         vm.deal(address(wallet), 1 ether);
 
         vm.prank(eSIMWallet);
-        vm.expectRevert("_amount 0");
+        vm.expectRevert(Errors.ZeroAmount.selector);
         wallet.pullETH(0);
     }
 
@@ -130,7 +130,7 @@ contract DeviceWalletGuardsTest is DeployerBase {
         vm.deal(address(wallet), 1 ether);
 
         vm.prank(eSIMWallet);
-        vm.expectRevert("_amount 0");
+        vm.expectRevert(Errors.ZeroAmount.selector);
         wallet.payETHForDataBundles(0);
     }
 
@@ -145,7 +145,7 @@ contract DeviceWalletGuardsTest is DeployerBase {
         _deployWallet(customDeviceUniqueIdentifiers[0], pubKey1, 8006);
 
         vm.prank(address(wallet));
-        vm.expectRevert("Unknown _eSIMWalletAddress");
+        vm.expectRevert(abi.encodeWithSelector(Errors.UnknownESIMWallet.selector, user1));
         wallet.toggleAccessToETH(user1, true);
 
         assertEq(wallet.canPullETH(user1), false, "A refused grant must leave the address without access");
@@ -158,7 +158,7 @@ contract DeviceWalletGuardsTest is DeployerBase {
         _deployWallet(customDeviceUniqueIdentifiers[0], pubKey1, 8007);
 
         vm.prank(address(wallet));
-        vm.expectRevert("Unknown eSIM wallet");
+        vm.expectRevert(abi.encodeWithSelector(Errors.UnknownESIMWallet.selector, user1));
         wallet.removeESIMWallet(user1, false);
     }
 
@@ -169,7 +169,7 @@ contract DeviceWalletGuardsTest is DeployerBase {
         _deployWallet(customDeviceUniqueIdentifiers[0], pubKey1, 8008);
 
         vm.prank(address(wallet));
-        vm.expectRevert("Unknown eSIM wallet");
+        vm.expectRevert(abi.encodeWithSelector(Errors.UnknownESIMWallet.selector, user1));
         wallet.removeESIMWallet(user1, false);
 
         assertEq(wallet.isValidESIMWallet(eSIMWallet), true, "The bound eSIM wallet must still be bound");
