@@ -12,7 +12,7 @@ import {BeaconProxy} from "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol"
 import {UpgradeableBeacon} from "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
 
 import "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
-import "@openzeppelin/contracts/utils/Create2.sol";
+import {Create2} from "@openzeppelin/contracts/utils/Create2.sol";
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 import {Registry} from "../Registry.sol";
