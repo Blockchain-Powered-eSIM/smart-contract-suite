@@ -11,8 +11,16 @@ the require sites and reports what is left, plus the arms that are genuinely unc
 
 Usage:
     forge coverage --ir-minimum --report lcov --report-file lcov.info \
-        --no-match-path "test/foundry/fork/*"
+        --no-match-path "test/foundry/{fork,invariant-testing}/*"
     python3 script/branch-coverage.py lcov.info
+
+Fork tests are excluded because they skip when the RPC variables are unset, so including them
+makes the number depend on the environment. Invariant runs are excluded for runtime: a campaign
+under `--ir-minimum` costs more than the rest of the suite put together. They do reach branches,
+so this is a deliberate choice about what the number means. A branch that only a random walk
+reaches counts as uncovered here, which is the intent: it should be pinned by a named test.
+
+Fuzz tests stay in. They run in seconds and reach revert arms that fixed inputs do not.
 """
 
 import collections
