@@ -5,6 +5,7 @@ pragma solidity 0.8.36;
 import "forge-std/Test.sol";
 
 import "contracts/CustomStructs.sol";
+import {Errors} from "contracts/Errors.sol";
 
 import {DeviceWalletFactoryFixture} from "test/foundry/unit-testing/device-wallet/base/DeviceWalletFactoryFixture.sol";
 import "test/utils/mocks/MockDeviceWallet.sol";
@@ -32,7 +33,7 @@ contract DeviceWalletFactoryConfigTest is DeviceWalletFactoryFixture {
 
     function test_addRegistryAddress_onlyOnce() public {
         vm.startPrank(deviceWalletFactory.owner());
-        vm.expectRevert("Already added");
+        vm.expectRevert(abi.encodeWithSelector(Errors.RegistryAlreadySet.selector, address(registry)));
         deviceWalletFactory.addRegistryAddress(address(registry));
         vm.stopPrank();
     }
@@ -49,7 +50,7 @@ contract DeviceWalletFactoryConfigTest is DeviceWalletFactoryFixture {
         assertNotEq(currentVault, address(0), "Vault cannot be address(0)");
 
         vm.startPrank(eSIMWalletAdmin);
-        vm.expectRevert("Cannot update to same address");
+        vm.expectRevert(abi.encodeWithSelector(Errors.VaultUnchanged.selector, currentVault));
         deviceWalletFactory.updateVaultAddress(currentVault);
         vm.stopPrank();
     }
@@ -59,7 +60,7 @@ contract DeviceWalletFactoryConfigTest is DeviceWalletFactoryFixture {
         assertNotEq(currentVault, address(0), "Vault cannot be address(0)");
 
         vm.startPrank(eSIMWalletAdmin);
-        vm.expectRevert("Vault address cannot be zero");
+        vm.expectRevert(abi.encodeWithSelector(Errors.ZeroAddress.selector, "_newVaultAddress"));
         deviceWalletFactory.updateVaultAddress(address(0));
         vm.stopPrank();
     }

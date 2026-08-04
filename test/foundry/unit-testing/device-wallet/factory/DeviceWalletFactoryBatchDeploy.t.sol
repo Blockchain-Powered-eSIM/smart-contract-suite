@@ -298,9 +298,12 @@ contract DeviceWalletFactoryBatchDeployTest is DeviceWalletFactoryFixture {
         deviceWalletFactory.deployDeviceWalletForUsers(identifiers, keys, salts, deposits);
 
         salts[0] = 783;
+        address existing = registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[0]);
 
         vm.prank(eSIMWalletAdmin);
-        vm.expectRevert("Wallet already exists with different owner");
+        vm.expectRevert(abi.encodeWithSelector(
+            Errors.DeviceWalletAlreadyExists.selector, customDeviceUniqueIdentifiers[0], existing
+        ));
         deviceWalletFactory.deployDeviceWalletForUsers(identifiers, keys, salts, deposits);
     }
 

@@ -34,10 +34,12 @@ interface Errors {
     error EmptyDeviceIdentifier();
     error EmptyESIMIdentifier();
 
+    // Any contract taking parallel arrays: LazyWalletRegistry and DeviceWalletFactory
+    error ArrayLengthMismatch(uint256 expected, uint256 actual);
+
     // LazyWalletRegistry
     error LazyWalletAlreadyDeployed(string deviceIdentifier);
     error IdentifierTooLong(string identifier, uint256 maxLength);
-    error ArrayLengthMismatch(uint256 expected, uint256 actual);
     error DepositDoesNotMatchValue(uint256 depositAmount, uint256 value);
     error NoESIMIdentifiersForDevice(string deviceIdentifier);
     error UnknownESIMIdentifier(string eSIMIdentifier);
@@ -58,6 +60,9 @@ interface Errors {
     error OnlyAdminOrRegistry();
     error OnlyEntryPoint();
     error InvalidDeviceWalletOwnerKey();
+    error VaultUnchanged(address vault);
+    error EmptyBatch();
+    error DeviceWalletInfoAlreadyAdded(address deviceWallet);
 
     // Account4337, and so DeviceWallet through it
     error OnlySelf();

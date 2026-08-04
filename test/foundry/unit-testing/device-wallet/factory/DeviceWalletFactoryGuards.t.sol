@@ -8,6 +8,7 @@ import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 import "contracts/device-wallet/DeviceWalletFactory.sol";
 import "contracts/CustomStructs.sol";
+import {Errors} from "contracts/Errors.sol";
 
 import "test/utils/DeployerBase.sol";
 
@@ -66,11 +67,11 @@ contract DeviceWalletFactoryGuardsTest is DeployerBase {
     /// @notice Calls initialize with one argument replaced, expecting the given revert string
     /// @param _vault The vault address to pass
     /// @param _upgradeManager The upgrade manager address to pass
-    /// @param _reason The revert string expected
-    function _expectInitializeToRevert(address _vault, address _upgradeManager, string memory _reason) internal {
+    /// @param _error The encoded error expected
+    function _expectInitializeToRevert(address _vault, address _upgradeManager, bytes memory _error) internal {
         DeviceWalletFactory implementation = new DeviceWalletFactory();
 
-        vm.expectRevert(bytes(_reason));
+        vm.expectRevert(_error);
         new ERC1967Proxy(
             address(implementation),
             abi.encodeCall(
@@ -87,13 +88,13 @@ contract DeviceWalletFactoryGuardsTest is DeployerBase {
     /// @notice A factory without a vault cannot be initialized
     /// @dev The vault has no setter that accepts zero, so a zero here would be permanent.
     function test_initialize_rejectsAZeroVault() public {
-        _expectInitializeToRevert(address(0), upgradeManager, "Vault address cannot be zero");
+        _expectInitializeToRevert(address(0), upgradeManager, abi.encodeWithSelector(Errors.ZeroAddress.selector, "_vault"));
     }
 
     /// @notice A factory without an owner cannot be initialized
     /// @dev The owner is the only caller that can upgrade this contract or the beacon under it.
     function test_initialize_rejectsAZeroUpgradeManager() public {
-        _expectInitializeToRevert(vault, address(0), "_upgradeManager cannot be zero");
+        _expectInitializeToRevert(vault, address(0), abi.encodeWithSelector(Errors.ZeroAddress.selector, "_upgradeManager"));
     }
 
     /// @notice The registry address cannot be set to zero
@@ -102,7 +103,7 @@ contract DeviceWalletFactoryGuardsTest is DeployerBase {
         DeviceWalletFactory factory = _factoryWithoutRegistry();
 
         vm.prank(upgradeManager);
-        vm.expectRevert("_registryContractAddress 0");
+        vm.expectRevert(abi.encodeWithSelector(Errors.ZeroAddress.selector, "_registryContractAddress"));
         factory.addRegistryAddress(address(0));
     }
 
@@ -127,7 +128,7 @@ contract DeviceWalletFactoryGuardsTest is DeployerBase {
     ///      of them at once.
     function test_updateDeviceWalletImplementation_rejectsTheZeroAddress() public {
         vm.prank(upgradeManager);
-        vm.expectRevert("_newDeviceImpl 0");
+        vm.expectRevert(abi.encodeWithSelector(Errors.ZeroAddress.selector, "_newDeviceImpl"));
         deviceWalletFactory.updateDeviceWalletImplementation(address(0));
     }
 
@@ -136,7 +137,7 @@ contract DeviceWalletFactoryGuardsTest is DeployerBase {
         address current = deviceWalletFactory.getCurrentDeviceWalletImplementation();
 
         vm.prank(upgradeManager);
-        vm.expectRevert("Existing implementation");
+        vm.expectRevert(abi.encodeWithSelector(Errors.ImplementationUnchanged.selector, current));
         deviceWalletFactory.updateDeviceWalletImplementation(current);
 
         assertEq(
@@ -155,13 +156,13 @@ contract DeviceWalletFactoryGuardsTest is DeployerBase {
     /// @param _keyCount Length of the key array
     /// @param _saltCount Length of the salt array
     /// @param _depositCount Length of the deposit array
-    /// @param _reason The revert string expected
+    /// @param _error The encoded error expected
     function _expectBatchToRevert(
         uint256 _identifierCount,
         uint256 _keyCount,
         uint256 _saltCount,
         uint256 _depositCount,
-        string memory _reason
+        bytes memory _error
     ) internal {
         string[] memory identifiers = new string[](_identifierCount);
         for (uint256 i = 0; i < _identifierCount; ++i) {
@@ -173,7 +174,7 @@ contract DeviceWalletFactoryGuardsTest is DeployerBase {
         }
 
         vm.prank(eSIMWalletAdmin);
-        vm.expectRevert(bytes(_reason));
+        vm.expectRevert(_error);
         deviceWalletFactory.deployDeviceWalletForUsers(
             identifiers, keys, new uint256[](_saltCount), new uint256[](_depositCount)
         );
@@ -181,24 +182,24 @@ contract DeviceWalletFactoryGuardsTest is DeployerBase {
 
     /// @notice A batch with nothing in it is refused rather than silently returning nothing
     function test_deployDeviceWalletForUsers_rejectsAnEmptyBatch() public {
-        _expectBatchToRevert(0, 0, 0, 0, "Array cannot be empty");
+        _expectBatchToRevert(0, 0, 0, 0, abi.encodeWithSelector(Errors.EmptyBatch.selector));
     }
 
     /// @notice Fewer owner keys than identifiers is refused
     /// @dev Each of the three length checks is separate, so each needs its own test. A missing one
     ///      would read past the end of its array and pair an identifier with another device's key.
     function test_deployDeviceWalletForUsers_rejectsAShortKeyArray() public {
-        _expectBatchToRevert(2, 1, 2, 2, "Array mismatch");
+        _expectBatchToRevert(2, 1, 2, 2, abi.encodeWithSelector(Errors.ArrayLengthMismatch.selector, 2, 1));
     }
 
     /// @notice Fewer salts than identifiers is refused
     function test_deployDeviceWalletForUsers_rejectsAShortSaltArray() public {
-        _expectBatchToRevert(2, 2, 1, 2, "Array mismatch");
+        _expectBatchToRevert(2, 2, 1, 2, abi.encodeWithSelector(Errors.ArrayLengthMismatch.selector, 2, 1));
     }
 
     /// @notice Fewer deposits than identifiers is refused
     function test_deployDeviceWalletForUsers_rejectsAShortDepositArray() public {
-        _expectBatchToRevert(2, 2, 2, 1, "Array mismatch");
+        _expectBatchToRevert(2, 2, 2, 1, abi.encodeWithSelector(Errors.ArrayLengthMismatch.selector, 2, 1));
     }
 
     /// @notice A device identifier cannot be empty
@@ -211,13 +212,13 @@ contract DeviceWalletFactoryGuardsTest is DeployerBase {
         keys[0] = pubKey1;
 
         vm.prank(eSIMWalletAdmin);
-        vm.expectRevert("DeviceIdentifier cannot be empty");
+        vm.expectRevert(Errors.EmptyDeviceIdentifier.selector);
         deviceWalletFactory.deployDeviceWalletForUsers(identifiers, keys, new uint256[](1), new uint256[](1));
     }
 
     /// @notice createAccount applies the same identifier check, on a path no admin gate protects
     function test_createAccount_rejectsAnEmptyDeviceIdentifier() public {
-        vm.expectRevert("DeviceIdentifier cannot be empty");
+        vm.expectRevert(Errors.EmptyDeviceIdentifier.selector);
         deviceWalletFactory.createAccount("", pubKey1, 1);
     }
 
@@ -241,7 +242,7 @@ contract DeviceWalletFactoryGuardsTest is DeployerBase {
 
         vm.deal(eSIMWalletAdmin, 1 ether);
         vm.prank(eSIMWalletAdmin);
-        vm.expectRevert("Out of ETH");
+        vm.expectRevert(abi.encodeWithSelector(Errors.InsufficientBalance.selector, 1 ether, 2 ether));
         deviceWalletFactory.deployDeviceWalletForUsers{value: 1 ether}(identifiers, keys, salts, deposits);
     }
 
@@ -263,7 +264,7 @@ contract DeviceWalletFactoryGuardsTest is DeployerBase {
         vm.deal(eSIMWalletAdmin, 1 ether);
 
         vm.prank(eSIMWalletAdmin);
-        vm.expectRevert("ETH return failed");
+        vm.expectRevert(Errors.FailedToTransfer.selector);
         deviceWalletFactory.deployDeviceWalletForUsers{value: 1 ether}(identifiers, keys, salts, deposits);
     }
 
@@ -284,8 +285,12 @@ contract DeviceWalletFactoryGuardsTest is DeployerBase {
         keys[0] = pubKey2;
         salts[0] = 6002;
 
+        address existing = registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[0]);
+
         vm.prank(eSIMWalletAdmin);
-        vm.expectRevert("Wallet already exists with different owner");
+        vm.expectRevert(abi.encodeWithSelector(
+            Errors.DeviceWalletAlreadyExists.selector, customDeviceUniqueIdentifiers[0], existing
+        ));
         deviceWalletFactory.deployDeviceWalletForUsers(identifiers, keys, salts, new uint256[](1));
     }
 
@@ -302,7 +307,9 @@ contract DeviceWalletFactoryGuardsTest is DeployerBase {
         salts[0] = 6004;
 
         vm.prank(eSIMWalletAdmin);
-        vm.expectRevert("Wallet already exists with different owner key");
+        vm.expectRevert(abi.encodeWithSelector(
+            Errors.OwnerKeyAlreadyRegistered.selector, keccak256(abi.encode(pubKey1[0], pubKey1[1]))
+        ));
         deviceWalletFactory.deployDeviceWalletForUsers(identifiers, keys, salts, new uint256[](1));
     }
 
@@ -340,14 +347,14 @@ contract DeviceWalletFactoryGuardsTest is DeployerBase {
         Wallets memory deployed = _deployOne(customDeviceUniqueIdentifiers[0], pubKey1, 7001);
 
         vm.prank(eSIMWalletAdmin);
-        vm.expectRevert("Device info already added");
+        vm.expectRevert(abi.encodeWithSelector(Errors.DeviceWalletInfoAlreadyAdded.selector, deployed.deviceWallet));
         deviceWalletFactory.postCreateAccount(deployed.deviceWallet, customDeviceUniqueIdentifiers[1], pubKey2);
     }
 
     /// @notice Registration with an empty device identifier is refused
     function test_postCreateAccount_rejectsAnEmptyDeviceIdentifier() public {
         vm.prank(eSIMWalletAdmin);
-        vm.expectRevert("DeviceIdentifier cannot be empty");
+        vm.expectRevert(Errors.EmptyDeviceIdentifier.selector);
         deviceWalletFactory.postCreateAccount(user1, "", pubKey1);
     }
 }

@@ -137,8 +137,8 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         IEntryPoint _entryPoint,
         P256Verifier _verifier
     ) external initializer {
-        require(_vault != address(0), "Vault address cannot be zero");
-        require(_upgradeManager != address(0), "_upgradeManager cannot be zero");
+        if(_vault == address(0)) revert Errors.ZeroAddress("_vault");
+        if(_upgradeManager == address(0)) revert Errors.ZeroAddress("_upgradeManager");
 
         vault = _vault;
         entryPoint = _entryPoint;
@@ -167,8 +167,8 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     function addRegistryAddress(
         address _registryContractAddress
     ) external onlyOwner returns (address) {
-        require(_registryContractAddress != address(0), "_registryContractAddress 0");
-        require(address(registry) == address(0), "Already added");
+        if(_registryContractAddress == address(0)) revert Errors.ZeroAddress("_registryContractAddress");
+        if(address(registry) != address(0)) revert Errors.RegistryAlreadySet(address(registry));
 
         registry = Registry(_registryContractAddress);
         emit AddedRegistry(address(registry));
@@ -180,8 +180,8 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     /// @dev Can only be called by the admin
     /// @param _newVaultAddress New vault address
     function updateVaultAddress(address _newVaultAddress) public onlyAdmin returns (address) {
-        require(vault != _newVaultAddress, "Cannot update to same address");
-        require(_newVaultAddress != address(0), "Vault address cannot be zero");
+        if(vault == _newVaultAddress) revert Errors.VaultUnchanged(vault);
+        if(_newVaultAddress == address(0)) revert Errors.ZeroAddress("_newVaultAddress");
 
         vault = _newVaultAddress;
         emit VaultAddressUpdated(vault);
@@ -194,8 +194,10 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     function updateDeviceWalletImplementation(
         address _newDeviceImpl
     ) external onlyOwner returns (address) {
-        require(_newDeviceImpl != address(0), "_newDeviceImpl 0");
-        require(_newDeviceImpl != getCurrentDeviceWalletImplementation(), "Existing implementation");
+        if(_newDeviceImpl == address(0)) revert Errors.ZeroAddress("_newDeviceImpl");
+        if(_newDeviceImpl == getCurrentDeviceWalletImplementation()) {
+            revert Errors.ImplementationUnchanged(_newDeviceImpl);
+        }
 
         beacon.upgradeTo(_newDeviceImpl);
 
@@ -216,17 +218,25 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         uint256[] calldata _depositAmounts
     ) external payable onlyAdminOrRegistry returns (Wallets[] memory) {
         uint256 numberOfDeviceWallets = _deviceUniqueIdentifiers.length;
-        require(numberOfDeviceWallets != 0, "Array cannot be empty");
-        require(numberOfDeviceWallets == _deviceWalletOwnersKey.length, "Array mismatch");
-        require(numberOfDeviceWallets == _salts.length, "Array mismatch");
-        require(numberOfDeviceWallets == _depositAmounts.length, "Array mismatch");
+        if(numberOfDeviceWallets == 0) revert Errors.EmptyBatch();
+        if(numberOfDeviceWallets != _deviceWalletOwnersKey.length) {
+            revert Errors.ArrayLengthMismatch(numberOfDeviceWallets, _deviceWalletOwnersKey.length);
+        }
+        if(numberOfDeviceWallets != _salts.length) {
+            revert Errors.ArrayLengthMismatch(numberOfDeviceWallets, _salts.length);
+        }
+        if(numberOfDeviceWallets != _depositAmounts.length) {
+            revert Errors.ArrayLengthMismatch(numberOfDeviceWallets, _depositAmounts.length);
+        }
 
         // Track the available ETH to spend
         uint256 availableETH = msg.value;
         Wallets[] memory walletsDeployed = new Wallets[](numberOfDeviceWallets);
 
         for (uint256 i = 0; i < numberOfDeviceWallets; ++i) {
-            require(_depositAmounts[i] <= availableETH, "Out of ETH");
+            if(_depositAmounts[i] > availableETH) {
+                revert Errors.InsufficientBalance(availableETH, _depositAmounts[i]);
+            }
             
             uint256 spentETH;
             (walletsDeployed[i], spentETH) = _deployDeviceWallet(
@@ -244,7 +254,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         // return unused ETH
         if(availableETH > 0) {
             (bool success,) = msg.sender.call{value: availableETH}("");
-            require(success, "ETH return failed");
+            if(!success) revert Errors.FailedToTransfer();
         }
 
         return walletsDeployed;
@@ -304,10 +314,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         uint256 _salt,
         uint256 _depositAmount
     ) internal returns (DeviceWallet deviceWallet, uint256 spentETH) {
-        require(
-            bytes(_deviceUniqueIdentifier).length != 0,
-            "DeviceIdentifier cannot be empty"
-        );
+        if(bytes(_deviceUniqueIdentifier).length == 0) revert Errors.EmptyDeviceIdentifier();
         _requireValidOwnerKey(_deviceWalletOwnerKey);
 
         address addr = getCounterFactualAddress(
@@ -319,7 +326,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         // Check if the device identifier is actually unique
         address wallet = registry.uniqueIdentifierToDeviceWallet(_deviceUniqueIdentifier);
         if(wallet != address(0)) {
-            require(wallet == addr, "Wallet already exists with different owner");
+            if(wallet != addr) revert Errors.DeviceWalletAlreadyExists(_deviceUniqueIdentifier, wallet);
             return (DeviceWallet(payable(wallet)), 0);
         }
 
@@ -327,7 +334,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         bytes32 keyHash = keccak256(abi.encode(_deviceWalletOwnerKey[0], _deviceWalletOwnerKey[1]));
         wallet = registry.registeredP256Keys(keyHash);
         if(wallet != address(0)) {
-            require(wallet == addr, "Wallet already exists with different owner key");
+            if(wallet != addr) revert Errors.OwnerKeyAlreadyRegistered(keyHash);
             return (DeviceWallet(payable(wallet)), 0);
         }
 
@@ -383,7 +390,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     /// @param _amount Amount of ETH to send
     function _fundDeviceWallet(address _deviceWallet, uint256 _amount) private {
         (bool success, ) = _deviceWallet.call{value: _amount}("");
-        require(success, "Wallet funding failed");
+        if(!success) revert Errors.FailedToTransfer();
     }
 
     /// @notice Checks that all the input params needed for deploying a fresh device wallet are valid
@@ -395,10 +402,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         string memory _deviceUniqueIdentifier,
         bytes32[2] memory _deviceWalletOwnerKey
     ) public view returns (address wallet) {
-        require(
-            bytes(_deviceUniqueIdentifier).length != 0,
-            "DeviceIdentifier cannot be empty"
-        );
+        if(bytes(_deviceUniqueIdentifier).length == 0) revert Errors.EmptyDeviceIdentifier();
         _requireValidOwnerKey(_deviceWalletOwnerKey);
 
         // Check if the device identifier is actually unique
@@ -429,10 +433,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         bytes32[2] memory _deviceWalletOwnerKey,
         uint256 _salt
     ) public payable returns (DeviceWallet deviceWallet) {
-        require(
-            bytes(_deviceUniqueIdentifier).length != 0,
-            "DeviceIdentifier cannot be empty"
-        );
+        if(bytes(_deviceUniqueIdentifier).length == 0) revert Errors.EmptyDeviceIdentifier();
         _requireValidOwnerKey(_deviceWalletOwnerKey);
 
         address addr = getCounterFactualAddress(
@@ -479,11 +480,8 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         string memory _deviceUniqueIdentifier,
         bytes32[2] memory _deviceWalletOwnerKey
     ) external onlyAdminOrRegistry {
-        require(deviceWalletInfoAdded[_deviceWallet] == false, "Device info already added");
-        require(
-            bytes(_deviceUniqueIdentifier).length != 0, 
-            "DeviceIdentifier cannot be empty"
-        );
+        if(deviceWalletInfoAdded[_deviceWallet]) revert Errors.DeviceWalletInfoAlreadyAdded(_deviceWallet);
+        if(bytes(_deviceUniqueIdentifier).length == 0) revert Errors.EmptyDeviceIdentifier();
         registry.updateDeviceWalletInfo(address(_deviceWallet), _deviceUniqueIdentifier, _deviceWalletOwnerKey);
         deviceWalletInfoAdded[_deviceWallet] = true;
     }
