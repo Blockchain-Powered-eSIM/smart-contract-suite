@@ -195,10 +195,13 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
 
         // Using transactionHistory = _dataBundleDetails; would be gas efficient
         // but it is not yet supported for struct types, hence using the loop
-        for (uint256 i = 0; i < _dataBundleDetails.length; i++) {
+        uint256 entries = _dataBundleDetails.length;
+        for (uint256 i = 0; i < entries; ++i) {
             // Create a temporary variable in storage
             transactionHistory.push(); // Increase the length of transactionHistory by 1
-            DataBundleDetails storage newTransaction = transactionHistory[transactionHistory.length - 1];
+            // The history started empty, so the entry just pushed sits at the loop index and the
+            // length does not need reading back.
+            DataBundleDetails storage newTransaction = transactionHistory[i];
             newTransaction.dataBundleID = _dataBundleDetails[i].dataBundleID;
             newTransaction.dataBundlePrice = _dataBundleDetails[i].dataBundlePrice;
         }

@@ -347,7 +347,10 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         DataBundleDetails[] storage dataBundleDetails = deviceIdentifierToESIMDetails[_oldDeviceIdentifier][_eSIMIdentifier];
         // Transfer history of the eSIM identifier to the new device identifier
         DataBundleDetails[] storage newDataBundleDetails = deviceIdentifierToESIMDetails[_newDeviceIdentifier][_eSIMIdentifier];
-        for(uint256 i=0; i<dataBundleDetails.length; ++i) {
+        // The two arrays are distinct because the caller refuses a switch to the same device, so
+        // pushing onto one cannot lengthen the other and the bound can be read once.
+        uint256 entries = dataBundleDetails.length;
+        for(uint256 i=0; i<entries; ++i) {
             newDataBundleDetails.push(dataBundleDetails[i]);
         }
         emit DataBundleDetailsTransferredToNewDeviceIdentifier(_newDeviceIdentifier, newDataBundleDetails);
@@ -368,10 +371,11 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
 
         uint256 i = 0;
 
-        for(; i<eSIMIdentifierOfOldDevice.length; ++i) {
-            if(
-                keccak256(bytes(eSIMIdentifierOfOldDevice[i])) == keccak256(bytes(_eSIMIdentifier)) 
-            ) {
+        uint256 associated = eSIMIdentifierOfOldDevice.length;
+        bytes32 target = keccak256(bytes(_eSIMIdentifier));
+
+        for(; i<associated; ++i) {
+            if(keccak256(bytes(eSIMIdentifierOfOldDevice[i])) == target) {
                 break;
             }
         }
