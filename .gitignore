@@ -6,4 +6,4 @@ out/
 forge-cache/
 lcov.info
 .env
-lib/
+.DS_Store
