@@ -339,7 +339,15 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
             deviceWalletInfoAdded[addr] = true;
             registry.updateDeviceWalletInfo(addr, _deviceUniqueIdentifier, _deviceWalletOwnerKey);
 
-            return (DeviceWallet(payable(addr)), 0);
+            // The deposit follows the wallet instead of staying behind to be refunded. Adoption is
+            // the one existing-wallet case where the deposit was still meant for the wallet the
+            // caller asked for, and leaving it behind hands anyone who deploys that address first
+            // a way to force the refund through a caller that cannot receive ETH.
+            if (_depositAmount > 0) {
+                _fundDeviceWallet(addr, _depositAmount);
+            }
+
+            return (DeviceWallet(payable(addr)), _depositAmount);
         }
 
         deviceWallet = DeviceWallet(

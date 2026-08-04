@@ -203,7 +203,9 @@ contract DeviceWalletFactoryBatchDeployTest is DeviceWalletFactoryFixture {
 
     /// @notice PoC for the front-run denial of service. createAccount is permissionless, so anyone
     /// watching the mempool can deploy a wallet the admin is about to deploy, leaving it with code
-    /// but no registry record. The batch must absorb that wallet instead of reverting.
+    /// but no registry record. The batch must absorb that wallet instead of reverting, and the
+    /// deposit must follow it rather than being refunded, since a caller that cannot receive ETH
+    /// would lose the whole batch to the refund.
     function test_deployDeviceWalletForUsers_survivesCreateAccountFrontRun() public {
         uint256 salt = 780;
 
@@ -242,8 +244,9 @@ contract DeviceWalletFactoryBatchDeployTest is DeviceWalletFactoryFixture {
         bytes32 keyHash = keccak256(abi.encode(pubKey1[0], pubKey1[1]));
         assertEq(registry.registeredP256Keys(keyHash), frontRunWallet, "Owner key should resolve to the adopted wallet");
 
-        // Nothing was deposited for a wallet that already existed, so the ETH comes back
+        // The deposit follows the adopted wallet rather than coming back
+        assertEq(frontRunWallet.balance, 1 ether, "Adopted wallet should hold the deposit");
         assertEq(address(deviceWalletFactory).balance, 0, "Factory must not retain any ETH");
-        assertEq(eSIMWalletAdmin.balance, 1 ether, "Admin should have been refunded");
+        assertEq(eSIMWalletAdmin.balance, 0, "Nothing should have come back to the admin");
     }
 }
