@@ -210,8 +210,8 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     /// @param _depositAmounts Array of all the ETH to be deposited into each of the device wallets 
     /// @return Array of deployed device wallet address
     function deployDeviceWalletForUsers(
-        string[] memory _deviceUniqueIdentifiers,
-        bytes32[2][] memory _deviceWalletOwnersKey,
+        string[] calldata _deviceUniqueIdentifiers,
+        bytes32[2][] calldata _deviceWalletOwnersKey,
         uint256[] calldata _salts,
         uint256[] calldata _depositAmounts
     ) external payable onlyAdminOrRegistry returns (Wallets[] memory) {

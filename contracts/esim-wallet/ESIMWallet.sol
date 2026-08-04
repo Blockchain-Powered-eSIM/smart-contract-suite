@@ -190,7 +190,7 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
 
     /// @notice Function to populate history for lazy wallets. Can only be called once, by lazy wallet registry
     /// @param _dataBundleDetails Array of all the data bundle purchase details before the wallet was deployed
-    function populateHistory(DataBundleDetails[] memory _dataBundleDetails) external onlyRegistry returns (bool) {
+    function populateHistory(DataBundleDetails[] calldata _dataBundleDetails) external onlyRegistry returns (bool) {
         require(transactionHistory.length == 0, "Wallet already in use");
 
         // Using transactionHistory = _dataBundleDetails; would be gas efficient

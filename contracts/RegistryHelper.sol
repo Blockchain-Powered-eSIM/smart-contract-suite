@@ -125,8 +125,8 @@ contract RegistryHelper {
         bytes32[2] memory _deviceWalletOwnerKey,
         string calldata _deviceUniqueIdentifier,
         uint256 _salt,
-        string[] memory _eSIMUniqueIdentifiers,
-        DataBundleDetails[][] memory _dataBundleDetails,
+        string[] calldata _eSIMUniqueIdentifiers,
+        DataBundleDetails[][] calldata _dataBundleDetails,
         uint256 _depositAmount
     ) external payable onlyLazyWalletRegistry returns (address, address[] memory) {
         require(_eSIMUniqueIdentifiers.length + _salt < type(uint256).max, "Salt value too high");
@@ -157,7 +157,7 @@ contract RegistryHelper {
         address deviceWallet = wallet[0].deviceWallet;
         address firstESIMWallet = wallet[0].eSIMWallet;
         address[] memory eSIMWallets = new address[](_eSIMUniqueIdentifiers.length);
-        
+
         // Tracks the eSIMWallets array index
         uint256 i = 0;
 
