@@ -195,6 +195,27 @@ contract RegistryHelper {
         return (deviceWallet, eSIMWallets);
     }
 
+    /// @notice Forwards one batch of pre-deployment purchase history to an eSIM wallet on behalf of
+    ///         the lazy wallet registry
+    /// @dev eSIM wallets accept history from this contract and nothing else, so the copy is routed
+    ///      through here rather than giving them a second address to trust. The lazy wallet
+    ///      registry owns the cursor that decides which entries a batch carries.
+    /// @param _eSIMWallet Wallet receiving the batch
+    /// @param _dataBundleDetails One batch of data bundle purchase details
+    function populateLazyHistory(
+        address _eSIMWallet,
+        DataBundleDetails[] calldata _dataBundleDetails
+    ) external onlyLazyWalletRegistry {
+        // A wallet mid-transfer has no device wallet holding it, so the standby flag is what says
+        // the protocol still knows about it. Reading only the association would leave a wallet
+        // whose transfer is never accepted unable to receive the rest of its own history.
+        if(isESIMWalletValid[_eSIMWallet] == address(0) && !isESIMWalletOnStandby[_eSIMWallet]) {
+            revert Errors.NotAProtocolESIMWallet(_eSIMWallet);
+        }
+
+        ESIMWallet(payable(_eSIMWallet)).populateHistory(_dataBundleDetails);
+    }
+
     function _updateDeviceWalletInfo(
         address _deviceWallet,
         string calldata _deviceUniqueIdentifier,

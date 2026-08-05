@@ -162,6 +162,25 @@ contract RegistryGuardsTest is DeployerBase {
         );
     }
 
+    /// @notice Only the lazy wallet registry may push purchase history into an eSIM wallet
+    /// @dev eSIM wallets accept history from the registry alone, so this forwarder is the only way
+    ///      to reach that entry point. An open gate would let anyone write arbitrary purchases into
+    ///      any wallet's history.
+    function test_populateLazyHistory_rejectsACallerOtherThanTheLazyWalletRegistry() public {
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(Errors.OnlyLazyWalletRegistry.selector);
+        registry.populateLazyHistory(user2, new DataBundleDetails[](0));
+    }
+
+    /// @notice History cannot be forwarded to an address the protocol never deployed
+    /// @dev The lazy wallet registry only ever names a wallet it deployed itself, so this is the
+    ///      backstop that keeps the registry from making a call into an arbitrary contract.
+    function test_populateLazyHistory_rejectsAnAddressThatIsNotAProtocolESIMWallet() public {
+        vm.prank(address(lazyWalletRegistry));
+        vm.expectRevert(abi.encodeWithSelector(Errors.NotAProtocolESIMWallet.selector, user2));
+        registry.populateLazyHistory(user2, new DataBundleDetails[](0));
+    }
+
     /// @notice A salt with no room left for the eSIM wallets below it is refused
     /// @dev Each eSIM wallet is deployed at the device salt plus its index, so a salt within the
     ///      list length of the maximum would wrap and land the last eSIM wallet on an address
