@@ -215,6 +215,38 @@ contract StorageLayoutTest is DeployerBase {
 
         vm.store(target, bytes32(uint256(1)), bytes32(uint256(uint160(SENTINEL))));
         assertEq(address(lazyWalletRegistry.registry()), SENTINEL, "LazyWalletRegistry.registry must read slot 1");
+
+        _assertLazyWalletRegistryMappingSlots(target);
+    }
+
+    /// @notice Pins the mapping slots, including the two the batched history copy added
+    /// @dev A mapping entry sits at keccak256(key . slot), so writing that word and reading the
+    ///      getter back proves which slot the mapping occupies. The cursor and the wallet record
+    ///      were appended, and an insertion anywhere above them moves both, which would leave the
+    ///      copy reading a cursor of zero and writing history into whatever address it found.
+    function _assertLazyWalletRegistryMappingSlots(address _target) private {
+        string memory key = "pin";
+
+        vm.store(_target, keccak256(abi.encodePacked(bytes(key), uint256(3))), bytes32(bytes("pinned")) | bytes32(uint256(12)));
+        assertEq(
+            lazyWalletRegistry.eSIMIdentifierToDeviceIdentifier(key),
+            "pinned",
+            "LazyWalletRegistry.eSIMIdentifierToDeviceIdentifier must read slot 3"
+        );
+
+        vm.store(_target, keccak256(abi.encodePacked(bytes(key), uint256(5))), bytes32(uint256(0xB2)));
+        assertEq(
+            lazyWalletRegistry.historyEntriesCopied(key),
+            0xB2,
+            "LazyWalletRegistry.historyEntriesCopied must read slot 5"
+        );
+
+        vm.store(_target, keccak256(abi.encodePacked(bytes(key), uint256(6))), bytes32(uint256(uint160(SENTINEL))));
+        assertEq(
+            lazyWalletRegistry.lazyDeployedESIMWallet(key),
+            SENTINEL,
+            "LazyWalletRegistry.lazyDeployedESIMWallet must read slot 6"
+        );
     }
 
     function test_layout_deviceWalletFactorySlotsAreUnchanged() public {
