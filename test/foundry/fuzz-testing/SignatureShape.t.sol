@@ -21,10 +21,10 @@ import {FuzzBase} from "test/foundry/fuzz-testing/base/FuzzBase.sol";
 ///      authorizer address, so 0xffffffff there would name an aggregator that does not exist and
 ///      revert the whole bundle rather than failing one operation.
 ///
-///      A body that gets past the version check reaches abi.decode, which reverts on input that is
-///      not a well formed WebAuthnSignature rather than returning a rejection. The tests below
-///      assert the property that has to hold either way, that neither entry point ever accepts, and
-///      two of them pin the reverting behaviour on its own so a change to it is visible.
+///      A body that gets past the version check reaches the decoder, which bounds-checks the
+///      encoding and hands back a zeroed struct rather than reverting when any bound fails. So
+///      every assertion below is strict: neither entry point ever accepts, and neither ever
+///      answers by reverting.
 contract SignatureShapeTest is FuzzBase {
 
     bytes4 private constant ERC1271_MAGIC_VALUE = 0x1626ba7e;
@@ -56,8 +56,9 @@ contract SignatureShapeTest is FuzzBase {
 
     /// @notice Random bytes past the guard are never accepted as a signature
     /// @dev Accepting would mean random input forged an assertion against the owner key, which is
-    ///      the only outcome that matters here. The call reverting instead of returning a rejection
-    ///      is the separate deviation pinned below.
+    ///      the only outcome that matters here. Answering at all is the second thing this asserts:
+    ///      a body too malformed to decode comes back as a rejection, so the assertion is strict
+    ///      rather than tolerating a revert.
     /// forge-config: default.fuzz.runs = 5000
     function testFuzz_isValidSignature_neverAcceptsRandomBytes(
         bytes32 _messageHash,
@@ -66,11 +67,11 @@ contract SignatureShapeTest is FuzzBase {
         vm.assume(_body.length >= 33);
         bytes memory signature = abi.encodePacked(uint8(1), uint48(type(uint48).max), _body);
 
-        try fuzzDeviceWallet.isValidSignature(_messageHash, signature) returns (bytes4 result) {
-            assertEq(result, ERC1271_REJECTED, "Random bytes must never be accepted as a signature");
-        } catch {
-            // Reached abi.decode with a body that is not a WebAuthnSignature
-        }
+        assertEq(
+            fuzzDeviceWallet.isValidSignature(_messageHash, signature),
+            ERC1271_REJECTED,
+            "Random bytes must never be accepted as a signature"
+        );
     }
 
     /// @notice Only version 1 is defined, and every other version is refused rather than decoded
@@ -163,7 +164,8 @@ contract SignatureShapeTest is FuzzBase {
     }
 
     /// @notice Random bytes past the guard are never validated as a userOp signature
-    /// @dev Same shape as the ERC-1271 case. The revert is pinned separately below.
+    /// @dev Same shape as the ERC-1271 case, and strict for the same reason, but the value it has
+    ///      to come back with is different. Reverting here would take out the whole bundle.
     /// forge-config: default.fuzz.runs = 5000
     function testFuzz_validateUserOp_neverAcceptsRandomBytes(
         bytes32 _userOpHash,
@@ -176,38 +178,40 @@ contract SignatureShapeTest is FuzzBase {
         userOp.signature = abi.encodePacked(uint8(1), uint48(type(uint48).max), _body);
 
         vm.prank(address(entryPoint));
-        try fuzzDeviceWallet.validateUserOp(userOp, _userOpHash, 0) returns (uint256 validationData) {
-            assertEq(validationData, SIG_VALIDATION_FAILED, "Random bytes must never validate a userOp");
-        } catch {
-            // Reached abi.decode with a body that is not a WebAuthnSignature
-        }
+        uint256 validationData = fuzzDeviceWallet.validateUserOp(userOp, _userOpHash, 0);
+
+        assertEq(validationData, SIG_VALIDATION_FAILED, "Random bytes must never validate a userOp");
     }
 
-    /// @notice A body that is not an encoded WebAuthnSignature reverts rather than being rejected
-    /// @dev Current behaviour, pinned so a change to it is deliberate rather than noticed later.
-    ///      Account4337 decodes the body with abi.decode, which reverts on input it cannot read,
-    ///      and neither entry point catches that. Forty bytes is the shortest signature the length
-    ///      guard lets through: one version byte, six validUntil bytes and thirty three that reach
-    ///      the decoder.
-    function test_isValidSignature_revertsOnAMalformedBody() public {
+    /// @notice A body that is not an encoded WebAuthnSignature is rejected rather than reverted on
+    /// @dev Forty bytes is the shortest signature the length guard lets through: one version byte,
+    ///      six validUntil bytes and thirty three that reach the decoder. Thirty three bytes cannot
+    ///      hold the six word struct head, so the decoder fails its first bound and hands back a
+    ///      zeroed struct, which verifySignature rejects because an empty clientDataJSON cannot
+    ///      contain the index it is handed.
+    function test_isValidSignature_rejectsAMalformedBody() public view {
         bytes memory signature = abi.encodePacked(uint8(1), uint48(type(uint48).max), new bytes(33));
         assertEq(signature.length, SHORTEST_DECODED_SIGNATURE, "The guard must let this length through");
 
-        vm.expectRevert();
-        fuzzDeviceWallet.isValidSignature(keccak256("a message"), signature);
+        assertEq(
+            fuzzDeviceWallet.isValidSignature(keccak256("a message"), signature),
+            ERC1271_REJECTED,
+            "A malformed body must be refused rather than reverted on"
+        );
     }
 
-    /// @notice The same body reverts inside validateUserOp
+    /// @notice The same body fails one operation inside validateUserOp
     /// @dev Worth pinning apart from the ERC-1271 case because the consequence differs. A revert
     ///      here reaches the EntryPoint rather than an integrating contract, and the comment at the
     ///      length guard reasons specifically about not failing a whole bundle.
-    function test_validateUserOp_revertsOnAMalformedBody() public {
+    function test_validateUserOp_rejectsAMalformedBody() public {
         PackedUserOperation memory userOp;
         userOp.sender = address(fuzzDeviceWallet);
         userOp.signature = abi.encodePacked(uint8(1), uint48(type(uint48).max), new bytes(33));
 
         vm.prank(address(entryPoint));
-        vm.expectRevert();
-        fuzzDeviceWallet.validateUserOp(userOp, keccak256("a userOp"), 0);
+        uint256 validationData = fuzzDeviceWallet.validateUserOp(userOp, keccak256("a userOp"), 0);
+
+        assertEq(validationData, SIG_VALIDATION_FAILED, "A malformed body must fail the operation only");
     }
 }

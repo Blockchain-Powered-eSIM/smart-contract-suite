@@ -264,8 +264,12 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
         bytes memory challenge,
         bytes calldata webAuthnSignatureBytes
     ) private view returns (bool) {
-        // Decoding the WebAuthnSignature struct from the provided ABI-encoded bytes
-        WebAuthnSignature memory sig = abi.decode(webAuthnSignatureBytes, (WebAuthnSignature));
+        // Decoded rather than abi.decode'd, because a malformed body has to be rejected here and
+        // not reverted on. This runs inside ERC-4337 validation, where a revert fails the whole
+        // bundle rather than the one operation, and behind isValidSignature, where it reaches the
+        // integrating contract as an error. A failed decode leaves the struct zeroed, which
+        // verifySignature returns false for.
+        WebAuthnSignature memory sig = WebAuthn.tryDecodeSignature(webAuthnSignatureBytes);
 
         return verifier.verifySignature({
             message: challenge,
