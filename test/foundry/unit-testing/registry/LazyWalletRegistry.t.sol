@@ -612,6 +612,20 @@ contract LazyWalletRegistryTest is DeployerBase {
         );
     }
 
+    /// @notice A full batch stays cheap enough that a failed one is worth retrying
+    /// @dev The cap is set for retry cost rather than the block limit, so this is the figure that
+    ///      justifies it. The deployment chains sit at 30,000,000 at their tightest.
+    function test_setHistoryForLazyWallet_staysCheapAtAFullBatch() public {
+        _lazyDeployOneESIM("batch_esim", 50, 5110);
+
+        vm.prank(eSIMWalletAdmin);
+        uint256 gasBefore = gasleft();
+        lazyWalletRegistry.setHistoryForLazyWallet("batch_esim", 50);
+        uint256 gasUsed = gasBefore - gasleft();
+
+        assertLt(gasUsed, 4_000_000, "A full batch must stay well inside a block");
+    }
+
     /// @notice Thirty eSIMs, each with a long history, still deploys inside a block.
     /// @dev Nothing bounds the eSIM count, so this is a measured reference point rather than a
     ///      ceiling the contract enforces. The history no longer counts against this figure, but
@@ -627,7 +641,7 @@ contract LazyWalletRegistryTest is DeployerBase {
         lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(pubKey1, device, 4245, 0);
         uint256 gasUsed = gasBefore - gasleft();
 
-        assertLt(gasUsed, 25_000_000, "A deployment at both limits must fit inside a block");
+        assertLt(gasUsed, 15_000_000, "A deployment at thirty eSIMs must fit inside a block");
     }
 
     /// @notice Binds one eSIM with `_purchases` entries, deploys the device, returns its wallet.
