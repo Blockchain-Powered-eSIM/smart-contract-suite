@@ -57,6 +57,9 @@ contract HandlerDistributionTest is CampaignBase {
             uint256 lazyESIM = state.lazyESIMIdentifierCount() - 2;
             adminHandler.switchESIMIdentifier(lazyESIM, seed + SWITCH_SEEDS, false);
             adminHandler.deployLazyWallet(lazyDevice, seed, 1 ether);
+            // Follows the deploy in the same round. History only reaches a wallet that exists, so
+            // running this before it would count as a revert and never reach a success
+            adminHandler.copyLazyHistory(lazyESIM + 1, 50);
 
             attackerHandler.donateETH(round, 1 ether);
             attackerHandler.donateToSingleton(round, 1 ether);
@@ -103,6 +106,7 @@ contract HandlerDistributionTest is CampaignBase {
         _assertExercised("populateLazyHistory");
         _assertExercised("switchESIMIdentifier");
         _assertExercised("deployLazyWallet");
+        _assertExercised("copyLazyHistory");
         _assertExercised("donateETH");
         _assertExercised("donateToSingleton");
         _assertExercised("deployESIMWalletForDevice");

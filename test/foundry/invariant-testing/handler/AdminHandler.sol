@@ -235,6 +235,30 @@ contract AdminHandler is HandlerBase {
         }
     }
 
+    /// @notice The admin copies the next batch of an eSIM's recorded history into its wallet
+    /// @dev Deployment no longer carries history, so this is the only path that puts it in a
+    ///      wallet. The batch size is fuzzed across the whole accepted range and past it, since the
+    ///      cursor arithmetic is what stops entries being written twice.
+    /// @param eSIMIndex Which bound eSIM identifier to copy for
+    /// @param maxEntries Batch size, swept past the cap so refusals are exercised too
+    function copyLazyHistory(uint256 eSIMIndex, uint256 maxEntries) external counted {
+        uint256 lazyESIMs = state.lazyESIMIdentifierCount();
+        if (lazyESIMs == 0) {
+            state.recordRevert("copyLazyHistory");
+            return;
+        }
+
+        string memory eSIMIdentifier = state.lazyESIMIdentifiers(bound(eSIMIndex, 0, lazyESIMs - 1));
+        maxEntries = bound(maxEntries, 0, lazyWalletRegistry.MAX_HISTORY_ENTRIES_PER_CALL() + 5);
+
+        vm.prank(_currentAdmin());
+        try lazyWalletRegistry.setHistoryForLazyWallet(eSIMIdentifier, maxEntries) {
+            state.recordCall("copyLazyHistory");
+        } catch {
+            state.recordRevert("copyLazyHistory");
+        }
+    }
+
     /// @notice The admin moves an eSIM identifier to a different device identifier
     /// @dev Only reachable while neither side has been deployed. Pointing it at an identifier that
     ///      has a wallet is the case that would orphan an eSIM, so the run presents that too.
