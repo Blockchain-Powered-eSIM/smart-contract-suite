@@ -294,6 +294,13 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         uint256 batchSize = _boundedBatchSize(_maxWallets, total);
         string[] memory batchIdentifiers = _readIdentifiers(allESIMIdentifiers, 0, batchSize);
 
+        // Both cursors move before the deployment, the same way the history copy advances its own
+        // ahead of handing a batch to the wallet. Nothing can currently reach back in mid-batch,
+        // since every callee is a protocol contract and this is admin gated, but eSIM wallets share
+        // one beacon and a later implementation is free to do more during initialisation.
+        lazyDeploymentSalt[_deviceUniqueIdentifier] = _salt;
+        eSIMWalletsDeployed[_deviceUniqueIdentifier] = batchSize;
+
         (deviceWallet, eSIMWallets) = registry.deployLazyWallet{value: msg.value}(
             _deviceOwnerPublicKey,
             _deviceUniqueIdentifier,
@@ -302,8 +309,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
             _depositAmount
         );
 
-        lazyDeploymentSalt[_deviceUniqueIdentifier] = _salt;
-        _recordDeployedESIMWallets(_deviceUniqueIdentifier, batchIdentifiers, eSIMWallets, 0);
+        _recordDeployedESIMWallets(batchIdentifiers, eSIMWallets);
 
         remaining = total - batchSize;
 
@@ -356,6 +362,11 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
 
         address deviceWallet = registry.uniqueIdentifierToDeviceWallet(_deviceUniqueIdentifier);
 
+        // Moved before the deployment for the same reason as in the first batch. It also means a
+        // reentrant call would find the cursor already past this batch rather than deploying the
+        // same positions twice.
+        eSIMWalletsDeployed[_deviceUniqueIdentifier] = alreadyDeployed + batchSize;
+
         eSIMWallets = registry.deployMoreLazyESIMWallets(
             deviceWallet,
             _deviceUniqueIdentifier,
@@ -364,7 +375,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
             batchIdentifiers
         );
 
-        _recordDeployedESIMWallets(_deviceUniqueIdentifier, batchIdentifiers, eSIMWallets, alreadyDeployed);
+        _recordDeployedESIMWallets(batchIdentifiers, eSIMWallets);
 
         remaining = outstanding - batchSize;
 
@@ -406,23 +417,18 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         return batchIdentifiers;
     }
 
-    /// @notice Binds each identifier in a batch to the wallet deployed for it and advances the cursor
+    /// @notice Binds each identifier in a batch to the wallet deployed for it
     /// @dev The deployment returns the wallets in the order it was given the identifiers, which is
     ///      what makes this pairing sound. It is the only proof later on that a wallet claiming an
-    ///      eSIM identifier is the one this contract deployed for it.
+    ///      eSIM identifier is the one this contract deployed for it. This cannot run before the
+    ///      deployment, unlike the cursor, because the addresses do not exist until then.
     function _recordDeployedESIMWallets(
-        string calldata _deviceUniqueIdentifier,
         string[] memory _batchIdentifiers,
-        address[] memory _eSIMWallets,
-        uint256 _startIndex
+        address[] memory _eSIMWallets
     ) private {
-        uint256 batchSize = _batchIdentifiers.length;
-
-        for(uint256 i=0; i<batchSize; ++i) {
+        for(uint256 i=0; i<_batchIdentifiers.length; ++i) {
             lazyDeployedESIMWallet[_batchIdentifiers[i]] = _eSIMWallets[i];
         }
-
-        eSIMWalletsDeployed[_deviceUniqueIdentifier] = _startIndex + batchSize;
     }
 
     /// @notice Copies the next batch of an eSIM's stored purchase history into its deployed wallet

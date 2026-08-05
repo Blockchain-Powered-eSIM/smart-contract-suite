@@ -842,7 +842,7 @@ contract LazyWalletRegistryTest is DeployerBase {
         }
 
         assertEq(lazyWalletRegistry.eSIMWalletsDeployed(device), 45, "Every eSIM must end up with a wallet");
-        _assertEveryESIMHasItsOwnWallet(device, 45, deviceWallet);
+        _assertEveryESIMHasItsOwnWallet(45, deviceWallet);
     }
 
     /// @notice Every identifier resolves to a distinct wallet the device wallet owns
@@ -850,10 +850,9 @@ contract LazyWalletRegistryTest is DeployerBase {
     ///      between batches would either revert on a used address or, if the guard were ever lost,
     ///      hand two identifiers the same wallet.
     function _assertEveryESIMHasItsOwnWallet(
-        string memory _device,
         uint256 _count,
         address _deviceWallet
-    ) private {
+    ) private view {
         address[] memory seen = new address[](_count);
 
         for(uint256 i=0; i<_count; ++i) {
