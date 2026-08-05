@@ -292,4 +292,58 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
         isESIMWalletOnStandby[_eSIMWalletAddress] = _isOnStandby;
         emit ESIMWalletSetOnStandby(_eSIMWalletAddress, _isOnStandby, msg.sender);
     }
+
+    /// @notice Binds an eSIM wallet to the calling device wallet, or clears that binding
+    /// @dev The association and the standby flag are two halves of one fact: a wallet is on
+    ///      standby exactly when no device wallet holds it. Written through the two separate
+    ///      entry points they land in different calls, and the second of those reaches back into
+    ///      the eSIM wallet to read `owner` and `newRequestedOwner`. eSIM wallets share one
+    ///      upgradeable beacon, so that logic is not fixed for the life of the protocol and a
+    ///      later implementation can read the registry while the two disagree. Writing them
+    ///      together closes that window. Standby is derived rather than passed in, so the two
+    ///      cannot be given contradicting values in the first place.
+    /// @param _eSIMWalletAddress Address of the eSIM wallet
+    /// @param _deviceWalletAddress The device wallet taking it on, or zero to clear the binding
+    function bindESIMWallet(
+        address _eSIMWalletAddress,
+        address _deviceWalletAddress
+    ) external onlyDeviceWallet {
+        address associated = isESIMWalletValid[_eSIMWalletAddress];
+
+        // Clearing is only for the device wallet currently holding the eSIM wallet. Binding is
+        // also open to its owner, which is how a wallet takes on one that was just given to it.
+        if(_deviceWalletAddress == address(0) && associated != msg.sender) {
+            revert Errors.NotTheAssociatedDeviceWallet(_eSIMWalletAddress, associated);
+        }
+
+        if(
+            ESIMWallet(payable(_eSIMWalletAddress)).owner() != msg.sender &&
+            associated != msg.sender
+        ) {
+            revert Errors.NotTheESIMWalletOwnerOrItsDeviceWallet(_eSIMWalletAddress);
+        }
+
+        // A device wallet can only bind an eSIM wallet to itself. Naming any other address is an
+        // attempt to move it without going through the ownership transfer.
+        if(_deviceWalletAddress != address(0) && _deviceWalletAddress != msg.sender) {
+            revert Errors.NotTheAssociatedDeviceWallet(_eSIMWalletAddress, _deviceWalletAddress);
+        }
+
+        // Owner cannot change device wallet address in the middle of ownership transfer
+        address pendingOwner = ESIMWallet(payable(_eSIMWalletAddress)).newRequestedOwner();
+        if(pendingOwner != address(0)) {
+            revert Errors.ESIMWalletOwnershipTransferPending(_eSIMWalletAddress, pendingOwner);
+        }
+
+        isESIMWalletValid[_eSIMWalletAddress] = _deviceWalletAddress;
+        emit UpdatedDeviceWalletassociatedWithESIMWallet(_eSIMWalletAddress, _deviceWalletAddress);
+
+        bool onStandby = _deviceWalletAddress == address(0);
+        // Only written on a change, so the event stream stays what it was before the two calls
+        // were merged. A newly deployed eSIM wallet is never on standby to begin with.
+        if(isESIMWalletOnStandby[_eSIMWalletAddress] != onStandby) {
+            isESIMWalletOnStandby[_eSIMWalletAddress] = onStandby;
+            emit ESIMWalletSetOnStandby(_eSIMWalletAddress, onStandby, msg.sender);
+        }
+    }
 }

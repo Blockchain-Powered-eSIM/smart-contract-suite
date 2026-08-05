@@ -272,6 +272,42 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
         assertEq(history[0].dataBundlePrice, 1 ether, "Transaction history's data bundle price should have been correct");
     }
 
+    /// @notice A registered device wallet cannot unbind an eSIM wallet another one holds
+    /// @dev The registry writes the association and the standby flag together now, so this gate is
+    ///      what stops a sibling reaching the pair at all. Both halves are asserted afterwards to
+    ///      show a refused call left neither of them moved.
+    function test_bindESIMWallet_rejectsAClearFromADeviceWalletThatDoesNotHoldIt() public {
+        deployWallets();
+
+        vm.prank(address(deviceWallet2));
+        vm.expectRevert(abi.encodeWithSelector(
+            Errors.NotTheAssociatedDeviceWallet.selector, address(eSIMWallet1), address(deviceWallet)
+        ));
+        registry.bindESIMWallet(address(eSIMWallet1), address(0));
+
+        _assertESIMWalletBinding(deviceWallet, eSIMWallet1, false, address(deviceWallet), true, true);
+    }
+
+    /// @notice An eSIM wallet cannot be bound again while its ownership transfer is still pending
+    /// @dev Requesting the transfer already unbound it, so the association is clear and the owner
+    ///      check passes. The pending owner is the only thing refusing the call.
+    function test_bindESIMWallet_rejectsABindWhileOwnershipTransferIsPending() public {
+        deployWallets();
+
+        vm.prank(address(deviceWallet));
+        eSIMWallet1.requestTransferOwnership(address(deviceWallet2));
+
+        vm.prank(address(deviceWallet));
+        vm.expectRevert(abi.encodeWithSelector(
+            Errors.ESIMWalletOwnershipTransferPending.selector,
+            address(eSIMWallet1),
+            address(deviceWallet2)
+        ));
+        registry.bindESIMWallet(address(eSIMWallet1), address(deviceWallet));
+
+        _assertESIMWalletBinding(deviceWallet, eSIMWallet1, true, address(0), false, false);
+    }
+
     /**
         A malicious but registered device wallet must not be able to steal an eSIM wallet:
         1. Alice owns an eSIM Wallet (0xESIM1), linked to her device (0xDeviceAlice)

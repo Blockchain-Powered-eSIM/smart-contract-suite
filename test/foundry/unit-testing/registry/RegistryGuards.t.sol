@@ -135,6 +135,15 @@ contract RegistryGuardsTest is DeployerBase {
         registry.updateDeviceWalletAssociatedWithESIMWallet(user2, user1);
     }
 
+    /// @notice Only a registered device wallet may bind or unbind an eSIM wallet
+    /// @dev This entry point writes the association and the standby flag together, so an open gate
+    ///      would hand an outsider both halves at once rather than one of them.
+    function test_bindESIMWallet_rejectsACallerThatIsNotADeviceWallet() public {
+        vm.prank(user1);
+        vm.expectRevert(Errors.OnlyDeviceWallet.selector);
+        registry.bindESIMWallet(user2, user1);
+    }
+
     /// @notice Only the lazy wallet registry may deploy a wallet on a user's behalf
     /// @dev This is the one entry point that mints a device wallet and its eSIM wallets from an
     ///      identifier alone, with no owner signature anywhere in the call. The gate is the whole

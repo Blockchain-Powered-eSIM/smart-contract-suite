@@ -308,12 +308,9 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         isValidESIMWallet[_eSIMWalletAddress] = true;
         canPullETH[_eSIMWalletAddress] = _hasAccessToETH;
 
-        // Inform and update the registry about the newly added eSIM wallet to this device wallet
-        registry.updateDeviceWalletAssociatedWithESIMWallet(_eSIMWalletAddress, address(this));
-        // Since the eSIM wallet now has a device wallet, remove it from standby
-        if(registry.isESIMWalletOnStandby(_eSIMWalletAddress)) {
-            registry.toggleESIMWalletStandbyStatus(_eSIMWalletAddress, false);
-        }
+        // Inform and update the registry about the newly added eSIM wallet to this device wallet.
+        // The association and the standby flag move together, so one call sets both.
+        registry.bindESIMWallet(_eSIMWalletAddress, address(this));
 
         emit ESIMWalletAdded(_eSIMWalletAddress, _hasAccessToETH, msg.sender);
     }
@@ -330,10 +327,10 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         isValidESIMWallet[_eSIMWalletAddress] = false;
         canPullETH[_eSIMWalletAddress] = false;
 
-        // Inform and update the registry about the existingd eSIM wallet being removed from this device wallet
-        // The standby toggle reads the association, so it has to run before that association is cleared
-        registry.toggleESIMWalletStandbyStatus(_eSIMWalletAddress, true);
-        registry.updateDeviceWalletAssociatedWithESIMWallet(_eSIMWalletAddress, address(0));
+        // Inform and update the registry about the existing eSIM wallet being removed from this
+        // device wallet. Clearing the association and raising standby is one call, so the two
+        // cannot be observed disagreeing part way through.
+        registry.bindESIMWallet(_eSIMWalletAddress, address(0));
 
         emit ESIMWalletRemoved(_eSIMWalletAddress, address(this), msg.sender);
 
