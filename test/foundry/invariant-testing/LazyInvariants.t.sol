@@ -18,9 +18,6 @@ contract LazyInvariantsTest is CampaignBase {
     /// @notice The list and the reverse mapping name each other
     /// @dev Walked from the list side. An entry in a device identifier's list whose reverse points
     ///      elsewhere is an eSIM identifier two devices would both deploy.
-    /// forge-config: default.invariant.runs = 256
-    /// forge-config: default.invariant.depth = 500
-    /// forge-config: default.invariant.fail-on-revert = false
     function invariant_lazyListMatchesItsReverse() public view {
         uint256 devices = state.lazyDeviceIdentifierCount();
         for (uint256 i = 0; i < devices; ++i) {
@@ -42,9 +39,6 @@ contract LazyInvariantsTest is CampaignBase {
     /// @notice Every eSIM identifier appears in the list of the device it points at
     /// @dev The other direction. An eSIM identifier pointing at a device whose list has never
     ///      heard of it is one that would be left behind by a deploy of that device.
-    /// forge-config: default.invariant.runs = 256
-    /// forge-config: default.invariant.depth = 500
-    /// forge-config: default.invariant.fail-on-revert = false
     function invariant_everyLazyESIMAppearsInItsList() public view {
         uint256 count = state.lazyESIMIdentifierCount();
         for (uint256 i = 0; i < count; ++i) {
@@ -70,9 +64,6 @@ contract LazyInvariantsTest is CampaignBase {
     /// @notice A device identifier never lists the same eSIM identifier twice
     /// @dev A duplicate would deploy two eSIM wallets carrying one identifier's history, and the
     ///      purchases inside it would be replayed against both.
-    /// forge-config: default.invariant.runs = 256
-    /// forge-config: default.invariant.depth = 500
-    /// forge-config: default.invariant.fail-on-revert = false
     function invariant_lazyListsHoldNoDuplicates() public view {
         uint256 devices = state.lazyDeviceIdentifierCount();
         for (uint256 i = 0; i < devices; ++i) {
@@ -94,9 +85,6 @@ contract LazyInvariantsTest is CampaignBase {
     /// @dev The cursor is what a batch reads to decide where to start, so a cursor beyond the
     ///      stored length would underflow the outstanding count on the next call and take the copy
     ///      path down permanently for that eSIM.
-    /// forge-config: default.invariant.runs = 256
-    /// forge-config: default.invariant.depth = 500
-    /// forge-config: default.invariant.fail-on-revert = false
     function invariant_copiedNeverExceedsStored() public view {
         uint256 count = state.lazyESIMIdentifierCount();
         for (uint256 i = 0; i < count; ++i) {
@@ -121,9 +109,6 @@ contract LazyInvariantsTest is CampaignBase {
     ///      is a display problem with no accounting effect, and the copy is meant to finish before
     ///      the wallet is handed to anyone. What still has to hold either way is that every copied
     ///      entry arrives, in the order this registry recorded it.
-    /// forge-config: default.invariant.runs = 256
-    /// forge-config: default.invariant.depth = 500
-    /// forge-config: default.invariant.fail-on-revert = false
     function invariant_copiedEntriesReachTheWalletInOrder() public view {
         uint256 count = state.lazyESIMIdentifierCount();
         for (uint256 i = 0; i < count; ++i) {
@@ -157,9 +142,6 @@ contract LazyInvariantsTest is CampaignBase {
     /// @dev The cursor and the wallet record are written on different paths, so a cursor moving
     ///      without a deployment behind it would mean entries were sent somewhere unaccounted for
     ///      and would be skipped once the real wallet arrived.
-    /// forge-config: default.invariant.runs = 256
-    /// forge-config: default.invariant.depth = 500
-    /// forge-config: default.invariant.fail-on-revert = false
     function invariant_historyIsNeverCopiedBeforeDeployment() public view {
         uint256 count = state.lazyESIMIdentifierCount();
         for (uint256 i = 0; i < count; ++i) {
@@ -178,9 +160,6 @@ contract LazyInvariantsTest is CampaignBase {
     /// @dev Nothing makes an eSIM identifier unique across eSIM wallets, so this record is the only
     ///      thing keeping a wallet that claims a lazy user's identifier from receiving their
     ///      purchase history. The collision case as a property rather than a single case.
-    /// forge-config: default.invariant.runs = 256
-    /// forge-config: default.invariant.depth = 500
-    /// forge-config: default.invariant.fail-on-revert = false
     function invariant_historyOnlyReachesLazyDeployedWallets() public view {
         uint256 count = state.lazyESIMIdentifierCount();
         for (uint256 i = 0; i < count; ++i) {
@@ -204,9 +183,6 @@ contract LazyInvariantsTest is CampaignBase {
     /// @dev The cursor is where the next batch starts reading, so a cursor beyond the list length
     ///      would underflow the outstanding count and take the continuation down permanently for
     ///      that device, leaving eSIMs that can never get a wallet.
-    /// forge-config: default.invariant.runs = 256
-    /// forge-config: default.invariant.depth = 500
-    /// forge-config: default.invariant.fail-on-revert = false
     function invariant_deployedNeverExceedsTheESIMList() public view {
         uint256 devices = state.lazyDeviceIdentifierCount();
         for (uint256 i = 0; i < devices; ++i) {
@@ -225,9 +201,6 @@ contract LazyInvariantsTest is CampaignBase {
     ///      A cursor standing without a wallet behind it would let the continuation bind eSIM
     ///      wallets to address zero; a wallet this contract deployed with no cursor would be
     ///      unreachable, since the continuation refuses a cursor of zero.
-    /// forge-config: default.invariant.runs = 256
-    /// forge-config: default.invariant.depth = 500
-    /// forge-config: default.invariant.fail-on-revert = false
     function invariant_deployCursorMovesOnlyWithADeviceWallet() public view {
         uint256 devices = state.lazyDeviceIdentifierCount();
         for (uint256 i = 0; i < devices; ++i) {
@@ -252,9 +225,6 @@ contract LazyInvariantsTest is CampaignBase {
     ///      free to move once the wallet exists, through a removal or an ownership transfer, and the
     ///      record deliberately follows the wallet rather than the device. What has to hold is that
     ///      the wallet at a position still answers for the identifier that position names.
-    /// forge-config: default.invariant.runs = 256
-    /// forge-config: default.invariant.depth = 500
-    /// forge-config: default.invariant.fail-on-revert = false
     function invariant_walletsExistExactlyBelowTheDeployCursor() public view {
         uint256 devices = state.lazyDeviceIdentifierCount();
         for (uint256 i = 0; i < devices; ++i) {

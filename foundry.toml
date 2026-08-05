@@ -20,4 +20,25 @@ extra_output = ["storageLayout"]
 # The CBOR trailer is kept, so the compiler version is still recorded onchain.
 bytecode_hash = "none"
 
+# Every campaign runs at these settings. fail_on_revert is false because the protocol is covered in
+# access control modifiers, so a handler call from the wrong sender reverting is the expected case
+# rather than a failure. HandlerDistribution.t.sol is what stops that hiding a starved entry point.
+#
+# These have to be the only place the settings are written. An inline
+# `/// forge-config: default.invariant.runs = N` comment wins over the active profile whatever that
+# profile is named, so one left on a test would pin it here and the campaign profile below would
+# silently not reach it. Measured: with the comments present, a profile asking for 3 runs still ran
+# 256.
+[profile.default.invariant]
+runs = 256
+depth = 500
+fail_on_revert = false
+
+# The long campaign, run before an audit or a release rather than on every change.
+# FOUNDRY_PROFILE=campaign forge test --via-ir --match-path "test/foundry/invariant-testing/*"
+[profile.campaign.invariant]
+runs = 5000
+depth = 100
+fail_on_revert = false
+
 # See more config options https://book.getfoundry.sh/reference/config.html

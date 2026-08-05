@@ -15,9 +15,6 @@ contract WalletInvariantsTest is CampaignBase {
 
     /// @notice All three contracts agree on which device wallet owns each eSIM wallet
     /// @dev The registry's mapping, the device wallet's own list, and the eSIM wallet's owner.
-    /// forge-config: default.invariant.runs = 256
-    /// forge-config: default.invariant.depth = 500
-    /// forge-config: default.invariant.fail-on-revert = false
     function invariant_associationsAgree() public view {
         uint256 count = state.eSIMWalletCount();
         for (uint256 i = 0; i < count; ++i) {
@@ -41,9 +38,6 @@ contract WalletInvariantsTest is CampaignBase {
     /// @dev Two separate calls set these, so nothing in the code ties them together. The comment
     ///      at the standby toggle assumes the pairing rather than enforcing it, which makes this
     ///      the only thing checking it.
-    /// forge-config: default.invariant.runs = 256
-    /// forge-config: default.invariant.depth = 500
-    /// forge-config: default.invariant.fail-on-revert = false
     function invariant_standbyMatchesDetachment() public view {
         uint256 count = state.eSIMWalletCount();
         for (uint256 i = 0; i < count; ++i) {
@@ -62,9 +56,6 @@ contract WalletInvariantsTest is CampaignBase {
     /// @dev The pair is set together on the way in and cleared together on the way out, so the
     ///      only way to separate them is a path that clears one and not the other. A detached
     ///      wallet that kept its right to pull would be reaching into someone else's balance.
-    /// forge-config: default.invariant.runs = 256
-    /// forge-config: default.invariant.depth = 500
-    /// forge-config: default.invariant.fail-on-revert = false
     function invariant_onlyHeldWalletsCanPullETH() public view {
         uint256 count = state.eSIMWalletCount();
         for (uint256 i = 0; i < count; ++i) {
@@ -85,9 +76,6 @@ contract WalletInvariantsTest is CampaignBase {
     /// @dev The opposite direction to the association check above, which starts from the registry.
     ///      A device wallet holding a claim the eSIM wallet does not recognise is what a transfer
     ///      that moved one side without the other would leave behind.
-    /// forge-config: default.invariant.runs = 256
-    /// forge-config: default.invariant.depth = 500
-    /// forge-config: default.invariant.fail-on-revert = false
     function invariant_claimedWalletsNameTheirClaimant() public view {
         uint256 count = state.eSIMWalletCount();
         for (uint256 i = 0; i < count; ++i) {
@@ -109,9 +97,6 @@ contract WalletInvariantsTest is CampaignBase {
     /// @dev The second half is what stops a wallet sitting with an offer nobody can act on. The
     ///      setter returns early on a self-offer rather than reverting, so the guard is a branch
     ///      and not a check, which is the kind that goes missing in a refactor.
-    /// forge-config: default.invariant.runs = 256
-    /// forge-config: default.invariant.depth = 500
-    /// forge-config: default.invariant.fail-on-revert = false
     function invariant_transferOffersNameAnotherDeviceWallet() public view {
         uint256 count = state.eSIMWalletCount();
         for (uint256 i = 0; i < count; ++i) {
@@ -134,9 +119,6 @@ contract WalletInvariantsTest is CampaignBase {
     /// @dev Ownership cannot be renounced and cannot be transferred in one step, so there is no
     ///      sequence that should leave one with no owner. An ownerless wallet holds whatever ETH
     ///      it had with nobody able to move it.
-    /// forge-config: default.invariant.runs = 256
-    /// forge-config: default.invariant.depth = 500
-    /// forge-config: default.invariant.fail-on-revert = false
     function invariant_eSIMWalletsKeepAnOwner() public view {
         uint256 count = state.eSIMWalletCount();
         for (uint256 i = 0; i < count; ++i) {

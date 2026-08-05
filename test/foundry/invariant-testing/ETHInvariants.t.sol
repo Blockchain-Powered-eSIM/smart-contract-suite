@@ -5,17 +5,16 @@ pragma solidity 0.8.36;
 import {CampaignBase} from "test/foundry/invariant-testing/base/CampaignBase.sol";
 
 /// @notice Where the protocol's ETH is allowed to be after any sequence of calls.
-/// @dev Configuration is in the inline `forge-config` comments rather than `foundry.toml`, which
-///      this repo keeps fixed for bytecode parity with hardhat.
+/// @dev Run settings come from `[profile.default.invariant]` in `foundry.toml`, and the long
+///      campaign from `[profile.campaign.invariant]`. Inline `forge-config` comments are not used
+///      here: they win over the active profile whatever it is named, so one left behind would pin
+///      that invariant at the short settings and the campaign would silently not run it.
 contract ETHInvariantsTest is CampaignBase {
 
     /// @notice No wei enters or leaves the accounted set
     /// @dev The campaign is funded once and nothing mints more. Every address that can end up
     ///      holding protocol ETH is summed, so a shortfall means wei reached somewhere the sum
     ///      does not name and a surplus means it was created.
-    /// forge-config: default.invariant.runs = 256
-    /// forge-config: default.invariant.depth = 500
-    /// forge-config: default.invariant.fail-on-revert = false
     function invariant_ethIsConserved() public view {
         assertEq(_heldETH(), state.accountedETH(), "ETH left the accounted set");
     }
@@ -27,9 +26,6 @@ contract ETHInvariantsTest is CampaignBase {
     ///      declares a `receive`, which is what stops a donation from creating a balance the
     ///      protocol can never move. The campaign attempts that donation on every run rather than
     ///      taking it on trust.
-    /// forge-config: default.invariant.runs = 256
-    /// forge-config: default.invariant.depth = 500
-    /// forge-config: default.invariant.fail-on-revert = false
     function invariant_singletonsHoldNoETH() public view {
         assertFalse(
             state.ghost_singletonAcceptedETH(),

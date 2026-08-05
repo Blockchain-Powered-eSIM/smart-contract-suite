@@ -16,9 +16,6 @@ contract RegistryInvariantsTest is CampaignBase {
     ///      wallet had taken the identifier over, because a handler records whatever the deploy
     ///      returned. Starting from the wallet is what makes a takeover visible: the displaced
     ///      wallet still names the identifier, and the identifier no longer names it.
-    /// forge-config: default.invariant.runs = 256
-    /// forge-config: default.invariant.depth = 500
-    /// forge-config: default.invariant.fail-on-revert = false
     function invariant_deviceIdentifiersStayWithTheirWallet() public view {
         uint256 count = state.deviceWalletCount();
         for (uint256 i = 0; i < count; ++i) {
@@ -36,9 +33,6 @@ contract RegistryInvariantsTest is CampaignBase {
     ///      record of the wallet's key has to match what the campaign last set, the hash of that
     ///      key has to be reserved, and the reservation has to name this wallet and no other. A
     ///      rotation that took a hash another wallet was already registered under breaks the third.
-    /// forge-config: default.invariant.runs = 256
-    /// forge-config: default.invariant.depth = 500
-    /// forge-config: default.invariant.fail-on-revert = false
     function invariant_ownerKeysStayWithTheirWallet() public view {
         uint256 count = state.deviceWalletCount();
         for (uint256 i = 0; i < count; ++i) {
@@ -63,9 +57,6 @@ contract RegistryInvariantsTest is CampaignBase {
     /// @dev The rotation deletes the old hash before writing the new one. If it stopped doing
     ///      that, the retired key would stay reserved and the wallet that once held it could never
     ///      rotate back onto it, while no wallet would answer to it either.
-    /// forge-config: default.invariant.runs = 256
-    /// forge-config: default.invariant.depth = 500
-    /// forge-config: default.invariant.fail-on-revert = false
     function invariant_retiredOwnerKeysHoldNoReservation() public view {
         uint256 count = state.usedKeyHashCount();
         for (uint256 i = 0; i < count; ++i) {

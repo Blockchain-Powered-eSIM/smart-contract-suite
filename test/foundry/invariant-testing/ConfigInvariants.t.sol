@@ -19,9 +19,6 @@ contract ConfigInvariantsTest is CampaignBase {
     ///      that could replace it. Nothing in the protocol reconciles the three, so a swap onto an
     ///      implementation built against a different entry point would leave every wallet
     ///      validating against one address while the singletons name another.
-    /// forge-config: default.invariant.runs = 256
-    /// forge-config: default.invariant.depth = 500
-    /// forge-config: default.invariant.fail-on-revert = false
     function invariant_entryPointIsTheSameEverywhere() public view {
         address expected = address(registry.entryPoint());
 
@@ -45,9 +42,6 @@ contract ConfigInvariantsTest is CampaignBase {
     /// @dev An outstanding nomination naming the sitting admin is the state the rotation is
     ///      supposed to collapse into a withdrawal. Leaving one there would mean the admin could
     ///      hand the role to itself, which reads as a rotation in the logs and moves nothing.
-    /// forge-config: default.invariant.runs = 256
-    /// forge-config: default.invariant.depth = 500
-    /// forge-config: default.invariant.fail-on-revert = false
     function invariant_adminRoleHasOneHolder() public view {
         address current = registry.eSIMWalletAdmin();
 
@@ -62,9 +56,6 @@ contract ConfigInvariantsTest is CampaignBase {
     /// @dev There is no `vm.warp` anywhere in the suite, on purpose. Any sequence that appeared to
     ///      depend on elapsed time would be reporting on the harness rather than the protocol, and
     ///      this is what stops one being added without the consequence being noticed.
-    /// forge-config: default.invariant.runs = 256
-    /// forge-config: default.invariant.depth = 500
-    /// forge-config: default.invariant.fail-on-revert = false
     function invariant_timeIsStatic() public view {
         assertEq(block.timestamp, campaignStartTime, "The campaign moved the clock");
     }
