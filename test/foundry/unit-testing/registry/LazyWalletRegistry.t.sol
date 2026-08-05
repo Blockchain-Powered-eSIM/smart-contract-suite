@@ -630,6 +630,179 @@ contract LazyWalletRegistryTest is DeployerBase {
         assertLt(gasUsed, 25_000_000, "A deployment at both limits must fit inside a block");
     }
 
+    /// @notice Binds one eSIM with `_purchases` entries, deploys the device, returns its wallet.
+    function _lazyDeployOneESIM(
+        string memory _eSIM,
+        uint256 _purchases,
+        uint256 _salt
+    ) internal returns (MockESIMWallet) {
+        string memory device = customDeviceUniqueIdentifiers[0];
+        _addPurchases(device, _eSIM, _purchases);
+
+        vm.prank(eSIMWalletAdmin);
+        (, address[] memory eSIMWallets) = lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(
+            pubKey1,
+            device,
+            _salt,
+            0
+        );
+
+        return MockESIMWallet(payable(eSIMWallets[0]));
+    }
+
+    /// @notice The whole stored history reaches the wallet, in order, across as many calls as it takes
+    /// @dev Deployment carries none of it, so this path is the only thing that puts a lazy user's
+    ///      purchases in front of them. Entries arriving out of order or short would misstate what
+    ///      they spent.
+    function test_setHistoryForLazyWallet_copiesTheWholeHistoryInOrder() public {
+        MockESIMWallet eSIMWallet = _lazyDeployOneESIM("copy_esim", 7, 5101);
+
+        vm.prank(eSIMWalletAdmin);
+        (uint256 firstCopied, uint256 firstRemaining) = lazyWalletRegistry.setHistoryForLazyWallet("copy_esim", 5);
+        assertEq(firstCopied, 5, "The first call must copy a full batch");
+        assertEq(firstRemaining, 2, "Two entries must be left over");
+
+        vm.prank(eSIMWalletAdmin);
+        (uint256 secondCopied, uint256 secondRemaining) = lazyWalletRegistry.setHistoryForLazyWallet("copy_esim", 5);
+        assertEq(secondCopied, 2, "The second call must copy only what is left");
+        assertEq(secondRemaining, 0, "Nothing must be left after the second call");
+
+        DataBundleDetails[] memory stored = lazyWalletRegistry.getDeviceIdentifierToESIMDetails(
+            customDeviceUniqueIdentifiers[0],
+            "copy_esim"
+        );
+        DataBundleDetails[] memory inWallet = eSIMWallet.getTransactionHistory();
+
+        assertEq(inWallet.length, stored.length, "The wallet must end up holding every stored entry");
+        for(uint256 i=0; i<stored.length; ++i) {
+            assertEq(inWallet[i].dataBundleID, stored[i].dataBundleID);
+            assertEq(inWallet[i].dataBundlePrice, stored[i].dataBundlePrice);
+        }
+        assertEq(lazyWalletRegistry.historyEntriesCopied("copy_esim"), 7, "The cursor must sit at the end");
+    }
+
+    /// @notice A call with nothing left to copy reverts rather than passing quietly
+    /// @dev A caller loops on this until it stops, so the end of the history has to be something it
+    ///      can read. Succeeding as a no-op would spin instead.
+    function test_setHistoryForLazyWallet_revertsOnceTheHistoryIsCopied() public {
+        _lazyDeployOneESIM("done_esim", 3, 5102);
+
+        vm.prank(eSIMWalletAdmin);
+        lazyWalletRegistry.setHistoryForLazyWallet("done_esim", 50);
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(abi.encodeWithSelector(Errors.HistoryAlreadyCopied.selector, "done_esim"));
+        lazyWalletRegistry.setHistoryForLazyWallet("done_esim", 50);
+    }
+
+    /// @notice A batch larger than the per-call cap is refused, not silently trimmed
+    /// @dev Trimming would leave the caller believing it wrote more than it did, and its own idea
+    ///      of where it had reached would then run ahead of the cursor.
+    function test_setHistoryForLazyWallet_rejectsABatchAboveTheCap() public {
+        _lazyDeployOneESIM("cap_esim", 3, 5103);
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(abi.encodeWithSelector(Errors.TooManyHistoryEntries.selector, 51, 50));
+        lazyWalletRegistry.setHistoryForLazyWallet("cap_esim", 51);
+    }
+
+    /// @notice A batch of zero is refused too, since it could only ever be a caller mistake
+    function test_setHistoryForLazyWallet_rejectsAnEmptyBatch() public {
+        _lazyDeployOneESIM("zero_esim", 3, 5104);
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(abi.encodeWithSelector(Errors.TooManyHistoryEntries.selector, 0, 50));
+        lazyWalletRegistry.setHistoryForLazyWallet("zero_esim", 0);
+    }
+
+    /// @notice An eSIM with no wallet deployed through this registry has nowhere to send history
+    function test_setHistoryForLazyWallet_rejectsAnESIMItNeverDeployed() public {
+        _addPurchases(customDeviceUniqueIdentifiers[0], "undeployed_esim", 3);
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(abi.encodeWithSelector(Errors.ESIMWalletNotLazyDeployed.selector, "undeployed_esim"));
+        lazyWalletRegistry.setHistoryForLazyWallet("undeployed_esim", 50);
+    }
+
+    /// @notice History reaches the wallet this registry deployed, not one that claims the same identifier
+    /// @dev Nothing makes an eSIM identifier unique across eSIM wallets, so a wallet deployed
+    ///      through the ordinary route can set itself a lazy user's identifier. Matching on the
+    ///      identifier alone would hand it their purchase history and leave them with none, and the
+    ///      identifier comes from an ICCID rather than from anything secret.
+    function test_setHistoryForLazyWallet_ignoresAWalletClaimingTheSameIdentifier() public {
+        MockESIMWallet victim = _lazyDeployOneESIM("victim_esim", 4, 5105);
+
+        string[] memory deviceIdentifiers = new string[](1);
+        bytes32[2][] memory keys = new bytes32[2][](1);
+        uint256[] memory salts = new uint256[](1);
+        deviceIdentifiers[0] = customDeviceUniqueIdentifiers[1];
+        keys[0] = listOfOwnerKeys[1];
+        salts[0] = 5106;
+
+        vm.prank(eSIMWalletAdmin);
+        Wallets memory impostorWallets = deviceWalletFactory.deployDeviceWalletForUsers(
+            deviceIdentifiers,
+            keys,
+            salts,
+            new uint256[](1)
+        )[0];
+
+        MockESIMWallet impostor = MockESIMWallet(payable(impostorWallets.eSIMWallet));
+        vm.prank(impostorWallets.deviceWallet);
+        impostor.setESIMUniqueIdentifier("victim_esim");
+
+        vm.prank(eSIMWalletAdmin);
+        lazyWalletRegistry.setHistoryForLazyWallet("victim_esim", 50);
+
+        assertEq(victim.getTransactionHistory().length, 4, "The lazy wallet must receive its own history");
+        assertEq(impostor.getTransactionHistory().length, 0, "The claiming wallet must receive nothing");
+    }
+
+    /// @notice A wallet handed to another device wallet still receives the rest of its history
+    /// @dev The copy is tied to the wallet address recorded at deployment rather than to whichever
+    ///      device holds it, so moving it mid-copy cannot strand the entries still waiting.
+    function test_setHistoryForLazyWallet_survivesAnOwnershipTransfer() public {
+        MockESIMWallet eSIMWallet = _lazyDeployOneESIM("moved_esim", 6, 5107);
+
+        vm.prank(eSIMWalletAdmin);
+        lazyWalletRegistry.setHistoryForLazyWallet("moved_esim", 2);
+
+        string[] memory deviceIdentifiers = new string[](1);
+        bytes32[2][] memory keys = new bytes32[2][](1);
+        uint256[] memory salts = new uint256[](1);
+        deviceIdentifiers[0] = customDeviceUniqueIdentifiers[1];
+        keys[0] = listOfOwnerKeys[1];
+        salts[0] = 5108;
+
+        vm.prank(eSIMWalletAdmin);
+        Wallets memory newHome = deviceWalletFactory.deployDeviceWalletForUsers(
+            deviceIdentifiers,
+            keys,
+            salts,
+            new uint256[](1)
+        )[0];
+
+        vm.prank(eSIMWallet.owner());
+        eSIMWallet.requestTransferOwnership(newHome.deviceWallet);
+        vm.prank(newHome.deviceWallet);
+        eSIMWallet.acceptOwnershipTransfer();
+
+        vm.prank(eSIMWalletAdmin);
+        (, uint256 remaining) = lazyWalletRegistry.setHistoryForLazyWallet("moved_esim", 50);
+
+        assertEq(remaining, 0, "The rest of the history must still be copyable");
+        assertEq(eSIMWallet.getTransactionHistory().length, 6, "The moved wallet must hold its whole history");
+    }
+
+    /// @notice Only the admin may copy history
+    function test_setHistoryForLazyWallet_rejectsACallerOtherThanTheAdmin() public {
+        _lazyDeployOneESIM("admin_esim", 3, 5109);
+
+        vm.prank(user1);
+        vm.expectRevert(Errors.OnlyESIMWalletAdmin.selector);
+        lazyWalletRegistry.setHistoryForLazyWallet("admin_esim", 50);
+    }
+
     function _bindESIMsNamed(string memory _device, string memory _eSIM) internal {
         string[] memory devices = new string[](1);
         devices[0] = _device;

@@ -30,6 +30,15 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         string[] _eSIMUniqueIdentifiers
     );
 
+    /// @notice Emitted for every batch of purchase history copied into a deployed eSIM wallet.
+    ///         `_remaining` reaching zero is what says the copy is finished.
+    event LazyHistoryCopied(
+        string _eSIMIdentifier,
+        address indexed _eSIMWallet,
+        uint256 _copied,
+        uint256 _remaining
+    );
+
     /// @notice Emitted when the user switches eSIM to a new device
     event ESIMIdentifierSwitchedToNewDeviceIdentifier(
         string _eSIMIdentifier,
@@ -75,6 +84,13 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
     ///      keccak cost of the linear scan the switch path runs over the whole list.
     uint256 private constant MAX_IDENTIFIER_LENGTH = 64;
 
+    /// @notice Most purchase history entries `setHistoryForLazyWallet` will copy in one call
+    /// @dev Each entry costs roughly 50,000 gas to write into the wallet, so a full batch is around
+    ///      2,500,000. The limit is about keeping a failed batch cheap to retry rather than about
+    ///      the block limit, which is 30,000,000 at its tightest across the deployment chains.
+    ///      Refused rather than clamped, so a caller never believes it wrote more than it did.
+    uint256 public constant MAX_HISTORY_ENTRIES_PER_CALL = 50;
+
     /// @dev Slot that used to hold a copy of the upgrade authority. It was written once in
     ///      `initialize` and had no setter, so it kept naming the deploy-time address once
     ///      ownership moved on. Kept so nothing below it shifts on the live proxies. Never read;
@@ -98,6 +114,21 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
 
     /// @notice List of eSIM identifiers associated with the device identifiers
     mapping(string deviceIdentifier => string[] associatedESIMIdentifiers) public eSIMIdentifiersAssociatedWithDeviceIdentifier;
+
+    /// @notice How many of an eSIM's stored purchase entries have already reached its wallet
+    /// @dev The wallet appends whatever batch it is handed, so this is the only thing stopping a
+    ///      repeated call from writing the same entries twice. Reading it rather than taking start
+    ///      and end indexes from the caller also makes two admin transactions in flight at once
+    ///      safe: the second reads the position the first left.
+    mapping(string eSIMIdentifier => uint256 copied) public historyEntriesCopied;
+
+    /// @notice The eSIM wallet this contract deployed for an eSIM identifier
+    /// @dev Nothing enforces that an eSIM identifier is unique across eSIM wallets, so without this
+    ///      record a wallet deployed through the ordinary route could claim an identifier that
+    ///      already belongs to a lazy user and receive their purchase history. Written from the
+    ///      addresses the deployment returns, and unaffected by any later ownership transfer, so
+    ///      the copy follows the wallet rather than whichever device is holding it.
+    mapping(string eSIMIdentifier => address eSIMWallet) public lazyDeployedESIMWallet;
 
     modifier onlyESIMWalletAdmin() {
         if(msg.sender != registry.eSIMWalletAdmin()) revert Errors.OnlyESIMWalletAdmin();
@@ -214,6 +245,13 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
             _depositAmount
         );
 
+        // The deployment returns the wallets in the order it was given the identifiers, which is
+        // what makes this pairing sound. It is the only proof later on that a wallet claiming an
+        // eSIM identifier is the one this contract deployed for it.
+        for(uint256 i=0; i<eSIMUniqueIdentifiers.length; ++i) {
+            lazyDeployedESIMWallet[eSIMUniqueIdentifiers[i]] = eSIMWallets[i];
+        }
+
         emit LazyWalletDeployed(
             _deviceOwnerPublicKey,
             deviceWallet,
@@ -223,6 +261,54 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         );
 
         return (deviceWallet, eSIMWallets);
+    }
+
+    /// @notice Copies the next batch of an eSIM's stored purchase history into its deployed wallet
+    /// @dev Split out of the deployment because carrying history there made one transaction grow
+    ///      with the eSIM count and the history length at the same time. Call it repeatedly until
+    ///      it reverts `HistoryAlreadyCopied`, which is the terminal condition rather than a
+    ///      failure. Reverting instead of returning quietly is what lets a caller loop on it.
+    ///
+    ///      No pause check. This moves no ETH, and the entries it writes were frozen when the
+    ///      wallet was deployed: `_populateHistory` refuses a device that already has one.
+    /// @param _eSIMIdentifier eSIM whose history is being copied
+    /// @param _maxEntries Most entries to copy in this call, at most MAX_HISTORY_ENTRIES_PER_CALL
+    /// @return copied Entries written by this call
+    /// @return remaining Entries still waiting after this call
+    function setHistoryForLazyWallet(
+        string calldata _eSIMIdentifier,
+        uint256 _maxEntries
+    ) external onlyESIMWalletAdmin returns (uint256 copied, uint256 remaining) {
+        if(_maxEntries == 0 || _maxEntries > MAX_HISTORY_ENTRIES_PER_CALL) {
+            revert Errors.TooManyHistoryEntries(_maxEntries, MAX_HISTORY_ENTRIES_PER_CALL);
+        }
+
+        // This lookup is the whole authorisation. An identifier only has an entry here if this
+        // contract deployed a wallet for it, so history cannot be aimed at a wallet somebody else
+        // created under the same identifier.
+        address eSIMWallet = lazyDeployedESIMWallet[_eSIMIdentifier];
+        if(eSIMWallet == address(0)) revert Errors.ESIMWalletNotLazyDeployed(_eSIMIdentifier);
+
+        string memory deviceIdentifier = eSIMIdentifierToDeviceIdentifier[_eSIMIdentifier];
+        DataBundleDetails[] storage history = deviceIdentifierToESIMDetails[deviceIdentifier][_eSIMIdentifier];
+
+        uint256 alreadyCopied = historyEntriesCopied[_eSIMIdentifier];
+        uint256 outstanding = history.length - alreadyCopied;
+        if(outstanding == 0) revert Errors.HistoryAlreadyCopied(_eSIMIdentifier);
+
+        copied = outstanding > _maxEntries ? _maxEntries : outstanding;
+        remaining = outstanding - copied;
+
+        DataBundleDetails[] memory batch = new DataBundleDetails[](copied);
+        for(uint256 i=0; i<copied; ++i) {
+            batch[i] = history[alreadyCopied + i];
+        }
+
+        historyEntriesCopied[_eSIMIdentifier] = alreadyCopied + copied;
+
+        registry.populateLazyHistory(eSIMWallet, batch);
+
+        emit LazyHistoryCopied(_eSIMIdentifier, eSIMWallet, copied, remaining);
     }
 
     /// @notice Internal function for populating information of all the eSIMs related to a device
