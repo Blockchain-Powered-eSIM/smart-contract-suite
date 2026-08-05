@@ -31,8 +31,10 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     /// @notice Emitted when the eSIM unique identifier is initialised
     event ESIMUniqueIdentifierInitialised(string _eSIMUniqueIdentifier);
 
-    /// @notice Emitted when the lazy wallet registry populates history after wallet deployment
-    event TransactionHistoryPopulated(DataBundleDetails[] _dataBundleDetails);
+    /// @notice Emitted for every batch of history the lazy wallet registry copies in after deployment.
+    ///         `_totalEntries` is the transaction history length once the batch has landed, which is
+    ///         what tells a partial copy apart from a finished one.
+    event TransactionHistoryPopulated(DataBundleDetails[] _dataBundleDetails, uint256 _totalEntries);
 
     /// @notice Emitted when ETH moves out of this contract
     event ETHSent(address indexed _recipient, uint256 _amount);
@@ -190,25 +192,28 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         }
     }
 
-    /// @notice Function to populate history for lazy wallets. Can only be called once, by lazy wallet registry
-    /// @param _dataBundleDetails Array of all the data bundle purchase details before the wallet was deployed
+    /// @notice Appends pre-deployment purchase history, one batch at a time, on behalf of the lazy
+    ///         wallet registry
+    /// @dev The registry carries the cursor that says how much of an eSIM's history has already been
+    ///      copied, so this function appends whatever it is handed and does not police repeats.
+    /// @param _dataBundleDetails One batch of data bundle purchase details from before the wallet
+    ///        was deployed
     function populateHistory(DataBundleDetails[] calldata _dataBundleDetails) external onlyRegistry returns (bool) {
-        if(transactionHistory.length != 0) revert Errors.TransactionHistoryNotEmpty();
-
         // Using transactionHistory = _dataBundleDetails; would be gas efficient
         // but it is not yet supported for struct types, hence using the loop
+        uint256 alreadyStored = transactionHistory.length;
         uint256 entries = _dataBundleDetails.length;
         for (uint256 i = 0; i < entries; ++i) {
             // Create a temporary variable in storage
             transactionHistory.push(); // Increase the length of transactionHistory by 1
-            // The history started empty, so the entry just pushed sits at the loop index and the
-            // length does not need reading back.
-            DataBundleDetails storage newTransaction = transactionHistory[i];
+            // The batch lands after whatever the array already held, so the write offset is the
+            // length read before the loop rather than the loop index.
+            DataBundleDetails storage newTransaction = transactionHistory[alreadyStored + i];
             newTransaction.dataBundleID = _dataBundleDetails[i].dataBundleID;
             newTransaction.dataBundlePrice = _dataBundleDetails[i].dataBundlePrice;
         }
 
-        emit TransactionHistoryPopulated(_dataBundleDetails);
+        emit TransactionHistoryPopulated(_dataBundleDetails, alreadyStored + entries);
 
         return true;
     }

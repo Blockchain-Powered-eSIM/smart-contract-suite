@@ -83,7 +83,6 @@ interface Errors {
     error ESIMIdentifierAlreadySet(string eSIMUniqueIdentifier);
     error EmptyDataBundleID();
     error ZeroDataBundlePrice();
-    error TransactionHistoryNotEmpty();
     error NotADeviceWallet(address account);
     error OnlyRequestedOwner(address newRequestedOwner);
     error UseAcceptOwnershipTransfer();

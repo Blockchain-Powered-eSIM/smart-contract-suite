@@ -165,24 +165,49 @@ contract ESIMWalletTest is DeployerBase {
         assertNotEq(eSIMWallet1.getTransactionHistory().length, 0, "Transaction history should have neen non-zero");
     }
     
-    function test_populateHistory_callTwiceFail() public {
+    /// @notice A history long enough to need more than one batch arrives whole and in order
+    /// @dev The registry copies pre-deployment history in batches now, so a second call has to
+    ///      append after the first rather than refuse or overwrite it.
+    function test_populateHistory_appendsTheSecondBatchAfterTheFirst() public {
         deployWallets();
 
-        vm.startPrank(address(registry));
-        bool historyPopulated = eSIMWallet1.populateHistory(
-            customDataBundleDetails[0]
-        );
-        vm.stopPrank();
-
-        assertEq(historyPopulated, true, "History should have been populated");
-        assertNotEq(eSIMWallet1.getTransactionHistory().length, 0, "Transaction history should have neen non-zero");
+        DataBundleDetails[] memory secondBatch = new DataBundleDetails[](2);
+        secondBatch[0] = DataBundleDetails("DB_ID_6", 61);
+        secondBatch[1] = DataBundleDetails("DB_ID_7", 71);
 
         vm.startPrank(address(registry));
-        vm.expectRevert(Errors.TransactionHistoryNotEmpty.selector);
-        eSIMWallet1.populateHistory(
-            customDataBundleDetails[0]
-        );
+        eSIMWallet1.populateHistory(customDataBundleDetails[0]);
+        eSIMWallet1.populateHistory(secondBatch);
         vm.stopPrank();
+
+        DataBundleDetails[] memory history = eSIMWallet1.getTransactionHistory();
+        assertEq(history.length, 7, "Both batches should have landed");
+
+        for (uint256 i = 0; i < customDataBundleDetails[0].length; ++i) {
+            assertEq(history[i].dataBundleID, customDataBundleDetails[0][i].dataBundleID);
+            assertEq(history[i].dataBundlePrice, customDataBundleDetails[0][i].dataBundlePrice);
+        }
+        assertEq(history[5].dataBundleID, "DB_ID_6", "The second batch must start where the first ended");
+        assertEq(history[5].dataBundlePrice, 61);
+        assertEq(history[6].dataBundleID, "DB_ID_7");
+        assertEq(history[6].dataBundlePrice, 71);
+    }
+
+    /// @notice The event carries the running total, which is how an indexer spots the final batch
+    function test_populateHistory_reportsTheRunningTotal() public {
+        deployWallets();
+
+        DataBundleDetails[] memory secondBatch = new DataBundleDetails[](1);
+        secondBatch[0] = DataBundleDetails("DB_ID_6", 61);
+
+        vm.prank(address(registry));
+        eSIMWallet1.populateHistory(customDataBundleDetails[0]);
+
+        vm.expectEmit(false, false, false, true, address(eSIMWallet1));
+        emit ESIMWallet.TransactionHistoryPopulated(secondBatch, 6);
+
+        vm.prank(address(registry));
+        eSIMWallet1.populateHistory(secondBatch);
     }
 
     function test_owner() public {
