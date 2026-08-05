@@ -49,6 +49,9 @@ interface Errors {
     error ESIMWalletNotLazyDeployed(string eSIMIdentifier);
     error HistoryAlreadyCopied(string eSIMIdentifier);
     error TooManyHistoryEntries(uint256 requested, uint256 maxPerCall);
+    error LazyWalletNotDeployed(string deviceIdentifier);
+    error AllESIMWalletsDeployed(string deviceIdentifier);
+    error TooManyESIMWallets(uint256 requested, uint256 maxPerCall);
 
     // ESIMWalletFactory
     error OnlyRegistryOrDeviceWalletFactoryOrDeviceWallet();

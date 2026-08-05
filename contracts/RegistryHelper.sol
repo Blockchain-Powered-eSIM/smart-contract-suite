@@ -117,13 +117,18 @@ contract RegistryHelper {
         _;
     }
 
-    /// @notice Allow LazyWalletRegistry to deploy a device wallet and an eSIM wallet on behalf of a user
+    /// @notice Allow LazyWalletRegistry to deploy a device wallet and its first eSIM wallets
     /// @dev Deploys the wallets and sets their identifiers only. Purchase history is copied in
     ///      afterwards through `populateLazyHistory`, because carrying it here made one transaction
     ///      grow with the eSIM count and each eSIM's history at the same time.
+    ///
+    ///      `_eSIMUniqueIdentifiers` is the first batch rather than the device's whole list, and any
+    ///      identifier past it reaches `deployMoreLazyESIMWallets`. The lazy wallet registry owns
+    ///      the cursor deciding where one batch ends and the next begins, and it reserves the whole
+    ///      salt range before this runs, so no bound on the salt is needed here.
     /// @param _deviceWalletOwnerKey P256 public key of user
     /// @param _deviceUniqueIdentifier Unique device identifier associated with the device
-    /// @return Return device wallet address and list of addresses of all the eSIM wallets
+    /// @return Return device wallet address and the eSIM wallet addresses this call deployed
     function deployLazyWallet(
         bytes32[2] memory _deviceWalletOwnerKey,
         string calldata _deviceUniqueIdentifier,
@@ -131,10 +136,6 @@ contract RegistryHelper {
         string[] calldata _eSIMUniqueIdentifiers,
         uint256 _depositAmount
     ) external payable onlyLazyWalletRegistry returns (address, address[] memory) {
-        if(_eSIMUniqueIdentifiers.length + _salt >= type(uint256).max) {
-            revert Errors.SaltTooHigh(_salt, _eSIMUniqueIdentifiers.length);
-        }
-
         address existing = uniqueIdentifierToDeviceWallet[_deviceUniqueIdentifier];
         if(existing != address(0)) {
             revert Errors.DeviceWalletAlreadyExists(_deviceUniqueIdentifier, existing);
@@ -175,21 +176,74 @@ contract RegistryHelper {
 
         for(; i<_eSIMUniqueIdentifiers.length; ++i) {
             // increase salt for subsequent eSIM wallet deployments
-            address eSIMWallet = eSIMWalletFactory.deployESIMWallet(deviceWallet, (_salt + i));
-
-            // Updates the Device wallet storage variables as well as for the registry
-            DeviceWallet(payable(deviceWallet)).addESIMWallet(eSIMWallet, true);
-
-            // Since the eSIM unique identifier is already known in this scenario
-            // We can execute the setESIMUniqueIdentifierForAnESIMWallet function in same transaction as deploying the smart wallet
-            DeviceWallet(payable(deviceWallet)).setESIMUniqueIdentifierForAnESIMWallet(eSIMWallet, _eSIMUniqueIdentifiers[i]);
-
-            eSIMWallets[i] = eSIMWallet;
-
-            emit LazyWalletDeployed(deviceWallet, _deviceUniqueIdentifier, eSIMWallet, _eSIMUniqueIdentifiers[i]);
+            eSIMWallets[i] = _deployLazyESIMWallet(
+                deviceWallet,
+                _deviceUniqueIdentifier,
+                _salt + i,
+                _eSIMUniqueIdentifiers[i]
+            );
         }
 
         return (deviceWallet, eSIMWallets);
+    }
+
+    /// @notice Deploys the next batch of eSIM wallets for a device the lazy registry already set up
+    /// @dev Separate from `deployLazyWallet` because that call deploys the device wallet itself, and
+    ///      the owner key, salt and deposit it takes describe a one-time act. Reaching a device this
+    ///      way needs none of them, and repeating them would either be ignored or checked against a
+    ///      key the owner is free to rotate between batches.
+    ///
+    ///      The salt continues from where the first batch stopped rather than starting over, because
+    ///      the eSIM wallet factory salts CREATE2 with it and a repeat would land on an address that
+    ///      already holds a wallet.
+    /// @param _deviceWallet Device wallet the new eSIM wallets are bound to
+    /// @param _deviceUniqueIdentifier Device identifier the wallets belong to
+    /// @param _baseSalt Salt the device's deployment started from
+    /// @param _startIndex Position of this batch's first identifier in the device's full list
+    /// @param _eSIMUniqueIdentifiers This batch's identifiers, in the order the full list holds them
+    /// @return Addresses of the eSIM wallets this call deployed
+    function deployMoreLazyESIMWallets(
+        address _deviceWallet,
+        string calldata _deviceUniqueIdentifier,
+        uint256 _baseSalt,
+        uint256 _startIndex,
+        string[] calldata _eSIMUniqueIdentifiers
+    ) external onlyLazyWalletRegistry returns (address[] memory) {
+        uint256 batchSize = _eSIMUniqueIdentifiers.length;
+        address[] memory eSIMWallets = new address[](batchSize);
+
+        for(uint256 i=0; i<batchSize; ++i) {
+            eSIMWallets[i] = _deployLazyESIMWallet(
+                _deviceWallet,
+                _deviceUniqueIdentifier,
+                _baseSalt + _startIndex + i,
+                _eSIMUniqueIdentifiers[i]
+            );
+        }
+
+        return eSIMWallets;
+    }
+
+    /// @notice Deploys one eSIM wallet, binds it to the device wallet and sets its eSIM identifier
+    /// @dev Shared by the first batch and every batch after it so the two cannot drift apart. The
+    ///      identifier is known up front on this route, unlike the ordinary one, so setting it here
+    ///      saves the admin a second transaction per wallet.
+    function _deployLazyESIMWallet(
+        address _deviceWallet,
+        string calldata _deviceUniqueIdentifier,
+        uint256 _salt,
+        string calldata _eSIMUniqueIdentifier
+    ) internal returns (address) {
+        address eSIMWallet = eSIMWalletFactory.deployESIMWallet(_deviceWallet, _salt);
+
+        // Updates the Device wallet storage variables as well as for the registry
+        DeviceWallet(payable(_deviceWallet)).addESIMWallet(eSIMWallet, true);
+
+        DeviceWallet(payable(_deviceWallet)).setESIMUniqueIdentifierForAnESIMWallet(eSIMWallet, _eSIMUniqueIdentifier);
+
+        emit LazyWalletDeployed(_deviceWallet, _deviceUniqueIdentifier, eSIMWallet, _eSIMUniqueIdentifier);
+
+        return eSIMWallet;
     }
 
     /// @notice Forwards one batch of pre-deployment purchase history to an eSIM wallet on behalf of
