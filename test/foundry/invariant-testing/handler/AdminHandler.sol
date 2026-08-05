@@ -209,7 +209,8 @@ contract AdminHandler is HandlerBase {
     /// @param index Which populated device identifier to deploy
     /// @param salt CREATE2 salt, kept small so collisions are reached
     /// @param deposit ETH to seed the new device wallet with
-    function deployLazyWallet(uint256 index, uint256 salt, uint256 deposit) external counted {
+    /// @param maxWallets Batch size, swept past the cap so refusals are exercised too
+    function deployLazyWallet(uint256 index, uint256 salt, uint256 deposit, uint256 maxWallets) external counted {
         uint256 lazyDevices = state.lazyDeviceIdentifierCount();
         if (lazyDevices == 0) {
             state.recordRevert("deployLazyWallet");
@@ -218,13 +219,14 @@ contract AdminHandler is HandlerBase {
         string memory deviceIdentifier = state.lazyDeviceIdentifiers(bound(index, 0, lazyDevices - 1));
         salt = bound(salt, 0, 1000);
         deposit = bound(deposit, 0, _spendable(_currentAdmin(), 5 ether));
+        maxWallets = bound(maxWallets, 0, lazyWalletRegistry.MAX_ESIM_WALLETS_PER_CALL() + 5);
 
         bytes32[2] memory ownerKey = _ownerKey(uint256(keccak256(bytes(deviceIdentifier))));
 
         vm.prank(_currentAdmin());
         try lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier{value: deposit}(
-            ownerKey, deviceIdentifier, salt, deposit
-        ) returns (address device, address[] memory wallets) {
+            ownerKey, deviceIdentifier, salt, deposit, maxWallets
+        ) returns (address device, address[] memory wallets, uint256) {
             state.recordDeviceWallet(device, deviceIdentifier, ownerKey);
             for (uint256 i = 0; i < wallets.length; ++i) {
                 state.recordESIMWallet(wallets[i], device);
@@ -232,6 +234,36 @@ contract AdminHandler is HandlerBase {
             state.recordCall("deployLazyWallet");
         } catch {
             state.recordRevert("deployLazyWallet");
+        }
+    }
+
+    /// @notice The admin deploys the next batch of eSIM wallets for a device already set up
+    /// @dev Reached only after `deployLazyWallet` left something outstanding, which a small batch
+    ///      size makes common. Without this the campaign would only ever see devices deployed whole,
+    ///      and the half-deployed state is the one the batching introduces.
+    /// @param index Which populated device identifier to continue
+    /// @param maxWallets Batch size, swept past the cap so refusals are exercised too
+    function deployMoreLazyESIMWallets(uint256 index, uint256 maxWallets) external counted {
+        uint256 lazyDevices = state.lazyDeviceIdentifierCount();
+        if (lazyDevices == 0) {
+            state.recordRevert("deployMoreLazyESIMWallets");
+            return;
+        }
+        string memory deviceIdentifier = state.lazyDeviceIdentifiers(bound(index, 0, lazyDevices - 1));
+        maxWallets = bound(maxWallets, 0, lazyWalletRegistry.MAX_ESIM_WALLETS_PER_CALL() + 5);
+
+        address device = registry.uniqueIdentifierToDeviceWallet(deviceIdentifier);
+
+        vm.prank(_currentAdmin());
+        try lazyWalletRegistry.deployMoreESIMWalletsForLazyDevice(
+            deviceIdentifier, maxWallets
+        ) returns (address[] memory wallets, uint256) {
+            for (uint256 i = 0; i < wallets.length; ++i) {
+                state.recordESIMWallet(wallets[i], device);
+            }
+            state.recordCall("deployMoreLazyESIMWallets");
+        } catch {
+            state.recordRevert("deployMoreLazyESIMWallets");
         }
     }
 

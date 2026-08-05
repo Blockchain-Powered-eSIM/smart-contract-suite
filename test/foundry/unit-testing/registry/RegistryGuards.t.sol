@@ -180,24 +180,13 @@ contract RegistryGuardsTest is DeployerBase {
         registry.populateLazyHistory(user2, new DataBundleDetails[](0));
     }
 
-    /// @notice A salt with no room left for the eSIM wallets below it is refused
-    /// @dev Each eSIM wallet is deployed at the device salt plus its index, so a salt within the
-    ///      list length of the maximum would wrap and land the last eSIM wallet on an address
-    ///      another device already holds.
-    function test_deployLazyWallet_rejectsASaltWithNoRoomForTheESIMWallets() public {
-        string[] memory eSIMIdentifiers = new string[](1);
-        eSIMIdentifiers[0] = "eSIM_Salt_1";
-        uint256 salt = type(uint256).max - 1;
-
-        vm.prank(address(lazyWalletRegistry));
-        vm.expectRevert(abi.encodeWithSelector(Errors.SaltTooHigh.selector, salt, eSIMIdentifiers.length));
-        registry.deployLazyWallet(
-            pubKey1,
-            customDeviceUniqueIdentifiers[0],
-            salt,
-            eSIMIdentifiers,
-            0
-        );
+    /// @notice The continuation refuses a caller other than the lazy wallet registry
+    /// @dev It binds eSIM wallets to a device wallet and sets their identifiers, so an open caller
+    ///      could attach wallets to any device in the protocol.
+    function test_deployMoreLazyESIMWallets_rejectsACallerOtherThanTheLazyRegistry() public {
+        vm.prank(user2);
+        vm.expectRevert(Errors.OnlyLazyWalletRegistry.selector);
+        registry.deployMoreLazyESIMWallets(user1, "device", 0, 0, new string[](0));
     }
 
     /// @notice A device identifier that already has a wallet cannot be deployed again

@@ -166,7 +166,57 @@ contract LazyWalletRegistryGuardsTest is DeployerBase {
 
         vm.prank(eSIMWalletAdmin);
         vm.expectRevert(abi.encodeWithSelector(Errors.DepositDoesNotMatchValue.selector, 2 ether, 1 ether));
-        lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier{value: 1 ether}(pubKey1, DEVICE, 11001, 2 ether);
+        lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier{value: 1 ether}(pubKey1, DEVICE, 11001, 2 ether, 1);
+    }
+
+    /// @notice A batch size of zero or above the cap is refused rather than clamped
+    /// @dev Refusing is what keeps the return value honest. Clamping a request of a thousand down to
+    ///      twenty would tell a caller it deployed a thousand wallets.
+    function test_deployLazyWalletAndSetESIMIdentifier_rejectsABatchOutsideTheCap() public {
+        _bindOneESIM();
+        uint256 cap = lazyWalletRegistry.MAX_ESIM_WALLETS_PER_CALL();
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(abi.encodeWithSelector(Errors.TooManyESIMWallets.selector, 0, cap));
+        lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(pubKey1, DEVICE, 11002, 0, 0);
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(abi.encodeWithSelector(Errors.TooManyESIMWallets.selector, cap + 1, cap));
+        lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(pubKey1, DEVICE, 11003, 0, cap + 1);
+    }
+
+    /// @notice The continuation refuses a device this contract never deployed
+    /// @dev The cursor is the marker, not the registry's device wallet record. A device deployed
+    ///      through the ordinary route under an identifier a fiat user's eSIMs are bound to would
+    ///      otherwise receive their wallets, and later their purchase history.
+    function test_deployMoreESIMWalletsForLazyDevice_rejectsADeviceItNeverDeployed() public {
+        _bindOneESIM();
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(abi.encodeWithSelector(Errors.LazyWalletNotDeployed.selector, DEVICE));
+        lazyWalletRegistry.deployMoreESIMWalletsForLazyDevice(DEVICE, 1);
+    }
+
+    /// @notice The continuation refuses a caller other than the admin
+    function test_deployMoreESIMWalletsForLazyDevice_rejectsANonAdminCaller() public {
+        vm.prank(user1);
+        vm.expectRevert(Errors.OnlyESIMWalletAdmin.selector);
+        lazyWalletRegistry.deployMoreESIMWalletsForLazyDevice(DEVICE, 1);
+    }
+
+    /// @notice A salt with no room left for the whole eSIM list is refused
+    /// @dev Each eSIM wallet is deployed at the device salt plus its position in the list, so a salt
+    ///      within the list length of the maximum would wrap partway through and land a later batch
+    ///      on an address another device already holds. The whole range is checked here rather than
+    ///      one batch at a time, because a device that runs out of salt halfway can neither be
+    ///      finished nor redeployed.
+    function test_deployLazyWalletAndSetESIMIdentifier_rejectsASaltWithNoRoomForTheESIMWallets() public {
+        _bindOneESIM();
+        uint256 salt = type(uint256).max - 1;
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(abi.encodeWithSelector(Errors.SaltTooHigh.selector, salt, 1));
+        lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(pubKey1, DEVICE, salt, 0, 1);
     }
 
     // ---------------------------------------------------------------------------------------------

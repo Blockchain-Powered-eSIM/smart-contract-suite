@@ -14,6 +14,11 @@ import "test/utils/mocks/MockDeviceWallet.sol";
 
 contract LazyWalletRegistryTest is DeployerBase {
 
+    /// @dev Batch size large enough to deploy every eSIM the fixture binds in one call. The largest
+    ///      device in `customESIMUniqueIdentifiers` holds six, so a request of twenty clamps to the
+    ///      whole list and these tests see the pre-batching behaviour.
+    uint256 private constant FULL_BATCH = 20;
+
     function test_batchPopulateHistory_withoutAdmin() public {
         vm.startPrank(user1);
         vm.expectRevert(Errors.OnlyESIMWalletAdmin.selector);
@@ -225,7 +230,8 @@ contract LazyWalletRegistryTest is DeployerBase {
             pubKey1,
             customDeviceUniqueIdentifiers[0],
             999,
-            0
+            0,
+            FULL_BATCH
         );
         vm.stopPrank();
     }
@@ -237,7 +243,8 @@ contract LazyWalletRegistryTest is DeployerBase {
             pubKey1,
             customDeviceUniqueIdentifiers[0],
             999,
-            0
+            0,
+            FULL_BATCH
         );
         vm.stopPrank();
     }
@@ -249,11 +256,12 @@ contract LazyWalletRegistryTest is DeployerBase {
 
         vm.startPrank(eSIMWalletAdmin);
         vm.deal(eSIMWalletAdmin, 10 ether);
-        (address deviceWalletAddress, address[] memory eSIMWallets) = lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier{value: 2 ether}(
+        (address deviceWalletAddress, address[] memory eSIMWallets,) = lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier{value: 2 ether}(
             pubKey1,
             deviceIdentifier,
             999,
-            2 ether
+            2 ether,
+            FULL_BATCH
         );
         vm.stopPrank();
 
@@ -332,11 +340,12 @@ contract LazyWalletRegistryTest is DeployerBase {
 
         vm.deal(eSIMWalletAdmin, 2 ether);
         vm.prank(eSIMWalletAdmin);
-        (address deviceWalletAddress,) = lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier{value: 2 ether}(
+        (address deviceWalletAddress,,) = lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier{value: 2 ether}(
             pubKey1,
             deviceIdentifier,
             salt,
-            2 ether
+            2 ether,
+            FULL_BATCH
         );
 
         assertEq(deviceWalletAddress, frontRunWallet, "The deployment must adopt the front-run wallet");
@@ -367,11 +376,12 @@ contract LazyWalletRegistryTest is DeployerBase {
         ));
 
         vm.prank(eSIMWalletAdmin);
-        (address deviceWalletAddress,) = lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(
+        (address deviceWalletAddress,,) = lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(
             pubKey1,
             deviceIdentifier,
             salt,
-            0
+            0,
+            FULL_BATCH
         );
 
         assertEq(deviceWalletAddress, frontRunWallet, "The deployment must adopt the front-run wallet");
@@ -584,11 +594,12 @@ contract LazyWalletRegistryTest is DeployerBase {
         uint256 _salt
     ) internal returns (DataBundleDetails[] memory) {
         vm.prank(eSIMWalletAdmin);
-        (, address[] memory eSIMWallets) = lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(
+        (, address[] memory eSIMWallets,) = lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(
             pubKey1,
             _device,
             _salt,
-            0
+            0,
+            FULL_BATCH
         );
 
         return MockESIMWallet(payable(eSIMWallets[0])).getTransactionHistory();
@@ -626,29 +637,246 @@ contract LazyWalletRegistryTest is DeployerBase {
         assertLt(gasUsed, 4_000_000, "A full batch must stay well inside a block");
     }
 
-    /// @notice Thirty eSIMs, each with a long history, still deploys inside a block.
-    /// @dev Nothing bounds the eSIM count, so this is a measured reference point rather than a
-    ///      ceiling the contract enforces. The history no longer counts against this figure, but
-    ///      the eSIM count still does and nothing caps it.
-    ///
-    ///      The real cost is 13,520,837 and the bound sits well above it so that
-    ///      `forge coverage --ir-minimum` passes too, where instrumentation inflates the same call
-    ///      to 16,400,170. A gas assertion tight enough to be interesting under a normal run is red
-    ///      under coverage, and a permanently red coverage run trains everyone to ignore it. This
-    ///      bound still fails on a regression back to the 21,168,334 the deployment cost while it
-    ///      carried history.
-    function test_deployLazyWalletAndSetESIMIdentifier_staysInsideABlockAtThirtyESIMs() public {
+    /// @notice The device wallet works the moment the first batch lands, with eSIMs still outstanding
+    /// @dev This is the decision the batching rests on. Holding the device inert until the last eSIM
+    ///      arrived would mean one dropped transaction leaves the user with nothing rather than with
+    ///      most of what they bought, so the wallets that exist have to be complete on their own.
+    function test_deployLazyWalletAndSetESIMIdentifier_leavesTheDeviceUsableMidDeployment() public {
         string memory device = customDeviceUniqueIdentifiers[0];
-        for(uint256 round=0; round<10; ++round) {
-            _bindESIMs(device, 30, "worst_");
+        _bindESIMs(device, 5, "partial_");
+
+        vm.prank(eSIMWalletAdmin);
+        (address deviceWalletAddress, address[] memory eSIMWallets, uint256 remaining) =
+            lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(pubKey1, device, 6001, 0, 2);
+
+        assertEq(eSIMWallets.length, 2, "The first batch must deploy exactly what it was asked for");
+        assertEq(remaining, 3, "Three eSIM wallets must still be outstanding");
+        assertEq(lazyWalletRegistry.eSIMWalletsDeployed(device), 2, "The cursor must sit at two");
+
+        MockDeviceWallet deviceWallet = MockDeviceWallet(payable(deviceWalletAddress));
+        assertEq(registry.isDeviceWalletValid(deviceWalletAddress), true, "The device wallet must be live");
+
+        for(uint256 i=0; i<eSIMWallets.length; ++i) {
+            MockESIMWallet eSIMWallet = MockESIMWallet(payable(eSIMWallets[i]));
+
+            assertEq(registry.isESIMWalletValid(eSIMWallets[i]), deviceWalletAddress, "Each wallet must be bound");
+            assertEq(deviceWallet.isValidESIMWallet(eSIMWallets[i]), true, "Each wallet must be valid on the device");
+            assertEq(deviceWallet.canPullETH(eSIMWallets[i]), true, "Each wallet must be able to pull ETH");
+            assertEq(
+                eSIMWallet.eSIMUniqueIdentifier(),
+                string.concat("partial_", vm.toString(i)),
+                "Each wallet must carry its own identifier"
+            );
         }
+
+        // The wallets that do not exist yet hold nothing, rather than resolving to something wrong
+        assertEq(
+            lazyWalletRegistry.lazyDeployedESIMWallet("partial_2"),
+            address(0),
+            "An undeployed identifier must resolve to nothing"
+        );
+    }
+
+    /// @notice An eSIM whose wallet exists can be given its history before the rest are deployed
+    /// @dev The history cursor is per eSIM and the deploy cursor is per device, so the two do not
+    ///      wait on each other. A user whose first eSIM landed sees its purchases straight away.
+    function test_setHistoryForLazyWallet_worksWhileTheDeviceIsStillDeploying() public {
+        string memory device = customDeviceUniqueIdentifiers[0];
+        _bindESIMs(device, 4, "midflight_");
+        _addPurchases(device, "midflight_0", 3);
+
+        vm.prank(eSIMWalletAdmin);
+        lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(pubKey1, device, 6101, 0, 1);
+
+        vm.prank(eSIMWalletAdmin);
+        (uint256 copied, uint256 remaining) = lazyWalletRegistry.setHistoryForLazyWallet("midflight_0", 50);
+
+        assertEq(copied, 4, "Every entry the eSIM holds must be copied");
+        assertEq(remaining, 0, "Nothing must be left waiting");
+        assertEq(
+            MockESIMWallet(payable(lazyWalletRegistry.lazyDeployedESIMWallet("midflight_0")))
+                .getTransactionHistory().length,
+            4,
+            "The wallet must hold its history while its siblings are still undeployed"
+        );
+
+        assertEq(lazyWalletRegistry.eSIMWalletsDeployed(device), 1, "The deploy cursor must not have moved");
+    }
+
+    /// @notice An eSIM cannot be moved to another device while the rest are still being deployed
+    /// @dev Switching mid-deployment would take an identifier out from under a cursor walking the
+    ///      list, leaving a wallet bound to a device whose history record no longer names it. The
+    ///      first batch creates the device wallet, which is what makes the existing guard cover the
+    ///      whole window rather than only the moment the last batch lands.
+    function test_switchESIMIdentifierToNewDeviceIdentifier_refusedWhileTheDeviceIsStillDeploying() public {
+        string memory device = customDeviceUniqueIdentifiers[0];
+        _bindESIMs(device, 4, "locked_");
+
+        vm.prank(eSIMWalletAdmin);
+        (,, uint256 remaining) = lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(pubKey1, device, 6201, 0, 1);
+        assertEq(remaining, 3, "The device must still be mid-deployment");
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(abi.encodeWithSelector(Errors.LazyWalletAlreadyDeployed.selector, device));
+        lazyWalletRegistry.switchESIMIdentifierToNewDeviceIdentifier("locked_3", device, "some_other_device");
+    }
+
+    /// @notice New purchase history cannot be recorded while the rest are still being deployed
+    /// @dev The cursor walks the identifier list, so an identifier appended after the first batch
+    ///      would either be skipped or shift the positions of the ones behind it.
+    function test_batchPopulateHistory_refusedWhileTheDeviceIsStillDeploying() public {
+        string memory device = customDeviceUniqueIdentifiers[0];
+        _bindESIMs(device, 4, "frozen_");
+
+        vm.prank(eSIMWalletAdmin);
+        lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(pubKey1, device, 6301, 0, 1);
+
+        vm.expectRevert(abi.encodeWithSelector(Errors.LazyWalletAlreadyDeployed.selector, device));
+        _bindESIMs(device, 1, "appended_");
+    }
+
+    /// @notice The continuation refuses once every eSIM has a wallet
+    /// @dev The terminal condition is a revert rather than a quiet no-op, so a caller looping until
+    ///      it is done stops on something it can read instead of spinning.
+    function test_deployMoreESIMWalletsForLazyDevice_revertsOnceEveryWalletExists() public {
+        string memory device = customDeviceUniqueIdentifiers[0];
+        _bindESIMs(device, 3, "done_");
+
+        vm.prank(eSIMWalletAdmin);
+        lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(pubKey1, device, 6401, 0, 3);
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(abi.encodeWithSelector(Errors.AllESIMWalletsDeployed.selector, device));
+        lazyWalletRegistry.deployMoreESIMWalletsForLazyDevice(device, 1);
+    }
+
+    /// @notice A batch larger than what is left deploys only what is left and says so
+    /// @dev Clamping is right here and refusing is right for a request above the cap. The caller
+    ///      asked for more wallets than the device has, and the return value reports what it got.
+    function test_deployMoreESIMWalletsForLazyDevice_clampsToWhatIsLeft() public {
+        string memory device = customDeviceUniqueIdentifiers[0];
+        _bindESIMs(device, 5, "clamp_");
+
+        vm.prank(eSIMWalletAdmin);
+        lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(pubKey1, device, 6501, 0, 3);
+
+        vm.prank(eSIMWalletAdmin);
+        (address[] memory eSIMWallets, uint256 remaining) =
+            lazyWalletRegistry.deployMoreESIMWalletsForLazyDevice(device, 20);
+
+        assertEq(eSIMWallets.length, 2, "Only the outstanding wallets may be deployed");
+        assertEq(remaining, 0, "Nothing must be left waiting");
+        assertEq(lazyWalletRegistry.eSIMWalletsDeployed(device), 5, "The cursor must reach the list length");
+    }
+
+    /// @notice A device deployed through the ordinary route cannot be continued as a lazy one
+    /// @dev The marker is the cursor and not the registry's device wallet record. Reading the record
+    ///      instead would let anyone who registers a device under an identifier a fiat user's eSIMs
+    ///      are bound to receive those wallets, and through them that user's purchase history.
+    function test_deployMoreESIMWalletsForLazyDevice_refusesADeviceTheOrdinaryRouteDeployed() public {
+        string memory device = customDeviceUniqueIdentifiers[0];
+        _bindESIMs(device, 3, "hijack_");
+
+        // Anyone can deploy a device wallet against an unclaimed identifier
+        vm.prank(user2);
+        address ordinaryWallet = address(deviceWalletFactory.createAccount(device, pubKey1, 6601));
+        vm.prank(eSIMWalletAdmin);
+        deviceWalletFactory.postCreateAccount(ordinaryWallet, device, pubKey1);
+        assertEq(
+            registry.uniqueIdentifierToDeviceWallet(device),
+            ordinaryWallet,
+            "The identifier must resolve to the ordinary wallet"
+        );
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(abi.encodeWithSelector(Errors.LazyWalletNotDeployed.selector, device));
+        lazyWalletRegistry.deployMoreESIMWalletsForLazyDevice(device, 1);
+    }
+
+    /// @notice A full batch of eSIM wallets stays cheap enough that a failed one is worth retrying
+    /// @dev The cap is set for retry cost rather than the block limit, so this is the figure that
+    ///      justifies it. The deployment chains sit at 30,000,000 at their tightest.
+    ///
+    ///      The real cost is 9,278,724, about 460,000 per eSIM wallet, and the bound sits above it so
+    ///      that `forge coverage --ir-minimum` passes too, where instrumentation adds about a fifth.
+    ///      It still fails on a regression that stops enforcing the cap, which would put the whole
+    ///      forty five eSIM deployment below back into one call at roughly 21,000,000.
+    function test_deployLazyWalletAndSetESIMIdentifier_staysCheapAtAFullBatch() public {
+        string memory device = customDeviceUniqueIdentifiers[0];
+        _bindESIMs(device, 20, "full_batch_");
 
         vm.prank(eSIMWalletAdmin);
         uint256 gasBefore = gasleft();
-        lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(pubKey1, device, 4245, 0);
+        lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(pubKey1, device, 4245, 0, 20);
         uint256 gasUsed = gasBefore - gasleft();
 
-        assertLt(gasUsed, 20_000_000, "A deployment at thirty eSIMs must fit inside a block");
+        assertLt(gasUsed, 14_000_000, "A full batch must stay well inside a block");
+    }
+
+    /// @notice A device with more eSIMs than one block could ever carry still deploys, over batches
+    /// @dev Forty five is past the point where the old single-transaction deployment stopped fitting
+    ///      in a 30,000,000 block, which is the whole reason the batching exists. Every batch is
+    ///      asserted individually so a regression that quietly makes one enormous call shows up as a
+    ///      gas failure rather than as a pass. Measured at 9,278,767 then 8,693,555 then 2,183,738.
+    function test_deployLazyWalletAndSetESIMIdentifier_reachesFortyFiveESIMsOverBatches() public {
+        string memory device = customDeviceUniqueIdentifiers[0];
+        _bindESIMs(device, 45, "worst_");
+
+        vm.prank(eSIMWalletAdmin);
+        uint256 gasBefore = gasleft();
+        (address deviceWallet,, uint256 remaining) = lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(
+            pubKey1,
+            device,
+            4245,
+            0,
+            20
+        );
+        assertLt(gasBefore - gasleft(), 14_000_000, "The first batch must fit inside a block");
+        assertEq(remaining, 25, "Twenty five eSIM wallets must be left after the first batch");
+
+        while(remaining > 0) {
+            vm.prank(eSIMWalletAdmin);
+            gasBefore = gasleft();
+            (, remaining) = lazyWalletRegistry.deployMoreESIMWalletsForLazyDevice(device, 20);
+            assertLt(gasBefore - gasleft(), 14_000_000, "Every later batch must fit inside a block");
+        }
+
+        assertEq(lazyWalletRegistry.eSIMWalletsDeployed(device), 45, "Every eSIM must end up with a wallet");
+        _assertEveryESIMHasItsOwnWallet(device, 45, deviceWallet);
+    }
+
+    /// @notice Every identifier resolves to a distinct wallet the device wallet owns
+    /// @dev Distinctness is the part worth asserting. A salt that restarted rather than continuing
+    ///      between batches would either revert on a used address or, if the guard were ever lost,
+    ///      hand two identifiers the same wallet.
+    function _assertEveryESIMHasItsOwnWallet(
+        string memory _device,
+        uint256 _count,
+        address _deviceWallet
+    ) private {
+        address[] memory seen = new address[](_count);
+
+        for(uint256 i=0; i<_count; ++i) {
+            string memory eSIM = string.concat("worst_", vm.toString(i));
+            address eSIMWallet = lazyWalletRegistry.lazyDeployedESIMWallet(eSIM);
+
+            assertNotEq(eSIMWallet, address(0), "Every identifier must resolve to a wallet");
+            assertEq(
+                registry.isESIMWalletValid(eSIMWallet),
+                _deviceWallet,
+                "Every wallet must be bound to the device wallet"
+            );
+            assertEq(
+                MockESIMWallet(payable(eSIMWallet)).eSIMUniqueIdentifier(),
+                eSIM,
+                "Every wallet must carry its own identifier"
+            );
+
+            for(uint256 j=0; j<i; ++j) {
+                assertNotEq(seen[j], eSIMWallet, "No two identifiers may share a wallet");
+            }
+            seen[i] = eSIMWallet;
+        }
     }
 
     /// @notice Binds one eSIM with `_purchases` entries, deploys the device, returns its wallet.
@@ -661,11 +889,12 @@ contract LazyWalletRegistryTest is DeployerBase {
         _addPurchases(device, _eSIM, _purchases);
 
         vm.prank(eSIMWalletAdmin);
-        (, address[] memory eSIMWallets) = lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(
+        (, address[] memory eSIMWallets,) = lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(
             pubKey1,
             device,
             _salt,
-            0
+            0,
+            FULL_BATCH
         );
 
         return MockESIMWallet(payable(eSIMWallets[0]));

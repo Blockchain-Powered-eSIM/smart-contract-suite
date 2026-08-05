@@ -52,13 +52,17 @@ contract HandlerDistributionTest is CampaignBase {
             // identifier can only be deployed once and can only be switched away from while it has
             // no wallet. Reading the positions back rather than computing them keeps this working
             // if the number of identifiers a round adds ever changes
-            adminHandler.populateLazyHistory(seed, 2, false);
+            // Three eSIMs rather than two because one is switched away below and the deploy is
+            // deliberately given a batch of one, so two have to be left for the continuation to have
+            // anything outstanding to reach
+            adminHandler.populateLazyHistory(seed, 3, false);
             uint256 lazyDevice = state.lazyDeviceIdentifierCount() - 1;
-            uint256 lazyESIM = state.lazyESIMIdentifierCount() - 2;
+            uint256 lazyESIM = state.lazyESIMIdentifierCount() - 3;
             adminHandler.switchESIMIdentifier(lazyESIM, seed + SWITCH_SEEDS, false);
-            adminHandler.deployLazyWallet(lazyDevice, seed, 1 ether);
-            // Follows the deploy in the same round. History only reaches a wallet that exists, so
-            // running this before it would count as a revert and never reach a success
+            adminHandler.deployLazyWallet(lazyDevice, seed, 1 ether, 1);
+            adminHandler.deployMoreLazyESIMWallets(lazyDevice, 1);
+            // Follows both deploy calls in the same round. History only reaches a wallet that
+            // exists, so running this before them would count as a revert and never reach a success
             adminHandler.copyLazyHistory(lazyESIM + 1, 50);
 
             attackerHandler.donateETH(round, 1 ether);
@@ -106,6 +110,7 @@ contract HandlerDistributionTest is CampaignBase {
         _assertExercised("populateLazyHistory");
         _assertExercised("switchESIMIdentifier");
         _assertExercised("deployLazyWallet");
+        _assertExercised("deployMoreLazyESIMWallets");
         _assertExercised("copyLazyHistory");
         _assertExercised("donateETH");
         _assertExercised("donateToSingleton");

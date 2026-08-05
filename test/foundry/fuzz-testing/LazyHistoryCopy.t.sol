@@ -122,11 +122,12 @@ contract LazyHistoryCopyTest is FuzzBase {
         }
 
         vm.prank(eSIMWalletAdmin);
-        (, address[] memory eSIMWallets) = lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(
+        (, address[] memory eSIMWallets,) = lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(
             pubKey1,
             device,
             9001,
-            0
+            0,
+            1
         );
 
         return MockESIMWallet(payable(eSIMWallets[0]));

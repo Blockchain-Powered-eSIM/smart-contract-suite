@@ -219,11 +219,13 @@ contract StorageLayoutTest is DeployerBase {
         _assertLazyWalletRegistryMappingSlots(target);
     }
 
-    /// @notice Pins the mapping slots, including the two the batched history copy added
+    /// @notice Pins the mapping slots, including the four the two batched paths added
     /// @dev A mapping entry sits at keccak256(key . slot), so writing that word and reading the
-    ///      getter back proves which slot the mapping occupies. The cursor and the wallet record
-    ///      were appended, and an insertion anywhere above them moves both, which would leave the
-    ///      copy reading a cursor of zero and writing history into whatever address it found.
+    ///      getter back proves which slot the mapping occupies. The two cursors, the wallet record
+    ///      and the salt were appended, and an insertion anywhere above them moves all four. A moved
+    ///      history cursor leaves the copy reading zero and writing into whatever address it found;
+    ///      a moved deploy cursor makes a half-deployed device look untouched, so the next batch
+    ///      restarts at index zero on salts that already hold wallets.
     function _assertLazyWalletRegistryMappingSlots(address _target) private {
         string memory key = "pin";
 
@@ -246,6 +248,20 @@ contract StorageLayoutTest is DeployerBase {
             lazyWalletRegistry.lazyDeployedESIMWallet(key),
             SENTINEL,
             "LazyWalletRegistry.lazyDeployedESIMWallet must read slot 6"
+        );
+
+        vm.store(_target, keccak256(abi.encodePacked(bytes(key), uint256(7))), bytes32(uint256(0xC3)));
+        assertEq(
+            lazyWalletRegistry.eSIMWalletsDeployed(key),
+            0xC3,
+            "LazyWalletRegistry.eSIMWalletsDeployed must read slot 7"
+        );
+
+        vm.store(_target, keccak256(abi.encodePacked(bytes(key), uint256(8))), bytes32(uint256(0xD4)));
+        assertEq(
+            lazyWalletRegistry.lazyDeploymentSalt(key),
+            0xD4,
+            "LazyWalletRegistry.lazyDeploymentSalt must read slot 8"
         );
     }
 
