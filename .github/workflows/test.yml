@@ -47,10 +47,18 @@ jobs:
       # Fuzz and invariant runs draw a fresh seed each time, and the malleable twin case verifies a
       # signature generated offchain per run, so all three report a different figure every time.
       # They are left out of the baseline rather than given a tolerance, so what remains is checked
-      # exactly.
+      # exactly. test/foundry/gas is out because it keeps its own baseline under snapshots/, one
+      # figure per operation, and sweeping it in here would record the test bodies instead.
       - name: Check gas snapshot
         run: |
           forge snapshot --check --via-ir \
-            --no-match-path "test/foundry/{fuzz-testing,invariant-testing,fork}/*" \
+            --no-match-path "test/foundry/{fuzz-testing,invariant-testing,fork,gas}/*" \
             --no-match-test "test_verifySignature_rejectsTheMalleableTwinOfARealAssertion"
         id: snapshot
+
+      # The per-operation baseline. forge test rewrites snapshots/ on every run, so a difference
+      # here means an operation moved rather than a test body moving around it.
+      - name: Check per-operation gas snapshots
+        run: |
+          git diff --exit-code -- snapshots/
+        id: operation-snapshot

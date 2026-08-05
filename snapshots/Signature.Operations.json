@@ -1,0 +1,7 @@
+{
+  "p256 verify: FreshCryptoLib alone": "227320",
+  "p256 verify: RIP-7212 precompile alone": "6900",
+  "validateUserOp: valid assertion": "30779",
+  "verifySignature: falls through to FreshCryptoLib": "250760",
+  "verifySignature: real assertion, precompile answers": "22493"
+}

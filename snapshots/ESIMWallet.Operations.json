@@ -1,0 +1,11 @@
+{
+  "acceptOwnershipTransfer": "3495",
+  "buyDataBundle: pulls from the device wallet": "80319",
+  "buyDataBundle: wallet already holds the price": "123920",
+  "deployESIMWallet: through the factory": "288731",
+  "populateHistory: 10 entries": "502471",
+  "requestTransferOwnership": "65310",
+  "setDataBundlePriceCap: back to the registry ceiling": "2286",
+  "setDataBundlePriceCap: set": "24286",
+  "setESIMUniqueIdentifier: first time": "25482"
+}
