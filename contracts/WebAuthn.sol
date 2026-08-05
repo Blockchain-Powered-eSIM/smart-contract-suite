@@ -17,6 +17,8 @@ import "./CustomStructs.sol";
 ///
 /// @author Coinbase (https://github.com/base-org/webauthn-sol)
 /// @author Daimo (https://github.com/daimo-eth/p256-verifier/blob/master/src/WebAuthn.sol)
+/// @author Solady (https://github.com/vectorized/solady/blob/main/src/utils/WebAuthn.sol),
+///         for `tryDecodeSignature`
 library WebAuthn {
     using LibString for string;
 
@@ -52,6 +54,66 @@ library WebAuthn {
     /// @dev Offset of the flags byte in the authenticator data, after the 32 byte rpIdHash.
     ///      See https://www.w3.org/TR/webauthn-2/#sctn-authenticator-data.
     uint256 private constant _AUTH_DATA_FLAGS_OFFSET = 32;
+
+    /// @dev Smallest encoding that can hold the struct head: six words, one per member.
+    uint256 private constant _MIN_ENCODED_LENGTH = 0xc0;
+
+    ///
+    /// @notice Decodes an encoded `WebAuthnSignature` without reverting on a malformed encoding.
+    ///
+    /// @dev The decoder solc generates reverts when the bytes are not a well formed encoding, and a
+    ///      revert is not a rejection anywhere this is reached from. Inside ERC-4337 validation it
+    ///      fails the whole bundle rather than the one operation, and behind `isValidSignature` it
+    ///      reaches an integrating contract as an error rather than as an invalid signature.
+    ///      Everything below this point in this library was already written to return false instead
+    ///      of reverting; the decode one level above it was not, so anything too malformed to decode
+    ///      never reached the hardening.
+    ///
+    ///      An encoding failing any bound leaves `decoded` as solc allocated it, with both dynamic
+    ///      members pointing at the zero slot. `verifySignature` then returns false, because an
+    ///      empty `clientDataJSON` cannot contain the index it is handed.
+    ///
+    ///      Assembly, and a copy of solady's `WebAuthn.tryDecodeAuth` rather than a fresh
+    ///      implementation: `WebAuthnAuth` and `WebAuthnSignature` have identical layouts, and
+    ///      rewriting an audited ABI bounds check by hand only adds somewhere for a mistake to
+    ///      live. Memory-safe: every read is inside `encodedSignature`, and the only writes are to
+    ///      the six words solc already reserved for the return value.
+    ///
+    /// @param encodedSignature `abi.encode` of a `WebAuthnSignature`, as supplied by the caller.
+    ///
+    /// @return decoded The signature, or a zeroed struct when the encoding is malformed.
+    function tryDecodeSignature(bytes memory encodedSignature)
+        internal
+        pure
+        returns (WebAuthnSignature memory decoded)
+    {
+        /// @solidity memory-safe-assembly
+        assembly {
+            for { let n := mload(encodedSignature) } iszero(lt(n, _MIN_ENCODED_LENGTH)) {} {
+                let o := add(encodedSignature, 0x20) // Start of the encoded bytes.
+                let e := add(o, n) // End of the encoded bytes.
+                let p := add(mload(o), o) // Start of the struct, from the outer offset.
+                if or(gt(add(p, _MIN_ENCODED_LENGTH), e), lt(p, o)) { break }
+                let authenticatorData := add(mload(p), p)
+                let clientDataJSON := add(mload(add(p, 0x20)), p)
+                if or(
+                    or(gt(authenticatorData, e), lt(authenticatorData, p)),
+                    or(gt(clientDataJSON, e), lt(clientDataJSON, p))
+                ) { break }
+                if or(
+                    gt(add(add(authenticatorData, 0x20), mload(authenticatorData)), e),
+                    gt(add(add(clientDataJSON, 0x20), mload(clientDataJSON)), e)
+                ) { break }
+                mstore(decoded, authenticatorData)
+                mstore(add(decoded, 0x20), clientDataJSON)
+                mstore(add(decoded, 0x40), mload(add(p, 0x40))) // challengeIndex
+                mstore(add(decoded, 0x60), mload(add(p, 0x60))) // typeIndex
+                mstore(add(decoded, 0x80), mload(add(p, 0x80))) // r
+                mstore(add(decoded, 0xa0), mload(add(p, 0xa0))) // s
+                break
+            }
+        }
+    }
 
     ///
     /// @notice Verifies a Webauthn Authentication Assertion as described
