@@ -75,22 +75,6 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
     ///      keccak cost of the linear scan the switch path runs over the whole list.
     uint256 private constant MAX_IDENTIFIER_LENGTH = 64;
 
-    /// @notice Most purchase history entries per eSIM that a deployment carries into the wallet
-    /// @dev Only what the wallet receives is limited. This contract keeps every entry, so nothing
-    ///      is lost and the full record stays readable. The limit exists because
-    ///      deployLazyWalletAndSetESIMIdentifier writes the whole history of every eSIM in one
-    ///      transaction, and history grows without bound as a user keeps buying.
-    ///
-    ///      Measured at 30 eSIMs, the most a device may hold: one entry each costs 15,300,000 gas
-    ///      and every further entry across all 30 adds about 1,500,000, so the worst case here
-    ///      lands near 21,300,000. That fits a 30,000,000 block with room left, and the deployment
-    ///      chains are looser still at 40,000,000 and 1,200,000,000.
-    ///
-    ///      Trimmed rather than refused. Capping purchases would turn a paying user away, and
-    ///      refusing to deploy a device that already exceeds the limit would strand exactly the
-    ///      wallets this protects.
-    uint256 private constant MAX_HISTORY_ENTRIES_PER_ESIM = 5;
-
     /// @dev Slot that used to hold a copy of the upgrade authority. It was written once in
     ///      `initialize` and had no setter, so it kept naming the deploy-time address once
     ///      ownership moved on. Kept so nothing below it shifts on the live proxies. Never read;
@@ -221,18 +205,12 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         }
 
         address[] memory eSIMWallets = new address[](eSIMUniqueIdentifiers.length);
-        DataBundleDetails[][] memory listOfDataBundleDetails = new DataBundleDetails[][](eSIMUniqueIdentifiers.length);
-
-        for(uint256 i=0; i<eSIMUniqueIdentifiers.length; ++i) {
-            listOfDataBundleDetails[i] = _recentHistory(_deviceUniqueIdentifier, eSIMUniqueIdentifiers[i]);
-        }
 
         (deviceWallet, eSIMWallets) = registry.deployLazyWallet{value: msg.value}(
             _deviceOwnerPublicKey,
             _deviceUniqueIdentifier,
             _salt,
             eSIMUniqueIdentifiers,
-            listOfDataBundleDetails,
             _depositAmount
         );
 
@@ -401,31 +379,6 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         string[] storage eSIMIdentifierOfNewDevice = eSIMIdentifiersAssociatedWithDeviceIdentifier[_newDeviceIdentifier];
         eSIMIdentifierOfNewDevice.push(_eSIMIdentifier);
         emit ESIMIdentifierAddedToNewDeviceIdentifier(_newDeviceIdentifier, _eSIMIdentifier, eSIMIdentifierOfNewDevice);
-    }
-
-    /// @notice The tail of an eSIM's purchase history, up to what a deployment can carry
-    /// @dev The tail and not the head: a wallet showing five purchases should show the five most
-    ///      recent ones. This contract keeps the whole record either way, so the entries left
-    ///      behind stay readable through `getDeviceIdentifierToESIMDetails`.
-    /// @param _deviceIdentifier Device the eSIM is bound to
-    /// @param _eSIMIdentifier eSIM whose history is being read
-    /// @return The most recent entries, oldest first, at most the per-eSIM limit
-    function _recentHistory(
-        string calldata _deviceIdentifier,
-        string memory _eSIMIdentifier
-    ) private view returns (DataBundleDetails[] memory) {
-        DataBundleDetails[] storage history = deviceIdentifierToESIMDetails[_deviceIdentifier][_eSIMIdentifier];
-
-        uint256 length = history.length;
-        uint256 carried = length > MAX_HISTORY_ENTRIES_PER_ESIM ? MAX_HISTORY_ENTRIES_PER_ESIM : length;
-        uint256 firstCarried = length - carried;
-
-        DataBundleDetails[] memory recent = new DataBundleDetails[](carried);
-        for(uint256 i=0; i<carried; ++i) {
-            recent[i] = history[firstCarried + i];
-        }
-
-        return recent;
     }
 
     /// @notice Rejects an identifier longer than the protocol accepts

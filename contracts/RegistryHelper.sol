@@ -118,6 +118,9 @@ contract RegistryHelper {
     }
 
     /// @notice Allow LazyWalletRegistry to deploy a device wallet and an eSIM wallet on behalf of a user
+    /// @dev Deploys the wallets and sets their identifiers only. Purchase history is copied in
+    ///      afterwards through `populateLazyHistory`, because carrying it here made one transaction
+    ///      grow with the eSIM count and each eSIM's history at the same time.
     /// @param _deviceWalletOwnerKey P256 public key of user
     /// @param _deviceUniqueIdentifier Unique device identifier associated with the device
     /// @return Return device wallet address and list of addresses of all the eSIM wallets
@@ -126,7 +129,6 @@ contract RegistryHelper {
         string calldata _deviceUniqueIdentifier,
         uint256 _salt,
         string[] calldata _eSIMUniqueIdentifiers,
-        DataBundleDetails[][] calldata _dataBundleDetails,
         uint256 _depositAmount
     ) external payable onlyLazyWalletRegistry returns (address, address[] memory) {
         if(_eSIMUniqueIdentifiers.length + _salt >= type(uint256).max) {
@@ -168,9 +170,7 @@ contract RegistryHelper {
         eSIMWallets[i] = firstESIMWallet;
         // deployDeviceWalletForUsers doesn't set the eSIM identifer, hence updating it here for the 1st eSIM wallet
         DeviceWallet(payable(deviceWallet)).setESIMUniqueIdentifierForAnESIMWallet(firstESIMWallet, _eSIMUniqueIdentifiers[i]);
-        // Populate data bundle purchase details for the eSIM wallet
-        ESIMWallet(payable(firstESIMWallet)).populateHistory(_dataBundleDetails[i]);
-        // Increase the index to deploy, set identifier and populate history for the remaining _eSIMUniqueIdentifiers
+        // Increase the index to deploy and set the identifier for the remaining _eSIMUniqueIdentifiers
         i++;
 
         for(; i<_eSIMUniqueIdentifiers.length; ++i) {
@@ -183,9 +183,6 @@ contract RegistryHelper {
             // Since the eSIM unique identifier is already known in this scenario
             // We can execute the setESIMUniqueIdentifierForAnESIMWallet function in same transaction as deploying the smart wallet
             DeviceWallet(payable(deviceWallet)).setESIMUniqueIdentifierForAnESIMWallet(eSIMWallet, _eSIMUniqueIdentifiers[i]);
-
-            // Populate data bundle purchase details for the eSIM wallet
-            ESIMWallet(payable(eSIMWallet)).populateHistory(_dataBundleDetails[i]);
 
             eSIMWallets[i] = eSIMWallet;
 

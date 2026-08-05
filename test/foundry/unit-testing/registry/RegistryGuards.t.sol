@@ -157,7 +157,6 @@ contract RegistryGuardsTest is DeployerBase {
             customDeviceUniqueIdentifiers[0],
             7001,
             new string[](0),
-            new DataBundleDetails[][](0),
             0
         );
     }
@@ -197,7 +196,6 @@ contract RegistryGuardsTest is DeployerBase {
             customDeviceUniqueIdentifiers[0],
             salt,
             eSIMIdentifiers,
-            new DataBundleDetails[][](1),
             0
         );
     }
@@ -229,7 +227,6 @@ contract RegistryGuardsTest is DeployerBase {
             customDeviceUniqueIdentifiers[0],
             7003,
             new string[](0),
-            new DataBundleDetails[][](0),
             0
         );
 

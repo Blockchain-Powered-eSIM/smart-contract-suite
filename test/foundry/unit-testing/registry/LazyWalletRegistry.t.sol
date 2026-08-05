@@ -298,7 +298,7 @@ contract LazyWalletRegistryTest is DeployerBase {
             assertEq(address(eSIMWallet.eSIMWalletFactory()), address(eSIMWalletFactory), "eSIMWalletFactory address in eSIM wallet should have matched");
             assertEq(address(eSIMWallet.deviceWallet()), address(deviceWallet), "ESIM wallet should have correct device wallet");
             assertEq(eSIMWallet.newRequestedOwner(), address(0), "ESIM wallet's new requested owner should have been address(0)");
-            assertNotEq(eSIMWallet.getTransactionHistory().length, 0, "Transaction history should not have been empty");
+            assertEq(eSIMWallet.getTransactionHistory().length, 0, "Deployment should not carry any purchase history");
             assertNotEq(bytes(eSIMWallet.eSIMUniqueIdentifier()).length, 0, "ESIM unique identifier should not be empty");
         }
     }
@@ -594,51 +594,28 @@ contract LazyWalletRegistryTest is DeployerBase {
         return MockESIMWallet(payable(eSIMWallets[0])).getTransactionHistory();
     }
 
-    /// @notice A history longer than a deployment can carry is trimmed, not refused, and this
-    /// registry keeps every entry.
-    /// @dev The deployment writes every entry of every eSIM in one transaction, so an unbounded
-    ///      history eventually cannot fit in a block and the device could never be deployed at all.
-    ///      Trimming is what keeps a heavy user deployable.
-    function test_deployLazyWalletAndSetESIMIdentifier_trimsHistoryToTheCarriedLimit() public {
+    /// @notice Deployment carries no purchase history, however long the record is
+    /// @dev The record used to be trimmed to the last five entries so that a deployment could carry
+    ///      it, which lost everything before that. History is copied in afterwards now, so the whole
+    ///      record survives and the deployment stops growing with it.
+    function test_deployLazyWalletAndSetESIMIdentifier_carriesNoHistory() public {
         string memory device = customDeviceUniqueIdentifiers[0];
         _addPurchases(device, "trim_esim", 8);
 
         DataBundleDetails[] memory carried = _deployAndReadCarriedHistory(device, 4242);
 
-        assertEq(carried.length, 5, "The wallet must receive only what a deployment can carry");
+        assertEq(carried.length, 0, "Deployment must leave the wallet's history empty");
         assertEq(
             lazyWalletRegistry.getDeviceIdentifierToESIMDetails(device, "trim_esim").length,
             8,
-            "Trimming must leave this registry's record whole"
+            "The registry must still hold every entry"
         );
     }
 
-    /// @notice The entries carried are the most recent ones.
-    function test_deployLazyWalletAndSetESIMIdentifier_carriesTheMostRecentEntries() public {
-        string memory device = customDeviceUniqueIdentifiers[0];
-        _addPurchases(device, "recent_esim", 8);
-
-        DataBundleDetails[] memory carried = _deployAndReadCarriedHistory(device, 4243);
-
-        assertEq(carried[0].dataBundleID, "DB_3", "The oldest carried entry must be the fourth purchase");
-        assertEq(carried[4].dataBundleID, "DB_7", "The newest carried entry must be the last purchase");
-    }
-
-    /// @notice A history inside the limit arrives whole, which is every ordinary user.
-    function test_deployLazyWalletAndSetESIMIdentifier_carriesAShortHistoryWhole() public {
-        string memory device = customDeviceUniqueIdentifiers[0];
-        _addPurchases(device, "short_esim", 2);
-
-        DataBundleDetails[] memory carried = _deployAndReadCarriedHistory(device, 4244);
-
-        assertEq(carried.length, 2, "A history inside the limit must not be touched");
-        assertEq(carried[0].dataBundleID, "DB_0", "The first purchase must survive");
-    }
-
-    /// @notice Thirty eSIMs, each with a history past the carried limit, still deploys inside a block.
+    /// @notice Thirty eSIMs, each with a long history, still deploys inside a block.
     /// @dev Nothing bounds the eSIM count, so this is a measured reference point rather than a
-    ///      ceiling the contract enforces. A device is deployable only while its list stays near
-    ///      this size, and the two dimensions multiply.
+    ///      ceiling the contract enforces. The history no longer counts against this figure, but
+    ///      the eSIM count still does and nothing caps it.
     function test_deployLazyWalletAndSetESIMIdentifier_staysInsideABlockAtThirtyESIMs() public {
         string memory device = customDeviceUniqueIdentifiers[0];
         for(uint256 round=0; round<10; ++round) {
