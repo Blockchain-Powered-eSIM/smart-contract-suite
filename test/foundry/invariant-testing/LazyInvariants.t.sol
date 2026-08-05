@@ -200,6 +200,86 @@ contract LazyInvariantsTest is CampaignBase {
         }
     }
 
+    /// @notice The deploy cursor never runs past the list it walks
+    /// @dev The cursor is where the next batch starts reading, so a cursor beyond the list length
+    ///      would underflow the outstanding count and take the continuation down permanently for
+    ///      that device, leaving eSIMs that can never get a wallet.
+    /// forge-config: default.invariant.runs = 256
+    /// forge-config: default.invariant.depth = 500
+    /// forge-config: default.invariant.fail-on-revert = false
+    function invariant_deployedNeverExceedsTheESIMList() public view {
+        uint256 devices = state.lazyDeviceIdentifierCount();
+        for (uint256 i = 0; i < devices; ++i) {
+            string memory device = state.lazyDeviceIdentifiers(i);
+
+            assertLe(
+                lazyWalletRegistry.eSIMWalletsDeployed(device),
+                lazyWalletRegistry.getESIMIdentifiersAssociatedWithDeviceIdentifier(device).length,
+                "More eSIM wallets have been deployed than the device lists"
+            );
+        }
+    }
+
+    /// @notice A device with a deploy cursor has a device wallet, and one without has neither
+    /// @dev The cursor is what the continuation reads to tell the lazy route from the ordinary one.
+    ///      A cursor standing without a wallet behind it would let the continuation bind eSIM
+    ///      wallets to address zero; a wallet this contract deployed with no cursor would be
+    ///      unreachable, since the continuation refuses a cursor of zero.
+    /// forge-config: default.invariant.runs = 256
+    /// forge-config: default.invariant.depth = 500
+    /// forge-config: default.invariant.fail-on-revert = false
+    function invariant_deployCursorMovesOnlyWithADeviceWallet() public view {
+        uint256 devices = state.lazyDeviceIdentifierCount();
+        for (uint256 i = 0; i < devices; ++i) {
+            string memory device = state.lazyDeviceIdentifiers(i);
+            if (lazyWalletRegistry.eSIMWalletsDeployed(device) == 0) continue;
+
+            assertTrue(
+                registry.uniqueIdentifierToDeviceWallet(device) != address(0),
+                "A device has a deploy cursor but no device wallet"
+            );
+        }
+    }
+
+    /// @notice Exactly the eSIMs below the cursor have wallets, and each carries its own identifier
+    /// @dev The list positions and the wallet record are written on the same path but read on
+    ///      different ones, so this is what proves the cursor names the same set the record does. An
+    ///      eSIM above the cursor holding a wallet means a batch skipped a position and the next one
+    ///      will deploy onto a salt already used; one below the cursor without a wallet means an eSIM
+    ///      that can never be deployed, since nothing ever revisits a position behind the cursor.
+    ///
+    ///      Nothing is claimed here about which device wallet holds the eSIM wallet. That binding is
+    ///      free to move once the wallet exists, through a removal or an ownership transfer, and the
+    ///      record deliberately follows the wallet rather than the device. What has to hold is that
+    ///      the wallet at a position still answers for the identifier that position names.
+    /// forge-config: default.invariant.runs = 256
+    /// forge-config: default.invariant.depth = 500
+    /// forge-config: default.invariant.fail-on-revert = false
+    function invariant_walletsExistExactlyBelowTheDeployCursor() public view {
+        uint256 devices = state.lazyDeviceIdentifierCount();
+        for (uint256 i = 0; i < devices; ++i) {
+            string memory device = state.lazyDeviceIdentifiers(i);
+            uint256 deployed = lazyWalletRegistry.eSIMWalletsDeployed(device);
+
+            string[] memory associated =
+                lazyWalletRegistry.getESIMIdentifiersAssociatedWithDeviceIdentifier(device);
+
+            for (uint256 j = 0; j < associated.length; ++j) {
+                address wallet = lazyWalletRegistry.lazyDeployedESIMWallet(associated[j]);
+
+                if (j < deployed) {
+                    assertTrue(wallet != address(0), "An eSIM below the deploy cursor has no wallet");
+                    assertTrue(
+                        _sameString(MockESIMWallet(payable(wallet)).eSIMUniqueIdentifier(), associated[j]),
+                        "An eSIM's wallet carries a different identifier"
+                    );
+                } else {
+                    assertEq(wallet, address(0), "An eSIM above the deploy cursor already has a wallet");
+                }
+            }
+        }
+    }
+
     /// @notice Compares two identifiers
     function _sameString(string memory a, string memory b) internal pure returns (bool) {
         return keccak256(bytes(a)) == keccak256(bytes(b));

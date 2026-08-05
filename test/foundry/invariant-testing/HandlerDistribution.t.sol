@@ -73,9 +73,14 @@ contract HandlerDistributionTest is CampaignBase {
             adminHandler.buyDataBundle(round, 1 gwei);
             walletHandler.pullETH(round, 1 gwei);
             // Removal comes before the transfer pair on purpose. Requesting a transfer detaches
-            // the wallet on its way through, so a removal after it has nothing left to remove
-            walletHandler.removeESIMWallet(round, true, false);
-            walletHandler.addESIMWallet(round, round);
+            // the wallet on its way through, so a removal after it has nothing left to remove.
+            //
+            // The pair is read out of the recorded state rather than driven off the round number.
+            // Adding a wallet back needs the device that owns it, and two indexes that happen to
+            // line up only do so while every round records the same number of each
+            (uint256 eSIMIndex, uint256 deviceIndex) = _boundESIMWalletToItsDevice();
+            walletHandler.removeESIMWallet(eSIMIndex, true, false);
+            walletHandler.addESIMWallet(deviceIndex, eSIMIndex);
             walletHandler.requestTransferOwnership(round, round + 1);
             walletHandler.acceptOwnershipTransfer(round);
 
@@ -140,6 +145,28 @@ contract HandlerDistributionTest is CampaignBase {
             MIN_SUCCESSES,
             string.concat("Entry point never reached the protocol: ", _name(name))
         );
+    }
+
+    /// @notice Finds an attached eSIM wallet and the position of the device wallet holding it
+    /// @dev Both handlers take positions into the recorded arrays, and a removal followed by an add
+    ///      only works when the two name the same pair. Scanning for one is what keeps this drive
+    ///      working when a round starts recording a different number of eSIM wallets than devices.
+    /// @return eSIMIndex Position of an eSIM wallet that currently has a device wallet
+    /// @return deviceIndex Position of that device wallet
+    function _boundESIMWalletToItsDevice() internal view returns (uint256 eSIMIndex, uint256 deviceIndex) {
+        uint256 eSIMCount = state.eSIMWalletCount();
+        uint256 deviceCount = state.deviceWalletCount();
+
+        for (uint256 i = 0; i < eSIMCount; ++i) {
+            address device = registry.isESIMWalletValid(state.eSIMWallets(i));
+            if (device == address(0)) continue;
+
+            for (uint256 j = 0; j < deviceCount; ++j) {
+                if (state.deviceWallets(j) == device) return (i, j);
+            }
+        }
+
+        return (0, 0);
     }
 
     /// @notice Renders a padded entry point name for a failure message
