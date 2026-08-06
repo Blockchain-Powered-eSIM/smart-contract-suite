@@ -1,0 +1,14 @@
+{
+  "acceptOwnershipBatch: four contracts": "35965",
+  "cancel": "4872",
+  "execute: one call, delay served": "41548",
+  "executeBatch: four calls, delay served": "64085",
+  "executeBatch: four proxy upgrades": "87614",
+  "executeBatchInstantly: both wallet beacons": "128021",
+  "executeBatchInstantly: four calls": "132239",
+  "executeInstantly: one call": "94756",
+  "executeInstantly: release a protocol wide pause": "65010",
+  "schedule: one call": "35291",
+  "scheduleBatch: four calls": "47819",
+  "scheduleBatch: four proxy upgrades": "52589"
+}
