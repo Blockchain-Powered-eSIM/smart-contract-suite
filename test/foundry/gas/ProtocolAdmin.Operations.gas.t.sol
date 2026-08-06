@@ -67,24 +67,23 @@ contract ProtocolAdminOperationsGasTest is AdminBase {
         vm.snapshotGasLastCall(NAMESPACE, "executeBatch: four calls, delay served");
     }
 
-    /// @notice The guardian's route, which is one transaction rather than two
-    /// @dev Compare against the two rows above added together. The instant call pays for the
-    ///      announcement and the execution at once, and skips the second transaction's base cost.
-    function test_executeInstantly_oneCall() public {
-        bytes memory data = abi.encodeCall(registry.setDefaultDataBundlePriceCap, (1 ether));
+    /// @notice Stripping the cancel power, one account and a whole signer set
+    /// @dev The batch row is the one that matters. A guardian doing this during an incident is
+    ///      racing whatever the compromised account scheduled, and every account it has to name in
+    ///      a separate transaction is another chance to lose that race.
+    function test_revokeCancellersInstantly() public {
+        vm.prank(guardian);
+        protocolAdmin.revokeCancellersInstantly(_one(canceller));
+        vm.snapshotGasLastCall(NAMESPACE, "revokeCancellersInstantly: one account");
+
+        address[] memory rest = new address[](3);
+        rest[0] = secondCanceller;
+        rest[1] = thirdCanceller;
+        rest[2] = proposer;
 
         vm.prank(guardian);
-        protocolAdmin.executeInstantly(address(registry), 0, data, bytes32(0), bytes32(uint256(1)));
-        vm.snapshotGasLastCall(NAMESPACE, "executeInstantly: one call");
-    }
-
-    /// @notice The guardian's route as a batch of four
-    function test_executeInstantly_fourCalls() public {
-        (address[] memory targets, uint256[] memory values, bytes[] memory payloads) = _fourCapCalls();
-
-        vm.prank(guardian);
-        protocolAdmin.executeBatchInstantly(targets, values, payloads, bytes32(0), bytes32(uint256(2)));
-        vm.snapshotGasLastCall(NAMESPACE, "executeBatchInstantly: four calls");
+        protocolAdmin.revokeCancellersInstantly(rest);
+        vm.snapshotGasLastCall(NAMESPACE, "revokeCancellersInstantly: three accounts");
     }
 
     /// @notice Calling off something already announced
@@ -99,7 +98,7 @@ contract ProtocolAdminOperationsGasTest is AdminBase {
 
     /// @notice Taking ownership of all four contracts, which happens once per deployment
     function test_acceptOwnershipBatch() public {
-        ProtocolAdmin next = _deployReplacement();
+        ProtocolAdmin next = _deployReplacement(DELAY);
         address[] memory targets = _ownedContracts();
 
         _offerAllFourTo(address(next));
@@ -142,25 +141,27 @@ contract ProtocolAdminOperationsGasTest is AdminBase {
             (address(new MockESIMWallet()))
         );
 
-        vm.prank(guardian);
-        protocolAdmin.executeBatchInstantly(targets, values, payloads, bytes32(0), bytes32(0));
-        vm.snapshotGasLastCall(NAMESPACE, "executeBatchInstantly: both wallet beacons");
+        vm.prank(proposer);
+        protocolAdmin.scheduleBatch(targets, values, payloads, bytes32(0), bytes32(0), DELAY);
+
+        vm.warp(block.timestamp + DELAY);
+
+        vm.prank(outsider);
+        protocolAdmin.executeBatch(targets, values, payloads, bytes32(0), bytes32(0));
+        vm.snapshotGasLastCall(NAMESPACE, "executeBatch: both wallet beacons");
     }
 
     /// @notice Releasing a protocol wide pause, the call the guardian role exists for
+    /// @dev Read this against `execute: one call, delay served` plus `schedule: one call`. The
+    ///      difference is not the gas, it is the two days, and this row is here so the cost of the
+    ///      one call that cannot wait is on the record.
     function test_unpause() public {
         vm.prank(eSIMWalletAdmin);
         registry.pause();
 
         vm.prank(guardian);
-        protocolAdmin.executeInstantly(
-            address(registry),
-            0,
-            abi.encodeCall(registry.unpause, ()),
-            bytes32(0),
-            bytes32(0)
-        );
-        vm.snapshotGasLastCall(NAMESPACE, "executeInstantly: release a protocol wide pause");
+        protocolAdmin.unpauseInstantly(address(registry));
+        vm.snapshotGasLastCall(NAMESPACE, "unpauseInstantly: release a protocol wide pause");
     }
 
     /// @dev Four calls at the same target, so the batch rows measure the batch machinery rather
@@ -209,17 +210,12 @@ contract ProtocolAdminOperationsGasTest is AdminBase {
             payloads[i] = abi.encodeCall(Ownable2StepUpgradeable.transferOwnership, (_destination));
         }
 
-        vm.prank(guardian);
-        protocolAdmin.executeBatchInstantly(targets, values, payloads, bytes32(0), bytes32(0));
-    }
+        vm.prank(proposer);
+        protocolAdmin.scheduleBatch(targets, values, payloads, bytes32(0), bytes32(uint256(7)), DELAY);
 
-    function _deployReplacement() private returns (ProtocolAdmin) {
-        address[] memory proposers = new address[](1);
-        proposers[0] = proposer;
+        vm.warp(block.timestamp + DELAY);
 
-        address[] memory guardians = new address[](1);
-        guardians[0] = guardian;
-
-        return new ProtocolAdmin(DELAY, DELAY_FLOOR, proposers, guardians);
+        vm.prank(outsider);
+        protocolAdmin.executeBatch(targets, values, payloads, bytes32(0), bytes32(uint256(7)));
     }
 }
