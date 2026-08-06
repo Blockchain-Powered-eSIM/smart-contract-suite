@@ -308,6 +308,63 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
         _assertESIMWalletBinding(deviceWallet, eSIMWallet1, true, address(0), false, false);
     }
 
+    /// @notice Clearing the association through the older entry point leaves the standby flag behind
+    /// @dev The association and the standby flag are two halves of one fact, and `bindESIMWallet`
+    ///      writes them together for exactly that reason. The entry point it was meant to replace is
+    ///      still external and still writes one half, so a device wallet can put its own eSIM wallet
+    ///      into a combination the pair is not supposed to reach. Asserting what the contract does
+    ///      today rather than what it should, since nothing here is fixed yet.
+    function test_updateDeviceWalletAssociatedWithESIMWallet_clearsTheAssociationWithoutRaisingStandby()
+        public
+    {
+        deployWallets();
+
+        vm.prank(address(deviceWallet));
+        registry.updateDeviceWalletAssociatedWithESIMWallet(address(eSIMWallet1), address(0));
+
+        assertEq(
+            registry.isESIMWalletValid(address(eSIMWallet1)),
+            address(0),
+            "No device wallet holds the eSIM wallet any more"
+        );
+        assertFalse(
+            registry.isESIMWalletOnStandby(address(eSIMWallet1)),
+            "And yet it was never put on standby"
+        );
+
+        // Zero on both halves is how the registry spells an address it has never heard of, so the
+        // rest of this wallet's pre-deployment history can no longer be delivered to it
+        DataBundleDetails[] memory batch = new DataBundleDetails[](1);
+        batch[0] = DataBundleDetails("DB_ID_0", 1 ether);
+
+        vm.prank(address(lazyWalletRegistry));
+        vm.expectRevert(
+            abi.encodeWithSelector(Errors.NotAProtocolESIMWallet.selector, address(eSIMWallet1))
+        );
+        registry.populateLazyHistory(address(eSIMWallet1), batch);
+    }
+
+    /// @notice Standby can be raised on an eSIM wallet a device wallet is still holding
+    /// @dev The same gap in the other direction. This entry point requires the caller to be the
+    ///      device wallet currently associated, which means the association is non-zero by the time
+    ///      it writes, so every successful call with `true` lands in the contradictory state.
+    function test_toggleESIMWalletStandbyStatus_raisesStandbyOnAWalletThatIsStillHeld() public {
+        deployWallets();
+
+        vm.prank(address(deviceWallet));
+        registry.toggleESIMWalletStandbyStatus(address(eSIMWallet1), true);
+
+        assertTrue(
+            registry.isESIMWalletOnStandby(address(eSIMWallet1)),
+            "The eSIM wallet reads as on standby"
+        );
+        assertEq(
+            registry.isESIMWalletValid(address(eSIMWallet1)),
+            address(deviceWallet),
+            "While a device wallet still holds it"
+        );
+    }
+
     /**
         A malicious but registered device wallet must not be able to steal an eSIM wallet:
         1. Alice owns an eSIM Wallet (0xESIM1), linked to her device (0xDeviceAlice)
