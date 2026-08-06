@@ -56,17 +56,21 @@ contract WalletHandler is HandlerBase {
             state.recordRevert("removeESIMWallet");
             return;
         }
+        // The registry keeps naming the last holder after a release, so it answers "who held this"
+        // rather than "who holds this". Only a device wallet still claiming the eSIM wallet can
+        // remove it, and without this check the campaign would spend its removals retrying wallets
+        // that were let go several calls ago
         address device = registry.isESIMWalletValid(wallet);
-        if (device == address(0)) {
+        if (device == address(0) || !DeviceWallet(payable(device)).isValidESIMWallet(wallet)) {
             state.recordRevert("removeESIMWallet");
             return;
         }
 
         vm.prank(viaESIMWallet ? wallet : device);
         try DeviceWallet(payable(device)).removeESIMWallet(wallet, callBackETH) {
-            // Four writes across two contracts, and nothing in the code ties them together. A
-            // removal that left any one of them set is a detached wallet that some path still
-            // treats as attached
+            // Removing withdraws the device wallet's own two rights and raises the registry's
+            // marker. The registration is deliberately left alone: it is what keeps the eSIM
+            // wallet recognisable to the protocol while nobody is holding it
             assertFalse(
                 DeviceWallet(payable(device)).isValidESIMWallet(wallet),
                 "A removed eSIM wallet is still claimed by its device wallet"
@@ -77,8 +81,8 @@ contract WalletHandler is HandlerBase {
             );
             assertEq(
                 registry.isESIMWalletValid(wallet),
-                address(0),
-                "A removed eSIM wallet is still associated in the registry"
+                device,
+                "A removed eSIM wallet lost its registration"
             );
             assertTrue(
                 registry.isESIMWalletOnStandby(wallet),

@@ -244,10 +244,9 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
             return;
         }
 
-        // Remove this eSIMWallet from the device wallet and send all ETH to device wallet
-        // This has to run before newRequestedOwner is written: the registry refuses to clear the
-        // association of a wallet that already has a pending request, so writing first would make
-        // the removal revert.
+        // Remove this eSIMWallet from the device wallet and send all ETH to device wallet.
+        // The transient window opens here rather than at acceptance, so a reader that sees the
+        // standby flag raised also sees the request that caused it.
         deviceWallet.removeESIMWallet(address(this), true);
 
         newRequestedOwner = _newOwner;

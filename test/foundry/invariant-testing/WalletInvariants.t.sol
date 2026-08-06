@@ -13,41 +13,60 @@ import "test/utils/mocks/MockDeviceWallet.sol";
 ///      same transaction. That is exactly the kind of agreement a long sequence breaks.
 contract WalletInvariantsTest is CampaignBase {
 
-    /// @notice All three contracts agree on which device wallet owns each eSIM wallet
-    /// @dev The registry's mapping, the device wallet's own list, and the eSIM wallet's owner.
+    /// @notice A registration, once made, is never withdrawn
+    /// @dev Zero is how the registry spells an address it has never heard of, so an eSIM wallet the
+    ///      protocol deployed must never read it. This is the property that lets every other reader
+    ///      answer "is this one of ours" from one mapping instead of two.
+    function invariant_everyESIMWalletStaysRegistered() public view {
+        uint256 count = state.eSIMWalletCount();
+        for (uint256 i = 0; i < count; ++i) {
+            address wallet = state.eSIMWallets(i);
+
+            assertTrue(
+                registry.isESIMWalletValid(wallet) != address(0),
+                "An eSIM wallet the protocol deployed lost its registration"
+            );
+        }
+    }
+
+    /// @notice While a device wallet is holding an eSIM wallet, all three contracts agree
+    /// @dev The registry's mapping, the device wallet's own list, and the eSIM wallet's owner. The
+    ///      device wallet's claim is the condition rather than the registry's, because the registry
+    ///      keeps naming the last holder after a release and there is nothing to agree with then.
     function invariant_associationsAgree() public view {
         uint256 count = state.eSIMWalletCount();
         for (uint256 i = 0; i < count; ++i) {
             address wallet = state.eSIMWallets(i);
             address device = registry.isESIMWalletValid(wallet);
             if (device == address(0)) continue;
+            if (!MockDeviceWallet(payable(device)).isValidESIMWallet(wallet)) continue;
 
-            assertTrue(
-                MockDeviceWallet(payable(device)).isValidESIMWallet(wallet),
-                "Registry names a device wallet that does not claim the eSIM wallet"
-            );
             assertEq(
                 ESIMWallet(payable(wallet)).owner(),
                 device,
                 "Registry and the eSIM wallet disagree about the owner"
             );
+            assertFalse(
+                registry.isESIMWalletOnStandby(wallet),
+                "An eSIM wallet reads as in transit while its device wallet still claims it"
+            );
         }
     }
 
-    /// @notice An eSIM wallet is on standby exactly while no device wallet holds it
-    /// @dev Two separate calls set these, so nothing in the code ties them together. The comment
-    ///      at the standby toggle assumes the pairing rather than enforcing it, which makes this
-    ///      the only thing checking it.
-    function invariant_standbyMatchesDetachment() public view {
+    /// @notice The transient marker is only ever up while nobody is holding the wallet
+    /// @dev The marker and the device wallet's claim move in opposite directions in the same call,
+    ///      one on release and one on bind, and nothing else writes either. A sequence that gets
+    ///      them both up has found a path that raised the marker without the release running.
+    function invariant_standbyMeansTheNamedDeviceHasLetGo() public view {
         uint256 count = state.eSIMWalletCount();
         for (uint256 i = 0; i < count; ++i) {
             address wallet = state.eSIMWallets(i);
             if (!registry.isESIMWalletOnStandby(wallet)) continue;
 
-            assertEq(
-                registry.isESIMWalletValid(wallet),
-                address(0),
-                "An eSIM wallet is on standby while a device wallet still holds it"
+            address device = registry.isESIMWalletValid(wallet);
+            assertFalse(
+                MockDeviceWallet(payable(device)).isValidESIMWallet(wallet),
+                "An eSIM wallet is in transit while its device wallet still claims it"
             );
         }
     }

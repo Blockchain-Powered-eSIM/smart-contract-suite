@@ -1,9 +1,9 @@
 {
-  "acceptOwnershipBatch: four contracts": "35940",
+  "acceptOwnershipBatch: four contracts": "35896",
   "cancel": "4581",
-  "execute: one call, delay served": "40964",
+  "execute: one call, delay served": "40942",
   "executeBatch: both wallet beacons": "68976",
-  "executeBatch: four calls, delay served": "63500",
+  "executeBatch: four calls, delay served": "63412",
   "executeBatch: four proxy upgrades": "87029",
   "revokeCancellersInstantly: one account": "11832",
   "revokeCancellersInstantly: three accounts": "27690",

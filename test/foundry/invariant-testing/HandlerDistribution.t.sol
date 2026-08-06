@@ -3,6 +3,7 @@
 pragma solidity 0.8.36;
 
 import {CampaignBase} from "test/foundry/invariant-testing/base/CampaignBase.sol";
+import "test/utils/mocks/MockDeviceWallet.sol";
 
 /// @notice Proves the campaign's entry points can actually reach the protocol.
 /// @dev `fail_on_revert` is false across every invariant file, which is the only workable setting
@@ -151,6 +152,11 @@ contract HandlerDistributionTest is CampaignBase {
     /// @dev Both handlers take positions into the recorded arrays, and a removal followed by an add
     ///      only works when the two name the same pair. Scanning for one is what keeps this drive
     ///      working when a round starts recording a different number of eSIM wallets than devices.
+    ///
+    ///      The device wallet's own claim is what says "currently attached". The registry's
+    ///      association answers a different question, which device wallet last held it, and it
+    ///      stays non-zero for the rest of the wallet's life. Reading it here instead would return
+    ///      the same released wallet every round and the removal would only ever land once.
     /// @return eSIMIndex Position of an eSIM wallet that currently has a device wallet
     /// @return deviceIndex Position of that device wallet
     function _boundESIMWalletToItsDevice() internal view returns (uint256 eSIMIndex, uint256 deviceIndex) {
@@ -158,8 +164,10 @@ contract HandlerDistributionTest is CampaignBase {
         uint256 deviceCount = state.deviceWalletCount();
 
         for (uint256 i = 0; i < eSIMCount; ++i) {
-            address device = registry.isESIMWalletValid(state.eSIMWallets(i));
+            address wallet = state.eSIMWallets(i);
+            address device = registry.isESIMWalletValid(wallet);
             if (device == address(0)) continue;
+            if (!MockDeviceWallet(payable(device)).isValidESIMWallet(wallet)) continue;
 
             for (uint256 j = 0; j < deviceCount; ++j) {
                 if (state.deviceWallets(j) == device) return (i, j);

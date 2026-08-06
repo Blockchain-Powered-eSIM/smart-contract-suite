@@ -327,10 +327,12 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         isValidESIMWallet[_eSIMWalletAddress] = false;
         canPullETH[_eSIMWalletAddress] = false;
 
-        // Inform and update the registry about the existing eSIM wallet being removed from this
-        // device wallet. Clearing the association and raising standby is one call, so the two
-        // cannot be observed disagreeing part way through.
-        registry.bindESIMWallet(_eSIMWalletAddress, address(0));
+        // Inform the registry that this eSIM wallet has been let go. Only the flag moves: the
+        // registry keeps naming this device wallet as the last one to hold it, which is what tells
+        // the protocol the wallet is still one of its own while the transfer is outstanding. The
+        // authority this device wallet had over it is withdrawn by the two writes above, not by
+        // anything in the registry.
+        registry.toggleESIMWalletStandbyStatus(_eSIMWalletAddress, true);
 
         emit ESIMWalletRemoved(_eSIMWalletAddress, address(this), msg.sender);
 

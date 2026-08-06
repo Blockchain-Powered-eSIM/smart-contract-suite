@@ -223,7 +223,7 @@ contract DeviceWalletGuardsTest is DeployerBase {
         wallet.removeESIMWallet(eSIMWallet, true);
 
         assertEq(wallet.isValidESIMWallet(eSIMWallet), false, "The eSIM wallet must be unbound from the device");
-        assertEq(registry.isESIMWalletValid(eSIMWallet), address(0), "The registry association must be cleared");
+        assertTrue(registry.isESIMWalletOnStandby(eSIMWallet), "The registry must have marked it released");
     }
 
     /// @dev Mirrors `DeviceWallet.NoETHToCallback`, so `expectEmit` has a selector to match

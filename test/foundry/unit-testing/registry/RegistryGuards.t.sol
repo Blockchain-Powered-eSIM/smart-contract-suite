@@ -128,16 +128,9 @@ contract RegistryGuardsTest is DeployerBase {
         registry.toggleESIMWalletStandbyStatus(user2, true);
     }
 
-    /// @notice Only a registered device wallet may change which device an eSIM wallet belongs to
-    function test_updateDeviceWalletAssociatedWithESIMWallet_rejectsACallerThatIsNotADeviceWallet() public {
-        vm.prank(user1);
-        vm.expectRevert(Errors.OnlyDeviceWallet.selector);
-        registry.updateDeviceWalletAssociatedWithESIMWallet(user2, user1);
-    }
-
-    /// @notice Only a registered device wallet may bind or unbind an eSIM wallet
-    /// @dev This entry point writes the association and the standby flag together, so an open gate
-    ///      would hand an outsider both halves at once rather than one of them.
+    /// @notice Only a registered device wallet may take an eSIM wallet on
+    /// @dev This is the only entry point that moves the association, so an open gate would let an
+    ///      outsider name itself the device wallet for any eSIM wallet in the protocol.
     function test_bindESIMWallet_rejectsACallerThatIsNotADeviceWallet() public {
         vm.prank(user1);
         vm.expectRevert(Errors.OnlyDeviceWallet.selector);

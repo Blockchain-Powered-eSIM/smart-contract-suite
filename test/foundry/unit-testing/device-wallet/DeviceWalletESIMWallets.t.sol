@@ -80,7 +80,7 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
         assertEq(address(deviceWallet).balance, 11 ether, "Device wallet balance should have increased to 11 ETH");
         assertEq(address(eSIMWallet1).balance, 0, "eSIM wallet balance should have decreased to 0 ETH");
 
-        _assertESIMWalletBinding(deviceWallet, eSIMWallet1, true, address(0), false, false);
+        _assertESIMWalletBinding(deviceWallet, eSIMWallet1, true, address(deviceWallet), false, false);
     }
 
     function test_removeESIMWallet_noETHToCallBack() public {
@@ -95,7 +95,7 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
         assertEq(address(deviceWallet).balance, 10 ether, "Device wallet balance should have been the same, 11 ETH");
         assertEq(address(eSIMWallet1).balance, 0, "eSIM wallet balance should have been the same, 0 ETH");
 
-        _assertESIMWalletBinding(deviceWallet, eSIMWallet1, true, address(0), false, false);
+        _assertESIMWalletBinding(deviceWallet, eSIMWallet1, true, address(deviceWallet), false, false);
     }
 
     /// @notice An associated eSIM wallet may remove itself but not a sibling
@@ -136,7 +136,7 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
         assertEq(handler.wasStillValidDuringRemoval(), false, "The wallet must already be unbound when the callback runs");
         assertEq(handler.couldStillPullETHDuringRemoval(), false, "The wallet must already have lost ETH access when the callback runs");
 
-        _assertESIMWalletBinding(deviceWallet, eSIMWallet1, true, address(0), false, false);
+        _assertESIMWalletBinding(deviceWallet, eSIMWallet1, true, address(deviceWallet), false, false);
     }
 
     function test_addESIMWallet_unauthorised() public {
@@ -199,23 +199,20 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
         assertEq(address(deviceWallet).balance, 11 ether, "Device wallet balance should have increased to 11 ETH");
         assertEq(address(eSIMWallet1).balance, 0, "eSIM wallet balance should have decreased to 0 ETH");
 
-        _assertESIMWalletBinding(deviceWallet, eSIMWallet1, true, address(0), false, false);
+        // Releasing raises the flag and leaves the association naming this device wallet. That is
+        // what keeps the eSIM wallet recognisable to the protocol while the transfer is outstanding
+        _assertESIMWalletBinding(deviceWallet, eSIMWallet1, true, address(deviceWallet), false, false);
 
         vm.startPrank(currentOwner);
-        vm.expectRevert(abi.encodeWithSelector(
-            Errors.NotTheAssociatedDeviceWallet.selector, address(eSIMWallet1), address(0)
-        ));
-        registry.toggleESIMWalletStandbyStatus(address(eSIMWallet1), false);
-
         vm.expectRevert(abi.encodeWithSelector(
             Errors.ESIMWalletOwnershipTransferPending.selector,
             address(eSIMWallet1),
             eSIMWallet1.newRequestedOwner()
         ));
-        registry.updateDeviceWalletAssociatedWithESIMWallet(address(eSIMWallet1), currentOwner);
+        registry.bindESIMWallet(address(eSIMWallet1), currentOwner);
         vm.stopPrank();
 
-        assertEq(registry.isESIMWalletValid(address(eSIMWallet1)), address(0), "Previous owner should not be able to change the device wallet");
+        assertEq(registry.isESIMWalletValid(address(eSIMWallet1)), address(deviceWallet), "Previous owner should not be able to take the eSIM wallet back mid-transfer");
 
         // Since the eSIM wallet was already removed, the user cannot do the operation again
         vm.startPrank(address(deviceWallet));
@@ -272,16 +269,33 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
         assertEq(history[0].dataBundlePrice, 1 ether, "Transaction history's data bundle price should have been correct");
     }
 
-    /// @notice A registered device wallet cannot unbind an eSIM wallet another one holds
-    /// @dev The registry writes the association and the standby flag together now, so this gate is
-    ///      what stops a sibling reaching the pair at all. Both halves are asserted afterwards to
-    ///      show a refused call left neither of them moved.
-    function test_bindESIMWallet_rejectsAClearFromADeviceWalletThatDoesNotHoldIt() public {
+    /// @notice A registered device wallet cannot release an eSIM wallet another one holds
+    /// @dev Releasing is now the standby flag alone, so this is the gate that stops a sibling
+    ///      reaching it. Both halves are asserted afterwards to show a refused call moved neither.
+    function test_toggleESIMWalletStandbyStatus_rejectsAReleaseFromADeviceWalletThatDoesNotHoldIt()
+        public
+    {
         deployWallets();
 
         vm.prank(address(deviceWallet2));
         vm.expectRevert(abi.encodeWithSelector(
             Errors.NotTheAssociatedDeviceWallet.selector, address(eSIMWallet1), address(deviceWallet)
+        ));
+        registry.toggleESIMWalletStandbyStatus(address(eSIMWallet1), true);
+
+        _assertESIMWalletBinding(deviceWallet, eSIMWallet1, false, address(deviceWallet), true, true);
+    }
+
+    /// @notice The association can never be driven back to zero
+    /// @dev Zero is how the registry spells an address it has never heard of, so a registered eSIM
+    ///      wallet must never read it. Releasing is the standby flag's job and this entry point
+    ///      refuses to express it, which is what makes the registration permanent.
+    function test_bindESIMWallet_rejectsTheZeroAddress() public {
+        deployWallets();
+
+        vm.prank(address(deviceWallet));
+        vm.expectRevert(abi.encodeWithSelector(
+            Errors.ZeroAddress.selector, "_deviceWalletAddress"
         ));
         registry.bindESIMWallet(address(eSIMWallet1), address(0));
 
@@ -289,8 +303,9 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
     }
 
     /// @notice An eSIM wallet cannot be bound again while its ownership transfer is still pending
-    /// @dev Requesting the transfer already unbound it, so the association is clear and the owner
-    ///      check passes. The pending owner is the only thing refusing the call.
+    /// @dev Requesting the transfer already released it, so the caller is still the associated
+    ///      device wallet and the owner check passes. The pending owner is the only thing refusing
+    ///      the call, which is what stops a release being walked back once someone else is named.
     function test_bindESIMWallet_rejectsABindWhileOwnershipTransferIsPending() public {
         deployWallets();
 
@@ -305,64 +320,79 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
         ));
         registry.bindESIMWallet(address(eSIMWallet1), address(deviceWallet));
 
-        _assertESIMWalletBinding(deviceWallet, eSIMWallet1, true, address(0), false, false);
+        _assertESIMWalletBinding(deviceWallet, eSIMWallet1, true, address(deviceWallet), false, false);
     }
 
-    /// @notice Clearing the association through the older entry point leaves the standby flag behind
-    /// @dev The association and the standby flag are two halves of one fact, and `bindESIMWallet`
-    ///      writes them together for exactly that reason. The entry point it was meant to replace is
-    ///      still external and still writes one half, so a device wallet can put its own eSIM wallet
-    ///      into a combination the pair is not supposed to reach. Asserting what the contract does
-    ///      today rather than what it should, since nothing here is fixed yet.
-    function test_updateDeviceWalletAssociatedWithESIMWallet_clearsTheAssociationWithoutRaisingStandby()
-        public
-    {
+    /// @notice Releasing an eSIM wallet leaves it recognisable to the protocol
+    /// @dev The registration and the transient marker are unrelated facts. Releasing moves only the
+    ///      marker, so the eSIM wallet keeps naming the device wallet that last held it and the
+    ///      rest of its pre-deployment history can still be delivered while the transfer is open.
+    function test_removeESIMWallet_keepsTheRegistrationAndStillAcceptsHistory() public {
         deployWallets();
 
         vm.prank(address(deviceWallet));
-        registry.updateDeviceWalletAssociatedWithESIMWallet(address(eSIMWallet1), address(0));
+        deviceWallet.removeESIMWallet(address(eSIMWallet1), false);
 
-        assertEq(
-            registry.isESIMWalletValid(address(eSIMWallet1)),
-            address(0),
-            "No device wallet holds the eSIM wallet any more"
-        );
-        assertFalse(
-            registry.isESIMWalletOnStandby(address(eSIMWallet1)),
-            "And yet it was never put on standby"
-        );
+        // Marker raised, registration still naming the device wallet that last held it
+        _assertESIMWalletBinding(deviceWallet, eSIMWallet1, true, address(deviceWallet), false, false);
 
-        // Zero on both halves is how the registry spells an address it has never heard of, so the
-        // rest of this wallet's pre-deployment history can no longer be delivered to it
         DataBundleDetails[] memory batch = new DataBundleDetails[](1);
         batch[0] = DataBundleDetails("DB_ID_0", 1 ether);
 
         vm.prank(address(lazyWalletRegistry));
-        vm.expectRevert(
-            abi.encodeWithSelector(Errors.NotAProtocolESIMWallet.selector, address(eSIMWallet1))
-        );
         registry.populateLazyHistory(address(eSIMWallet1), batch);
+
+        DataBundleDetails[] memory history = eSIMWallet1.getTransactionHistory();
+        assertEq(history.length, 1, "History was delivered while the wallet was released");
     }
 
-    /// @notice Standby can be raised on an eSIM wallet a device wallet is still holding
-    /// @dev The same gap in the other direction. This entry point requires the caller to be the
-    ///      device wallet currently associated, which means the association is non-zero by the time
-    ///      it writes, so every successful call with `true` lands in the contradictory state.
-    function test_toggleESIMWalletStandbyStatus_raisesStandbyOnAWalletThatIsStillHeld() public {
+    /// @notice Taking an eSIM wallet on clears the transient marker in the same call
+    /// @dev The one moment both facts move together, which is why it is one call rather than two.
+    function test_addESIMWallet_clearsTheStandbyMarkerRaisedByTheRelease() public {
         deployWallets();
 
         vm.prank(address(deviceWallet));
-        registry.toggleESIMWalletStandbyStatus(address(eSIMWallet1), true);
+        eSIMWallet1.requestTransferOwnership(address(deviceWallet2));
 
-        assertTrue(
-            registry.isESIMWalletOnStandby(address(eSIMWallet1)),
-            "The eSIM wallet reads as on standby"
-        );
-        assertEq(
-            registry.isESIMWalletValid(address(eSIMWallet1)),
-            address(deviceWallet),
-            "While a device wallet still holds it"
-        );
+        _assertESIMWalletBinding(deviceWallet, eSIMWallet1, true, address(deviceWallet), false, false);
+
+        vm.prank(address(deviceWallet2));
+        eSIMWallet1.acceptOwnershipTransfer();
+
+        // The registry has not moved yet: ownership and registration are separate steps, and the
+        // registration follows the bind rather than the acceptance
+        _assertESIMWalletBinding(deviceWallet, eSIMWallet1, true, address(deviceWallet), false, false);
+
+        vm.prank(address(deviceWallet2));
+        deviceWallet2.addESIMWallet(address(eSIMWallet1), false);
+
+        _assertESIMWalletBinding(deviceWallet2, eSIMWallet1, false, address(deviceWallet2), false, true);
+    }
+
+    /// @notice The outgoing device wallet can lower the marker while its own transfer is pending
+    /// @dev Pinned rather than prevented. It stays the associated device wallet until the new one
+    ///      binds, and it is still the eSIM wallet's owner through this window, so this is the
+    ///      party reversing its own release rather than a third one interfering. It buys back no
+    ///      authority: the device wallet cleared `isValidESIMWallet` and `canPullETH` on itself
+    ///      when it released, and the pending owner still refuses a rebind.
+    function test_toggleESIMWalletStandbyStatus_letsTheOutgoingDeviceWalletLowerTheMarker() public {
+        deployWallets();
+
+        vm.prank(address(deviceWallet));
+        eSIMWallet1.requestTransferOwnership(address(deviceWallet2));
+
+        vm.prank(address(deviceWallet));
+        registry.toggleESIMWalletStandbyStatus(address(eSIMWallet1), false);
+
+        _assertESIMWalletBinding(deviceWallet, eSIMWallet1, false, address(deviceWallet), false, false);
+
+        vm.prank(address(deviceWallet));
+        vm.expectRevert(abi.encodeWithSelector(
+            Errors.ESIMWalletOwnershipTransferPending.selector,
+            address(eSIMWallet1),
+            address(deviceWallet2)
+        ));
+        registry.bindESIMWallet(address(eSIMWallet1), address(deviceWallet));
     }
 
     /**
@@ -370,7 +400,7 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
         1. Alice owns an eSIM Wallet (0xESIM1), linked to her device (0xDeviceAlice)
         2. Alice requests ownership transfer of 0xESIM1 to Bob
         3. Before Bob could accept ownership; Carol, a malicious actor tries to claim 0xESIM1
-        3. Carol calls: updateDeviceWalletAssociatedWithESIMWallet(0xESIM1, 0xDeviceCarol);
+        3. Carol calls: bindESIMWallet(0xESIM1, 0xDeviceCarol);
         4. Alice's eSIM Wallet is now controlled by Carol's device.
         5. Carol gains control over Alice's eSIM wallet.
      */
@@ -401,14 +431,14 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
         assertEq(address(deviceWallet).balance, 11 ether, "Device wallet balance should have increased to 11 ETH");
         assertEq(address(eSIMWallet1).balance, 0, "eSIM wallet balance should have decreased to 0 ETH");
 
-        _assertESIMWalletBinding(deviceWallet, eSIMWallet1, true, address(0), false, false);
+        _assertESIMWalletBinding(deviceWallet, eSIMWallet1, true, address(deviceWallet), false, false);
 
         // 3. Carol (deviceWallet3) tries to steal standby eSIMWallet (eSIMWallet1)
         vm.startPrank(address(deviceWallet3));
         vm.expectRevert(abi.encodeWithSelector(
             Errors.NotTheESIMWalletOwnerOrItsDeviceWallet.selector, address(eSIMWallet1)
         ));
-        registry.updateDeviceWalletAssociatedWithESIMWallet(
+        registry.bindESIMWallet(
             address(eSIMWallet1),
             address(deviceWallet3)
         );

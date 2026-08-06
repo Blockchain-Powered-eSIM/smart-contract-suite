@@ -101,10 +101,17 @@ contract RegistryHelper {
     mapping(address deviceWalletAddress => bool valid) public isDeviceWalletValid;
 
     /// @notice All the eSIM wallets deployed using this registry are valid and mapped to their owner device wallet
+    /// @dev This is the registration record. A non-zero entry means the protocol deployed this eSIM
+    ///      wallet, and it stays non-zero for the rest of the wallet's life. Mid-transfer it names
+    ///      the device wallet that last held it, so it is never zero to mean "released".
     mapping(address eSIMWalletAddress => address deviceWalletAddress) public isESIMWalletValid;
 
     /// @notice If an existing eSIM wallet is in the process of being transferred from one device wallet to another
-    ///         If bool is `true`, it means that the eSIM wallet has no device wallet associated to it yet
+    /// @dev If bool is `true`, the eSIM wallet is in a transient state. `isESIMWalletValid` still
+    ///      points at the old device wallet. Do not use this mapping to check whether an eSIM
+    ///      wallet belongs to the protocol; that is what `isESIMWalletValid` is for. Its job is to
+    ///      hold transactions on this eSIM wallet until it reads false again, meaning the new
+    ///      device wallet has accepted it.
     mapping(address eSIMWalletAddress => bool isOnStandby) public isESIMWalletOnStandby;
 
     /// @dev Registry inherits this contract and its own state begins directly after this gap, so
@@ -257,10 +264,9 @@ contract RegistryHelper {
         address _eSIMWallet,
         DataBundleDetails[] calldata _dataBundleDetails
     ) external onlyLazyWalletRegistry {
-        // A wallet mid-transfer has no device wallet holding it, so the standby flag is what says
-        // the protocol still knows about it. Reading only the association would leave a wallet
-        // whose transfer is never accepted unable to receive the rest of its own history.
-        if(isESIMWalletValid[_eSIMWallet] == address(0) && !isESIMWalletOnStandby[_eSIMWallet]) {
+        // A wallet the registry does not know is invalid to the protocol. Even mid-transfer the
+        // association still points at the last known device wallet, so this is the whole check.
+        if(isESIMWalletValid[_eSIMWallet] == address(0)) {
             revert Errors.NotAProtocolESIMWallet(_eSIMWallet);
         }
 
