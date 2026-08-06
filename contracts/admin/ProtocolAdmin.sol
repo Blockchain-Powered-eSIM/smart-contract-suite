@@ -14,32 +14,50 @@ interface IOwnable2Step {
     function pendingOwner() external view returns (address);
 }
 
+/// @notice Minimal view of the pause a guardian is allowed to release
+interface IPausable {
+    /// @notice Clears the pause
+    function unpause() external;
+}
+
 /// @notice Owner of the four upgradeable protocol contracts, with a delay on every change
 /// @dev Replaces the single externally owned account that owns `Registry`, `LazyWalletRegistry`,
 ///      `DeviceWalletFactory` and `ESIMWalletFactory` today. Both wallet beacons sit under the two
 ///      factories, so owning the factories reaches every device wallet and every eSIM wallet.
 ///
-///      Two ways to get an operation executed, and nothing else:
+///      Everything this contract can do to the protocol goes one way: a proposer schedules it, the
+///      delay elapses, and anyone at all executes it. Execution is open on purpose. The
+///      announcement is what the delay buys, and once the wait is served there is no reason to make
+///      the protocol depend on one key still being available to press the button.
 ///
-///      1. A proposer schedules it, the delay elapses, and anyone at all executes it. Execution is
-///         open on purpose: the announcement is what the delay buys, and once the wait is served
-///         there is no reason to make the protocol depend on one key still being available to
-///         press the button.
-///      2. A guardian executes it immediately. No wait, but the payload is still announced in the
-///         same transaction, so the record of what happened is identical.
+///      A guardian does not get a general fast path. It can say exactly two things, and both are
+///      written here as their own functions rather than as payloads, so no third sentence is
+///      expressible however the role is held:
 ///
-///      A guardian therefore bypasses the delay completely. That is the point of the role, and it
-///      is also the whole risk in it: whoever holds it can do anything a proposer could do, with no
-///      warning window. Hold it on a separate signer set from the proposers.
+///      1. Release a pause. An upgrade that waits is reviewable; an outage that waits is an outage.
+///      2. Take `CANCELLER_ROLE` away from an account.
+///
+///      The second one exists because without it a compromised canceller is permanent. Evicting any
+///      role holder means scheduling `revokeRole`, a scheduled operation can be cancelled by any
+///      canceller, and so a compromised canceller cancels its own eviction forever. Nothing else can
+///      break that loop, because the delay is what every other route waits on.
+///
+///      Two limits on that power carry the whole recovery argument, and both are enforced rather
+///      than documented. A guardian may not hold `CANCELLER_ROLE` itself, or it could revoke every
+///      other canceller, become the only one, and cancel its own eviction. And it may not touch
+///      `PROPOSER_ROLE`, because reaching zero proposers is unrecoverable: re-granting any role
+///      needs a scheduled operation, scheduling needs a proposer, and `Registry.unpause` is owner
+///      only, so a bricked admin plus a pause is a pause nobody can ever release. Reaching zero
+///      cancellers is fine by comparison. It costs the veto, and a proposer can schedule it back.
 ///
 ///      Not upgradeable, deliberately. An upgradeable owner of upgradeable contracts moves the
 ///      trust to whoever can upgrade it, and there is no delay left to protect that step.
 contract ProtocolAdmin is TimelockController {
 
-    /// @notice Executes an operation without waiting for the delay
-    /// @dev Also granted `CANCELLER_ROLE` and `EXECUTOR_ROLE` at construction. Anyone trusted to
-    ///      skip the wait is trusted to stop a scheduled operation, and holding the executor role
-    ///      explicitly keeps the fast path working even if open execution is later closed off.
+    /// @notice Releases a pause and strips a canceller, both without waiting for the delay
+    /// @dev Also granted `EXECUTOR_ROLE` at construction, which keeps the role useful if open
+    ///      execution is ever closed off. Deliberately not granted `CANCELLER_ROLE`; see the note on
+    ///      the contract for why that pairing is what makes a guardian un-evictable.
     bytes32 public constant GUARDIAN_ROLE = keccak256("GUARDIAN_ROLE");
 
     /// @notice Shortest delay this contract will ever accept, whatever `updateDelay` was given
@@ -49,12 +67,11 @@ contract ProtocolAdmin is TimelockController {
     ///      `getMinDelay`, which is what `schedule` measures against.
     uint256 public immutable minDelayFloor;
 
-    /// @dev Operations a guardian has released for immediate execution. Set and cleared inside the
-    ///      one transaction that executes them, so a value is never observable between calls.
-    mapping(bytes32 id => bool released) private _releasedByGuardian;
+    /// @notice A guardian released a pause
+    event PauseReleased(address indexed target, address indexed guardian);
 
-    /// @notice A guardian released an operation from the delay
-    event OperationReleased(bytes32 indexed id, address indexed guardian);
+    /// @notice A guardian took the cancel power away from an account
+    event CancellerRevoked(address indexed account, address indexed guardian);
 
     /// @notice Ownership of a protocol contract was accepted
     event OwnershipAccepted(address indexed target);
@@ -68,27 +85,41 @@ contract ProtocolAdmin is TimelockController {
     /// @notice A zero address appeared in one of the constructor role lists
     error ZeroAddress(string parameter);
 
-    /// @notice The operation has already run
-    error OperationAlreadyExecuted(bytes32 id);
+    /// @notice An account was named in two role lists that have to stay separate
+    error RolesMustNotOverlap(address account);
+
+    /// @notice The account named does not hold the cancel power
+    error NotACanceller(address account);
 
     /// @notice The contract was not offered ownership of this target
     error OwnershipNotOffered(address target);
 
     /// @param _minDelay Delay new operations wait before they can be executed
     /// @param _minDelayFloor Shortest delay `updateDelay` can ever bring the contract down to
-    /// @param _proposers Accounts that may schedule and cancel operations
-    /// @param _guardians Accounts that may execute an operation immediately
+    /// @param _proposers Accounts that may schedule operations, and that may also cancel them
+    /// @param _cancellers Further accounts that may cancel, holding no other role
+    /// @param _guardians Accounts that may release a pause and strip a canceller
     /// @dev No admin account. The zero passed to `TimelockController` leaves this contract holding
     ///      its own `DEFAULT_ADMIN_ROLE`, so granting or revoking any role is itself an operation
-    ///      that has to be scheduled and waited out. Rotating the proposer set is a role change
-    ///      here and never touches the protocol contracts, whose owner stays this address.
+    ///      that has to be scheduled and waited out. Rotating a signer set is a role change here and
+    ///      never touches the protocol contracts, whose owner stays this address.
+    ///
+    ///      The base constructor gives every proposer `CANCELLER_ROLE` as well, which is kept.
+    ///      `_cancellers` is for the accounts that cancel and do nothing else, typically the
+    ///      individual keys behind a proposer multisig, so that one key can veto on its own without
+    ///      being able to schedule anything on its own.
     ///
     ///      `EXECUTOR_ROLE` goes to the zero address, which `onlyRoleOrOpenRole` reads as open to
     ///      everyone. See the note on the contract for why.
+    ///
+    ///      An empty `_cancellers` is allowed, since the proposers already carry the role. An empty
+    ///      `_guardians` is not: there would be no way to add one without the delay it exists to
+    ///      skip, and no way at all to break a compromised canceller loose.
     constructor(
         uint256 _minDelay,
         uint256 _minDelayFloor,
         address[] memory _proposers,
+        address[] memory _cancellers,
         address[] memory _guardians
     ) TimelockController(_minDelay, _proposers, new address[](0), address(0)) {
         if(_minDelay < _minDelayFloor) revert DelayBelowFloor(_minDelay, _minDelayFloor);
@@ -98,12 +129,20 @@ contract ProtocolAdmin is TimelockController {
             if(_proposers[i] == address(0)) revert ZeroAddress("_proposers");
         }
 
+        for(uint256 i = 0; i < _cancellers.length; ++i) {
+            address canceller = _cancellers[i];
+            if(canceller == address(0)) revert ZeroAddress("_cancellers");
+            if(hasRole(PROPOSER_ROLE, canceller)) revert RolesMustNotOverlap(canceller);
+
+            _grantRole(CANCELLER_ROLE, canceller);
+        }
+
         for(uint256 i = 0; i < _guardians.length; ++i) {
             address guardian = _guardians[i];
             if(guardian == address(0)) revert ZeroAddress("_guardians");
+            if(hasRole(CANCELLER_ROLE, guardian)) revert RolesMustNotOverlap(guardian);
 
             _grantRole(GUARDIAN_ROLE, guardian);
-            _grantRole(CANCELLER_ROLE, guardian);
             _grantRole(EXECUTOR_ROLE, guardian);
         }
 
@@ -121,78 +160,37 @@ contract ProtocolAdmin is TimelockController {
         return delay < minDelayFloor ? minDelayFloor : delay;
     }
 
-    /// @inheritdoc TimelockController
-    /// @dev A released operation reads as ready no matter how long it has left, which is what lets
-    ///      the inherited `execute` run it. An operation that already ran is never reopened: `Done`
-    ///      is returned untouched, so a release cannot replay one.
+    /// @notice Releases a pause on a protocol contract immediately
+    /// @dev The selector is fixed in the interface rather than passed in, so this cannot be pointed
+    ///      at anything else on the target. Whatever a guardian does here, the worst outcome
+    ///      reachable is that something is unpaused which someone wanted paused, and the key that
+    ///      applies a pause is not this one and can simply apply it again.
+    /// @param target Contract to unpause
+    function unpauseInstantly(address target) external onlyRole(GUARDIAN_ROLE) {
+        emit PauseReleased(target, _msgSender());
+
+        IPausable(target).unpause();
+    }
+
+    /// @notice Takes the cancel power away from accounts immediately
+    /// @dev Only `CANCELLER_ROLE`, never anything else, and adding it back is an ordinary scheduled
+    ///      operation. A batch because the account being evicted is usually one signer set holding
+    ///      the role several times over, and doing that in one transaction rather than several is
+    ///      the difference between the eviction landing and the operation it is racing landing
+    ///      first.
     ///
-    ///      `getTimestamp` is left alone and keeps returning the real value, so an operation
-    ///      released and executed in one transaction still reads zero there beforehand. Nothing in
-    ///      this contract or its base reads that timestamp for a decision; every guard goes through
-    ///      this function.
-    function getOperationState(bytes32 id) public view virtual override returns (OperationState) {
-        OperationState state = super.getOperationState(id);
+    ///      All or nothing, and an account that does not hold the role reverts rather than passing
+    ///      quietly. A guardian doing this is acting on a named list during an incident, and a
+    ///      silent no-op would leave it believing a veto is gone while the veto is still there.
+    /// @param accounts Accounts to strip
+    function revokeCancellersInstantly(address[] calldata accounts) external onlyRole(GUARDIAN_ROLE) {
+        for(uint256 i = 0; i < accounts.length; ++i) {
+            address account = accounts[i];
 
-        if(state != OperationState.Done && _releasedByGuardian[id]) {
-            return OperationState.Ready;
+            if(!_revokeRole(CANCELLER_ROLE, account)) revert NotACanceller(account);
+
+            emit CancellerRevoked(account, _msgSender());
         }
-
-        return state;
-    }
-
-    /// @notice Runs a single operation immediately, whether or not it was ever scheduled
-    /// @param target Contract to call
-    /// @param value Wei to send with the call
-    /// @param payload Calldata for the call
-    /// @param predecessor Operation that must be done first, or zero
-    /// @param salt Disambiguates two otherwise identical operations
-    function executeInstantly(
-        address target,
-        uint256 value,
-        bytes calldata payload,
-        bytes32 predecessor,
-        bytes32 salt
-    ) external payable onlyRole(GUARDIAN_ROLE) {
-        bytes32 id = hashOperation(target, value, payload, predecessor, salt);
-
-        _release(id);
-        emit CallScheduled(id, 0, target, value, payload, predecessor, 0);
-
-        execute(target, value, payload, predecessor, salt);
-
-        delete _releasedByGuardian[id];
-    }
-
-    /// @notice Runs a batch immediately, whether or not it was ever scheduled
-    /// @dev The batch form is the one that matters for an upgrade. Four proxies and both beacons
-    ///      move in one transaction or none of them do, so the two chains cannot be left half
-    ///      upgraded by a transaction that stopped landing partway through.
-    /// @param targets Contracts to call, in order
-    /// @param values Wei to send with each call
-    /// @param payloads Calldata for each call
-    /// @param predecessor Operation that must be done first, or zero
-    /// @param salt Disambiguates two otherwise identical operations
-    function executeBatchInstantly(
-        address[] calldata targets,
-        uint256[] calldata values,
-        bytes[] calldata payloads,
-        bytes32 predecessor,
-        bytes32 salt
-    ) external payable onlyRole(GUARDIAN_ROLE) {
-        if(targets.length != values.length || targets.length != payloads.length) {
-            revert TimelockInvalidOperationLength(targets.length, payloads.length, values.length);
-        }
-
-        bytes32 id = hashOperationBatch(targets, values, payloads, predecessor, salt);
-
-        _release(id);
-        for(uint256 i = 0; i < targets.length; ++i) {
-            emit CallScheduled(id, i, targets[i], values[i], payloads[i], predecessor, 0);
-        }
-
-        executeBatch(targets, values, payloads, predecessor, salt);
-
-        delete _releasedByGuardian[id];
     }
 
     /// @notice Completes the handover of every contract that has offered this one its ownership
@@ -216,22 +214,5 @@ contract ProtocolAdmin is TimelockController {
             emit OwnershipAccepted(target);
             IOwnable2Step(target).acceptOwnership();
         }
-    }
-
-    /// @notice Returns whether an operation is currently released from the delay
-    /// @dev Only ever true partway through a guardian's own transaction, so this reads false to
-    ///      every observer outside one. Present for tracing, not for callers to act on.
-    function isReleased(bytes32 id) external view returns (bool) {
-        return _releasedByGuardian[id];
-    }
-
-    /// @notice Marks an operation ready regardless of its delay
-    function _release(bytes32 id) private {
-        if(super.getOperationState(id) == OperationState.Done) {
-            revert OperationAlreadyExecuted(id);
-        }
-
-        _releasedByGuardian[id] = true;
-        emit OperationReleased(id, _msgSender());
     }
 }

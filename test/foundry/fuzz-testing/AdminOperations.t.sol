@@ -22,7 +22,7 @@ contract AdminOperationsFuzzTest is AdminBase {
     /// @notice Only the proposer set may schedule, whoever else asks
     /// forge-config: default.fuzz.runs = 2000
     function testFuzz_schedule_turnsAwayEveryAccountOutsideTheProposerSet(address _caller) public {
-        vm.assume(_caller != proposer);
+        vm.assume(_caller != proposer && _caller != coldProposer);
 
         bytes memory data = abi.encodeCall(registry.setDefaultDataBundlePriceCap, (1 ether));
         bytes32 role = protocolAdmin.PROPOSER_ROLE();
@@ -34,19 +34,32 @@ contract AdminOperationsFuzzTest is AdminBase {
         protocolAdmin.schedule(address(registry), 0, data, bytes32(0), bytes32(0), DELAY);
     }
 
-    /// @notice Only a guardian may skip the delay, whoever else asks
+    /// @notice Only a guardian may release a pause, whoever else asks
     /// forge-config: default.fuzz.runs = 2000
-    function testFuzz_instant_turnsAwayEveryAccountOutsideTheGuardianSet(address _caller) public {
+    function testFuzz_unpauseInstantly_turnsAwayEveryAccountOutsideTheGuardianSet(address _caller) public {
         vm.assume(_caller != guardian);
 
-        bytes memory data = abi.encodeCall(registry.unpause, ());
         bytes32 role = protocolAdmin.GUARDIAN_ROLE();
 
         vm.prank(_caller);
         vm.expectRevert(
             abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, _caller, role)
         );
-        protocolAdmin.executeInstantly(address(registry), 0, data, bytes32(0), bytes32(0));
+        protocolAdmin.unpauseInstantly(address(registry));
+    }
+
+    /// @notice Only a guardian may strip a canceller, whoever else asks
+    /// forge-config: default.fuzz.runs = 2000
+    function testFuzz_revokeCancellers_turnsAwayEveryAccountOutsideTheGuardianSet(address _caller) public {
+        vm.assume(_caller != guardian);
+
+        bytes32 role = protocolAdmin.GUARDIAN_ROLE();
+
+        vm.prank(_caller);
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, _caller, role)
+        );
+        protocolAdmin.revokeCancellersInstantly(_one(canceller));
     }
 
     /// @notice Execution is open to every account once the wait is served
@@ -158,38 +171,52 @@ contract AdminOperationsFuzzTest is AdminBase {
         assertEq(registry.defaultDataBundlePriceCap(), _caps[count - 1], "the last call must win");
     }
 
-    /// @notice The instant path reaches the same end state as waiting out the delay
+    /// @notice Nothing a guardian names loses anything but the cancel power
     /// forge-config: default.fuzz.runs = 512
-    function testFuzz_instant_landsTheSameStateAsTheDelayedPath(uint96 _cap, bytes32 _salt) public {
-        bytes memory data = abi.encodeCall(registry.setDefaultDataBundlePriceCap, (_cap));
+    function testFuzz_revokeCancellers_neverReachesAnotherRole(uint256 _seed) public {
+        address[] memory candidates = _cancellerSet();
+        address account = candidates[_seed % candidates.length];
 
-        _runInstantly(address(registry), data, _salt);
-        uint256 viaGuardian = registry.defaultDataBundlePriceCap();
+        bool wasProposer = protocolAdmin.hasRole(protocolAdmin.PROPOSER_ROLE(), account);
+        bool wasGuardian = protocolAdmin.hasRole(protocolAdmin.GUARDIAN_ROLE(), account);
 
-        _runThroughTheDelay(
-            address(registry),
-            abi.encodeCall(registry.setDefaultDataBundlePriceCap, (0)),
-            keccak256(abi.encode(_salt))
-        );
-        _runThroughTheDelay(address(registry), data, keccak256(abi.encode(_salt, uint256(1))));
+        vm.prank(guardian);
+        protocolAdmin.revokeCancellersInstantly(_one(account));
 
-        assertEq(registry.defaultDataBundlePriceCap(), viaGuardian);
+        assertFalse(protocolAdmin.hasRole(protocolAdmin.CANCELLER_ROLE(), account));
+        assertEq(protocolAdmin.hasRole(protocolAdmin.PROPOSER_ROLE(), account), wasProposer);
+        assertEq(protocolAdmin.hasRole(protocolAdmin.GUARDIAN_ROLE(), account), wasGuardian);
+        assertTrue(protocolAdmin.hasRole(protocolAdmin.DEFAULT_ADMIN_ROLE(), address(protocolAdmin)));
     }
 
-    /// @notice No operation survives its own execution in a state anyone can run again
+    /// @notice An account that never held the cancel power is refused rather than passed over
+    /// forge-config: default.fuzz.runs = 1000
+    function testFuzz_revokeCancellers_refusesAnyAccountWithoutTheRole(address _account) public {
+        vm.assume(!protocolAdmin.hasRole(protocolAdmin.CANCELLER_ROLE(), _account));
+
+        vm.prank(guardian);
+        vm.expectRevert(abi.encodeWithSelector(ProtocolAdmin.NotACanceller.selector, _account));
+        protocolAdmin.revokeCancellersInstantly(_one(_account));
+    }
+
+    /// @notice The guardian's unpause can never reach a second selector on its target
     /// forge-config: default.fuzz.runs = 512
-    function testFuzz_instant_neverLeavesAnOperationReplayable(uint96 _cap, bytes32 _salt) public {
-        bytes memory data = abi.encodeCall(registry.setDefaultDataBundlePriceCap, (_cap));
-        bytes32 id = protocolAdmin.hashOperation(address(registry), 0, data, bytes32(0), _salt);
+    function testFuzz_unpauseInstantly_leavesEveryOtherRegistrySettingAlone(uint96 _cap) public {
+        _runThroughTheDelay(
+            address(registry),
+            abi.encodeCall(registry.setDefaultDataBundlePriceCap, (_cap)),
+            bytes32(0)
+        );
 
-        _runInstantly(address(registry), data, _salt);
+        vm.prank(eSIMWalletAdmin);
+        registry.pause();
 
-        assertFalse(protocolAdmin.isReleased(id));
-        assertTrue(protocolAdmin.isOperationDone(id));
+        vm.prank(guardian);
+        protocolAdmin.unpauseInstantly(address(registry));
 
-        vm.prank(outsider);
-        vm.expectRevert();
-        protocolAdmin.execute(address(registry), 0, data, bytes32(0), _salt);
+        assertFalse(registry.paused());
+        assertEq(registry.defaultDataBundlePriceCap(), _cap, "only the pause may have moved");
+        assertEq(registry.owner(), address(protocolAdmin));
     }
 
     /// @notice Ownership only ever moves to an address that was offered it

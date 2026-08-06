@@ -34,6 +34,11 @@ contract ProtocolAdminHandler is Test {
 
     address public immutable proposer;
     address public immutable guardian;
+    address public immutable walletAdmin;
+
+    /// @dev Every account that started with the cancel power. The campaign strips accounts from
+    ///      this list and never adds one back, so it is the set the invariants read against.
+    address[] public cancellers;
 
     Operation[] public operations;
 
@@ -44,15 +49,34 @@ contract ProtocolAdminHandler is Test {
 
     uint256 public scheduled;
     uint256 public executed;
-    uint256 public executedInstantly;
     uint256 public cancelled;
+    uint256 public unpaused;
+    uint256 public cancellersRevoked;
     uint256 public rejections;
 
-    constructor(ProtocolAdmin _admin, Registry _registry, address _proposer, address _guardian) {
+    constructor(
+        ProtocolAdmin _admin,
+        Registry _registry,
+        address _proposer,
+        address _guardian,
+        address _walletAdmin,
+        address[] memory _cancellers
+    ) {
         admin = _admin;
         registry = _registry;
         proposer = _proposer;
         guardian = _guardian;
+        walletAdmin = _walletAdmin;
+
+        for(uint256 i = 0; i < _cancellers.length; ++i) {
+            cancellers.push(_cancellers[i]);
+        }
+    }
+
+    /// @notice How many accounts the campaign started with holding the cancel power
+    /// @return The tracked canceller count
+    function cancellerCount() external view returns (uint256) {
+        return cancellers.length;
     }
 
     /// @notice How many operations the campaign has announced or taken so far
@@ -97,18 +121,35 @@ contract ProtocolAdminHandler is Test {
         } catch {}
     }
 
-    /// @notice A guardian takes an operation without waiting
-    function executeInstantly(uint96 _cap, bytes32 _salt) external {
-        bytes memory data = abi.encodeCall(registry.setDefaultDataBundlePriceCap, (_cap));
-        bytes32 id = admin.hashOperation(address(registry), 0, data, bytes32(0), _salt);
+    /// @notice The hot key trips the pause, which is the only way one ever appears
+    /// @dev Not a role on the admin contract at all. It is here because the guardian's release is
+    ///      only reachable from a paused state, and a campaign that never paused would leave that
+    ///      half of the role untested.
+    function pauseProtocol() external {
+        vm.prank(walletAdmin);
+        try registry.pause() {} catch {}
+    }
+
+    /// @notice A guardian releases the pause without waiting
+    function unpauseInstantly() external {
+        vm.prank(guardian);
+        try admin.unpauseInstantly(address(registry)) {
+            ++unpaused;
+        } catch {}
+    }
+
+    /// @notice A guardian strips the cancel power from one of the accounts holding it
+    function revokeCanceller(uint256 _index) external {
+        if(cancellers.length == 0) return;
+
+        uint256 index = _index % cancellers.length;
+        address account = cancellers[index];
 
         vm.prank(guardian);
-        try admin.executeInstantly(address(registry), 0, data, bytes32(0), _salt) {
-            operations.push(
-                Operation({target: address(registry), data: data, salt: _salt, id: id, cap: _cap})
-            );
-            expectedCap = _cap;
-            ++executedInstantly;
+        try admin.revokeCancellersInstantly(_asArray(account)) {
+            cancellers[index] = cancellers[cancellers.length - 1];
+            cancellers.pop();
+            ++cancellersRevoked;
         } catch {}
     }
 
@@ -119,6 +160,20 @@ contract ProtocolAdminHandler is Test {
         bytes32 id = operations[_index % operations.length].id;
 
         vm.prank(proposer);
+        try admin.cancel(id) {
+            ++cancelled;
+        } catch {}
+    }
+
+    /// @notice An account holding only the cancel power calls something off
+    /// @dev The separation being exercised rather than asserted. These accounts can stop an
+    ///      operation and can start nothing, which is the whole reason they hold the role alone.
+    function cancelAsACanceller(uint256 _index, uint256 _who) external {
+        if(operations.length == 0 || cancellers.length == 0) return;
+
+        bytes32 id = operations[_index % operations.length].id;
+
+        vm.prank(cancellers[_who % cancellers.length]);
         try admin.cancel(id) {
             ++cancelled;
         } catch {}
@@ -143,15 +198,42 @@ contract ProtocolAdminHandler is Test {
         }
     }
 
-    /// @notice Nobody outside the guardian set may skip the delay
-    function rejectsAnUnauthorisedInstantExecution(address _caller, uint96 _cap) external {
+    /// @notice Nobody outside the guardian set may release a pause
+    function rejectsAnUnauthorisedUnpause(address _caller) external {
         if(_caller == guardian) return;
 
-        bytes memory data = abi.encodeCall(registry.setDefaultDataBundlePriceCap, (_cap));
+        vm.prank(_caller);
+        try admin.unpauseInstantly(address(registry)) {
+            revert("an account outside the guardian set released a pause");
+        } catch {
+            ++rejections;
+        }
+    }
+
+    /// @notice Nobody outside the guardian set may strip the cancel power
+    function rejectsAnUnauthorisedCancellerRevocation(address _caller, uint256 _index) external {
+        if(_caller == guardian || cancellers.length == 0) return;
 
         vm.prank(_caller);
-        try admin.executeInstantly(address(registry), 0, data, bytes32(0), bytes32(0)) {
-            revert("an account outside the guardian set skipped the delay");
+        try admin.revokeCancellersInstantly(_asArray(cancellers[_index % cancellers.length])) {
+            revert("an account outside the guardian set stripped a canceller");
+        } catch {
+            ++rejections;
+        }
+    }
+
+    /// @notice The guardian may not reach a role other than the one it is allowed to strip
+    /// @dev There is no entry point that would let it, which is the point. This is the statement
+    ///      that the two named powers are the whole surface rather than the documented part of it.
+    function rejectsAGuardianReachingAnotherRole(uint256 _index) external {
+        if(cancellers.length == 0) return;
+
+        address account = cancellers[_index % cancellers.length];
+        bytes32 proposerRole = admin.PROPOSER_ROLE();
+
+        vm.prank(guardian);
+        try admin.revokeRole(proposerRole, account) {
+            revert("the guardian revoked a role it was never given");
         } catch {
             ++rejections;
         }
@@ -179,5 +261,11 @@ contract ProtocolAdminHandler is Test {
         } catch {
             ++rejections;
         }
+    }
+
+    /// @dev Wraps one account into the array shape `revokeCancellersInstantly` takes
+    function _asArray(address _account) private pure returns (address[] memory accounts) {
+        accounts = new address[](1);
+        accounts[0] = _account;
     }
 }

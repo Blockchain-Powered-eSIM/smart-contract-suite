@@ -21,7 +21,7 @@ import "test/utils/AdminBase.sol";
 contract OwnershipHandoverTest is AdminBase {
 
     function test_accept_isOpenToAnyoneOnceTheOfferIsMade() public {
-        ProtocolAdmin next = _deployReplacement();
+        ProtocolAdmin next = _deployReplacement(7 days);
         address[] memory targets = _ownedContracts();
 
         _offerAllFourTo(address(next));
@@ -36,7 +36,7 @@ contract OwnershipHandoverTest is AdminBase {
     /// @dev The offer is the decision, so accepting is not a privilege. What it must never do is
     ///      take something that was not offered.
     function test_accept_rejectsATargetThatOfferedNothing() public {
-        ProtocolAdmin next = _deployReplacement();
+        ProtocolAdmin next = _deployReplacement(7 days);
         address[] memory targets = _ownedContracts();
 
         vm.expectRevert(
@@ -48,12 +48,12 @@ contract OwnershipHandoverTest is AdminBase {
     /// @dev All four or none. A batch that took the first two would leave the deployment owned by
     ///      two different addresses with no record of which is which.
     function test_accept_takesNothingWhenOneTargetInTheBatchOfferedNothing() public {
-        ProtocolAdmin next = _deployReplacement();
+        ProtocolAdmin next = _deployReplacement(7 days);
         address[] memory targets = _ownedContracts();
 
         bytes memory data = abi.encodeCall(Ownable2StepUpgradeable.transferOwnership, (address(next)));
-        _runInstantly(address(registry), data, bytes32(uint256(1)));
-        _runInstantly(address(lazyWalletRegistry), data, bytes32(uint256(2)));
+        _runThroughTheDelay(address(registry), data, bytes32(uint256(1)));
+        _runThroughTheDelay(address(lazyWalletRegistry), data, bytes32(uint256(2)));
 
         vm.expectRevert(
             abi.encodeWithSelector(ProtocolAdmin.OwnershipNotOffered.selector, address(deviceWalletFactory))
@@ -72,7 +72,7 @@ contract OwnershipHandoverTest is AdminBase {
         assertEq(registry.pendingOwner(), outsider);
 
         // The offer is retractable for as long as it stands
-        _runInstantly(
+        _runThroughTheDelay(
             address(registry),
             abi.encodeCall(Ownable2StepUpgradeable.transferOwnership, (address(protocolAdmin))),
             bytes32(uint256(9))
@@ -85,7 +85,7 @@ contract OwnershipHandoverTest is AdminBase {
     /// @dev Replacing the admin contract with a differently configured one. The old contract stops
     ///      being owner the moment the new one accepts, and no proxy is redeployed.
     function test_handover_movesToAReplacementAdminContract() public {
-        ProtocolAdmin next = _deployReplacement();
+        ProtocolAdmin next = _deployReplacement(7 days);
         address[] memory targets = _ownedContracts();
 
         _offerAllFourTo(address(next));
@@ -95,16 +95,19 @@ contract OwnershipHandoverTest is AdminBase {
             assertEq(Ownable2StepUpgradeable(targets[i]).owner(), address(next));
         }
 
-        // The retired contract can no longer reach anything
+        // The retired contract can no longer reach anything, including through its guardian
         vm.prank(guardian);
         vm.expectRevert();
-        protocolAdmin.executeInstantly(
-            address(registry),
-            0,
-            abi.encodeCall(registry.setDefaultDataBundlePriceCap, (1 ether)),
-            bytes32(0),
-            bytes32(0)
-        );
+        protocolAdmin.unpauseInstantly(address(registry));
+
+        vm.prank(eSIMWalletAdmin);
+        registry.pause();
+
+        // The replacement can, because the same guardian holds the role there too
+        vm.prank(guardian);
+        next.unpauseInstantly(address(registry));
+
+        assertFalse(registry.paused());
     }
 
     /// @dev A multisig taking the owner slot directly, with no timelock in front of it. Reachable
@@ -130,15 +133,14 @@ contract OwnershipHandoverTest is AdminBase {
     /// @dev None of the four will let their owner walk away, so a handover cannot end with nobody
     ///      holding the slot.
     function test_handover_cannotEndWithNoOwnerAtAll() public {
-        vm.prank(guardian);
+        bytes memory data = abi.encodeCall(Ownable.renounceOwnership, ());
+        _schedule(address(registry), data, bytes32(0));
+
+        vm.warp(block.timestamp + DELAY);
+
+        vm.prank(outsider);
         vm.expectRevert();
-        protocolAdmin.executeInstantly(
-            address(registry),
-            0,
-            abi.encodeCall(Ownable.renounceOwnership, ()),
-            bytes32(0),
-            bytes32(0)
-        );
+        protocolAdmin.execute(address(registry), 0, data, bytes32(0), bytes32(0));
 
         assertEq(registry.owner(), address(protocolAdmin));
     }
@@ -169,7 +171,9 @@ contract OwnershipHandoverTest is AdminBase {
         vm.expectRevert();
         registry.pause();
 
-        _runInstantly(address(registry), abi.encodeCall(registry.unpause, ()), bytes32(0));
+        vm.prank(guardian);
+        protocolAdmin.unpauseInstantly(address(registry));
+
         assertFalse(registry.paused());
     }
 
@@ -186,7 +190,7 @@ contract OwnershipHandoverTest is AdminBase {
     }
 
     function test_accept_emitsOncePerTarget() public {
-        ProtocolAdmin next = _deployReplacement();
+        ProtocolAdmin next = _deployReplacement(7 days);
         address[] memory targets = _ownedContracts();
 
         _offerAllFourTo(address(next));
@@ -200,7 +204,7 @@ contract OwnershipHandoverTest is AdminBase {
     }
 
     function test_accept_doesNothingForAnEmptyBatch() public {
-        ProtocolAdmin next = _deployReplacement();
+        ProtocolAdmin next = _deployReplacement(7 days);
 
         next.acceptOwnershipBatch(new address[](0));
 
@@ -224,15 +228,5 @@ contract OwnershipHandoverTest is AdminBase {
 
         vm.prank(outsider);
         protocolAdmin.executeBatch(targets, values, payloads, bytes32(0), bytes32(0));
-    }
-
-    function _deployReplacement() private returns (ProtocolAdmin) {
-        address[] memory proposers = new address[](1);
-        proposers[0] = proposer;
-
-        address[] memory guardians = new address[](1);
-        guardians[0] = guardian;
-
-        return new ProtocolAdmin(7 days, DELAY_FLOOR, proposers, guardians);
     }
 }

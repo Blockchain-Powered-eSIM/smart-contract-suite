@@ -15,13 +15,29 @@ contract ProtocolAdminTest is AdminBase {
 
     function test_construction_grantsTheRolesItSaysItDoes() public view {
         assertTrue(protocolAdmin.hasRole(protocolAdmin.PROPOSER_ROLE(), proposer));
-        assertTrue(protocolAdmin.hasRole(protocolAdmin.CANCELLER_ROLE(), proposer));
+        assertTrue(protocolAdmin.hasRole(protocolAdmin.PROPOSER_ROLE(), coldProposer));
         assertFalse(protocolAdmin.hasRole(protocolAdmin.GUARDIAN_ROLE(), proposer));
 
         assertTrue(protocolAdmin.hasRole(protocolAdmin.GUARDIAN_ROLE(), guardian));
-        assertTrue(protocolAdmin.hasRole(protocolAdmin.CANCELLER_ROLE(), guardian));
         assertTrue(protocolAdmin.hasRole(protocolAdmin.EXECUTOR_ROLE(), guardian));
         assertFalse(protocolAdmin.hasRole(protocolAdmin.PROPOSER_ROLE(), guardian));
+        assertFalse(protocolAdmin.hasRole(protocolAdmin.CANCELLER_ROLE(), guardian));
+    }
+
+    /// @dev The base grants every proposer the cancel power too, which is kept: a signer set that
+    ///      can start an operation can stop one. What the separate list adds is accounts that can
+    ///      only stop, so one key behind a multisig vetoes alone without scheduling alone.
+    function test_construction_spreadsTheCancelPowerWiderThanTheProposerSet() public view {
+        bytes32 cancellerRole = protocolAdmin.CANCELLER_ROLE();
+
+        assertTrue(protocolAdmin.hasRole(cancellerRole, proposer));
+        assertTrue(protocolAdmin.hasRole(cancellerRole, coldProposer));
+
+        address[] memory cancellers = _cancellerSet();
+        for(uint256 i = 0; i < cancellers.length; ++i) {
+            assertTrue(protocolAdmin.hasRole(cancellerRole, cancellers[i]));
+            assertFalse(protocolAdmin.hasRole(protocolAdmin.PROPOSER_ROLE(), cancellers[i]));
+        }
     }
 
     /// @dev The zero address holding a role is how `onlyRoleOrOpenRole` spells "open to everyone".
@@ -39,38 +55,67 @@ contract ProtocolAdminTest is AdminBase {
     }
 
     function test_construction_rejectsADelayUnderTheFloor() public {
-        address[] memory proposers = new address[](1);
-        proposers[0] = proposer;
-        address[] memory guardians = new address[](1);
-        guardians[0] = guardian;
-
         vm.expectRevert(abi.encodeWithSelector(ProtocolAdmin.DelayBelowFloor.selector, 30 minutes, 1 hours));
-        new ProtocolAdmin(30 minutes, 1 hours, proposers, guardians);
+        new ProtocolAdmin(30 minutes, 1 hours, _proposerSet(), _cancellerSet(), _guardianSet());
     }
 
-    /// @dev Without a guardian there is no way to release a pause quickly, which is the one thing
-    ///      the delay must not stand in front of.
+    /// @dev Without a guardian there is no way to release a pause quickly, and no way to break a
+    ///      compromised canceller loose from cancelling its own eviction.
     function test_construction_rejectsAnEmptyGuardianSet() public {
-        address[] memory proposers = new address[](1);
-        proposers[0] = proposer;
-
         vm.expectRevert(ProtocolAdmin.NoGuardians.selector);
-        new ProtocolAdmin(DELAY, DELAY_FLOOR, proposers, new address[](0));
+        new ProtocolAdmin(DELAY, DELAY_FLOOR, _proposerSet(), _cancellerSet(), new address[](0));
     }
 
-    function test_construction_rejectsTheZeroAddressInEitherRoleList() public {
-        address[] memory withZeroProposer = new address[](1);
-        address[] memory guardians = new address[](1);
-        guardians[0] = guardian;
+    /// @dev The proposers already carry the cancel power, so naming no extra accounts is a weaker
+    ///      configuration rather than a broken one.
+    function test_construction_acceptsAnEmptyCancellerSet() public {
+        ProtocolAdmin lean =
+            new ProtocolAdmin(DELAY, DELAY_FLOOR, _proposerSet(), new address[](0), _guardianSet());
 
+        assertTrue(lean.hasRole(lean.CANCELLER_ROLE(), proposer));
+        assertFalse(lean.hasRole(lean.CANCELLER_ROLE(), canceller));
+    }
+
+    function test_construction_rejectsTheZeroAddressInEveryRoleList() public {
         vm.expectRevert(abi.encodeWithSelector(ProtocolAdmin.ZeroAddress.selector, "_proposers"));
-        new ProtocolAdmin(DELAY, DELAY_FLOOR, withZeroProposer, guardians);
+        new ProtocolAdmin(DELAY, DELAY_FLOOR, new address[](1), _cancellerSet(), _guardianSet());
 
-        address[] memory proposers = new address[](1);
-        proposers[0] = proposer;
+        vm.expectRevert(abi.encodeWithSelector(ProtocolAdmin.ZeroAddress.selector, "_cancellers"));
+        new ProtocolAdmin(DELAY, DELAY_FLOOR, _proposerSet(), new address[](1), _guardianSet());
 
         vm.expectRevert(abi.encodeWithSelector(ProtocolAdmin.ZeroAddress.selector, "_guardians"));
-        new ProtocolAdmin(DELAY, DELAY_FLOOR, proposers, new address[](1));
+        new ProtocolAdmin(DELAY, DELAY_FLOOR, _proposerSet(), _cancellerSet(), new address[](1));
+    }
+
+    /// @dev The separation the whole recovery story rests on, refused at construction rather than
+    ///      written down. A guardian holding the cancel power could strip every other canceller,
+    ///      become the only one, and cancel its own eviction for as long as it liked.
+    function test_construction_rejectsAGuardianThatCanAlsoCancel() public {
+        address[] memory cancellers = new address[](1);
+        cancellers[0] = guardian;
+
+        vm.expectRevert(abi.encodeWithSelector(ProtocolAdmin.RolesMustNotOverlap.selector, guardian));
+        new ProtocolAdmin(DELAY, DELAY_FLOOR, _proposerSet(), cancellers, _guardianSet());
+    }
+
+    /// @dev The same overlap reached the other way. A proposer already holds the cancel power, so
+    ///      naming one as a guardian is the same configuration under a different spelling.
+    function test_construction_rejectsAGuardianThatIsAlsoAProposer() public {
+        address[] memory guardians = new address[](1);
+        guardians[0] = proposer;
+
+        vm.expectRevert(abi.encodeWithSelector(ProtocolAdmin.RolesMustNotOverlap.selector, proposer));
+        new ProtocolAdmin(DELAY, DELAY_FLOOR, _proposerSet(), _cancellerSet(), guardians);
+    }
+
+    /// @dev The extra canceller list is for accounts that hold nothing else. A proposer named there
+    ///      would already have the role, and the duplicate is a configuration someone got wrong.
+    function test_construction_rejectsACancellerThatIsAlsoAProposer() public {
+        address[] memory cancellers = new address[](1);
+        cancellers[0] = coldProposer;
+
+        vm.expectRevert(abi.encodeWithSelector(ProtocolAdmin.RolesMustNotOverlap.selector, coldProposer));
+        new ProtocolAdmin(DELAY, DELAY_FLOOR, _proposerSet(), cancellers, _guardianSet());
     }
 
     function test_ownership_reachesAllFourContracts() public view {
@@ -153,7 +198,10 @@ contract ProtocolAdminTest is AdminBase {
 
     /// @dev Both roles can stop a scheduled operation. A guardian trusted to skip the wait is
     ///      trusted to call one off.
-    function test_cancel_worksForBothTheProposerAndTheGuardian() public {
+    /// @dev A veto needs one account acting alone, whether that account can also schedule or not.
+    ///      Requiring the proposer set to agree to stop something would make the delay useless in
+    ///      exactly the case it exists for, which is that set having been compromised.
+    function test_cancel_worksForAProposerAndForACancellerAlike() public {
         bytes memory data = abi.encodeCall(registry.setDefaultDataBundlePriceCap, (1 ether));
 
         bytes32 first = _schedule(address(registry), data, bytes32(uint256(1)));
@@ -162,9 +210,28 @@ contract ProtocolAdminTest is AdminBase {
         assertFalse(protocolAdmin.isOperation(first));
 
         bytes32 second = _schedule(address(registry), data, bytes32(uint256(2)));
-        vm.prank(guardian);
+        vm.prank(canceller);
         protocolAdmin.cancel(second);
         assertFalse(protocolAdmin.isOperation(second));
+
+        bytes32 third = _schedule(address(registry), data, bytes32(uint256(3)));
+        vm.prank(coldProposer);
+        protocolAdmin.cancel(third);
+        assertFalse(protocolAdmin.isOperation(third));
+    }
+
+    /// @dev The guardian is not part of the veto. It can take the cancel power away from an
+    ///      account and can never use it, which is what keeps it evictable.
+    function test_cancel_rejectsTheGuardian() public {
+        bytes memory data = abi.encodeCall(registry.setDefaultDataBundlePriceCap, (1 ether));
+        bytes32 id = _schedule(address(registry), data, bytes32(0));
+        bytes32 role = protocolAdmin.CANCELLER_ROLE();
+
+        vm.prank(guardian);
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, guardian, role)
+        );
+        protocolAdmin.cancel(id);
     }
 
     function test_cancel_rejectsAnAccountHoldingNeitherRole() public {

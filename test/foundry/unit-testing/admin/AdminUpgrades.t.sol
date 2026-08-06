@@ -97,16 +97,24 @@ contract AdminUpgradesTest is AdminBase {
         _assertAllFourMoved(nexts);
     }
 
-    /// @dev Same four, taken instantly. An upgrade should normally wait, but a fix for something
-    ///      already being exploited is exactly the case the guardian exists for.
-    function test_upgrade_movesAllFourSingletonsInstantly() public {
-        (address[] memory targets, uint256[] memory values, bytes[] memory payloads, address[] memory nexts) =
-            _fourUpgrades();
+    /// @dev No account reaches an upgrade without the wait, the guardian included. An upgrade is
+    ///      the change worth announcing most, and the emergency lever is the pause rather than a
+    ///      fast path to new code: the hot key freezes the protocol in one transaction and the
+    ///      replacement implementation then gets the same review as any other.
+    function test_upgrade_hasNoRouteThatSkipsTheDelay() public {
+        (address[] memory targets, uint256[] memory values, bytes[] memory payloads,) = _fourUpgrades();
 
-        vm.prank(guardian);
-        protocolAdmin.executeBatchInstantly(targets, values, payloads, bytes32(0), bytes32(0));
+        vm.prank(proposer);
+        protocolAdmin.scheduleBatch(targets, values, payloads, bytes32(0), bytes32(0), DELAY);
 
-        _assertAllFourMoved(nexts);
+        address[3] memory callers = [guardian, proposer, outsider];
+        for(uint256 i = 0; i < callers.length; ++i) {
+            vm.prank(callers[i]);
+            vm.expectRevert();
+            protocolAdmin.executeBatch(targets, values, payloads, bytes32(0), bytes32(0));
+        }
+
+        assertEq(registry.owner(), address(protocolAdmin), "nothing may have moved");
     }
 
     /// @dev One beacon call moves every device wallet that exists. There is no per-wallet opt out,
@@ -185,7 +193,8 @@ contract AdminUpgradesTest is AdminBase {
 
         bytes32 id = _schedule(address(registry), data, bytes32(0));
 
-        vm.prank(guardian);
+        // One key behind the proposer multisig, acting alone
+        vm.prank(canceller);
         protocolAdmin.cancel(id);
 
         vm.warp(block.timestamp + DELAY);

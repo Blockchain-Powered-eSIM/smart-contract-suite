@@ -13,6 +13,13 @@ import "test/utils/DeployerBase.sol";
 ///      retired: one contract owns `Registry`, `LazyWalletRegistry`, `DeviceWalletFactory` and
 ///      `ESIMWalletFactory`, and the two wallet beacons follow from the factories.
 ///
+///      The signer sets mirror the intended deployment rather than the smallest thing that would
+///      compile, because most of what is worth testing here is which account can reach which call.
+///      Two proposers, one standing in for a multisig and one for a cold key that exists so a
+///      compromised multisig is not the end of governance. Three cancellers holding nothing else,
+///      standing in for the individual keys behind that multisig, so one of them can veto alone
+///      without being able to schedule alone. One guardian, holding neither.
+///
 ///      The handover runs the way a real one would. The outgoing owner offers each contract, then
 ///      the admin takes all four in a single `acceptOwnershipBatch`, so nothing here depends on a
 ///      shortcut the deployment could not take.
@@ -22,15 +29,26 @@ abstract contract AdminBase is DeployerBase {
     uint256 internal constant DELAY_FLOOR = 1 hours;
 
     /// @dev Stands in for the multisig. Every test that schedules something signs as this address.
-    address internal proposer = address(0x50505Ea1b0f47F9B1A54f2D2F0e0EA3aA0E63c5f);
+    address internal proposer;
 
-    /// @dev Held separately from the proposer on purpose. A guardian skips the delay entirely, so
-    ///      a test that passes only because one address holds both roles proves nothing.
-    address internal guardian = address(0x6d0A11a0F47f9B1a54f2d2F0E0EA3AA0E63C5f01);
+    /// @dev The backup. Never used in routine work, and the only thing standing between a
+    ///      compromised `proposer` and a protocol nobody can ever schedule anything for again.
+    address internal coldProposer;
+
+    /// @dev Cancel and nothing else, the three keys behind `proposer`. Held apart because a
+    ///      canceller that could also schedule would make the veto meaningless as a separation.
+    address internal canceller;
+    address internal secondCanceller;
+    address internal thirdCanceller;
+
+    /// @dev Holds neither of the above, which the constructor enforces. A guardian that could
+    ///      cancel would be able to strip every other canceller, become the only one, and then
+    ///      cancel its own eviction forever.
+    address internal guardian;
 
     /// @dev Holds no role at all. Used to prove open execution really is open, and that everything
     ///      else really is closed.
-    address internal outsider = address(0x0175106E1b0F47F9b1A54f2d2F0E0ea3aA0e63C5);
+    address internal outsider;
 
     ProtocolAdmin internal protocolAdmin;
 
@@ -41,15 +59,52 @@ abstract contract AdminBase is DeployerBase {
         // would put every scheduled operation in the first two days of the epoch.
         vm.warp(1_800_000_000);
 
-        address[] memory proposers = new address[](1);
-        proposers[0] = proposer;
+        proposer = makeAddr("proposer");
+        coldProposer = makeAddr("coldProposer");
+        canceller = makeAddr("canceller");
+        secondCanceller = makeAddr("secondCanceller");
+        thirdCanceller = makeAddr("thirdCanceller");
+        guardian = makeAddr("guardian");
+        outsider = makeAddr("outsider");
 
-        address[] memory guardians = new address[](1);
-        guardians[0] = guardian;
-
-        protocolAdmin = new ProtocolAdmin(DELAY, DELAY_FLOOR, proposers, guardians);
+        protocolAdmin = new ProtocolAdmin(
+            DELAY,
+            DELAY_FLOOR,
+            _proposerSet(),
+            _cancellerSet(),
+            _guardianSet()
+        );
 
         _handOverOwnership();
+    }
+
+    /// @notice The two accounts that may schedule, and that the base also gives the cancel power
+    function _proposerSet() internal view returns (address[] memory proposers) {
+        proposers = new address[](2);
+        proposers[0] = proposer;
+        proposers[1] = coldProposer;
+    }
+
+    /// @notice The three accounts that may only cancel
+    function _cancellerSet() internal view returns (address[] memory cancellers) {
+        cancellers = new address[](3);
+        cancellers[0] = canceller;
+        cancellers[1] = secondCanceller;
+        cancellers[2] = thirdCanceller;
+    }
+
+    /// @notice The one account that may release a pause and strip a canceller
+    function _guardianSet() internal view returns (address[] memory guardians) {
+        guardians = new address[](1);
+        guardians[0] = guardian;
+    }
+
+    /// @notice A second admin contract holding the same signer sets
+    /// @dev What retiring this one looks like. The four contracts move to the replacement through
+    ///      the ordinary two step handover, so the test is the migration rather than a shortcut.
+    /// @param _delay Delay the replacement starts with
+    function _deployReplacement(uint256 _delay) internal returns (ProtocolAdmin) {
+        return new ProtocolAdmin(_delay, DELAY_FLOOR, _proposerSet(), _cancellerSet(), _guardianSet());
     }
 
     /// @notice Moves all four contracts from the deploying account to the admin contract
@@ -105,10 +160,10 @@ abstract contract AdminBase is DeployerBase {
         protocolAdmin.execute(_target, 0, _data, bytes32(0), _salt);
     }
 
-    /// @notice Runs one call immediately as the guardian
-    function _runInstantly(address _target, bytes memory _data, bytes32 _salt) internal {
-        vm.prank(guardian);
-        protocolAdmin.executeInstantly(_target, 0, _data, bytes32(0), _salt);
+    /// @notice Wraps a single address into the array shape `revokeCancellersInstantly` takes
+    function _one(address _account) internal pure returns (address[] memory accounts) {
+        accounts = new address[](1);
+        accounts[0] = _account;
     }
 
     /// @notice Wraps a single call into the array shape the batch entry points take
