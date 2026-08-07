@@ -34,7 +34,8 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
     /// @dev The EIP-191 prefix, "\x19Ethereum Signed Message:\n"
     string private constant EIP191_PREFIX = "\x19Ethereum Signed Message:\n";
 
-    /// @dev Byte length of the user operation precursor: version (1) + validUntil (6) + userOpHash (32).
+    /// @dev Byte length of the user operation precursor:
+    ///      version (1) + validUntil (6) + userOpHash (32).
     ///      A string because it is concatenated after the prefix before hashing.
     string private constant USEROP_PRECURSOR_LENGTH = "39";
 
@@ -42,8 +43,8 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
     ///      version (1) + validUntil (6) + chain id (32) + wallet (20) + message hash (32).
     string private constant ERC1271_PRECURSOR_LENGTH = "91";
 
-    /// @dev version (uint8) + validUntil (uint48),
-    ///      the fixed header on every signature this account accepts.
+    /// @dev The fixed header on every signature this account accepts.
+    ///      version (uint8) + validUntil (uint48)
     uint256 private constant SIGNATURE_HEADER_LENGTH = 7;
 
     /// @notice The ERC-4337 EntryPoint singleton this account answers to
