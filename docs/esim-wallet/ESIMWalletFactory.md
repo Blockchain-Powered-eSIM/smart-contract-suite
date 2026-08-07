@@ -1,14 +1,42 @@
 # Solidity API
 
-## OnlyRegistryOrDeviceWalletFactoryOrDeviceWallet
-
-```solidity
-error OnlyRegistryOrDeviceWalletFactoryOrDeviceWallet()
-```
-
 ## ESIMWalletFactory
 
-Contract for deploying a new eSIM wallet
+Deploys eSIM wallets and owns the beacon they all point at
+
+_A UUPS singleton. It owns an `UpgradeableBeacon`, so one call here moves every eSIM wallet
+     in the protocol onto new logic at once. There is no per-wallet opt-out._
+
+### registry
+
+```solidity
+contract Registry registry
+```
+
+Address of the registry contract
+
+### beacon
+
+```solidity
+contract UpgradeableBeacon beacon
+```
+
+Upgradeable beacon that points to the correct eSIM wallet logic contract
+
+_Every eSIM wallet is a beacon proxy reading its implementation from here, so the
+     implementation is replaced once rather than on each proxy:
+
+     eSIM wallet beacon proxy ─┐
+     eSIM wallet beacon proxy ─┼─> beacon ─> eSIM wallet implementation
+     eSIM wallet beacon proxy ─┘_
+
+### isESIMWalletDeployed
+
+```solidity
+mapping(address => bool) isESIMWalletDeployed
+```
+
+Set to true if eSIM wallet address is deployed using the factory, false otherwise
 
 ### ESIMWalletFactorydeployed
 
@@ -26,37 +54,21 @@ event ESIMWalletDeployed(address _eSIMWalletAddress, address _deviceWalletAddres
 
 Emitted when a new eSIM wallet is deployed
 
-### registry
+### ESIMWalletImplementationUpdated
 
 ```solidity
-contract Registry registry
+event ESIMWalletImplementationUpdated(address _newImplementation)
 ```
 
-Address of the registry contract
+Emitted when the eSIM wallet implementation is updated
 
-### eSIMWalletImplementation
+### AddedRegistry
 
 ```solidity
-address eSIMWalletImplementation
+event AddedRegistry(address registry)
 ```
 
-Implementation at the time of deployment
-
-### beacon
-
-```solidity
-address beacon
-```
-
-Beacon referenced by each deployment of a savETH vault
-
-### isESIMWalletDeployed
-
-```solidity
-mapping(address => bool) isESIMWalletDeployed
-```
-
-Set to true if eSIM wallet address is deployed using the factory, false otherwise
+Emitted when the registry is added to the factory contract
 
 ### onlyRegistryOrDeviceWalletFactoryOrDeviceWallet
 
@@ -64,32 +76,63 @@ Set to true if eSIM wallet address is deployed using the factory, false otherwis
 modifier onlyRegistryOrDeviceWalletFactoryOrDeviceWallet()
 ```
 
+Restricts a call to the registry, the device wallet factory or a known device wallet
+
+_The first two deploy on behalf of a device wallet during setup. A device wallet reaching
+     this directly is constrained further inside `deployESIMWallet`._
+
 ### constructor
 
 ```solidity
 constructor() public
 ```
 
-### _authorizeUpgrade
-
-```solidity
-function _authorizeUpgrade(address newImplementation) internal
-```
-
-_Owner based upgrades_
+_Locks the implementation contract itself. Without this, anyone can call initialize
+     directly on the implementation, own it, and make it deploy a beacon it controls. The
+     proxy is unaffected either way, but an owned implementation is a trap for any later
+     upgrade that adds an outward call._
 
 ### initialize
 
 ```solidity
-function initialize(address _registryContractAddress, address _upgradeManager) external
+function initialize(address _eSIMWalletImplementation, address _upgradeManager) external
 ```
+
+Deploys the beacon and hands ownership of this factory to the upgrade manager
+
+_The factory owns the beacon rather than the upgrade manager owning it directly, so the
+     only way to move the implementation is `updateESIMWalletImplementation`, which is
+     owner gated and emits an event._
 
 #### Parameters
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| _registryContractAddress | address | Address of the registry contract |
+| _eSIMWalletImplementation | address | First eSIM wallet logic contract the beacon points at |
 | _upgradeManager | address | Admin address responsible for upgrading contracts |
+
+### addRegistryAddress
+
+```solidity
+function addRegistryAddress(address _registryContractAddress) external returns (address)
+```
+
+Points the factory at the registry, which is deployed after it
+
+_Write-once. Every caller check in this contract reads the registry, so allowing it to
+     move would let a later owner redirect all of them at once._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _registryContractAddress | address | Address of the registry |
+
+#### Return Values
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| [0] | address | The registry address now in force |
 
 ### deployESIMWallet
 
@@ -97,20 +140,75 @@ function initialize(address _registryContractAddress, address _upgradeManager) e
 function deployESIMWallet(address _deviceWalletAddress, uint256 _salt) external returns (address)
 ```
 
-Function to deploy an eSIM wallet
-
-_can only be called by the respective deviceWallet contract_
+Deploys an eSIM wallet at a deterministic address and binds it to a device wallet
 
 #### Parameters
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
 | _deviceWalletAddress | address | Address of the associated device wallet |
-| _salt | uint256 |  |
+| _salt | uint256 | CREATE2 salt, chosen by the caller and unique per wallet |
 
 #### Return Values
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
 | [0] | address | Address of the newly deployed eSIM wallet |
+
+### updateESIMWalletImplementation
+
+```solidity
+function updateESIMWalletImplementation(address _eSIMWalletImpl) external returns (address)
+```
+
+Update the eSIM wallet implementation address in the beacon contract
+
+_Moves every eSIM wallet in the protocol at once. Treat any change here as a
+     protocol-wide upgrade, since no wallet can decline it._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _eSIMWalletImpl | address | Address of the new eSIM wallet implementation contract |
+
+#### Return Values
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| [0] | address | The implementation now in force |
+
+### renounceOwnership
+
+```solidity
+function renounceOwnership() public pure
+```
+
+Ownership of this contract is never renounced
+
+_The owner is the only caller _authorizeUpgrade accepts, and this contract owns the
+     beacon, so it is also the only route to updateESIMWalletImplementation. Renouncing
+     would freeze every eSIM wallet on its current logic permanently._
+
+### _authorizeUpgrade
+
+```solidity
+function _authorizeUpgrade(address newImplementation) internal
+```
+
+Restricts UUPS upgrades of this factory to the owner
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| newImplementation | address | Address of the implementation being moved to |
+
+### getCurrentESIMWalletImplementation
+
+```solidity
+function getCurrentESIMWalletImplementation() public view returns (address)
+```
+
+The eSIM wallet logic contract every eSIM wallet currently runs
 

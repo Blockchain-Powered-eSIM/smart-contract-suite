@@ -2,11 +2,13 @@
 
 ## Account4337
 
-### owner
+ERC-4337 account owned by a P256 key rather than by an address
 
-```solidity
-bytes32[2] owner
-```
+_The owner never sends a transaction itself. It signs a WebAuthn assertion, and either
+        the EntryPoint or this account calling into itself turns that into a call. Two entry
+        points read signatures, `validateUserOp` for user operations and `isValidSignature` for
+        ERC-1271, and each hashes a different precursor, so a signature made for one is not
+        accepted by the other._
 
 ### entryPoint
 
@@ -14,7 +16,10 @@ bytes32[2] owner
 contract IEntryPoint entryPoint
 ```
 
-The ERC-4337 entry point singleton
+The ERC-4337 EntryPoint singleton this account answers to
+
+_Immutable to keep validation cheap, which means moving to a new EntryPoint version
+        is a new implementation rather than a setter call._
 
 ### verifier
 
@@ -22,7 +27,21 @@ The ERC-4337 entry point singleton
 contract P256Verifier verifier
 ```
 
-Signature verifier contract
+Contract that verifies every WebAuthn assertion for this account
+
+### owner
+
+```solidity
+bytes32[2] owner
+```
+
+X and Y co-ordinates of the P256 key that owns this account
+
+_DeviceWallet inherits this contract, and base storage comes first, so its own
+     variables begin immediately after this one. A state variable added here moves all of
+     them on wallets that are already deployed, which then read back as zero. Anything
+     this contract needs later belongs in its own ERC-7201 namespace, not in a slot
+     following `owner`._
 
 ### Account4337Initialized
 
@@ -30,11 +49,15 @@ Signature verifier contract
 event Account4337Initialized(contract IEntryPoint entryPoint, bytes32[2] owner)
 ```
 
+Emitted once, when the account's owner key is first set
+
 ### AccountOwnershipTransferred
 
 ```solidity
 event AccountOwnershipTransferred(bytes32[2] newOwner)
 ```
+
+Emitted when the owner key is replaced
 
 ### onlySelf
 
@@ -42,17 +65,18 @@ event AccountOwnershipTransferred(bytes32[2] newOwner)
 modifier onlySelf()
 ```
 
+Restricts a call to the account itself
+
+_The only way to satisfy this from outside is `execute` or `executeBatch` targeting this
+     address, which the owner key has to have signed for._
+
 ### onlyEntryPoint
 
 ```solidity
 modifier onlyEntryPoint()
 ```
 
-### onlyOwnerOrEntryPoint
-
-```solidity
-modifier onlyOwnerOrEntryPoint()
-```
+Restricts a call to the EntryPoint singleton
 
 ### constructor
 
@@ -60,15 +84,31 @@ modifier onlyOwnerOrEntryPoint()
 constructor(contract IEntryPoint _entryPoint, contract P256Verifier _verifier) public
 ```
 
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _entryPoint | contract IEntryPoint | EntryPoint singleton this account validates against |
+| _verifier | contract P256Verifier | Contract used to verify WebAuthn assertions |
+
 ### initialize
 
 ```solidity
-function initialize(bytes32[2] anOwner) public virtual
+function initialize(bytes32[2] anOwner) internal virtual
 ```
 
-_The _entryPoint member is immutable, to reduce gas consumption.  To upgrade EntryPoint,
-a new implementation of SimpleAccount must be deployed with the new EntryPoint address, then upgrading
-the implementation by calling `upgradeTo()`_
+Sets the owner key on a freshly deployed account
+
+_Internal on purpose. A public setup function guarded only by `initializer` names no
+     caller, so a proxy created without its init call in the same transaction could be
+     claimed by anyone with an owner key of their choosing and none of the protocol wiring.
+     Internal keeps the subclass path working and leaves no other way in._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| anOwner | bytes32[2] | X,Y co-ordinates of the P256 key taking ownership |
 
 ### _initialize
 
@@ -76,11 +116,15 @@ the implementation by calling `upgradeTo()`_
 function _initialize(bytes32[2] anOwner) internal virtual
 ```
 
-### transferOwnership
+Writes the owner key without the initializer guard
 
-```solidity
-function transferOwnership(bytes32[2] newOwner) public returns (bytes32[2])
-```
+_Split out so a subclass can reuse the write from its own initializer._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| anOwner | bytes32[2] | X,Y co-ordinates of the P256 key taking ownership |
 
 ### execute
 
@@ -88,7 +132,16 @@ function transferOwnership(bytes32[2] newOwner) public returns (bytes32[2])
 function execute(struct Call call) external
 ```
 
-execute a transaction (called directly from owner, or by entryPoint)
+Makes one call from this account
+
+_Callable by the EntryPoint or by this account. There is no path here for the P256 key
+     directly: it holds no address, so it reaches this only by signing a user operation._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| call | struct Call | Target, value and calldata of the call to make |
 
 ### executeBatch
 
@@ -96,15 +149,42 @@ execute a transaction (called directly from owner, or by entryPoint)
 function executeBatch(struct Call[] calls) external
 ```
 
-execute a sequence of transactions
+Makes a sequence of calls from this account, reverting all of them if one fails
 
-_to reduce gas consumption for trivial case (no value), use a zero-length array to mean zero value_
+_Same callers as `execute`. Each entry carries its own value, so a batch that moves no
+     ETH simply leaves every value at zero._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| calls | struct Call[] | Targets, values and calldata, executed in order |
 
 ### isValidSignature
 
 ```solidity
-function isValidSignature(bytes32 message, bytes signature) external view returns (bytes4 magicValue)
+function isValidSignature(bytes32 _messageHash, bytes _signature) external view returns (bytes4 magicValue)
 ```
+
+Validates a signature over an arbitrary message, per ERC-1271
+
+_The challenge inside `clientDataJSON` is not `_messageHash`. It is the EIP-191 digest
+     over version, validUntil, chain id, this address and `_messageHash`, so an offchain
+     signer needs all five. Signature layout is version (1 byte) then validUntil (6 bytes)
+     then the ABI-encoded WebAuthn assertion._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _messageHash | bytes32 | EIP-191 digest of the original message |
+| _signature | bytes | Packed version, validUntil and WebAuthn assertion |
+
+#### Return Values
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| magicValue | bytes4 | `0x1626ba7e` when the signature is valid and unexpired, `0xffffffff` otherwise |
 
 ### validateUserOp
 
@@ -118,8 +198,9 @@ signature failure should be reported by returning SIG_VALIDATION_FAILED (1).
 This allows making a "simulation call" without a valid signature
 Other failures (e.g. nonce mismatch, or invalid signature format) should still revert to signal failure.
 
-_Must validate caller is the entryPoint.
-     Must validate the signature and nonce_
+_Must stay within the ERC-4337 validation rules: no banned opcodes, no external calls
+     to other contracts, no TIMESTAMP. Expiry is handed to the EntryPoint through the packed
+     return value instead of being checked here._
 
 #### Parameters
 
@@ -133,19 +214,32 @@ _Must validate caller is the entryPoint.
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| validationData | uint256 | - Packaged ValidationData structure. use `_packValidationData` and                              `_unpackValidationData` to encode and decode.                              <20-byte> sigAuthorizer - 0 for valid signature, 1 to mark signature failure,                                 otherwise, an address of an "authorizer" contract.                              <6-byte> validUntil - Last timestamp this operation is valid. 0 for "indefinite"                              <6-byte> validAfter - First timestamp this operation is valid                                                    If an account doesn't use time-range, it is enough to                                                    return SIG_VALIDATION_FAILED value (1) for signature failure.                              Note that the validation code cannot use block.timestamp (or block.number) directly. |
+| validationData | uint256 | - Packaged ValidationData structure. use `_packValidationData` and                              `_unpackValidationData` to encode and decode.                              <20-byte> aggregatorOrSigFail - 0 for valid signature, 1 to mark signature failure,                                 otherwise, an address of an "aggregator" contract.                              <6-byte> validUntil - Last timestamp this operation is valid at, or 0 for "indefinitely"                              <6-byte> validAfter - First timestamp this operation is valid                                                    If an account doesn't use time-range, it is enough to                                                    return SIG_VALIDATION_FAILED value (1) for signature failure.                              Note that the validation code cannot use block.timestamp (or block.number) directly. |
 
-### _requireFromEntryPointOrOwner
-
-```solidity
-function _requireFromEntryPointOrOwner() internal view
-```
-
-### _call
+### transferOwnership
 
 ```solidity
-function _call(address target, uint256 value, bytes data) internal
+function transferOwnership(bytes32[2] newOwner) public virtual returns (bytes32[2])
 ```
+
+Replaces the P256 key that owns this account
+
+_Reachable only through `execute` or `executeBatch` with this account as the target, so
+     the current owner has to sign for it. Nothing outside this contract is told: a
+     subclass holding its own record of the owner has to override this and keep that record
+     in step._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| newOwner | bytes32[2] | X,Y co-ordinates of the P256 key taking over |
+
+#### Return Values
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| [0] | bytes32[2] | The owner key now in force |
 
 ### getDeposit
 
@@ -153,7 +247,7 @@ function _call(address target, uint256 value, bytes data) internal
 function getDeposit() public view returns (uint256)
 ```
 
-check current account deposit in the entryPoint
+This account's gas deposit held by the EntryPoint
 
 ### addDeposit
 
@@ -161,7 +255,9 @@ check current account deposit in the entryPoint
 function addDeposit() public payable
 ```
 
-deposit more funds for this account in the entryPoint
+Tops up this account's gas deposit at the EntryPoint
+
+_Open to anyone, since paying another account's gas costs the payer and nobody else._
 
 ### withdrawDepositTo
 
@@ -169,22 +265,41 @@ deposit more funds for this account in the entryPoint
 function withdrawDepositTo(address payable withdrawAddress, uint256 amount) public
 ```
 
-withdraw value from the account's deposit
+Withdraws part of this account's gas deposit from the EntryPoint
 
 #### Parameters
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| withdrawAddress | address payable | target to send to |
-| amount | uint256 | to withdraw |
+| withdrawAddress | address payable | Recipient of the withdrawn ETH |
+| amount | uint256 | Amount to withdraw |
 
-### _authorizeUpgrade
+### _requireFromEntryPointOrOwner
 
 ```solidity
-function _authorizeUpgrade(address newImplementation) internal view
+function _requireFromEntryPointOrOwner() internal view
 ```
 
-UUPSUpsgradeable: only allow self-upgrade.
+Reverts unless the caller is the EntryPoint or this account itself
+
+_"Owner" in the name means `address(this)`, not the P256 key, which has no address to
+     call from._
+
+### _call
+
+```solidity
+function _call(address target, uint256 value, bytes data) internal
+```
+
+Calls a target and bubbles its revert data unchanged
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| target | address | Address to call |
+| value | uint256 | ETH to send with the call |
+| data | bytes | Calldata for the call |
 
 ### receive
 
@@ -192,9 +307,5 @@ UUPSUpsgradeable: only allow self-upgrade.
 receive() external payable
 ```
 
-### fallback
-
-```solidity
-fallback() external payable
-```
+Accepts plain ETH transfers
 
