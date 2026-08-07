@@ -13,6 +13,7 @@ import {Registry} from "contracts/Registry.sol";
 import {LazyWalletRegistry} from "contracts/LazyWalletRegistry.sol";
 
 import {ProtocolState} from "test/foundry/invariant-testing/base/ProtocolState.sol";
+import {MockESIMWallet} from "test/utils/mocks/MockESIMWallet.sol";
 
 /// @notice Everything a handler needs to reach the protocol and record what it did.
 /// @dev Bundled rather than passed as ten parameters, because every handler takes the same set and
@@ -70,10 +71,16 @@ abstract contract HandlerBase is Test {
         attacker = config.attacker;
     }
 
-    /// @notice Counts an invocation before the body decides whether it can go through
+    /// @notice Counts an invocation before the body decides whether it can go through, and reads
+    ///         the eSIM wallets' purchase history afterwards
+    /// @dev The history check rides here rather than on the two entry points that write history,
+    ///      because the thing worth catching is an entry lost to a call that had no business
+    ///      touching history at all. A beacon swap is the clearest one: it moves every wallet onto
+    ///      new logic in a single call.
     modifier counted() {
         state.recordInvocation();
         _;
+        _readHistories();
     }
 
     /// @notice Whoever currently holds the admin role
@@ -136,6 +143,43 @@ abstract contract HandlerBase is Test {
         uint256 count = state.deviceWalletCount();
         if (count == 0) return address(0);
         return state.deviceWallets(bound(seed, 0, count - 1));
+    }
+
+    /// @notice Reads purchase history off the eSIM wallets and hands it to the ghost state
+    /// @dev Every wallet already known to hold an entry is read on every call, because that is the
+    ///      only part of the list where a loss is visible and a wallet read only occasionally would
+    ///      let one through: a rewrite is caught by comparing against the last reading, so a call
+    ///      that writes and a call that rewrites both have to be seen. One further wallet is taken
+    ///      in turn out of the full list, which is how a wallet reaches the short list in the first
+    ///      place. Reading the full list every time would be several times the work for nothing.
+    function _readHistories() internal {
+        uint256 known = state.historyWalletCount();
+        for (uint256 i = 0; i < known; ++i) {
+            _readHistory(state.historyWallets(i));
+        }
+
+        uint256 count = state.eSIMWalletCount();
+        if (count == 0) return;
+
+        address next = state.eSIMWallets(state.totalInvocations() % count);
+        if (!state.isHistoryWallet(next)) _readHistory(next);
+    }
+
+    /// @notice Digests one wallet's history and hands both the prefix and the whole of it over
+    function _readHistory(address wallet) private {
+        DataBundleDetails[] memory entries = MockESIMWallet(payable(wallet)).getTransactionHistory();
+
+        uint256 recorded = state.ghost_historyEntries(wallet);
+        bytes32 prefixDigest;
+        bytes32 fullDigest;
+
+        for (uint256 i = 0; i < entries.length; ++i) {
+            fullDigest =
+                keccak256(abi.encode(fullDigest, entries[i].dataBundleID, entries[i].dataBundlePrice));
+            if (i + 1 == recorded) prefixDigest = fullDigest;
+        }
+
+        state.checkHistory(wallet, entries.length, prefixDigest, fullDigest);
     }
 
     /// @notice Picks an eSIM wallet the campaign has deployed, or zero when none exists yet

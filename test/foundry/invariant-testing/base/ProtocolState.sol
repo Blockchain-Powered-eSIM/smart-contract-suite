@@ -128,6 +128,34 @@ contract ProtocolState {
     uint256 public ghost_donated;
 
     // ----------------------------------------------------------------------------------------
+    // Purchase history
+    // ----------------------------------------------------------------------------------------
+
+    /// @notice Entries each eSIM wallet held when it was last looked at
+    mapping(address eSIMWallet => uint256 entries) public ghost_historyEntries;
+
+    /// @notice A chained digest over those entries, in order
+    /// @dev The length alone would miss a rewrite that kept the count. Chaining means the digest
+    ///      of the first `n` entries is a step in computing the digest of all of them, so one pass
+    ///      over the array produces both the value to compare and the value to store.
+    mapping(address eSIMWallet => bytes32 digest) public ghost_historyDigest;
+
+    /// @notice Every eSIM wallet seen holding at least one entry, each appearing once
+    /// @dev The handlers walk this list after every call rather than the full wallet list. It is
+    ///      the only part of the list where a loss is visible, since a wallet with nothing recorded
+    ///      has nothing to compare against, and it stays short: a run reaches around twenty entries
+    ///      spread over as many wallets, against a wallet list several times longer.
+    address[] public historyWallets;
+
+    mapping(address eSIMWallet => bool listed) public isHistoryWallet;
+
+    /// @notice Set if any eSIM wallet ever held fewer entries than it did before
+    bool public ghost_historyShrank;
+
+    /// @notice Set if any entry already recorded came back different
+    bool public ghost_historyRewritten;
+
+    // ----------------------------------------------------------------------------------------
     // Bookkeeping the distribution check reads
     // ----------------------------------------------------------------------------------------
 
@@ -253,6 +281,43 @@ contract ProtocolState {
     /// @notice Records that a contract with no withdrawal path took a plain send
     function markSingletonAcceptedETH() external {
         ghost_singletonAcceptedETH = true;
+    }
+
+    /// @notice Compares an eSIM wallet's purchase history against what it last held, then stores it
+    /// @dev A violation is recorded and the stored values are left alone, so the wallet stays
+    ///      measured against the state it was in before the loss rather than against the loss.
+    /// @param wallet eSIM wallet the history was read from
+    /// @param entries How many entries it holds now
+    /// @param prefixDigest Digest over the first `ghost_historyEntries[wallet]` of them
+    /// @param fullDigest Digest over all `entries` of them
+    function checkHistory(
+        address wallet,
+        uint256 entries,
+        bytes32 prefixDigest,
+        bytes32 fullDigest
+    ) external {
+        if (entries < ghost_historyEntries[wallet]) {
+            ghost_historyShrank = true;
+            return;
+        }
+
+        if (prefixDigest != ghost_historyDigest[wallet]) {
+            ghost_historyRewritten = true;
+            return;
+        }
+
+        ghost_historyEntries[wallet] = entries;
+        ghost_historyDigest[wallet] = fullDigest;
+
+        if (entries > 0 && !isHistoryWallet[wallet]) {
+            isHistoryWallet[wallet] = true;
+            historyWallets.push(wallet);
+        }
+    }
+
+    /// @notice How many eSIM wallets have ever been seen holding an entry
+    function historyWalletCount() external view returns (uint256) {
+        return historyWallets.length;
     }
 
     /// @notice Counts an entry point that reached the protocol
