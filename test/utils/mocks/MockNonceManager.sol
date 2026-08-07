@@ -1,18 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.36;
 
-import "@account-abstraction/contracts/interfaces/INonceManager.sol";
+import {INonceManager} from "@account-abstraction/contracts/interfaces/INonceManager.sol";
 
+/// @notice Stand-in for the EntryPoint's two-dimensional nonce accounting
 contract MockNonceManager is INonceManager {
     // Mapping to store nonces by sender and key
     mapping(address => mapping(uint192 => uint256)) private nonces;
 
-    /**
-     * Returns the next nonce for the specified sender and key.
-     * @param sender The account address.
-     * @param key The high 192 bits of the nonce.
-     * @return nonce The full nonce for the next UserOp with this sender.
-     */
+    /// @notice Returns the next nonce for the specified sender and key
+    /// @param sender The account address
+    /// @param key The high 192 bits of the nonce
+    /// @return nonce The full nonce for the next user operation from this sender
     function getNonce(address sender, uint192 key) 
         external 
         view 
@@ -22,15 +21,13 @@ contract MockNonceManager is INonceManager {
         return nonces[sender][key];
     }
 
-    /**
-     * Manually increments the nonce for the specified sender and key.
-     * @param key The high 192 bits of the nonce.
-     */
+    /// @notice Manually increments the nonce for the caller and the given key
+    /// @param key The high 192 bits of the nonce
     function incrementNonce(uint192 key) external override {
         nonces[msg.sender][key]++;
     }
 
-    // Helper function to set a specific nonce, useful for testing purposes
+    /// @notice Sets a specific nonce, so a test can start from an arbitrary position
     function setNonce(address sender, uint192 key, uint256 newNonce) external {
         nonces[sender][key] = newNonce;
     }

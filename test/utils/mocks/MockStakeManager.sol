@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.36;
 
-import "@account-abstraction/contracts/interfaces/IStakeManager.sol";
+import {IStakeManager} from "@account-abstraction/contracts/interfaces/IStakeManager.sol";
 
+/// @notice Stand-in for the EntryPoint's deposit and stake accounting
 contract MockStakeManager is IStakeManager {
     mapping(address => DepositInfo) private deposits;
 
-    /**
-     * Get deposit info for the specified account.
-     * @param account The account to query.
-     * @return info Full deposit information of the given account.
-     */
+    /// @notice Get deposit info for the specified account
+    /// @param account The account to query
+    /// @return info Full deposit information of the given account
     function getDepositInfo(address account)
         external
         view
@@ -20,11 +19,9 @@ contract MockStakeManager is IStakeManager {
         return deposits[account];
     }
 
-    /**
-     * Get account balance for gas payment.
-     * @param account The account to query.
-     * @return The deposit amount of the account.
-     */
+    /// @notice Get account balance for gas payment
+    /// @param account The account to query
+    /// @return The deposit amount of the account
     function balanceOf(address account)
         external
         view
@@ -34,11 +31,8 @@ contract MockStakeManager is IStakeManager {
         return deposits[account].deposit;
     }
 
-    /**
-     * Add to the deposit of the given account.
-     * Emits a Deposited event.
-     * @param account The account to add to.
-     */
+    /// @notice Add to the deposit of the given account
+    /// @param account The account to add to
     function depositTo(address account) public payable override {
         // The ETH stays here. The real EntryPoint holds a deposit until the account withdraws it
         // or an operation spends it, so forwarding it on would credit the deposit and hand the
@@ -48,10 +42,8 @@ contract MockStakeManager is IStakeManager {
         emit Deposited(account, deposits[account].deposit);
     }
 
-    /**
-     * Add to the account's stake and set unstake delay.
-     * @param _unstakeDelaySec The new lock duration before withdrawal.
-     */
+    /// @notice Add to the account's stake and set the unstake delay
+    /// @param _unstakeDelaySec The new lock duration before withdrawal
     function addStake(uint32 _unstakeDelaySec) external payable override {
         DepositInfo storage info = deposits[msg.sender];
         info.stake += uint112(msg.value);
@@ -60,10 +52,7 @@ contract MockStakeManager is IStakeManager {
         emit StakeLocked(msg.sender, info.stake, _unstakeDelaySec);
     }
 
-    /**
-     * Attempt to unlock the stake.
-     * Emits a StakeUnlocked event.
-     */
+    /// @notice Start the unlock delay on the caller's stake
     function unlockStake() external override {
         DepositInfo storage info = deposits[msg.sender];
         require(info.staked, "No active stake");
@@ -72,11 +61,8 @@ contract MockStakeManager is IStakeManager {
         emit StakeUnlocked(msg.sender, info.withdrawTime);
     }
 
-    /**
-     * Withdraw from the unlocked stake after the delay.
-     * Emits a StakeWithdrawn event.
-     * @param withdrawAddress The address to send withdrawn value.
-     */
+    /// @notice Withdraw from the unlocked stake once the delay has passed
+    /// @param withdrawAddress The address to send withdrawn value
     function withdrawStake(address payable withdrawAddress) external override {
         DepositInfo storage info = deposits[msg.sender];
         require(!info.staked, "Stake is locked");
@@ -88,12 +74,9 @@ contract MockStakeManager is IStakeManager {
         emit StakeWithdrawn(msg.sender, withdrawAddress, amount);
     }
 
-    /**
-     * Withdraw from the deposit.
-     * Emits a Withdrawn event.
-     * @param withdrawAddress The address to send withdrawn value.
-     * @param withdrawAmount The amount to withdraw.
-     */
+    /// @notice Withdraw from the deposit
+    /// @param withdrawAddress The address to send withdrawn value
+    /// @param withdrawAmount The amount to withdraw
     function withdrawTo(address payable withdrawAddress, uint256 withdrawAmount) external override {
         require(deposits[msg.sender].deposit >= withdrawAmount, "Insufficient deposit");
 
@@ -102,6 +85,7 @@ contract MockStakeManager is IStakeManager {
         emit Withdrawn(msg.sender, withdrawAddress, withdrawAmount);
     }
 
+    /// @notice Treats a plain transfer as a deposit for the sender
     receive() external payable {
         depositTo(msg.sender);
     }

@@ -395,15 +395,11 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
         registry.bindESIMWallet(address(eSIMWallet1), address(deviceWallet));
     }
 
-    /**
-        A malicious but registered device wallet must not be able to steal an eSIM wallet:
-        1. Alice owns an eSIM Wallet (0xESIM1), linked to her device (0xDeviceAlice)
-        2. Alice requests ownership transfer of 0xESIM1 to Bob
-        3. Before Bob could accept ownership; Carol, a malicious actor tries to claim 0xESIM1
-        3. Carol calls: bindESIMWallet(0xESIM1, 0xDeviceCarol);
-        4. Alice's eSIM Wallet is now controlled by Carol's device.
-        5. Carol gains control over Alice's eSIM wallet.
-     */
+    /// A registered but malicious device wallet must not be able to steal an eSIM wallet:
+    /// 1. Alice owns eSIM wallet 0xESIM1, linked to her device 0xDeviceAlice
+    /// 2. Alice requests an ownership transfer of 0xESIM1 to Bob
+    /// 3. Before Bob accepts, Carol calls bindESIMWallet(0xESIM1, 0xDeviceCarol)
+    /// 4. Carol's device would own Alice's eSIM wallet, and Carol would control it
     function test_transferESIMWallet_frontrun() public {
         deployWallets();
         vm.deal(address(deviceWallet), 10 ether);
