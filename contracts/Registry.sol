@@ -87,29 +87,6 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
         _disableInitializers();
     }
 
-    /// @dev Owner based upgrades
-    function _authorizeUpgrade(address newImplementation)
-    internal
-    onlyOwner
-    override
-    {}
-
-    /// @notice Ownership of this contract is never renounced
-    /// @dev The owner is the only caller _authorizeUpgrade accepts, and there is no other route to
-    ///      replace this implementation. Renouncing would freeze the contract on its current logic
-    ///      permanently.
-    function renounceOwnership() public pure override {
-        revert Errors.OwnershipCannotBeRenounced();
-    }
-
-    /// @notice Address (owned/controlled by eSIM wallet project) that can upgrade contracts
-    /// @dev Reads through to the owner rather than holding its own copy. `_authorizeUpgrade` is
-    ///      gated on `onlyOwner`, so the owner is the upgrade authority by definition and a second
-    ///      copy could only ever disagree with it.
-    function upgradeManager() public view returns (address) {
-        return owner();
-    }
-
     /// @param _eSIMWalletAdmin Admin address of the eSIM wallet project
     /// @param _vault Address of the vault that receives payments for the data bundles
     /// @param _upgradeManager Admin address responsible for upgrading contracts
@@ -143,9 +120,9 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
         __Ownable_init(_upgradeManager);
 
         emit RegistryInitialized(
-            _eSIMWalletAdmin, 
-            _vault, 
-            _upgradeManager, 
+            _eSIMWalletAdmin,
+            _vault,
+            _upgradeManager,
             address(deviceWalletFactory),
             address(eSIMWalletFactory)
         );
@@ -201,13 +178,6 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
         emit Unpaused(msg.sender);
     }
 
-    /// @notice Reverts while the protocol is paused
-    /// @dev Device wallets and eSIM wallets call this rather than reading `paused` and reverting
-    ///      themselves, so the revert reason is the same wherever it comes from.
-    function requireNotPaused() external view {
-        if(paused) revert Errors.ProtocolPaused();
-    }
-
     /// @notice Sets the price ceiling eSIM wallets fall back to when they hold none of their own
     /// @dev Owner and not admin, deliberately. The admin is the party this ceiling constrains, so
     ///      letting it raise its own limit would leave the ceiling meaningless. Setting zero
@@ -216,19 +186,6 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
     function setDefaultDataBundlePriceCap(uint256 _cap) external onlyOwner {
         defaultDataBundlePriceCap = _cap;
         emit DefaultDataBundlePriceCapUpdated(_cap);
-    }
-
-    /// @notice Function to add or update the lazy wallet registry address
-    function addOrUpdateLazyWalletRegistryAddress(
-        address _lazyWalletRegistry
-    ) public onlyOwner returns (address) {
-        if(_lazyWalletRegistry == address(0)) revert Errors.ZeroAddress("_lazyWalletRegistry");
-
-        lazyWalletRegistry = _lazyWalletRegistry;
-
-        emit UpdatedLazyWalletRegistryAddress(_lazyWalletRegistry);
-
-        return lazyWalletRegistry;
     }
 
     /// @dev For all the device wallets deployed by the esim wallet admin using the device wallet factory,
@@ -251,25 +208,6 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
     /// @param _newOwnerKey X,Y co-ordinates of the P256 key taking over
     function updateDeviceWalletOwnerKey(bytes32[2] memory _newOwnerKey) external onlyDeviceWallet {
         _updateDeviceWalletOwnerKey(msg.sender, _newOwnerKey);
-    }
-
-    /// @notice Marks an eSIM wallet as being moved from one device wallet to another, or cancels that
-    /// @dev Only the flag moves here. The association is a separate fact and keeps naming the device
-    ///      wallet that last held the eSIM wallet, so raising standby on a wallet this caller still
-    ///      holds is the ordinary case rather than a contradiction.
-    /// @param _eSIMWalletAddress Address of the eSIM wallet
-    /// @param _isOnStandby True while a transfer is outstanding, false once it is settled or revoked
-    function toggleESIMWalletStandbyStatus(
-        address _eSIMWalletAddress,
-        bool _isOnStandby
-    ) public onlyDeviceWallet {
-        address associated = isESIMWalletValid[_eSIMWalletAddress];
-        if(associated != msg.sender) {
-            revert Errors.NotTheAssociatedDeviceWallet(_eSIMWalletAddress, associated);
-        }
-
-        isESIMWalletOnStandby[_eSIMWalletAddress] = _isOnStandby;
-        emit ESIMWalletSetOnStandby(_eSIMWalletAddress, _isOnStandby, msg.sender);
     }
 
     /// @notice Binds an eSIM wallet to the calling device wallet and settles any outstanding transfer
@@ -318,5 +256,67 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
             isESIMWalletOnStandby[_eSIMWalletAddress] = false;
             emit ESIMWalletSetOnStandby(_eSIMWalletAddress, false, msg.sender);
         }
+    }
+
+    /// @notice Ownership of this contract is never renounced
+    /// @dev The owner is the only caller _authorizeUpgrade accepts, and there is no other route to
+    ///      replace this implementation. Renouncing would freeze the contract on its current logic
+    ///      permanently.
+    function renounceOwnership() public pure override {
+        revert Errors.OwnershipCannotBeRenounced();
+    }
+
+    /// @notice Function to add or update the lazy wallet registry address
+    function addOrUpdateLazyWalletRegistryAddress(
+        address _lazyWalletRegistry
+    ) public onlyOwner returns (address) {
+        if(_lazyWalletRegistry == address(0)) revert Errors.ZeroAddress("_lazyWalletRegistry");
+
+        lazyWalletRegistry = _lazyWalletRegistry;
+
+        emit UpdatedLazyWalletRegistryAddress(_lazyWalletRegistry);
+
+        return lazyWalletRegistry;
+    }
+
+    /// @notice Marks an eSIM wallet as being moved from one device wallet to another, or cancels that
+    /// @dev Only the flag moves here. The association is a separate fact and keeps naming the device
+    ///      wallet that last held the eSIM wallet, so raising standby on a wallet this caller still
+    ///      holds is the ordinary case rather than a contradiction.
+    /// @param _eSIMWalletAddress Address of the eSIM wallet
+    /// @param _isOnStandby True while a transfer is outstanding, false once it is settled or revoked
+    function toggleESIMWalletStandbyStatus(
+        address _eSIMWalletAddress,
+        bool _isOnStandby
+    ) public onlyDeviceWallet {
+        address associated = isESIMWalletValid[_eSIMWalletAddress];
+        if(associated != msg.sender) {
+            revert Errors.NotTheAssociatedDeviceWallet(_eSIMWalletAddress, associated);
+        }
+
+        isESIMWalletOnStandby[_eSIMWalletAddress] = _isOnStandby;
+        emit ESIMWalletSetOnStandby(_eSIMWalletAddress, _isOnStandby, msg.sender);
+    }
+
+    /// @dev Owner based upgrades
+    function _authorizeUpgrade(address newImplementation)
+    internal
+    onlyOwner
+    override
+    {}
+
+    /// @notice Address (owned/controlled by eSIM wallet project) that can upgrade contracts
+    /// @dev Reads through to the owner rather than holding its own copy. `_authorizeUpgrade` is
+    ///      gated on `onlyOwner`, so the owner is the upgrade authority by definition and a second
+    ///      copy could only ever disagree with it.
+    function upgradeManager() public view returns (address) {
+        return owner();
+    }
+
+    /// @notice Reverts while the protocol is paused
+    /// @dev Device wallets and eSIM wallets call this rather than reading `paused` and reverting
+    ///      themselves, so the revert reason is the same wherever it comes from.
+    function requireNotPaused() external view {
+        if(paused) revert Errors.ProtocolPaused();
     }
 }
