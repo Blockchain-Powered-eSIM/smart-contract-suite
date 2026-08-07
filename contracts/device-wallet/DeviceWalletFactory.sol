@@ -23,6 +23,27 @@ import "../CustomStructs.sol";
 /// @notice Contract for deploying a new eSIM wallet
 contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable {
 
+    /// @notice Upgradeable beacon that points to correct Device wallet implementation
+    /// @dev    Just updating the device wallet implementation address in this contract resolves
+    ///         the issue of manually updating each device wallet proxy with a new implementation
+    UpgradeableBeacon public beacon;
+
+    IEntryPoint public entryPoint;
+
+    P256Verifier public verifier;
+
+    ///@notice Registry contract instance
+    Registry public registry;
+
+    /// @notice eSIM wallet factory contract instance
+    ESIMWalletFactory public eSIMWalletFactory;
+
+    /// @notice Vault address that receives payments for eSIM data bundles
+    address public vault;
+
+    /// @notice Tracks all the device wallets that have their data added into the registry upon deployment
+    mapping(address deviceWallet => bool isAdded) public deviceWalletInfoAdded;
+
     /// @notice Emitted when factory is deployed
     event DeviceWalletFactoryDeployed(
         address _vault,
@@ -46,37 +67,6 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
 
     /// @notice Emitted when the registry is added to the factory contract
     event AddedRegistry(address indexed registry);
-
-    /// @notice Upgradeable beacon that points to correct Device wallet implementation
-    /// @dev    Just updating the device wallet implementation address in this contract resolves
-    ///         the issue of manually updating each device wallet proxy with a new implementation
-    UpgradeableBeacon public beacon;
-
-    IEntryPoint public entryPoint;
-
-    P256Verifier public verifier;
-
-    ///@notice Registry contract instance
-    Registry public registry;
-
-    /// @notice eSIM wallet factory contract instance
-    ESIMWalletFactory public eSIMWalletFactory;
-
-    /// @notice Vault address that receives payments for eSIM data bundles
-    address public vault;
-
-    /// @notice Tracks all the device wallets that have their data added into the registry upon deployment
-    mapping(address deviceWallet => bool isAdded) public deviceWalletInfoAdded;
-
-    /// @notice Admin address of the eSIM wallet project
-    /// @dev Held by the registry, which is where it is rotated, so this contract cannot fall
-    ///      behind the rest of the protocol after a rotation. Answers address(0) before the
-    ///      registry is wired up, which no caller can match, so admin functions stay closed until
-    ///      then rather than reverting on a call into address(0).
-    function eSIMWalletAdmin() public view returns (address) {
-        if(address(registry) == address(0)) return address(0);
-        return registry.eSIMWalletAdmin();
-    }
 
     function _onlyAdmin() private view {
         if (msg.sender != eSIMWalletAdmin()) revert Errors.OnlyAdmin();
@@ -106,21 +96,6 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
-    }
-
-    /// @dev Owner based upgrades
-    function _authorizeUpgrade(address newImplementation)
-    internal
-    override
-    onlyOwner
-    {}
-
-    /// @notice Ownership of this contract is never renounced
-    /// @dev The owner is the only caller _authorizeUpgrade accepts, and this contract owns the
-    ///      beacon, so it is also the only route to updateDeviceWalletImplementation. Renouncing
-    ///      would freeze every device wallet on its current logic permanently.
-    function renounceOwnership() public pure override {
-        revert Errors.OwnershipCannotBeRenounced();
     }
 
     /// @param _vault Address of the vault that receives payments for the data bundles
@@ -155,7 +130,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
             getCurrentDeviceWalletImplementation(),
             address(beacon)
         );
-        
+
         __Ownable_init(_upgradeManager);
         __Ownable2Step_init();
         __UUPSUpgradeable_init();
@@ -175,19 +150,6 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         emit AddedRegistry(address(registry));
 
         return address(registry);
-    }
-
-    /// @notice Function to update vault address.
-    /// @dev Can only be called by the admin
-    /// @param _newVaultAddress New vault address
-    function updateVaultAddress(address _newVaultAddress) public onlyAdmin returns (address) {
-        if(vault == _newVaultAddress) revert Errors.VaultUnchanged(vault);
-        if(_newVaultAddress == address(0)) revert Errors.ZeroAddress("_newVaultAddress");
-
-        vault = _newVaultAddress;
-        emit VaultAddressUpdated(vault);
-
-        return vault;
     }
 
     /// @notice Function to update the device wallet implementation
@@ -210,7 +172,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     /// @notice To deploy multiple device wallets at once
     /// @param _deviceUniqueIdentifiers Array of unique device identifiers for each device wallet
     /// @param _deviceWalletOwnersKey Array of P256 public keys of owners of the respective device wallets
-    /// @param _depositAmounts Array of all the ETH to be deposited into each of the device wallets 
+    /// @param _depositAmounts Array of all the ETH to be deposited into each of the device wallets
     /// @return Array of deployed device wallet address
     function deployDeviceWalletForUsers(
         string[] calldata _deviceUniqueIdentifiers,
@@ -238,7 +200,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
             if(_depositAmounts[i] > availableETH) {
                 revert Errors.InsufficientBalance(availableETH, _depositAmounts[i]);
             }
-            
+
             uint256 spentETH;
             (walletsDeployed[i], spentETH) = _deployDeviceWallet(
                 _deviceUniqueIdentifiers[i],
@@ -260,6 +222,105 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
 
         return walletsDeployed;
     }
+
+    /// @notice Update the respective storage after createAccount was called via EntryPoint
+    /// @dev This is not needed if the admin deploys the wallet for users as an EOA
+    /// The function can be called by the admin directly, and can also be called by the registry
+    /// when deploying the wallet via lazy wallet registry
+    function postCreateAccount(
+        address _deviceWallet,
+        string memory _deviceUniqueIdentifier,
+        bytes32[2] memory _deviceWalletOwnerKey
+    ) external onlyAdminOrRegistry {
+        if(deviceWalletInfoAdded[_deviceWallet]) revert Errors.DeviceWalletInfoAlreadyAdded(_deviceWallet);
+        if(bytes(_deviceUniqueIdentifier).length == 0) revert Errors.EmptyDeviceIdentifier();
+
+        // Flag set before the call so a second pass through here cannot reach the registry at all.
+        // The registry already rejects a duplicate identifier or key, so this closes the window
+        // rather than being the only thing holding it shut.
+        deviceWalletInfoAdded[_deviceWallet] = true;
+        registry.updateDeviceWalletInfo(address(_deviceWallet), _deviceUniqueIdentifier, _deviceWalletOwnerKey);
+    }
+
+    /// @notice Function to update vault address.
+    /// @dev Can only be called by the admin
+    /// @param _newVaultAddress New vault address
+    function updateVaultAddress(address _newVaultAddress) public onlyAdmin returns (address) {
+        if(vault == _newVaultAddress) revert Errors.VaultUnchanged(vault);
+        if(_newVaultAddress == address(0)) revert Errors.ZeroAddress("_newVaultAddress");
+
+        vault = _newVaultAddress;
+        emit VaultAddressUpdated(vault);
+
+        return vault;
+    }
+
+    /**
+     * create an account, and return its address.
+     * returns the address even if the account is already deployed.
+     * Note that during UserOperation execution, this method is called only if the account is not deployed.
+     * This method returns an existing account address so that entryPoint.getSenderAddress() would work even after account creation
+     */
+    /// @dev This createAccount needs to be called by the entry point,
+    /// hence it cannot read or write to any external contract storages
+    /// The validation should be done off-chain, and any storage update to external contracts should be done as a separate function
+    function createAccount(
+        string memory _deviceUniqueIdentifier,
+        bytes32[2] memory _deviceWalletOwnerKey,
+        uint256 _salt
+    ) public payable returns (DeviceWallet deviceWallet) {
+        if(bytes(_deviceUniqueIdentifier).length == 0) revert Errors.EmptyDeviceIdentifier();
+        _requireValidOwnerKey(_deviceWalletOwnerKey);
+
+        address addr = getCounterFactualAddress(
+            _deviceWalletOwnerKey,
+            _deviceUniqueIdentifier,
+            _salt
+        );
+
+        uint256 codeSize = addr.code.length;
+        if (codeSize > 0) {
+            // The wallet is already deployed, so the ETH has to follow it. Keeping it here would
+            // strand it in the factory, which has no way to send it anywhere.
+            if (msg.value > 0) {
+                _fundDeviceWallet(addr, msg.value);
+            }
+
+            return DeviceWallet(payable(addr));
+        }
+
+        deviceWallet = DeviceWallet(
+            payable(
+                new BeaconProxy{salt : bytes32(_salt)}(
+                    address(beacon),
+                    abi.encodeCall(
+                        DeviceWallet.init,
+                        (address(registry), _deviceWalletOwnerKey, _deviceUniqueIdentifier, address(eSIMWalletFactory))
+                    )
+                )
+            )
+        );
+
+        // Funding has to come after deployment, since the wallet does not exist before this point
+        if (msg.value > 0) {
+            _fundDeviceWallet(address(deviceWallet), msg.value);
+        }
+    }
+
+    /// @notice Ownership of this contract is never renounced
+    /// @dev The owner is the only caller _authorizeUpgrade accepts, and this contract owns the
+    ///      beacon, so it is also the only route to updateDeviceWalletImplementation. Renouncing
+    ///      would freeze every device wallet on its current logic permanently.
+    function renounceOwnership() public pure override {
+        revert Errors.OwnershipCannotBeRenounced();
+    }
+
+    /// @dev Owner based upgrades
+    function _authorizeUpgrade(address newImplementation)
+    internal
+    override
+    onlyOwner
+    {}
 
     /// @dev Internal function to allow admin to deploy a device wallet (and an eSIM wallet) for given unique device identifiers
     /// @param _deviceUniqueIdentifier Unique device identifier for the device wallet
@@ -290,20 +351,6 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         emit DeviceWalletDeployed(deviceWalletAddress, eSIMWalletAddress, _deviceWalletOwnerKey);
 
         return (Wallets(deviceWalletAddress, eSIMWalletAddress), spentETH);
-    }
-
-    /// @notice Rejects a P256 public key that is not a point on the curve
-    /// @dev This is the same predicate FCL_ecdsa.ecdsa_verify applies before it does anything else,
-    ///      so a key rejected here is one that could never have verified a signature. A wallet
-    ///      deployed with such a key is unusable for its whole life and it consumes its device
-    ///      identifier and key hash, neither of which the protocol can release.
-    function _requireValidOwnerKey(bytes32[2] memory _deviceWalletOwnerKey) private pure {
-        if(
-            !FCL_Elliptic_ZZ.ecAff_isOnCurve(
-                uint256(_deviceWalletOwnerKey[0]),
-                uint256(_deviceWalletOwnerKey[1])
-            )
-        ) revert Errors.InvalidDeviceWalletOwnerKey();
     }
 
     /// @dev Returns the ETH actually forwarded to the wallet, which is zero whenever an existing
@@ -363,7 +410,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
                 new BeaconProxy{salt : bytes32(_salt)}(
                     address(beacon),
                     abi.encodeCall(
-                        DeviceWallet.init, 
+                        DeviceWallet.init,
                         (address(registry), _deviceWalletOwnerKey, _deviceUniqueIdentifier, address(eSIMWalletFactory))
                     )
                 )
@@ -380,6 +427,20 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         }
     }
 
+    /// @notice Rejects a P256 public key that is not a point on the curve
+    /// @dev This is the same predicate FCL_ecdsa.ecdsa_verify applies before it does anything else,
+    ///      so a key rejected here is one that could never have verified a signature. A wallet
+    ///      deployed with such a key is unusable for its whole life and it consumes its device
+    ///      identifier and key hash, neither of which the protocol can release.
+    function _requireValidOwnerKey(bytes32[2] memory _deviceWalletOwnerKey) private pure {
+        if(
+            !FCL_Elliptic_ZZ.ecAff_isOnCurve(
+                uint256(_deviceWalletOwnerKey[0]),
+                uint256(_deviceWalletOwnerKey[1])
+            )
+        ) revert Errors.InvalidDeviceWalletOwnerKey();
+    }
+
     /// @notice Sends ETH to a device wallet so that it lands in the wallet's own balance
     /// @dev No EntryPoint deposit is created. A wallet holding no deposit still transacts: the
     ///      EntryPoint reports the whole prefund as missing during validation and the account pays
@@ -392,6 +453,16 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     function _fundDeviceWallet(address _deviceWallet, uint256 _amount) private {
         (bool success, ) = _deviceWallet.call{value: _amount}("");
         if(!success) revert Errors.FailedToTransfer();
+    }
+
+    /// @notice Admin address of the eSIM wallet project
+    /// @dev Held by the registry, which is where it is rotated, so this contract cannot fall
+    ///      behind the rest of the protocol after a rotation. Answers address(0) before the
+    ///      registry is wired up, which no caller can match, so admin functions stay closed until
+    ///      then rather than reverting on a call into address(0).
+    function eSIMWalletAdmin() public view returns (address) {
+        if(address(registry) == address(0)) return address(0);
+        return registry.eSIMWalletAdmin();
     }
 
     /// @notice Checks that all the input params needed for deploying a fresh device wallet are valid
@@ -418,77 +489,6 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         if(wallet != address(0)) {
             return wallet;
         }
-    }
-
-    /**
-     * create an account, and return its address.
-     * returns the address even if the account is already deployed.
-     * Note that during UserOperation execution, this method is called only if the account is not deployed.
-     * This method returns an existing account address so that entryPoint.getSenderAddress() would work even after account creation
-     */
-    /// @dev This createAccount needs to be called by the entry point,
-    /// hence it cannot read or write to any external contract storages
-    /// The validation should be done off-chain, and any storage update to external contracts should be done as a separate function
-    function createAccount(
-        string memory _deviceUniqueIdentifier,
-        bytes32[2] memory _deviceWalletOwnerKey,
-        uint256 _salt
-    ) public payable returns (DeviceWallet deviceWallet) {
-        if(bytes(_deviceUniqueIdentifier).length == 0) revert Errors.EmptyDeviceIdentifier();
-        _requireValidOwnerKey(_deviceWalletOwnerKey);
-
-        address addr = getCounterFactualAddress(
-            _deviceWalletOwnerKey,
-            _deviceUniqueIdentifier,
-            _salt
-        );
-
-        uint256 codeSize = addr.code.length;
-        if (codeSize > 0) {
-            // The wallet is already deployed, so the ETH has to follow it. Keeping it here would
-            // strand it in the factory, which has no way to send it anywhere.
-            if (msg.value > 0) {
-                _fundDeviceWallet(addr, msg.value);
-            }
-
-            return DeviceWallet(payable(addr));
-        }
-
-        deviceWallet = DeviceWallet(
-            payable(
-                new BeaconProxy{salt : bytes32(_salt)}(
-                    address(beacon),
-                    abi.encodeCall(
-                        DeviceWallet.init,
-                        (address(registry), _deviceWalletOwnerKey, _deviceUniqueIdentifier, address(eSIMWalletFactory))
-                    )
-                )
-            )
-        );
-
-        // Funding has to come after deployment, since the wallet does not exist before this point
-        if (msg.value > 0) {
-            _fundDeviceWallet(address(deviceWallet), msg.value);
-        }
-    }
-
-    /// @notice Update the respective storage after createAccount was called via EntryPoint
-    /// @dev This is not needed if the admin deploys the wallet for users as an EOA
-    /// The function can be called by the admin directly, and can also be called by the registry
-    /// when deploying the wallet via lazy wallet registry
-    function postCreateAccount(
-        address _deviceWallet,
-        string memory _deviceUniqueIdentifier,
-        bytes32[2] memory _deviceWalletOwnerKey
-    ) external onlyAdminOrRegistry {
-        if(deviceWalletInfoAdded[_deviceWallet]) revert Errors.DeviceWalletInfoAlreadyAdded(_deviceWallet);
-        if(bytes(_deviceUniqueIdentifier).length == 0) revert Errors.EmptyDeviceIdentifier();
-
-        // Flag set before the call so a second pass through here cannot reach the registry at all.
-        // The registry already rejects a duplicate identifier or key, so this closes the window
-        // rather than being the only thing holding it shut.
-        deviceWalletInfoAdded[_deviceWallet] = true;
-        registry.updateDeviceWalletInfo(address(_deviceWallet), _deviceUniqueIdentifier, _deviceWalletOwnerKey);
     }
 
     /**
