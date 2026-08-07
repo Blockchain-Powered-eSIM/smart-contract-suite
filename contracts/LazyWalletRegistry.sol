@@ -1,16 +1,25 @@
+// SPDX-License-Identifier: MIT
 pragma solidity 0.8.36;
 
-// SPDX-License-Identifier: MIT
+// Libraries
+import {Errors} from "./Errors.sol";
 
+// Types
+import {DataBundleDetails} from "./CustomStructs.sol";
+
+// Contracts
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
-
 import {Registry} from "./Registry.sol";
-import {Errors} from "./Errors.sol";
-import "./CustomStructs.sol";
 
-/// @notice Contract for deploying the factory contracts and maintaining registry
+/// @notice Holds what a fiat user bought before they had a wallet, then deploys the wallets and
+///         copies the record onto them
+/// @dev Everything here is keyed by string identifiers rather than by address, because a lazy user
+///      has no address yet. Deployment and the history copy are both batched and both carry their
+///      own cursor in storage, so a dropped transaction is retried by repeating the same call. Each
+///      batch loop reverts on its terminal condition rather than returning quietly, which is what
+///      lets a caller loop until it stops.
 contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable {
 
     /// @notice Longest device or eSIM identifier accepted when a new binding is created
@@ -149,7 +158,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         DataBundleDetails[] _newDataBundleDetails
     );
 
-    /// @notice Emitted when teh Data bundle related details are deleted from the old device identifer
+    /// @notice Emitted when the data bundle details are deleted from the old device identifier
     event DataBundleDetailsDeletedFromOldDeviceIdentifier(
         string _oldDeviceIdentifier,
         string _eSIMIdentifier
@@ -169,10 +178,17 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         string[] _eSIMIdentifierOfNewDevice
     );
 
+    /// @notice Restricts a call to the eSIM wallet admin
+    /// @dev Read from the registry on every call, so a rotation there takes effect immediately.
+    ///      Every state-changing function in this contract sits behind it.
     modifier onlyESIMWalletAdmin() {
         if(msg.sender != registry.eSIMWalletAdmin()) revert Errors.OnlyESIMWalletAdmin();
         _;
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // Initialisation
+    // ---------------------------------------------------------------------------------------------
 
     /// @dev Locks the implementation contract itself. Without this, anyone can call initialize
     ///      directly on the implementation and own it. The proxy is unaffected either way, but an
@@ -182,6 +198,9 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         _disableInitializers();
     }
 
+    /// @notice Points this contract at the registry and hands ownership to the upgrade manager
+    /// @param _registry Registry this contract reads the admin from and deploys wallets through
+    /// @param _upgradeManager Admin address responsible for upgrading contracts
     function initialize(
         address _registry,
         address _upgradeManager
@@ -195,7 +214,13 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         __Ownable_init(_upgradeManager);
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // Recording purchases made before deployment
+    // ---------------------------------------------------------------------------------------------
+
     /// @notice Function to populate all the device and eSIM related data along with the data bundles
+    /// @dev Refused for any device that already has a wallet, which is what freezes a device's eSIM
+    ///      list and its history for the whole time a deployment is walking them.
     /// @param _deviceUniqueIdentifiers List of device unique identifiers associated with the eSIM related data
     /// @param _eSIMUniqueIdentifiers 2D array of all the eSIMs corresponding to their device identifiers.
     /// @param _dataBundleDetails 2D array of all the new data bundles bought for the respective eSIMs
@@ -216,6 +241,10 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
             _populateHistory(_deviceUniqueIdentifiers[i], _eSIMUniqueIdentifiers[i], _dataBundleDetails[i]);
         }
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // Lazy deployment
+    // ---------------------------------------------------------------------------------------------
 
     /// @notice Deploys a device wallet and the first batch of its eSIM wallets, setting their identifiers
     /// @dev Only the first `_maxWallets` eSIM wallets are deployed here. Anything left goes through
@@ -406,7 +435,13 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         emit LazyHistoryCopied(_eSIMIdentifier, eSIMWallet, copied, remaining);
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // Switching an eSIM to another device
+    // ---------------------------------------------------------------------------------------------
+
     /// @notice This function should be called when the fiat user wants to switch their eSIM to a new device
+    /// @dev Only ever before deployment. Once a wallet exists onchain, the onchain graph is the
+    ///      record and the eSIM moves through ESIMWallet's ownership transfer instead.
     /// @param _eSIMIdentifier unique eSIM identifier that needs to be switched to a new device
     /// @param _oldDeviceIdentifier device identifier that the eSIM is currently associated with
     /// @param _newDeviceIdentifier new device identifier that the eSIM needs to be switched to
@@ -462,6 +497,10 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         return true;
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // Ownership and upgrades
+    // ---------------------------------------------------------------------------------------------
+
     /// @notice Ownership of this contract is never renounced
     /// @dev The owner is the only caller _authorizeUpgrade accepts, and there is no other route to
     ///      replace this implementation. Renouncing would freeze the contract on its current logic
@@ -470,15 +509,24 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         revert Errors.OwnershipCannotBeRenounced();
     }
 
-    /// @dev Owner based upgrades
+    /// @notice Restricts UUPS upgrades to the owner
+    /// @param newImplementation Address of the implementation being moved to
     function _authorizeUpgrade(address newImplementation)
     internal
     onlyOwner
     override
     {}
 
-    /// @notice Internal function for populating information of all the eSIMs related to a device
-    /// @dev The _eSIMUniqueIdentifiers array can have multiple repeating occurrences since there can be multiple purchases per eSIM
+    // ---------------------------------------------------------------------------------------------
+    // History and device association
+    // ---------------------------------------------------------------------------------------------
+
+    /// @notice Records one device's eSIM identifiers and the purchases made against them
+    /// @dev `_eSIMUniqueIdentifiers` may repeat an identifier, since one eSIM can have several
+    ///      purchases. An identifier already bound to a different device is refused.
+    /// @param _deviceUniqueIdentifier Device the purchases belong to
+    /// @param _eSIMUniqueIdentifiers One entry per purchase, naming the eSIM it was made for
+    /// @param _dataBundleDetails The purchases themselves, aligned with the identifiers
     function _populateHistory(
         string calldata _deviceUniqueIdentifier,
         string[] calldata _eSIMUniqueIdentifiers,
@@ -528,7 +576,10 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         emit DataUpdatedForDevice(_deviceUniqueIdentifier, _eSIMUniqueIdentifiers, _dataBundleDetails);
     }
 
-    /// @dev Internal function to update the eSIM related details when switching to a new device identifier
+    /// @notice Moves an eSIM's stored purchase history to the device taking it over
+    /// @param _eSIMIdentifier eSIM being switched
+    /// @param _oldDeviceIdentifier Device it is leaving
+    /// @param _newDeviceIdentifier Device it is joining
     function _updateDeviceIdentifierToESIMDetails(
         string calldata _eSIMIdentifier,
         string calldata _oldDeviceIdentifier,
@@ -550,7 +601,12 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         emit DataBundleDetailsDeletedFromOldDeviceIdentifier(_oldDeviceIdentifier, _eSIMIdentifier);
     }
 
-    /// @dev Internal function to update the eSIM identifiers related to the device when switching
+    /// @notice Moves an eSIM identifier between the two devices' lists
+    /// @dev The removal is a swap with the last element and a pop, so the old device's list keeps
+    ///      its members but not their order.
+    /// @param _eSIMIdentifier eSIM being switched
+    /// @param _oldDeviceIdentifier Device it is leaving
+    /// @param _newDeviceIdentifier Device it is joining
     function _updateESIMIdentifiersAssociatedWithDeviceIdentifier(
         string calldata _eSIMIdentifier,
         string calldata _oldDeviceIdentifier,
@@ -581,10 +637,17 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         emit ESIMIdentifierAddedToNewDeviceIdentifier(_newDeviceIdentifier, _eSIMIdentifier, eSIMIdentifierOfNewDevice);
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // Batch bounds and records
+    // ---------------------------------------------------------------------------------------------
+
     /// @notice Rejects a batch size outside the cap, then clamps it to what is actually left
     /// @dev A request above the cap is refused rather than clamped, so a caller never believes it
     ///      deployed more than it did. Clamping to the outstanding count is different: the caller
     ///      asked for more than exists, and the return value says how many it got.
+    /// @param _requested Batch size the caller asked for
+    /// @param _outstanding How many are actually left
+    /// @return The batch size to use
     function _boundedBatchSize(uint256 _requested, uint256 _outstanding) private pure returns (uint256) {
         if(_requested == 0 || _requested > MAX_ESIM_WALLETS_PER_CALL) {
             revert Errors.TooManyESIMWallets(_requested, MAX_ESIM_WALLETS_PER_CALL);
@@ -596,6 +659,10 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
     /// @notice Copies one batch of identifiers out of a device's list
     /// @dev Reads only the slice the batch needs. Copying the whole list into memory first would put
     ///      the cost this split exists to bound back into every call.
+    /// @param _allESIMIdentifiers The device's full identifier list
+    /// @param _startIndex Position this batch starts at
+    /// @param _batchSize How many to read
+    /// @return The batch's identifiers, in list order
     function _readIdentifiers(
         string[] storage _allESIMIdentifiers,
         uint256 _startIndex,
@@ -615,6 +682,8 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
     ///      what makes this pairing sound. It is the only proof later on that a wallet claiming an
     ///      eSIM identifier is the one this contract deployed for it. This cannot run before the
     ///      deployment, unlike the cursor, because the addresses do not exist until then.
+    /// @param _batchIdentifiers The batch's eSIM identifiers
+    /// @param _eSIMWallets The wallets deployed for them, in the same order
     function _recordDeployedESIMWallets(
         string[] memory _batchIdentifiers,
         address[] memory _eSIMWallets
@@ -641,6 +710,9 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
     }
 
     /// @notice Function to check if a lazy wallet has been deployed or not
+    /// @dev Asks the registry for a device wallet, so it is also true for a device deployed through
+    ///      the ordinary route. That is deliberate: both cases have to block a lazy deployment.
+    /// @param _deviceUniqueIdentifier Device being checked
     /// @return Boolean. True if deployed, false otherwise
     function isLazyWalletDeployed(string calldata _deviceUniqueIdentifier) public view returns (bool) {
         if(registry.uniqueIdentifierToDeviceWallet(_deviceUniqueIdentifier) != address(0)) {
