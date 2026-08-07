@@ -1,22 +1,28 @@
+// SPDX-License-Identifier: MIT
 pragma solidity 0.8.36;
 
-// SPDX-License-Identifier: MIT
+// Interfaces
+import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
+import {IPausable} from "./interfaces/IPausable.sol";
 
+// Contracts
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
-
 import {RegistryHelper} from "./RegistryHelper.sol";
-import {IPausable} from "./interfaces/IPausable.sol";
 import {DeviceWalletFactory} from "./device-wallet/DeviceWalletFactory.sol";
 import {ESIMWalletFactory} from "./esim-wallet/ESIMWalletFactory.sol";
 import {ESIMWallet} from "./esim-wallet/ESIMWallet.sol";
 import {Errors} from "./Errors.sol";
 
-import "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
-
-/// @notice Contract for deploying the factory contracts and maintaining registry
-/// @dev `IPausable` is declared so the compiler checks the one signature `ProtocolAdmin` calls
+/// @notice Single source of truth for who is who in the protocol, and the switchboard the wallets
+///         read on every guarded path
+/// @dev Holds the admin address, the vault, the pause flag and the price ceiling in one place.
+///      Device wallets and eSIM wallets are beacon proxies tracked by mappings with no enumerable
+///      list, so there is no way to write a value into each of them: one write here is how a change
+///      reaches all of them in the same transaction.
+///
+///      `IPausable` is declared so the compiler checks the one signature `ProtocolAdmin` calls
 ///      through it. A guardian releases a pause with no delay, so the two drifting apart would only
 ///      show as a revert during an incident. `pause()` stays outside the interface deliberately: it
 ///      is the hot admin key's lever, while releasing it is the timelock's.
@@ -64,20 +70,29 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
     ///      exposure for all of them at the same time.
     uint256 public defaultDataBundlePriceCap;
 
+    /// @notice Restricts a call to a device wallet this registry has recorded
     modifier onlyDeviceWallet() {
         if(!isDeviceWalletValid[msg.sender]) revert Errors.OnlyDeviceWallet();
         _;
     }
 
+    /// @notice Restricts a call to the device wallet factory
     modifier onlyDeviceWalletFactory() {
         if(msg.sender != address(deviceWalletFactory)) revert Errors.OnlyDeviceWalletFactory();
         _;
     }
 
+    /// @notice Restricts a call to the current eSIM wallet admin
+    /// @dev The hot key the backend signs with, not the owner. It can trip the pause but not
+    ///      release it, and cannot upgrade anything.
     modifier onlyESIMWalletAdmin() {
         if(msg.sender != eSIMWalletAdmin) revert Errors.OnlyAdmin();
         _;
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // Initialisation
+    // ---------------------------------------------------------------------------------------------
 
     /// @dev Locks the implementation contract itself. Without this, anyone can call initialize
     ///      directly on the implementation and own it. The proxy is unaffected either way, but an
@@ -87,9 +102,13 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
         _disableInitializers();
     }
 
+    /// @notice Wires the registry to the two factories and sets the protocol's addresses
     /// @param _eSIMWalletAdmin Admin address of the eSIM wallet project
     /// @param _vault Address of the vault that receives payments for the data bundles
     /// @param _upgradeManager Admin address responsible for upgrading contracts
+    /// @param _deviceWalletFactory Factory that deploys device wallets
+    /// @param _eSIMWalletFactory Factory that deploys eSIM wallets
+    /// @param _entryPoint ERC-4337 EntryPoint singleton for this chain
     function initialize(
         address _eSIMWalletAdmin,
         address _vault,
@@ -128,7 +147,11 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
         );
     }
 
-    /// @notice 2-step admin update. The current admin nominates, the nominee accepts.
+    // ---------------------------------------------------------------------------------------------
+    // Admin handover
+    // ---------------------------------------------------------------------------------------------
+
+    /// @notice Nominates the next eSIM wallet admin, who then has to accept
     /// @dev Deliberately does not check for an existing request. If the current admin nominates an
     ///      unintended address, calling this again overrides it. Nominating the current admin
     ///      revokes any outstanding request.
@@ -147,7 +170,7 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
         }
     }
 
-    /// @notice Function to update the admin address
+    /// @notice Takes up the admin role, callable only by the nominated address
     /// @return Address of the new admin
     function acceptAdminUpdate() external returns (address) {
         if(msg.sender != newRequestedAdmin) revert Errors.OnlyRequestedAdmin(newRequestedAdmin);
@@ -160,6 +183,10 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
 
         return eSIMWalletAdmin;
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // Pause and price ceiling
+    // ---------------------------------------------------------------------------------------------
 
     /// @notice Stops the ETH-moving paths on every device wallet and eSIM wallet
     /// @dev The admin trips this and the owner clears it. The admin key signs backend batches all
@@ -178,6 +205,13 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
         emit Unpaused(msg.sender);
     }
 
+    /// @notice Reverts while the protocol is paused
+    /// @dev Device wallets and eSIM wallets call this rather than reading `paused` and reverting
+    ///      themselves, so the revert reason is the same wherever it comes from.
+    function requireNotPaused() external view {
+        if(paused) revert Errors.ProtocolPaused();
+    }
+
     /// @notice Sets the price ceiling eSIM wallets fall back to when they hold none of their own
     /// @dev Owner and not admin, deliberately. The admin is the party this ceiling constrains, so
     ///      letting it raise its own limit would leave the ceiling meaningless. Setting zero
@@ -188,10 +222,16 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
         emit DefaultDataBundlePriceCapUpdated(_cap);
     }
 
-    /// @dev For all the device wallets deployed by the esim wallet admin using the device wallet factory,
-    ///      update the mappings
+    // ---------------------------------------------------------------------------------------------
+    // Device wallet registration
+    // ---------------------------------------------------------------------------------------------
+
+    /// @notice Records a device wallet the factory has just deployed
+    /// @dev Factory only. Writes the identifier, the address and the owner key together, so the
+    ///      three stay consistent with each other.
     /// @param _deviceWallet Address of the device wallet
     /// @param _deviceUniqueIdentifier String unique identifier associated with the device wallet
+    /// @param _deviceWalletOwnerKey X,Y co-ordinates of the P256 key owning the wallet
     function updateDeviceWalletInfo(
         address _deviceWallet,
         string calldata _deviceUniqueIdentifier,
@@ -209,6 +249,10 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
     function updateDeviceWalletOwnerKey(bytes32[2] memory _newOwnerKey) external onlyDeviceWallet {
         _updateDeviceWalletOwnerKey(msg.sender, _newOwnerKey);
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // eSIM wallet binding
+    // ---------------------------------------------------------------------------------------------
 
     /// @notice Binds an eSIM wallet to the calling device wallet and settles any outstanding transfer
     /// @dev The association is a registration: once the registry has named a device wallet for an
@@ -258,27 +302,6 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
         }
     }
 
-    /// @notice Ownership of this contract is never renounced
-    /// @dev The owner is the only caller _authorizeUpgrade accepts, and there is no other route to
-    ///      replace this implementation. Renouncing would freeze the contract on its current logic
-    ///      permanently.
-    function renounceOwnership() public pure override {
-        revert Errors.OwnershipCannotBeRenounced();
-    }
-
-    /// @notice Function to add or update the lazy wallet registry address
-    function addOrUpdateLazyWalletRegistryAddress(
-        address _lazyWalletRegistry
-    ) public onlyOwner returns (address) {
-        if(_lazyWalletRegistry == address(0)) revert Errors.ZeroAddress("_lazyWalletRegistry");
-
-        lazyWalletRegistry = _lazyWalletRegistry;
-
-        emit UpdatedLazyWalletRegistryAddress(_lazyWalletRegistry);
-
-        return lazyWalletRegistry;
-    }
-
     /// @notice Marks an eSIM wallet as being moved from one device wallet to another, or cancels that
     /// @dev Only the flag moves here. The association is a separate fact and keeps naming the device
     ///      wallet that last held the eSIM wallet, so raising standby on a wallet this caller still
@@ -298,7 +321,35 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
         emit ESIMWalletSetOnStandby(_eSIMWalletAddress, _isOnStandby, msg.sender);
     }
 
-    /// @dev Owner based upgrades
+    // ---------------------------------------------------------------------------------------------
+    // Ownership, wiring and upgrades
+    // ---------------------------------------------------------------------------------------------
+
+    /// @notice Points the registry at the lazy wallet registry, which is deployed after it
+    /// @param _lazyWalletRegistry Address of the lazy wallet registry
+    /// @return The address now in force
+    function addOrUpdateLazyWalletRegistryAddress(
+        address _lazyWalletRegistry
+    ) public onlyOwner returns (address) {
+        if(_lazyWalletRegistry == address(0)) revert Errors.ZeroAddress("_lazyWalletRegistry");
+
+        lazyWalletRegistry = _lazyWalletRegistry;
+
+        emit UpdatedLazyWalletRegistryAddress(_lazyWalletRegistry);
+
+        return lazyWalletRegistry;
+    }
+
+    /// @notice Ownership of this contract is never renounced
+    /// @dev The owner is the only caller _authorizeUpgrade accepts, and there is no other route to
+    ///      replace this implementation. Renouncing would freeze the contract on its current logic
+    ///      permanently.
+    function renounceOwnership() public pure override {
+        revert Errors.OwnershipCannotBeRenounced();
+    }
+
+    /// @notice Restricts UUPS upgrades to the owner
+    /// @param newImplementation Address of the implementation being moved to
     function _authorizeUpgrade(address newImplementation)
     internal
     onlyOwner
@@ -311,12 +362,5 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
     ///      copy could only ever disagree with it.
     function upgradeManager() public view returns (address) {
         return owner();
-    }
-
-    /// @notice Reverts while the protocol is paused
-    /// @dev Device wallets and eSIM wallets call this rather than reading `paused` and reverting
-    ///      themselves, so the revert reason is the same wherever it comes from.
-    function requireNotPaused() external view {
-        if(paused) revert Errors.ProtocolPaused();
     }
 }
