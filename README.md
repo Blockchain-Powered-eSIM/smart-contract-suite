@@ -148,6 +148,7 @@ on one chain and a plain EOA on the other.
 - [Registry](./docs/Registry.md)
 - [Registry Helper](./docs/RegistryHelper.md)
 - [Lazy Wallet Registry](./docs/LazyWalletRegistry.md)
+- [Protocol Admin](./docs/admin/ProtocolAdmin.md)
 - [Device Wallet Factory](./docs/device-wallet/DeviceWalletFactory.md)
 - [Device Wallet](./docs/device-wallet/DeviceWallet.md)
 - [eSIM Wallet Factory](./docs/esim-wallet/ESIMWalletFactory.md)
@@ -155,7 +156,10 @@ on one chain and a plain EOA on the other.
 - [Account4337](./docs/aa-helper/Account4337.md)
 - [Upgradeable Beacon](./docs/UpgradableBeacon.md)
 - [Custom Structs](./docs/CustomStructs.md)
+- [Errors](./docs/Errors.md)
 - [eSIM Wallet Interface](./docs/interfaces/IOwnableESIMWallet.md)
+- [Ownable Two-Step Interface](./docs/interfaces/IOwnable2Step.md)
+- [Pausable Interface](./docs/interfaces/IPausable.md)
 - [P256 Verifier](./docs/P256Verifier.md)
 - [WebAuthn](./docs/WebAuthn.md)
 
