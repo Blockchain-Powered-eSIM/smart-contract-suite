@@ -1,22 +1,28 @@
+// SPDX-License-Identifier: MIT
 pragma solidity 0.8.36;
 
-// SPDX-License-Identifier: MIT
-
+// Libraries
 import {FCL_Elliptic_ZZ} from "FreshCryptoLib/FCL_elliptic.sol";
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
+import {Errors} from "../Errors.sol";
 
+// Interfaces
+import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
+
+// Contracts
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
-import {Address} from "@openzeppelin/contracts/utils/Address.sol";
-
-import "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
-
+import {Account4337} from "../aa-helper/Account4337.sol";
 import {Registry} from "../Registry.sol";
 import {ESIMWalletFactory} from "../esim-wallet/ESIMWalletFactory.sol";
 import {ESIMWallet} from "../esim-wallet/ESIMWallet.sol";
-import {Account4337} from "../aa-helper/Account4337.sol";
 import {P256Verifier} from "../P256Verifier.sol";
-import {Errors} from "../Errors.sol";
 
+/// @notice A user's device: an ERC-4337 account that owns the eSIM wallets bought for that device
+/// @dev A beacon proxy deployed by `DeviceWalletFactory`, owned by a P256 key the user holds. It
+///      funds its eSIM wallets, decides which of them may pull ETH, and is the only party that can
+///      move one to another device. Its own owner key rotates through `transferOwnership`, which
+///      also tells the registry so the two records cannot drift apart.
 contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 {
     using Address for address;
 
@@ -51,12 +57,15 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     /// @notice Emitted when the eSIM wallet is removed from this Device Wallet
     event ESIMWalletRemoved(address indexed _eSIMWalletAddress, address indexed _deviceWalletAddress, address indexed _caller);
 
-    /// @notice Emitted when the eSIM being remvoved has no ETH to call back to this device wallet
+    /// @notice Emitted when the eSIM wallet being removed has no ETH to call back
     event NoETHToCallback();
 
     /// @notice Emitted when the eSIM being removed sends back ETH to this device wallet
     event ETHCalledBack(uint256 _amount);
 
+    /// @notice Reverts unless the caller is the registry, the device wallet factory or this wallet
+    /// @dev Private rather than inline in the modifier, so the check is emitted once instead of at
+    ///      every use site. Keep each of these next to the modifier that calls it.
     function _onlyRegistryOrDeviceWalletFactoryOrOwner() private view {
         if(
             msg.sender != address(registry) &&
@@ -67,11 +76,13 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         }
     }
 
+    /// @notice Restricts a call to the registry, the device wallet factory or this wallet itself
     modifier onlyRegistryOrDeviceWalletFactoryOrOwner() {
         _onlyRegistryOrDeviceWalletFactoryOrOwner();
         _;
     }
 
+    /// @notice Reverts unless the caller is this wallet itself or the eSIM wallet being removed
     /// @dev An eSIM wallet may only name itself. Accepting any associated wallet let one of them
     ///      unbind a sibling, strip its ETH access, put it on standby and force its balance back to
     ///      the device wallet. Association of the named wallet is still established by the caller,
@@ -85,11 +96,13 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         }
     }
 
+    /// @notice Restricts a call to this wallet itself or to the eSIM wallet being removed
     modifier onlySelfOrESIMWalletBeingRemoved(address _eSIMWalletAddress) {
         _onlySelfOrESIMWalletBeingRemoved(_eSIMWalletAddress);
         _;
     }
 
+    /// @notice Reverts unless the caller is the registry or the eSIM wallet admin
     /// @dev The registry is checked first because its address is already in a warm slot, while
     ///      reading the admin off it costs a cold proxy hop. The registry is also the caller that
     ///      reaches here most, through the lazy wallet deployment path, so short-circuiting on it
@@ -103,20 +116,25 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         }
     }
 
+    /// @notice Restricts a call to the registry or the eSIM wallet admin
     modifier onlyESIMWalletAdminOrRegistry() {
         _onlyESIMWalletAdminOrRegistry();
         _;
     }
 
+    /// @notice Reverts unless the caller is an eSIM wallet this device wallet holds
     function _onlyAssociatedESIMWallets() private view {
         if (!isValidESIMWallet[msg.sender]) revert Errors.OnlyAssociatedESIMWallets();
     }
 
+    /// @notice Restricts a call to an eSIM wallet this device wallet holds
     modifier onlyAssociatedESIMWallets() {
         _onlyAssociatedESIMWallets();
         _;
     }
 
+    /// @notice Restricts a call to the eSIM wallet admin
+    /// @dev Read from the registry on every call, so a rotation there takes effect immediately.
     modifier onlyESIMWalletAdmin() {
         if(msg.sender != registry.eSIMWalletAdmin()) {
             revert Errors.OnlyESIMWalletAdmin();
@@ -124,13 +142,26 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         _;
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // Initialisation
+    // ---------------------------------------------------------------------------------------------
+
+    /// @param anEntryPoint EntryPoint singleton this wallet validates against
+    /// @param _verifier Contract used to verify WebAuthn assertions
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(
         IEntryPoint anEntryPoint,
         P256Verifier _verifier
     ) Account4337(anEntryPoint, _verifier) {}
 
-    /// @notice Initialises the device wallet and deploys eSIM wallets for any already existing eSIMs
+    /// @notice Wires the wallet to the registry and the factory, and sets its owner key
+    /// @dev Called as the beacon proxy's constructor argument, so it always runs in the same
+    ///      transaction as the deployment. `Account4337.initialize` is internal, and this is the
+    ///      only path to it.
+    /// @param _registry Registry contract this wallet reads the admin, vault and pause flag from
+    /// @param _deviceWalletOwnerKey X,Y co-ordinates of the P256 key owning this wallet
+    /// @param _deviceUniqueIdentifier Identifier the device is reached by
+    /// @param _eSIMWalletFactory Factory this wallet deploys its eSIM wallets through
     function init(
         address _registry,
         bytes32[2] memory _deviceWalletOwnerKey,
@@ -149,9 +180,15 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         __ReentrancyGuard_init();
     }
 
-    /// @notice Allow eSIMWalletAdmin to deploy new eSIM wallet whenever new eSIM is installed
-    /// @dev Don't forget to call setESIMUniqueIdentifierForAnESIMWallet function after deploying eSIM wallet
+    // ---------------------------------------------------------------------------------------------
+    // eSIM wallet deployment
+    // ---------------------------------------------------------------------------------------------
+
+    /// @notice Deploys an eSIM wallet for this device and binds it
+    /// @dev The new wallet has no eSIM identifier yet. That arrives through
+    ///      `setESIMUniqueIdentifierForAnESIMWallet` once the eSIM itself has been created.
     /// @param _hasAccessToETH Set to true if the eSIM wallet is allowed to pull ETH from this wallet.
+    /// @param _salt CREATE2 salt for the new eSIM wallet
     /// @return eSIM wallet address
     function deployESIMWallet(
         bool _hasAccessToETH,
@@ -164,11 +201,16 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         return eSIMWalletAddress;
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // ETH movement
+    // ---------------------------------------------------------------------------------------------
+
     /// @notice Allow the eSIM wallets associated with this device wallet to pay ETH for data bundles
     /// @dev Instead of pulling the ETH into the eSIM wallet and then sending to the vault,
     ///      the eSIM wallet can directly request the device wallet to pay ETH for the data bundles
-    /// NOTE This function is not yet being used by the eSIM wallet. If not needed, this might be removed in future
+    ///      Not called by the eSIM wallet today, and a candidate for removal if it stays unused.
     /// @param _amount Amount of ETH to pull
+    /// @return The amount paid
     function payETHForDataBundles(uint256 _amount) external onlyAssociatedESIMWallets nonReentrant returns (uint256) {
         registry.requireNotPaused();
         if(_amount == 0) revert Errors.ZeroAmount();
@@ -183,7 +225,10 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     }
 
     /// @notice Allow the eSIM wallets associated with this device wallet to pull ETH (for data bundles)
+    /// @dev Refused while the protocol is paused, and refused for a wallet whose ETH access the
+    ///      owner has revoked.
     /// @param _amount Amount of ETH to pull
+    /// @return The amount pulled
     function pullETH(uint256 _amount) external onlyAssociatedESIMWallets nonReentrant returns (uint256) {
         registry.requireNotPaused();
         if(_amount == 0) revert Errors.ZeroAmount();
@@ -193,6 +238,10 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
 
         return _amount;
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // Owner key rotation
+    // ---------------------------------------------------------------------------------------------
 
     /// @inheritdoc Account4337
     /// @dev The registry holds its own record of which key owns this wallet, and the deploy paths
@@ -216,10 +265,16 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         return updatedOwner;
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // eSIM wallet management
+    // ---------------------------------------------------------------------------------------------
+
     /// @notice Allow wallet owner or admin to set unique identifier for their eSIM wallet
-    /// @dev Allow lazy wallet registry to call the function for fiat users who later decided to get a smart wallet
+    /// @dev The registry is also a caller, which is how a wallet deployed on the lazy path gets its
+    ///      identifier in the same transaction as its deployment.
     /// @param _eSIMWalletAddress Address of the eSIM wallet smart contract
     /// @param _eSIMUniqueIdentifier String unique identifier for the eSIM wallet
+    /// @return The identifier now written on the eSIM wallet
     function setESIMUniqueIdentifierForAnESIMWallet(
         address _eSIMWalletAddress,
         string calldata _eSIMUniqueIdentifier
@@ -290,7 +345,11 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         }
     }
 
-    /// @notice Internal function for binding eSIM wallet with the device wallet
+    /// @notice Binds an eSIM wallet to this device wallet and records it with the registry
+    /// @dev Refuses a wallet this device wallet does not already own, so binding cannot run ahead
+    ///      of the ownership handover.
+    /// @param _eSIMWalletAddress Address of the eSIM wallet to bind
+    /// @param _hasAccessToETH True if it may pull ETH from this device wallet
     function _addESIMWallet(
         address _eSIMWalletAddress,
         bool _hasAccessToETH
@@ -317,6 +376,14 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         emit ESIMWalletAdded(_eSIMWalletAddress, _hasAccessToETH, msg.sender);
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // ETH transfers and key checks
+    // ---------------------------------------------------------------------------------------------
+
+    /// @notice Sends ETH out of this wallet, reverting if the call fails
+    /// @dev A zero amount is a no-op rather than a revert.
+    /// @param _recipient Address receiving the ETH
+    /// @param _amount Amount in wei
     function _transferETH(address _recipient, uint256 _amount) internal virtual {
         uint256 balance = address(this).balance;
         if(_amount > balance) revert Errors.InsufficientBalance(balance, _amount);
@@ -345,7 +412,9 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     }
 
     /// @notice Fetches the vault address (that receives payment for data bundles) from the device wallet factory
-    /// @dev Mostly used by the associated eSIM wallets for reference
+    /// @dev Read through to the registry rather than cached, so a vault change reaches every
+    ///      wallet at once. The associated eSIM wallets call this before paying.
+    /// @return The vault address
     function getVaultAddress() public view returns (address) {
         return registry.vault();
     }
