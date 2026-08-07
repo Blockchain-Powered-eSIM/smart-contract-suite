@@ -15,6 +15,26 @@ import {Errors} from "../Errors.sol";
 
 /// @notice Contract for deploying a new eSIM wallet
 contract ESIMWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable {
+
+    /// @notice Address of the registry contract
+    Registry public registry;
+
+    /// @notice Upgradeable beacon that points to the correct eSIM wallet logic contract
+    /// @dev    Just updating the eSIM wallet implementation address in this contract resolves
+    ///         the issue of manually updating each eSIM wallet proxy with a new implementation
+    /// eSIM Wallet proxies (Beacon Proxies) --> beacon (Upgradeable Beacon) --> eSIM wallet implementation (logic contract)
+    /**
+        eSIM wallet beacon proxy -------
+                                        |
+        eSIM wallet beacon proxy ------- -------> beacon (Upgradeable beacon) -------> eSIM wallet implementation
+                                        |
+        eSIM wallet beacon proxy -------
+    */
+    UpgradeableBeacon public beacon;
+
+    /// @notice Set to true if eSIM wallet address is deployed using the factory, false otherwise
+    mapping(address eSIMWalletAddress => bool isDeployed) public isESIMWalletDeployed;
+
     /// @notice Emitted when the eSIM wallet factory is deployed
     event ESIMWalletFactorydeployed(
         address indexed _upgradeManager,
@@ -37,25 +57,6 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgrad
     /// @notice Emitted when the registry is added to the factory contract
     event AddedRegistry(address indexed registry);
 
-    /// @notice Address of the registry contract
-    Registry public registry;
-
-    /// @notice Upgradeable beacon that points to the correct eSIM wallet logic contract
-    /// @dev    Just updating the eSIM wallet implementation address in this contract resolves
-    ///         the issue of manually updating each eSIM wallet proxy with a new implementation
-    /// eSIM Wallet proxies (Beacon Proxies) --> beacon (Upgradeable Beacon) --> eSIM wallet implementation (logic contract)
-    /**
-        eSIM wallet beacon proxy -------
-                                        |
-        eSIM wallet beacon proxy ------- -------> beacon (Upgradeable beacon) -------> eSIM wallet implementation
-                                        |
-        eSIM wallet beacon proxy -------    
-    */
-    UpgradeableBeacon public beacon;
-
-    /// @notice Set to true if eSIM wallet address is deployed using the factory, false otherwise
-    mapping(address eSIMWalletAddress => bool isDeployed) public isESIMWalletDeployed;
-
     modifier onlyRegistryOrDeviceWalletFactoryOrDeviceWallet() {
         if(
             msg.sender != address(registry) &&
@@ -66,7 +67,7 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgrad
         }
         _;
     }
-    
+
     /// @dev Locks the implementation contract itself. Without this, anyone can call initialize
     ///      directly on the implementation, own it, and make it deploy a beacon it controls. The
     ///      proxy is unaffected either way, but an owned implementation is a trap for any later
@@ -74,21 +75,6 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgrad
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
-    }
-
-    /// @dev Owner based upgrades for UUPS eSIM wallet factory
-    function _authorizeUpgrade(address newImplementation)
-    internal
-    override
-    onlyOwner
-    {}
-
-    /// @notice Ownership of this contract is never renounced
-    /// @dev The owner is the only caller _authorizeUpgrade accepts, and this contract owns the
-    ///      beacon, so it is also the only route to updateESIMWalletImplementation. Renouncing
-    ///      would freeze every eSIM wallet on its current logic permanently.
-    function renounceOwnership() public pure override {
-        revert Errors.OwnershipCannotBeRenounced();
     }
 
     /// @param _upgradeManager Admin address responsible for upgrading contracts
@@ -178,11 +164,6 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgrad
         return eSIMWalletAddress;
     }
 
-    /// @notice Public function to get the current eSIM wallet implementation (logic) contract
-    function getCurrentESIMWalletImplementation() public view returns (address) {
-        return beacon.implementation();
-    }
-
     /// @notice Update the eSIM wallet implementation address in the beacon contract
     /// @dev    Beacon Proxy uses the beacon contract to get the current implementation address
     /// @param  _eSIMWalletImpl Address of the new eSIM wallet implementation contract
@@ -197,5 +178,25 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgrad
         emit ESIMWalletImplementationUpdated(getCurrentESIMWalletImplementation());
 
         return getCurrentESIMWalletImplementation();
+    }
+
+    /// @notice Ownership of this contract is never renounced
+    /// @dev The owner is the only caller _authorizeUpgrade accepts, and this contract owns the
+    ///      beacon, so it is also the only route to updateESIMWalletImplementation. Renouncing
+    ///      would freeze every eSIM wallet on its current logic permanently.
+    function renounceOwnership() public pure override {
+        revert Errors.OwnershipCannotBeRenounced();
+    }
+
+    /// @dev Owner based upgrades for UUPS eSIM wallet factory
+    function _authorizeUpgrade(address newImplementation)
+    internal
+    override
+    onlyOwner
+    {}
+
+    /// @notice Public function to get the current eSIM wallet implementation (logic) contract
+    function getCurrentESIMWalletImplementation() public view returns (address) {
+        return beacon.implementation();
     }
 }
