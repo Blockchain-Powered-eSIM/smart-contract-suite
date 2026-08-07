@@ -7,7 +7,7 @@ import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/U
 import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 
 import {RegistryHelper} from "./RegistryHelper.sol";
-import {IPausable} from "./admin/ProtocolAdmin.sol";
+import {IPausable} from "./interfaces/IPausable.sol";
 import {DeviceWalletFactory} from "./device-wallet/DeviceWalletFactory.sol";
 import {ESIMWalletFactory} from "./esim-wallet/ESIMWalletFactory.sol";
 import {ESIMWallet} from "./esim-wallet/ESIMWallet.sol";

@@ -4,21 +4,8 @@ pragma solidity 0.8.36;
 
 import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
 
-/// @notice Minimal view of the two-step ownership handover the protocol contracts use
-interface IOwnable2Step {
-    /// @notice Completes a handover the current owner already offered to the caller
-    function acceptOwnership() external;
-
-    /// @notice Address the current owner has offered ownership to, or zero
-    /// @return The nominated address
-    function pendingOwner() external view returns (address);
-}
-
-/// @notice Minimal view of the pause a guardian is allowed to release
-interface IPausable {
-    /// @notice Clears the pause
-    function unpause() external;
-}
+import {IOwnable2Step} from "../interfaces/IOwnable2Step.sol";
+import {IPausable} from "../interfaces/IPausable.sol";
 
 /// @notice Owner of the four upgradeable protocol contracts, with a delay on every change
 /// @dev Replaces the single externally owned account that owns `Registry`, `LazyWalletRegistry`,
