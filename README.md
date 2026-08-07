@@ -3,8 +3,7 @@
 ![](./resources/KokioSCWithBG.png)
 
 Onchain wallets for eSIM data plans. A phone gets one smart wallet controlled by a passkey, and
-every eSIM on that phone gets its own wallet that buys data bundles and keeps the record of what it
-bought.
+every eSIM on that phone gets its own wallet that buys data bundles and keeps the record of what it bought.
 
 The wallets are ERC-4337 accounts. Signatures are WebAuthn assertions over a P256 key held in the
 device's secure enclave, so no seed phrase appears anywhere in the flow.
@@ -12,8 +11,7 @@ device's secure enclave, so no seed phrase appears anywhere in the flow.
 ## Architecture
 
 Two proxy layers, and most of the risk sits in them. Four UUPS singletons hold protocol state and
-upgrade one at a time. Every wallet is a beacon proxy, so one beacon call moves every wallet of that
-kind at once. There is no per-wallet opt-out, which makes any beacon change a protocol-wide upgrade.
+upgrade one at a time. Every wallet is a beacon proxy, so one beacon call moves every wallet of that kind at once. There is no per-wallet opt-out, which makes any beacon change a protocol-wide upgrade.
 
 | Contract | What it does | Pattern |
 |---|---|---|
@@ -32,8 +30,7 @@ kind at once. There is no per-wallet opt-out, which makes any beacon change a pr
 | `CustomStructs` | Structs shared across contracts | Types |
 | `interfaces/` | `IPausable` and `IOwnable2Step`, the two calls `ProtocolAdmin` makes back into the protocol | Interfaces |
 
-A backend server generates the device and eSIM identifiers and writes them into the wallets. That is
-what ties an onchain wallet to a provisioned eSIM.
+A backend server generates the device and eSIM identifiers and writes them into the wallets. That is what ties an onchain wallet to a provisioned eSIM.
 
 ## Quickstart
 
@@ -49,10 +46,9 @@ forge test
 This repo does not compile without via-IR. `via_ir = true` is already in `foundry.toml`, so plain
 `forge` commands pick it up. A cold build takes about 30 seconds.
 
-Dependencies are git submodules under `lib/`. Hardhat is wired up through
-`@nomicfoundation/hardhat-foundry` and compiles the same sources, so `npx hardhat compile` produces
-byte-identical bytecode. That parity depends on `bytecode_hash = "none"` in `foundry.toml` and
-`metadata.bytecodeHash: "none"` in `hardhat.config.js`. Removing either breaks it.
+Dependencies are git submodules under `lib/`.
+Hardhat is wired up through `@nomicfoundation/hardhat-foundry` and compiles the same sources, so `npx hardhat compile` produces byte-identical bytecode.
+That parity depends on `bytecode_hash = "none"` in `foundry.toml` and `metadata.bytecodeHash: "none"` in `hardhat.config.js`. Removing either breaks it.
 
 ## Testing
 
@@ -67,11 +63,10 @@ byte-identical bytecode. That parity depends on `bytecode_hash = "none"` in `fou
 | `test/foundry/fork/` | 1 | A user operation through the deployed EntryPoint on both chains |
 
 Branch coverage is 94.27%, or 181 of 192 arms, with `WebAuthn` at 80% the lowest and
-`RegistryHelper`, `Account4337` and `ProtocolAdmin` at 100%. Measure it with
-`script/branch-coverage.py` rather than reading forge's own percentage:
+`RegistryHelper`, `Account4337` and `ProtocolAdmin` at 100%.
+Measure it with `script/branch-coverage.py` rather than reading forge's own percentage:
 `forge coverage --ir-minimum` does not count `require(cond, "string")` as a branch, so those sites
-report zero hits on both arms however often they run. The contracts use custom errors throughout, so
-nothing is currently excluded, but the raw number stops meaning anything the moment a `require`
+report zero hits on both arms however often they run. The contracts use custom errors throughout, so nothing is currently excluded, but the raw number stops meaning anything the moment a `require`
 string is added.
 
 ```bash
@@ -89,17 +84,14 @@ The long invariant campaign is a separate profile, run before a release rather t
 FOUNDRY_PROFILE=campaign forge test --match-path "test/foundry/invariant-testing/*"
 ```
 
-Two gas baselines, measuring different things. `.gas-snapshot` is the whole-test-body figure, useful
-as a regression tripwire and not as a protocol gas number, since a row can include whatever that
-test deployed. `snapshots/*.json` is per operation, written by the tests under `test/foundry/gas/`
-and rewritten by any ordinary `forge test`.
+Two gas baselines, measuring different things. `.gas-snapshot` is the whole-test-body figure, useful as a regression tripwire and not as a protocol gas number, since a row can include whatever that test deployed.
+`snapshots/*.json` is per operation, written by the tests under `test/foundry/gas/` and rewritten by any ordinary `forge test`.
 
 ## Security
 
-**Audit.** Reviewed by CD Security in March 2025. The report is in
-[audits/2025-03-CDSecurity.pdf](./audits/2025-03-CDSecurity.pdf).
+**Audit.** Reviewed by CD Security in March 2025. The report is in [audits/2025-03-CDSecurity.pdf](./audits/2025-03-CDSecurity.pdf).
 
-**Formal verification.** Six Certora specs, 51 rules, all clean.
+**Formal verification.** Six Certora specs, 51 rules.
 
 | Spec | Rules | Subject |
 |---|---|---|
@@ -110,12 +102,9 @@ and rewritten by any ordinary `forge test`.
 | `DeviceWallet.spec` | 8 | Owner key, eSIM wallet set, ETH access flags |
 | `RegistryCrossContract.spec` | 4 | `Registry`, `DeviceWallet` and `ESIMWallet` agreeing on who holds an eSIM wallet |
 
-Three caveats attach to every proof. Loops unroll three times, so a result covers batches of at most
-three rather than all batches. Hashing of unbounded arguments is assumed within 224 bytes. External
-calls are summarised one signature at a time.
+Three caveats attach to every proof. Loops unroll three times, so a result covers batches of at most three rather than all batches. Hashing of unbounded arguments is assumed within 224 bytes. External calls are summarised one signature at a time.
 
-`LazyWalletRegistry` has no spec, and the reason is the prover rather than the property: every
-mapping in it is string-keyed, and Certora's storage analysis fails on any method taking a `string`.
+`LazyWalletRegistry` has no spec, and the reason is every mapping in it is string-keyed, and Certora's storage analysis fails on any method taking a `string`.
 Its properties are carried by Foundry invariants instead.
 
 **Static analysis.** Slither and Aderyn run before anything substantial is committed:
@@ -183,12 +172,3 @@ on one chain and a plain EOA on the other.
    through the device wallet, and returns a QR code for activation.
 5. **Use the device wallet.** It holds ETH and ERC-20 tokens and can be used as an ordinary wallet.
    Funds can be withdrawn at any time.
-
-## Future work
-
-**Asset recovery.** Owners can transfer a device or eSIM wallet to another address today, but a lost
-device means a lost wallet. Assigning recovery rights to a secondary keystore would fix that.
-
-**Device-bound identity.** The device identifier is derived from device parameters. Binding it to
-the secure enclave instead would make the wallet genuinely device-bound rather than
-device-associated.
