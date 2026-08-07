@@ -2,13 +2,10 @@ pragma solidity 0.8.36;
 
 // SPDX-License-Identifier: MIT
 
-import "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
-import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {DeviceWalletFactory} from "./device-wallet/DeviceWalletFactory.sol";
 import {ESIMWalletFactory} from "./esim-wallet/ESIMWalletFactory.sol";
 import {DeviceWallet} from "./device-wallet/DeviceWallet.sol";
 import {ESIMWallet} from "./esim-wallet/ESIMWallet.sol";
-import {P256Verifier} from "./P256Verifier.sol";
 import {Errors} from "./Errors.sol";
 import "./CustomStructs.sol";
 

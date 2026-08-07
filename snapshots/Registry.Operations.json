@@ -3,8 +3,8 @@
   "pause": "30702",
   "requestAdminUpdate": "31634",
   "setDefaultDataBundlePriceCap": "30732",
-  "toggleESIMWalletStandbyStatus: off standby": "3641",
-  "toggleESIMWalletStandbyStatus: onto standby": "23541",
+  "toggleESIMWalletStandbyStatus: off standby": "3632",
+  "toggleESIMWalletStandbyStatus: onto standby": "23532",
   "unpause": "4056",
   "updateDeviceWalletInfo: first device, cold storage": "122094",
   "updateDeviceWalletInfo: second device, warm storage": "115594"

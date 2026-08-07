@@ -4,6 +4,8 @@ pragma solidity 0.8.36;
 
 import "forge-std/Test.sol";
 
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+
 import "contracts/CustomStructs.sol";
 import {Errors} from "contracts/Errors.sol";
 

@@ -76,6 +76,19 @@ contract DeviceWalletGuardsTest is DeployerBase {
         _initialiseDirectly(beacon, address(0), customDeviceUniqueIdentifiers[0]);
     }
 
+    /// @notice A wallet cannot be initialised without an eSIM wallet factory
+    /// @dev There is no setter, so a zero would leave a device wallet that can never deploy an eSIM
+    ///      wallet, which is the only thing a device wallet exists to do.
+    function test_init_rejectsAZeroESIMWalletFactory() public {
+        address beacon = address(deviceWalletFactory.beacon());
+
+        vm.expectRevert(abi.encodeWithSelector(Errors.ZeroAddress.selector, "_eSIMWalletFactory"));
+        new BeaconProxy(
+            beacon,
+            abi.encodeCall(DeviceWallet.init, (address(registry), pubKey1, customDeviceUniqueIdentifiers[0], address(0)))
+        );
+    }
+
     /// @notice A wallet cannot be initialised without a device identifier
     function test_init_rejectsAnEmptyDeviceIdentifier() public {
         address beacon = address(deviceWalletFactory.beacon());

@@ -94,7 +94,7 @@ contract ProtocolAdmin is TimelockController {
     /// @notice The contract was not offered ownership of this target
     error OwnershipNotOffered(address target);
 
-    /// @param _minDelay Delay new operations wait before they can be executed
+    /// @param _initialDelay Delay new operations wait before they can be executed
     /// @param _minDelayFloor Shortest delay `updateDelay` can ever bring the contract down to
     /// @param _proposers Accounts that may schedule operations, and that may also cancel them
     /// @param _cancellers Further accounts that may cancel, holding no other role
@@ -116,13 +116,13 @@ contract ProtocolAdmin is TimelockController {
     ///      `_guardians` is not: there would be no way to add one without the delay it exists to
     ///      skip, and no way at all to break a compromised canceller loose.
     constructor(
-        uint256 _minDelay,
+        uint256 _initialDelay,
         uint256 _minDelayFloor,
         address[] memory _proposers,
         address[] memory _cancellers,
         address[] memory _guardians
-    ) TimelockController(_minDelay, _proposers, new address[](0), address(0)) {
-        if(_minDelay < _minDelayFloor) revert DelayBelowFloor(_minDelay, _minDelayFloor);
+    ) TimelockController(_initialDelay, _proposers, new address[](0), address(0)) {
+        if(_initialDelay < _minDelayFloor) revert DelayBelowFloor(_initialDelay, _minDelayFloor);
         if(_guardians.length == 0) revert NoGuardians();
 
         for(uint256 i = 0; i < _proposers.length; ++i) {

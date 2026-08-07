@@ -22,9 +22,12 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
     event ESIMBindedWithDevice(string _eSIMUniqueIdentifier, string _deviceUniqueIdentifier);
 
     /// @notice Emitted when the Lazy wallet is deployed
+    /// @dev The device wallet is indexed so an indexer can follow one device without reading every
+    ///      log. The two string arrays are left unindexed on purpose: indexing a dynamic type stores
+    ///      its hash instead of its value, which no consumer of these can use.
     event LazyWalletDeployed(
         bytes32[2] _deviceOwnerPublicKey,
-        address deviceWallet,
+        address indexed deviceWallet,
         string _deviceUniqueIdentifier,
         address[] eSIMWallets,
         string[] _eSIMUniqueIdentifiers

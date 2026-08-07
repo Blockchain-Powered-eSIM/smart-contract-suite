@@ -3,11 +3,11 @@ pragma solidity 0.8.36;
 // SPDX-License-Identifier: MIT
 
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 
 import {RegistryHelper} from "./RegistryHelper.sol";
+import {IPausable} from "./admin/ProtocolAdmin.sol";
 import {DeviceWalletFactory} from "./device-wallet/DeviceWalletFactory.sol";
 import {ESIMWalletFactory} from "./esim-wallet/ESIMWalletFactory.sol";
 import {ESIMWallet} from "./esim-wallet/ESIMWallet.sol";
@@ -16,7 +16,11 @@ import {Errors} from "./Errors.sol";
 import "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 
 /// @notice Contract for deploying the factory contracts and maintaining registry
-contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, RegistryHelper {
+/// @dev `IPausable` is declared so the compiler checks the one signature `ProtocolAdmin` calls
+///      through it. A guardian releases a pause with no delay, so the two drifting apart would only
+///      show as a revert during an incident. `pause()` stays outside the interface deliberately: it
+///      is the hot admin key's lever, while releasing it is the timelock's.
+contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, RegistryHelper, IPausable {
 
     /// @notice Entry point contract address (one entryPoint per chain)
     IEntryPoint public entryPoint;
@@ -61,7 +65,7 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
     uint256 public defaultDataBundlePriceCap;
 
     modifier onlyDeviceWallet() {
-        if(isDeviceWalletValid[msg.sender] != true) revert Errors.OnlyDeviceWallet();
+        if(!isDeviceWalletValid[msg.sender]) revert Errors.OnlyDeviceWallet();
         _;
     }
 

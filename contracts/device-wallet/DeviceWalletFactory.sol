@@ -4,7 +4,6 @@ pragma solidity 0.8.36;
 
 import {FCL_Elliptic_ZZ} from "FreshCryptoLib/FCL_elliptic.sol";
 
-import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
@@ -13,7 +12,6 @@ import {UpgradeableBeacon} from "@openzeppelin/contracts/proxy/beacon/Upgradeabl
 
 import "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 import {Create2} from "@openzeppelin/contracts/utils/Create2.sol";
-import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 import {Registry} from "../Registry.sol";
 import {DeviceWallet} from "./DeviceWallet.sol";
@@ -139,6 +137,9 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     ) external initializer {
         if(_vault == address(0)) revert Errors.ZeroAddress("_vault");
         if(_upgradeManager == address(0)) revert Errors.ZeroAddress("_upgradeManager");
+        if(address(_entryPoint) == address(0)) revert Errors.ZeroAddress("_entryPoint");
+        if(address(_verifier) == address(0)) revert Errors.ZeroAddress("_verifier");
+        if(_eSIMWalletFactoryAddress == address(0)) revert Errors.ZeroAddress("_eSIMWalletFactoryAddress");
 
         vault = _vault;
         entryPoint = _entryPoint;
@@ -482,8 +483,12 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     ) external onlyAdminOrRegistry {
         if(deviceWalletInfoAdded[_deviceWallet]) revert Errors.DeviceWalletInfoAlreadyAdded(_deviceWallet);
         if(bytes(_deviceUniqueIdentifier).length == 0) revert Errors.EmptyDeviceIdentifier();
-        registry.updateDeviceWalletInfo(address(_deviceWallet), _deviceUniqueIdentifier, _deviceWalletOwnerKey);
+
+        // Flag set before the call so a second pass through here cannot reach the registry at all.
+        // The registry already rejects a duplicate identifier or key, so this closes the window
+        // rather than being the only thing holding it shut.
         deviceWalletInfoAdded[_deviceWallet] = true;
+        registry.updateDeviceWalletInfo(address(_deviceWallet), _deviceUniqueIdentifier, _deviceWalletOwnerKey);
     }
 
     /**

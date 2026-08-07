@@ -5,6 +5,8 @@ pragma solidity 0.8.36;
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+
 import "contracts/esim-wallet/ESIMWalletFactory.sol";
 import "contracts/CustomStructs.sol";
 
@@ -30,6 +32,42 @@ contract ESIMWalletFactoryTest is DeployerBase {
         vm.stopPrank();
 
         assertEq(address(eSIMWalletFactory.registry()), address(registry), "Registry address should have been set");
+    }
+
+    /// @notice A factory without an owner cannot be initialised
+    /// @dev The owner is the only caller that can upgrade this contract or the beacon under it, so
+    ///      a zero here would leave both frozen with no way back.
+    function test_initialize_rejectsAZeroUpgradeManager() public {
+        ESIMWalletFactory implementation = new ESIMWalletFactory();
+
+        vm.expectRevert(abi.encodeWithSelector(Errors.ZeroAddress.selector, "_upgradeManager"));
+        new ERC1967Proxy(
+            address(implementation),
+            abi.encodeCall(implementation.initialize, (address(eSIMWalletImpl), address(0)))
+        );
+    }
+
+    /// @notice The registry address cannot be set to zero
+    /// @dev It can only be set once, so a zero would close the deploy path permanently.
+    function test_addRegistryAddress_rejectsTheZeroAddress() public {
+        ESIMWalletFactory implementation = new ESIMWalletFactory();
+        ESIMWalletFactory factory = ESIMWalletFactory(address(new ERC1967Proxy(
+            address(implementation),
+            abi.encodeCall(implementation.initialize, (address(eSIMWalletImpl), upgradeManager))
+        )));
+
+        vm.prank(upgradeManager);
+        vm.expectRevert(abi.encodeWithSelector(Errors.ZeroAddress.selector, "_registryContractAddress"));
+        factory.addRegistryAddress(address(0));
+    }
+
+    /// @notice The beacon cannot be pointed at the zero address
+    /// @dev Every eSIM wallet reads its logic through this beacon, so a zero would brick all of
+    ///      them at once.
+    function test_updateESIMWalletImplementation_rejectsTheZeroAddress() public {
+        vm.prank(eSIMWalletFactory.owner());
+        vm.expectRevert(abi.encodeWithSelector(Errors.ZeroAddress.selector, "_eSIMWalletImpl"));
+        eSIMWalletFactory.updateESIMWalletImplementation(address(0));
     }
 
     function test_deployESIMWallet_unauthorised() public {

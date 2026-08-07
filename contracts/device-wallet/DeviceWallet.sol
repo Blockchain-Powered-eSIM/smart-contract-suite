@@ -5,14 +5,12 @@ pragma solidity 0.8.36;
 import {FCL_Elliptic_ZZ} from "FreshCryptoLib/FCL_elliptic.sol";
 
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 
 import "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 
 import {Registry} from "../Registry.sol";
-import {DeviceWalletFactory} from "./DeviceWalletFactory.sol";
 import {ESIMWalletFactory} from "../esim-wallet/ESIMWalletFactory.sol";
 import {ESIMWallet} from "../esim-wallet/ESIMWallet.sol";
 import {Account4337} from "../aa-helper/Account4337.sol";
@@ -140,6 +138,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         address _eSIMWalletFactory
     ) external initializer {
         if(_registry == address(0)) revert Errors.ZeroAddress("_registry");
+        if(_eSIMWalletFactory == address(0)) revert Errors.ZeroAddress("_eSIMWalletFactory");
         if(bytes(_deviceUniqueIdentifier).length == 0) revert Errors.EmptyDeviceIdentifier();
 
         registry = Registry(_registry);

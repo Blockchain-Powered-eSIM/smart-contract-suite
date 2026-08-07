@@ -81,6 +81,29 @@ contract DeviceWalletFactoryGuardsTest is DeployerBase {
         );
     }
 
+    /// @notice Calls initialize with one of the three wiring addresses replaced
+    /// @param _eSIMWalletFactory The eSIM wallet factory address to pass
+    /// @param _entryPoint The entry point to pass
+    /// @param _verifier The P256 verifier to pass
+    /// @param _parameter The name the revert should carry
+    function _expectWiringToRevert(
+        address _eSIMWalletFactory,
+        IEntryPoint _entryPoint,
+        P256Verifier _verifier,
+        string memory _parameter
+    ) internal {
+        DeviceWalletFactory implementation = new DeviceWalletFactory();
+
+        vm.expectRevert(abi.encodeWithSelector(Errors.ZeroAddress.selector, _parameter));
+        new ERC1967Proxy(
+            address(implementation),
+            abi.encodeCall(
+                implementation.initialize,
+                (address(deviceWalletImpl), vault, upgradeManager, _eSIMWalletFactory, _entryPoint, _verifier)
+            )
+        );
+    }
+
     // ---------------------------------------------------------------------------------------------
     // Wiring
     // ---------------------------------------------------------------------------------------------
@@ -95,6 +118,24 @@ contract DeviceWalletFactoryGuardsTest is DeployerBase {
     /// @dev The owner is the only caller that can upgrade this contract or the beacon under it.
     function test_initialize_rejectsAZeroUpgradeManager() public {
         _expectInitializeToRevert(vault, address(0), abi.encodeWithSelector(Errors.ZeroAddress.selector, "_upgradeManager"));
+    }
+
+    /// @notice The three wiring addresses cannot be zero either
+    /// @dev None of the three has a setter, so recovering from a zero here needs an upgrade. The
+    ///      entry point and the verifier are worse than the others: both are baked into the wallet
+    ///      implementation at construction, so every wallet the factory then deploys is broken.
+    function test_initialize_rejectsAZeroEntryPoint() public {
+        _expectWiringToRevert(address(eSIMWalletFactory), IEntryPoint(payable(address(0))), p256Verifier, "_entryPoint");
+    }
+
+    /// @notice A factory cannot be initialised without a signature verifier
+    function test_initialize_rejectsAZeroVerifier() public {
+        _expectWiringToRevert(address(eSIMWalletFactory), typeCastEntryPoint, P256Verifier(address(0)), "_verifier");
+    }
+
+    /// @notice A factory cannot be initialised without an eSIM wallet factory
+    function test_initialize_rejectsAZeroESIMWalletFactory() public {
+        _expectWiringToRevert(address(0), typeCastEntryPoint, p256Verifier, "_eSIMWalletFactoryAddress");
     }
 
     /// @notice The registry address cannot be set to zero
