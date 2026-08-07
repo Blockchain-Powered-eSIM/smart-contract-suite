@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.36;
 
+/// @notice Every custom error the protocol reverts with, in one place
+/// @dev An interface rather than a library so each contract reaches them as `Errors.Name` without
+///      inheriting anything. Grouped by the contract that raises them; several are shared, and the
+///      comment above each group names who uses it.
 interface Errors {
     // Any contract rejecting a zero address argument. The parameter name identifies which
     // argument was zero, since a single function often checks several.
