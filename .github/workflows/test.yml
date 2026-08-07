@@ -62,3 +62,12 @@ jobs:
         run: |
           git diff --exit-code -- snapshots/
         id: operation-snapshot
+
+      # Four UUPS singletons and every wallet behind two beacons, so a slot that moves reaches
+      # live state. The generator strips ast ids, which renumber on edits that touch no storage,
+      # so a difference here is a real layout change.
+      - name: Check storage layouts
+        run: |
+          python3 script/storage-layouts.py
+          git diff --exit-code -- storage-layouts/
+        id: storage-layout

@@ -1,0 +1,68 @@
+{
+  "contract": "contracts/LazyWalletRegistry.sol:LazyWalletRegistry",
+  "storage": [
+    {
+      "slot": "0",
+      "offset": 0,
+      "bytes": "20",
+      "label": "_retiredUpgradeManager",
+      "type": "t_address"
+    },
+    {
+      "slot": "1",
+      "offset": 0,
+      "bytes": "20",
+      "label": "registry",
+      "type": "t_contract(Registry)"
+    },
+    {
+      "slot": "2",
+      "offset": 0,
+      "bytes": "32",
+      "label": "deviceIdentifierToESIMDetails",
+      "type": "t_mapping(t_string_memory_ptr,t_mapping(t_string_memory_ptr,t_array(t_struct(DataBundleDetails)_storage)dyn_storage))"
+    },
+    {
+      "slot": "3",
+      "offset": 0,
+      "bytes": "32",
+      "label": "eSIMIdentifierToDeviceIdentifier",
+      "type": "t_mapping(t_string_memory_ptr,t_string_storage)"
+    },
+    {
+      "slot": "4",
+      "offset": 0,
+      "bytes": "32",
+      "label": "eSIMIdentifiersAssociatedWithDeviceIdentifier",
+      "type": "t_mapping(t_string_memory_ptr,t_array(t_string_storage)dyn_storage)"
+    },
+    {
+      "slot": "5",
+      "offset": 0,
+      "bytes": "32",
+      "label": "historyEntriesCopied",
+      "type": "t_mapping(t_string_memory_ptr,t_uint256)"
+    },
+    {
+      "slot": "6",
+      "offset": 0,
+      "bytes": "32",
+      "label": "lazyDeployedESIMWallet",
+      "type": "t_mapping(t_string_memory_ptr,t_address)"
+    },
+    {
+      "slot": "7",
+      "offset": 0,
+      "bytes": "32",
+      "label": "eSIMWalletsDeployed",
+      "type": "t_mapping(t_string_memory_ptr,t_uint256)"
+    },
+    {
+      "slot": "8",
+      "offset": 0,
+      "bytes": "32",
+      "label": "lazyDeploymentSalt",
+      "type": "t_mapping(t_string_memory_ptr,t_uint256)"
+    }
+  ]
+}

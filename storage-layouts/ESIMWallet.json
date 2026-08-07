@@ -1,0 +1,47 @@
+{
+  "contract": "contracts/esim-wallet/ESIMWallet.sol:ESIMWallet",
+  "storage": [
+    {
+      "slot": "0",
+      "offset": 0,
+      "bytes": "20",
+      "label": "eSIMWalletFactory",
+      "type": "t_address"
+    },
+    {
+      "slot": "1",
+      "offset": 0,
+      "bytes": "32",
+      "label": "eSIMUniqueIdentifier",
+      "type": "t_string_storage"
+    },
+    {
+      "slot": "2",
+      "offset": 0,
+      "bytes": "20",
+      "label": "deviceWallet",
+      "type": "t_contract(DeviceWallet)"
+    },
+    {
+      "slot": "3",
+      "offset": 0,
+      "bytes": "32",
+      "label": "transactionHistory",
+      "type": "t_array(t_struct(DataBundleDetails)_storage)dyn_storage"
+    },
+    {
+      "slot": "4",
+      "offset": 0,
+      "bytes": "20",
+      "label": "newRequestedOwner",
+      "type": "t_address"
+    },
+    {
+      "slot": "5",
+      "offset": 0,
+      "bytes": "32",
+      "label": "dataBundlePriceCap",
+      "type": "t_uint256"
+    }
+  ]
+}

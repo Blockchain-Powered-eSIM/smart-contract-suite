@@ -1,0 +1,54 @@
+{
+  "contract": "contracts/device-wallet/DeviceWalletFactory.sol:DeviceWalletFactory",
+  "storage": [
+    {
+      "slot": "0",
+      "offset": 0,
+      "bytes": "20",
+      "label": "beacon",
+      "type": "t_contract(UpgradeableBeacon)"
+    },
+    {
+      "slot": "1",
+      "offset": 0,
+      "bytes": "20",
+      "label": "entryPoint",
+      "type": "t_contract(IEntryPoint)"
+    },
+    {
+      "slot": "2",
+      "offset": 0,
+      "bytes": "20",
+      "label": "verifier",
+      "type": "t_contract(P256Verifier)"
+    },
+    {
+      "slot": "3",
+      "offset": 0,
+      "bytes": "20",
+      "label": "registry",
+      "type": "t_contract(Registry)"
+    },
+    {
+      "slot": "4",
+      "offset": 0,
+      "bytes": "20",
+      "label": "eSIMWalletFactory",
+      "type": "t_contract(ESIMWalletFactory)"
+    },
+    {
+      "slot": "5",
+      "offset": 0,
+      "bytes": "20",
+      "label": "vault",
+      "type": "t_address"
+    },
+    {
+      "slot": "6",
+      "offset": 0,
+      "bytes": "32",
+      "label": "deviceWalletInfoAdded",
+      "type": "t_mapping(t_address,t_bool)"
+    }
+  ]
+}
