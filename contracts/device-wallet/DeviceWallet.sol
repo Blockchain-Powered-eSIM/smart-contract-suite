@@ -308,8 +308,9 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         isValidESIMWallet[_eSIMWalletAddress] = true;
         canPullETH[_eSIMWalletAddress] = _hasAccessToETH;
 
-        // Inform and update the registry about the newly added eSIM wallet to this device wallet.
-        // The association and the standby flag move together, so one call sets both.
+        // Inform the registry that this device wallet now holds the eSIM wallet. The call writes the
+        // association and, if a release was outstanding, lowers the transit marker. The two records
+        // are independent and this is the only call that touches both.
         registry.bindESIMWallet(_eSIMWalletAddress, address(this));
 
         emit ESIMWalletAdded(_eSIMWalletAddress, _hasAccessToETH, msg.sender);
