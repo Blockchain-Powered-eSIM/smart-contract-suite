@@ -11,67 +11,6 @@ import "./CustomStructs.sol";
 
 contract RegistryHelper {
 
-    event LazyWalletDeployed(
-        address indexed _deviceWallet, 
-        string _deviceUniqueIdentifier, 
-        address indexed _eSIMWallet, 
-        string _eSIMUniqueIdentifier
-    );
-
-    event DeviceWalletInfoUpdated(
-        address indexed _deviceWallet,
-        string _deviceUniqueIdentifier,
-        bytes32[2] _deviceWalletOwnerKey
-    );
-
-    /// @notice Emitted when a device wallet rotates the P256 key that owns it
-    event DeviceWalletOwnerKeyUpdated(
-        address indexed _deviceWallet,
-        bytes32[2] _oldOwnerKey,
-        bytes32[2] _newOwnerKey
-    );
-
-    event UpdatedDeviceWalletassociatedWithESIMWallet(
-        address indexed _eSIMWalletAddress,
-        address indexed _deviceWalletAddress
-    );
-
-    event UpdatedLazyWalletRegistryAddress(
-        address indexed _lazyWalletRegistry
-    );
-
-    event RegistryInitialized(
-        address _eSIMWalletAdmin, 
-        address _vault, 
-        address indexed _upgradeManager, 
-        address indexed _deviceWalletFactory, 
-        address indexed _eSIMWalletFactory
-    );
-
-    /// @notice Emitted when the current admin requests to transfer the admin role to a new address
-    event AdminUpdateRequested(address indexed eSIMWalletAdmin, address indexed _newAdmin);
-
-    /// @notice Emitted when the newly requested admin accepts the role
-    event AdminUpdated(address indexed _newAdmin);
-
-    /// @notice Emitted when the current admin revokes the transfer of the admin role
-    event AdminUpdateRevoked(address indexed _currentAdmin, address indexed _revokedAddress);
-
-    /// @notice Emitted when the admin stops the ETH-moving paths protocol-wide
-    event Paused(address indexed _admin);
-
-    /// @notice Emitted when the owner releases the pause
-    event Unpaused(address indexed _owner);
-
-    /// @notice Emitted when the owner changes the price ceiling eSIM wallets fall back to
-    event DefaultDataBundlePriceCapUpdated(uint256 _cap);
-
-    event ESIMWalletSetOnStandby(
-        address indexed _eSIMWalletAddress,
-        bool _isOnStandby,
-        address indexed _deviceWalletAddress
-    );
-
     /// @notice Address of the Lazy wallet registry
     address public lazyWalletRegistry;
 
@@ -115,6 +54,67 @@ contract RegistryHelper {
     ///      a new variable here has to consume gap slots rather than follow them. One appended
     ///      below moves every Registry variable on the deployed proxies.
     uint256[50] private __gap;
+
+    event LazyWalletDeployed(
+        address indexed _deviceWallet,
+        string _deviceUniqueIdentifier,
+        address indexed _eSIMWallet,
+        string _eSIMUniqueIdentifier
+    );
+
+    event DeviceWalletInfoUpdated(
+        address indexed _deviceWallet,
+        string _deviceUniqueIdentifier,
+        bytes32[2] _deviceWalletOwnerKey
+    );
+
+    /// @notice Emitted when a device wallet rotates the P256 key that owns it
+    event DeviceWalletOwnerKeyUpdated(
+        address indexed _deviceWallet,
+        bytes32[2] _oldOwnerKey,
+        bytes32[2] _newOwnerKey
+    );
+
+    event UpdatedDeviceWalletassociatedWithESIMWallet(
+        address indexed _eSIMWalletAddress,
+        address indexed _deviceWalletAddress
+    );
+
+    event UpdatedLazyWalletRegistryAddress(
+        address indexed _lazyWalletRegistry
+    );
+
+    event RegistryInitialized(
+        address _eSIMWalletAdmin,
+        address _vault,
+        address indexed _upgradeManager,
+        address indexed _deviceWalletFactory,
+        address indexed _eSIMWalletFactory
+    );
+
+    /// @notice Emitted when the current admin requests to transfer the admin role to a new address
+    event AdminUpdateRequested(address indexed eSIMWalletAdmin, address indexed _newAdmin);
+
+    /// @notice Emitted when the newly requested admin accepts the role
+    event AdminUpdated(address indexed _newAdmin);
+
+    /// @notice Emitted when the current admin revokes the transfer of the admin role
+    event AdminUpdateRevoked(address indexed _currentAdmin, address indexed _revokedAddress);
+
+    /// @notice Emitted when the admin stops the ETH-moving paths protocol-wide
+    event Paused(address indexed _admin);
+
+    /// @notice Emitted when the owner releases the pause
+    event Unpaused(address indexed _owner);
+
+    /// @notice Emitted when the owner changes the price ceiling eSIM wallets fall back to
+    event DefaultDataBundlePriceCapUpdated(uint256 _cap);
+
+    event ESIMWalletSetOnStandby(
+        address indexed _eSIMWalletAddress,
+        bool _isOnStandby,
+        address indexed _deviceWalletAddress
+    );
 
     modifier onlyLazyWalletRegistry() {
         if(msg.sender != lazyWalletRegistry) revert Errors.OnlyLazyWalletRegistry();
@@ -228,6 +228,26 @@ contract RegistryHelper {
         return eSIMWallets;
     }
 
+    /// @notice Forwards one batch of pre-deployment purchase history to an eSIM wallet on behalf of
+    ///         the lazy wallet registry
+    /// @dev eSIM wallets accept history from this contract and nothing else, so the copy is routed
+    ///      through here rather than giving them a second address to trust. The lazy wallet
+    ///      registry owns the cursor that decides which entries a batch carries.
+    /// @param _eSIMWallet Wallet receiving the batch
+    /// @param _dataBundleDetails One batch of data bundle purchase details
+    function populateLazyHistory(
+        address _eSIMWallet,
+        DataBundleDetails[] calldata _dataBundleDetails
+    ) external onlyLazyWalletRegistry {
+        // A wallet the registry does not know is invalid to the protocol. Even mid-transfer the
+        // association still points at the last known device wallet, so this is the whole check.
+        if(isESIMWalletValid[_eSIMWallet] == address(0)) {
+            revert Errors.NotAProtocolESIMWallet(_eSIMWallet);
+        }
+
+        ESIMWallet(payable(_eSIMWallet)).populateHistory(_dataBundleDetails);
+    }
+
     /// @notice Deploys one eSIM wallet, binds it to the device wallet and sets its eSIM identifier
     /// @dev Shared by the first batch and every batch after it so the two cannot drift apart. The
     ///      identifier is known up front on this route, unlike the ordinary one, so setting it here
@@ -248,26 +268,6 @@ contract RegistryHelper {
         emit LazyWalletDeployed(_deviceWallet, _deviceUniqueIdentifier, eSIMWallet, _eSIMUniqueIdentifier);
 
         return eSIMWallet;
-    }
-
-    /// @notice Forwards one batch of pre-deployment purchase history to an eSIM wallet on behalf of
-    ///         the lazy wallet registry
-    /// @dev eSIM wallets accept history from this contract and nothing else, so the copy is routed
-    ///      through here rather than giving them a second address to trust. The lazy wallet
-    ///      registry owns the cursor that decides which entries a batch carries.
-    /// @param _eSIMWallet Wallet receiving the batch
-    /// @param _dataBundleDetails One batch of data bundle purchase details
-    function populateLazyHistory(
-        address _eSIMWallet,
-        DataBundleDetails[] calldata _dataBundleDetails
-    ) external onlyLazyWalletRegistry {
-        // A wallet the registry does not know is invalid to the protocol. Even mid-transfer the
-        // association still points at the last known device wallet, so this is the whole check.
-        if(isESIMWalletValid[_eSIMWallet] == address(0)) {
-            revert Errors.NotAProtocolESIMWallet(_eSIMWallet);
-        }
-
-        ESIMWallet(payable(_eSIMWallet)).populateHistory(_dataBundleDetails);
     }
 
     function _updateDeviceWalletInfo(
