@@ -93,8 +93,13 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         _;
     }
 
+    /// @dev `_disableInitializers` rather than an `initializer` modifier. The modifier leaves the
+    ///      version at 1, which a later `reinitializer(2)` would still accept on the implementation
+    ///      itself. This pins it at the maximum so no version can ever run there.
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() initializer {}
+    constructor() {
+        _disableInitializers();
+    }
 
     /// @notice ESIMWallet initialize function to initialise the contract
     /// @dev If _eSIMUniqueIdentifier is empty, the eSIM wallet is being deployed before buying an eSIM
