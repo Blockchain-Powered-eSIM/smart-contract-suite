@@ -1,14 +1,22 @@
+// SPDX-License-Identifier: MIT
 pragma solidity 0.8.36;
 
-// SPDX-License-Identifier: MIT
+// Libraries
+import {Errors} from "./Errors.sol";
 
+// Types
+import {DataBundleDetails, Wallets} from "./CustomStructs.sol";
+
+// Contracts
 import {DeviceWalletFactory} from "./device-wallet/DeviceWalletFactory.sol";
 import {ESIMWalletFactory} from "./esim-wallet/ESIMWalletFactory.sol";
 import {DeviceWallet} from "./device-wallet/DeviceWallet.sol";
 import {ESIMWallet} from "./esim-wallet/ESIMWallet.sol";
-import {Errors} from "./Errors.sol";
-import "./CustomStructs.sol";
 
+/// @notice Storage and the lazy deployment paths that `Registry` inherits
+/// @dev Split out so `Registry` holds the admin and pause logic while the mappings and the calls
+///      into the two factories live here. Only the lazy wallet registry reaches the functions in
+///      this file; everything else goes through `Registry` itself.
 contract RegistryHelper {
 
     /// @notice Address of the Lazy wallet registry
@@ -55,6 +63,7 @@ contract RegistryHelper {
     ///      below moves every Registry variable on the deployed proxies.
     uint256[50] private __gap;
 
+    /// @notice Emitted for each eSIM wallet deployed on behalf of the lazy wallet registry
     event LazyWalletDeployed(
         address indexed _deviceWallet,
         string _deviceUniqueIdentifier,
@@ -62,6 +71,7 @@ contract RegistryHelper {
         string _eSIMUniqueIdentifier
     );
 
+    /// @notice Emitted when a device wallet is first recorded, with its identifier and owner key
     event DeviceWalletInfoUpdated(
         address indexed _deviceWallet,
         string _deviceUniqueIdentifier,
@@ -75,15 +85,18 @@ contract RegistryHelper {
         bytes32[2] _newOwnerKey
     );
 
+    /// @notice Emitted when an eSIM wallet is bound to a device wallet
     event UpdatedDeviceWalletassociatedWithESIMWallet(
         address indexed _eSIMWalletAddress,
         address indexed _deviceWalletAddress
     );
 
+    /// @notice Emitted when the owner points the registry at the lazy wallet registry
     event UpdatedLazyWalletRegistryAddress(
         address indexed _lazyWalletRegistry
     );
 
+    /// @notice Emitted once, when the registry is initialised
     event RegistryInitialized(
         address _eSIMWalletAdmin,
         address _vault,
@@ -110,16 +123,22 @@ contract RegistryHelper {
     /// @notice Emitted when the owner changes the price ceiling eSIM wallets fall back to
     event DefaultDataBundlePriceCapUpdated(uint256 _cap);
 
+    /// @notice Emitted when an eSIM wallet's outstanding transfer is raised or settled
     event ESIMWalletSetOnStandby(
         address indexed _eSIMWalletAddress,
         bool _isOnStandby,
         address indexed _deviceWalletAddress
     );
 
+    /// @notice Restricts a call to the lazy wallet registry
     modifier onlyLazyWalletRegistry() {
         if(msg.sender != lazyWalletRegistry) revert Errors.OnlyLazyWalletRegistry();
         _;
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // Lazy wallet deployment
+    // ---------------------------------------------------------------------------------------------
 
     /// @notice Allow LazyWalletRegistry to deploy a device wallet and its first eSIM wallets
     /// @dev Deploys the wallets and sets their identifiers only. Purchase history is copied in
@@ -132,6 +151,9 @@ contract RegistryHelper {
     ///      salt range before this runs, so no bound on the salt is needed here.
     /// @param _deviceWalletOwnerKey P256 public key of user
     /// @param _deviceUniqueIdentifier Unique device identifier associated with the device
+    /// @param _salt CREATE2 salt the device wallet and its first eSIM wallet are deployed at
+    /// @param _eSIMUniqueIdentifiers First batch of eSIM identifiers, in the order the full list holds them
+    /// @param _depositAmount ETH forwarded to the new device wallet
     /// @return Return device wallet address and the eSIM wallet addresses this call deployed
     function deployLazyWallet(
         bytes32[2] memory _deviceWalletOwnerKey,
@@ -252,6 +274,11 @@ contract RegistryHelper {
     /// @dev Shared by the first batch and every batch after it so the two cannot drift apart. The
     ///      identifier is known up front on this route, unlike the ordinary one, so setting it here
     ///      saves the admin a second transaction per wallet.
+    /// @param _deviceWallet Device wallet the eSIM wallet is bound to
+    /// @param _deviceUniqueIdentifier Device identifier the wallet belongs to
+    /// @param _salt CREATE2 salt for this eSIM wallet
+    /// @param _eSIMUniqueIdentifier Identifier written onto the new eSIM wallet
+    /// @return Address of the eSIM wallet deployed
     function _deployLazyESIMWallet(
         address _deviceWallet,
         string calldata _deviceUniqueIdentifier,
@@ -270,6 +297,15 @@ contract RegistryHelper {
         return eSIMWallet;
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // Device wallet records
+    // ---------------------------------------------------------------------------------------------
+
+    /// @notice Records a device wallet against its identifier and its owner key
+    /// @dev Writes all four mappings together, so a wallet is either fully recorded or not recorded.
+    /// @param _deviceWallet Address of the device wallet
+    /// @param _deviceUniqueIdentifier Identifier the wallet is reached by
+    /// @param _deviceWalletOwnerKey X,Y co-ordinates of the P256 key owning the wallet
     function _updateDeviceWalletInfo(
         address _deviceWallet,
         string calldata _deviceUniqueIdentifier,
