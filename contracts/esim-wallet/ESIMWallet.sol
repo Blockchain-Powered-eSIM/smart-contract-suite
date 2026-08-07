@@ -199,18 +199,12 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     /// @param _dataBundleDetails One batch of data bundle purchase details from before the wallet
     ///        was deployed
     function populateHistory(DataBundleDetails[] calldata _dataBundleDetails) external onlyRegistry returns (bool) {
-        // Using transactionHistory = _dataBundleDetails; would be gas efficient
-        // but it is not yet supported for struct types, hence using the loop
+        // Assigning the whole calldata array at once is not supported for arrays of structs, so
+        // each entry is pushed on its own. The batch lands after whatever the array already held.
         uint256 alreadyStored = transactionHistory.length;
         uint256 entries = _dataBundleDetails.length;
         for (uint256 i = 0; i < entries; ++i) {
-            // Create a temporary variable in storage
-            transactionHistory.push(); // Increase the length of transactionHistory by 1
-            // The batch lands after whatever the array already held, so the write offset is the
-            // length read before the loop rather than the loop index.
-            DataBundleDetails storage newTransaction = transactionHistory[alreadyStored + i];
-            newTransaction.dataBundleID = _dataBundleDetails[i].dataBundleID;
-            newTransaction.dataBundlePrice = _dataBundleDetails[i].dataBundlePrice;
+            transactionHistory.push(_dataBundleDetails[i]);
         }
 
         emit TransactionHistoryPopulated(_dataBundleDetails, alreadyStored + entries);

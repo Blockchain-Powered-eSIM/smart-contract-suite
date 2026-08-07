@@ -3,7 +3,7 @@
   "buyDataBundle: pulls from the device wallet": "80231",
   "buyDataBundle: wallet already holds the price": "123854",
   "deployESIMWallet: through the factory": "288709",
-  "populateHistory: 10 entries": "502471",
+  "populateHistory: 10 entries": "497956",
   "requestTransferOwnership": "59945",
   "setDataBundlePriceCap: back to the registry ceiling": "2286",
   "setDataBundlePriceCap: set": "24286",
