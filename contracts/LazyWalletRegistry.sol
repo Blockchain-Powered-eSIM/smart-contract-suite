@@ -13,86 +13,6 @@ import "./CustomStructs.sol";
 /// @notice Contract for deploying the factory contracts and maintaining registry
 contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable {
 
-    /// @notice Emitted when data related to a device is updated
-    event DataUpdatedForDevice(
-        string _deviceUniqueIdentifier, string[] _eSIMUniqueIdentifiers, DataBundleDetails[] _dataBundleDetails
-    );
-
-    /// @notice Emitted when an eSIM identifier is associated with a device identifier
-    event ESIMBindedWithDevice(string _eSIMUniqueIdentifier, string _deviceUniqueIdentifier);
-
-    /// @notice Emitted when the Lazy wallet is deployed
-    /// @dev The device wallet is indexed so an indexer can follow one device without reading every
-    ///      log. The two string arrays are left unindexed on purpose: indexing a dynamic type stores
-    ///      its hash instead of its value, which no consumer of these can use.
-    event LazyWalletDeployed(
-        bytes32[2] _deviceOwnerPublicKey,
-        address indexed deviceWallet,
-        string _deviceUniqueIdentifier,
-        address[] eSIMWallets,
-        string[] _eSIMUniqueIdentifiers
-    );
-
-    /// @notice Emitted for every batch of eSIM wallets deployed for a device, including the first.
-    ///         `_remaining` reaching zero is what says the device is fully deployed.
-    /// @dev `LazyWalletDeployed` fires once, when the device wallet itself is created, and carries
-    ///      only the first batch. Anything waiting for the whole set has to follow this instead.
-    event LazyESIMWalletsDeployed(
-        string _deviceUniqueIdentifier,
-        address indexed _deviceWallet,
-        address[] _eSIMWallets,
-        string[] _eSIMUniqueIdentifiers,
-        uint256 _remaining
-    );
-
-    /// @notice Emitted for every batch of purchase history copied into a deployed eSIM wallet.
-    ///         `_remaining` reaching zero is what says the copy is finished.
-    event LazyHistoryCopied(
-        string _eSIMIdentifier,
-        address indexed _eSIMWallet,
-        uint256 _copied,
-        uint256 _remaining
-    );
-
-    /// @notice Emitted when the user switches eSIM to a new device
-    event ESIMIdentifierSwitchedToNewDeviceIdentifier(
-        string _eSIMIdentifier,
-        string _oldDeviceIdentifier,
-        string currentDeviceIdentifier
-    );
-
-    /// @notice Emitted when the device identifier associated with an eSIM identifier is updated
-    event NewDeviceIdentifierAssociatedWithESIMIdentifier(
-        string _eSIMIdentifier,
-        string _oldDeviceIdentifier,
-        string _newDeviceIdentifier);
-
-    /// @notice Emitted when the Data bundle related details of an eSIM are transferred to a new device identifier
-    event DataBundleDetailsTransferredToNewDeviceIdentifier(
-        string _newDeviceIdentifier,
-        DataBundleDetails[] _newDataBundleDetails
-    );
-
-    /// @notice Emitted when teh Data bundle related details are deleted from the old device identifer
-    event DataBundleDetailsDeletedFromOldDeviceIdentifier(
-        string _oldDeviceIdentifier,
-        string _eSIMIdentifier
-    );
-
-    /// @notice Emitted when an eSIM identifier is removed from a device identifier's list
-    event ESIMIdentifierRemovedFromOldDeviceIdentifier(
-        string _oldDeviceIdentifier, 
-        string _eSIMIdentifier, 
-        string[] _eSIMIdentifierOfOldDevice
-    );
-
-    /// @notice Emitted when an eSIM identifier is added to a new device identifier's list
-    event ESIMIdentifierAddedToNewDeviceIdentifier(
-        string _newDeviceIdentifier,
-        string _eSIMIdentifier,
-        string[] _eSIMIdentifierOfNewDevice
-    );
-
     /// @notice Longest device or eSIM identifier accepted when a new binding is created
     /// @dev An eSIM identifier is a UUID v4 in string form, so 36 bytes. This leaves room for a
     ///      longer device identifier while keeping both inside two storage words, which bounds the
@@ -169,6 +89,86 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
     ///      contract can detect: it just produces different addresses.
     mapping(string deviceIdentifier => uint256 baseSalt) public lazyDeploymentSalt;
 
+    /// @notice Emitted when data related to a device is updated
+    event DataUpdatedForDevice(
+        string _deviceUniqueIdentifier, string[] _eSIMUniqueIdentifiers, DataBundleDetails[] _dataBundleDetails
+    );
+
+    /// @notice Emitted when an eSIM identifier is associated with a device identifier
+    event ESIMBindedWithDevice(string _eSIMUniqueIdentifier, string _deviceUniqueIdentifier);
+
+    /// @notice Emitted when the Lazy wallet is deployed
+    /// @dev The device wallet is indexed so an indexer can follow one device without reading every
+    ///      log. The two string arrays are left unindexed on purpose: indexing a dynamic type stores
+    ///      its hash instead of its value, which no consumer of these can use.
+    event LazyWalletDeployed(
+        bytes32[2] _deviceOwnerPublicKey,
+        address indexed deviceWallet,
+        string _deviceUniqueIdentifier,
+        address[] eSIMWallets,
+        string[] _eSIMUniqueIdentifiers
+    );
+
+    /// @notice Emitted for every batch of eSIM wallets deployed for a device, including the first.
+    ///         `_remaining` reaching zero is what says the device is fully deployed.
+    /// @dev `LazyWalletDeployed` fires once, when the device wallet itself is created, and carries
+    ///      only the first batch. Anything waiting for the whole set has to follow this instead.
+    event LazyESIMWalletsDeployed(
+        string _deviceUniqueIdentifier,
+        address indexed _deviceWallet,
+        address[] _eSIMWallets,
+        string[] _eSIMUniqueIdentifiers,
+        uint256 _remaining
+    );
+
+    /// @notice Emitted for every batch of purchase history copied into a deployed eSIM wallet.
+    ///         `_remaining` reaching zero is what says the copy is finished.
+    event LazyHistoryCopied(
+        string _eSIMIdentifier,
+        address indexed _eSIMWallet,
+        uint256 _copied,
+        uint256 _remaining
+    );
+
+    /// @notice Emitted when the user switches eSIM to a new device
+    event ESIMIdentifierSwitchedToNewDeviceIdentifier(
+        string _eSIMIdentifier,
+        string _oldDeviceIdentifier,
+        string currentDeviceIdentifier
+    );
+
+    /// @notice Emitted when the device identifier associated with an eSIM identifier is updated
+    event NewDeviceIdentifierAssociatedWithESIMIdentifier(
+        string _eSIMIdentifier,
+        string _oldDeviceIdentifier,
+        string _newDeviceIdentifier);
+
+    /// @notice Emitted when the Data bundle related details of an eSIM are transferred to a new device identifier
+    event DataBundleDetailsTransferredToNewDeviceIdentifier(
+        string _newDeviceIdentifier,
+        DataBundleDetails[] _newDataBundleDetails
+    );
+
+    /// @notice Emitted when teh Data bundle related details are deleted from the old device identifer
+    event DataBundleDetailsDeletedFromOldDeviceIdentifier(
+        string _oldDeviceIdentifier,
+        string _eSIMIdentifier
+    );
+
+    /// @notice Emitted when an eSIM identifier is removed from a device identifier's list
+    event ESIMIdentifierRemovedFromOldDeviceIdentifier(
+        string _oldDeviceIdentifier,
+        string _eSIMIdentifier,
+        string[] _eSIMIdentifierOfOldDevice
+    );
+
+    /// @notice Emitted when an eSIM identifier is added to a new device identifier's list
+    event ESIMIdentifierAddedToNewDeviceIdentifier(
+        string _newDeviceIdentifier,
+        string _eSIMIdentifier,
+        string[] _eSIMIdentifierOfNewDevice
+    );
+
     modifier onlyESIMWalletAdmin() {
         if(msg.sender != registry.eSIMWalletAdmin()) revert Errors.OnlyESIMWalletAdmin();
         _;
@@ -182,29 +182,6 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         _disableInitializers();
     }
 
-    /// @dev Owner based upgrades
-    function _authorizeUpgrade(address newImplementation)
-    internal
-    onlyOwner
-    override
-    {}
-
-    /// @notice Ownership of this contract is never renounced
-    /// @dev The owner is the only caller _authorizeUpgrade accepts, and there is no other route to
-    ///      replace this implementation. Renouncing would freeze the contract on its current logic
-    ///      permanently.
-    function renounceOwnership() public pure override {
-        revert Errors.OwnershipCannotBeRenounced();
-    }
-
-    /// @notice Address (owned/controlled by eSIM wallet project) that can upgrade contracts
-    /// @dev Reads through to the owner rather than holding its own copy. `_authorizeUpgrade` is
-    ///      gated on `onlyOwner`, so the owner is the upgrade authority by definition and a second
-    ///      copy could only ever disagree with it.
-    function upgradeManager() public view returns (address) {
-        return owner();
-    }
-
     function initialize(
         address _registry,
         address _upgradeManager
@@ -216,16 +193,6 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
 
         __Ownable2Step_init();
         __Ownable_init(_upgradeManager);
-    }
-
-    /// @notice Function to check if a lazy wallet has been deployed or not
-    /// @return Boolean. True if deployed, false otherwise
-    function isLazyWalletDeployed(string calldata _deviceUniqueIdentifier) public view returns (bool) {
-        if(registry.uniqueIdentifierToDeviceWallet(_deviceUniqueIdentifier) != address(0)) {
-            return true;
-        }
-
-        return false;
     }
 
     /// @notice Function to populate all the device and eSIM related data along with the data bundles
@@ -391,49 +358,6 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         );
     }
 
-    /// @notice Rejects a batch size outside the cap, then clamps it to what is actually left
-    /// @dev A request above the cap is refused rather than clamped, so a caller never believes it
-    ///      deployed more than it did. Clamping to the outstanding count is different: the caller
-    ///      asked for more than exists, and the return value says how many it got.
-    function _boundedBatchSize(uint256 _requested, uint256 _outstanding) private pure returns (uint256) {
-        if(_requested == 0 || _requested > MAX_ESIM_WALLETS_PER_CALL) {
-            revert Errors.TooManyESIMWallets(_requested, MAX_ESIM_WALLETS_PER_CALL);
-        }
-
-        return _requested > _outstanding ? _outstanding : _requested;
-    }
-
-    /// @notice Copies one batch of identifiers out of a device's list
-    /// @dev Reads only the slice the batch needs. Copying the whole list into memory first would put
-    ///      the cost this split exists to bound back into every call.
-    function _readIdentifiers(
-        string[] storage _allESIMIdentifiers,
-        uint256 _startIndex,
-        uint256 _batchSize
-    ) private view returns (string[] memory) {
-        string[] memory batchIdentifiers = new string[](_batchSize);
-
-        for(uint256 i=0; i<_batchSize; ++i) {
-            batchIdentifiers[i] = _allESIMIdentifiers[_startIndex + i];
-        }
-
-        return batchIdentifiers;
-    }
-
-    /// @notice Binds each identifier in a batch to the wallet deployed for it
-    /// @dev The deployment returns the wallets in the order it was given the identifiers, which is
-    ///      what makes this pairing sound. It is the only proof later on that a wallet claiming an
-    ///      eSIM identifier is the one this contract deployed for it. This cannot run before the
-    ///      deployment, unlike the cursor, because the addresses do not exist until then.
-    function _recordDeployedESIMWallets(
-        string[] memory _batchIdentifiers,
-        address[] memory _eSIMWallets
-    ) private {
-        for(uint256 i=0; i<_batchIdentifiers.length; ++i) {
-            lazyDeployedESIMWallet[_batchIdentifiers[i]] = _eSIMWallets[i];
-        }
-    }
-
     /// @notice Copies the next batch of an eSIM's stored purchase history into its deployed wallet
     /// @dev Split out of the deployment because carrying history there made one transaction grow
     ///      with the eSIM count and the history length at the same time. Call it repeatedly until
@@ -480,57 +404,6 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         registry.populateLazyHistory(eSIMWallet, batch);
 
         emit LazyHistoryCopied(_eSIMIdentifier, eSIMWallet, copied, remaining);
-    }
-
-    /// @notice Internal function for populating information of all the eSIMs related to a device
-    /// @dev The _eSIMUniqueIdentifiers array can have multiple repeating occurrences since there can be multiple purchases per eSIM
-    function _populateHistory(
-        string calldata _deviceUniqueIdentifier,
-        string[] calldata _eSIMUniqueIdentifiers,
-        DataBundleDetails[] calldata _dataBundleDetails
-    ) internal {
-        if(bytes(_deviceUniqueIdentifier).length == 0) revert Errors.EmptyDeviceIdentifier();
-        _requireBoundedIdentifier(_deviceUniqueIdentifier);
-        if(isLazyWalletDeployed(_deviceUniqueIdentifier)) {
-            revert Errors.LazyWalletAlreadyDeployed(_deviceUniqueIdentifier);
-        }
-
-        uint256 len = _eSIMUniqueIdentifiers.length;
-        if(len != _dataBundleDetails.length) {
-            revert Errors.ArrayLengthMismatch(len, _dataBundleDetails.length);
-        }
-
-        for(uint256 i=0; i<len; ++i) {
-            string calldata eSIMUniqueIdentifier = _eSIMUniqueIdentifiers[i];
-            if(bytes(eSIMUniqueIdentifier).length == 0) revert Errors.EmptyESIMIdentifier();
-
-            string memory deviceUniqueIdentifier = eSIMIdentifierToDeviceIdentifier[eSIMUniqueIdentifier];
-
-            if(bytes(deviceUniqueIdentifier).length == 0) {
-                _requireBoundedIdentifier(eSIMUniqueIdentifier);
-
-                eSIMIdentifierToDeviceIdentifier[eSIMUniqueIdentifier] = _deviceUniqueIdentifier;
-
-                string[] storage associatedESIMIdentifiers = eSIMIdentifiersAssociatedWithDeviceIdentifier[_deviceUniqueIdentifier];
-                associatedESIMIdentifiers.push(eSIMUniqueIdentifier);
-
-                emit ESIMBindedWithDevice(eSIMUniqueIdentifier, _deviceUniqueIdentifier);
-            }
-            else {
-                if(keccak256(bytes(deviceUniqueIdentifier)) != keccak256(bytes(_deviceUniqueIdentifier))) {
-                    revert Errors.ESIMBoundToADifferentDevice(eSIMUniqueIdentifier, deviceUniqueIdentifier);
-                }
-            }
-
-            DataBundleDetails[] storage dataBundleDetails = deviceIdentifierToESIMDetails[_deviceUniqueIdentifier][eSIMUniqueIdentifier];
-            // Manually add a new struct to history and then set its fields
-            dataBundleDetails.push();  // Increase the array length by one
-            DataBundleDetails storage newDataBundleDetail = dataBundleDetails[dataBundleDetails.length - 1];
-            newDataBundleDetail.dataBundleID = _dataBundleDetails[i].dataBundleID;
-            newDataBundleDetail.dataBundlePrice = _dataBundleDetails[i].dataBundlePrice;
-        }
-
-        emit DataUpdatedForDevice(_deviceUniqueIdentifier, _eSIMUniqueIdentifiers, _dataBundleDetails);
     }
 
     /// @notice This function should be called when the fiat user wants to switch their eSIM to a new device
@@ -589,6 +462,72 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         return true;
     }
 
+    /// @notice Ownership of this contract is never renounced
+    /// @dev The owner is the only caller _authorizeUpgrade accepts, and there is no other route to
+    ///      replace this implementation. Renouncing would freeze the contract on its current logic
+    ///      permanently.
+    function renounceOwnership() public pure override {
+        revert Errors.OwnershipCannotBeRenounced();
+    }
+
+    /// @dev Owner based upgrades
+    function _authorizeUpgrade(address newImplementation)
+    internal
+    onlyOwner
+    override
+    {}
+
+    /// @notice Internal function for populating information of all the eSIMs related to a device
+    /// @dev The _eSIMUniqueIdentifiers array can have multiple repeating occurrences since there can be multiple purchases per eSIM
+    function _populateHistory(
+        string calldata _deviceUniqueIdentifier,
+        string[] calldata _eSIMUniqueIdentifiers,
+        DataBundleDetails[] calldata _dataBundleDetails
+    ) internal {
+        if(bytes(_deviceUniqueIdentifier).length == 0) revert Errors.EmptyDeviceIdentifier();
+        _requireBoundedIdentifier(_deviceUniqueIdentifier);
+        if(isLazyWalletDeployed(_deviceUniqueIdentifier)) {
+            revert Errors.LazyWalletAlreadyDeployed(_deviceUniqueIdentifier);
+        }
+
+        uint256 len = _eSIMUniqueIdentifiers.length;
+        if(len != _dataBundleDetails.length) {
+            revert Errors.ArrayLengthMismatch(len, _dataBundleDetails.length);
+        }
+
+        for(uint256 i=0; i<len; ++i) {
+            string calldata eSIMUniqueIdentifier = _eSIMUniqueIdentifiers[i];
+            if(bytes(eSIMUniqueIdentifier).length == 0) revert Errors.EmptyESIMIdentifier();
+
+            string memory deviceUniqueIdentifier = eSIMIdentifierToDeviceIdentifier[eSIMUniqueIdentifier];
+
+            if(bytes(deviceUniqueIdentifier).length == 0) {
+                _requireBoundedIdentifier(eSIMUniqueIdentifier);
+
+                eSIMIdentifierToDeviceIdentifier[eSIMUniqueIdentifier] = _deviceUniqueIdentifier;
+
+                string[] storage associatedESIMIdentifiers = eSIMIdentifiersAssociatedWithDeviceIdentifier[_deviceUniqueIdentifier];
+                associatedESIMIdentifiers.push(eSIMUniqueIdentifier);
+
+                emit ESIMBindedWithDevice(eSIMUniqueIdentifier, _deviceUniqueIdentifier);
+            }
+            else {
+                if(keccak256(bytes(deviceUniqueIdentifier)) != keccak256(bytes(_deviceUniqueIdentifier))) {
+                    revert Errors.ESIMBoundToADifferentDevice(eSIMUniqueIdentifier, deviceUniqueIdentifier);
+                }
+            }
+
+            DataBundleDetails[] storage dataBundleDetails = deviceIdentifierToESIMDetails[_deviceUniqueIdentifier][eSIMUniqueIdentifier];
+            // Manually add a new struct to history and then set its fields
+            dataBundleDetails.push();  // Increase the array length by one
+            DataBundleDetails storage newDataBundleDetail = dataBundleDetails[dataBundleDetails.length - 1];
+            newDataBundleDetail.dataBundleID = _dataBundleDetails[i].dataBundleID;
+            newDataBundleDetail.dataBundlePrice = _dataBundleDetails[i].dataBundlePrice;
+        }
+
+        emit DataUpdatedForDevice(_deviceUniqueIdentifier, _eSIMUniqueIdentifiers, _dataBundleDetails);
+    }
+
     /// @dev Internal function to update the eSIM related details when switching to a new device identifier
     function _updateDeviceIdentifierToESIMDetails(
         string calldata _eSIMIdentifier,
@@ -642,11 +581,72 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         emit ESIMIdentifierAddedToNewDeviceIdentifier(_newDeviceIdentifier, _eSIMIdentifier, eSIMIdentifierOfNewDevice);
     }
 
+    /// @notice Rejects a batch size outside the cap, then clamps it to what is actually left
+    /// @dev A request above the cap is refused rather than clamped, so a caller never believes it
+    ///      deployed more than it did. Clamping to the outstanding count is different: the caller
+    ///      asked for more than exists, and the return value says how many it got.
+    function _boundedBatchSize(uint256 _requested, uint256 _outstanding) private pure returns (uint256) {
+        if(_requested == 0 || _requested > MAX_ESIM_WALLETS_PER_CALL) {
+            revert Errors.TooManyESIMWallets(_requested, MAX_ESIM_WALLETS_PER_CALL);
+        }
+
+        return _requested > _outstanding ? _outstanding : _requested;
+    }
+
+    /// @notice Copies one batch of identifiers out of a device's list
+    /// @dev Reads only the slice the batch needs. Copying the whole list into memory first would put
+    ///      the cost this split exists to bound back into every call.
+    function _readIdentifiers(
+        string[] storage _allESIMIdentifiers,
+        uint256 _startIndex,
+        uint256 _batchSize
+    ) private view returns (string[] memory) {
+        string[] memory batchIdentifiers = new string[](_batchSize);
+
+        for(uint256 i=0; i<_batchSize; ++i) {
+            batchIdentifiers[i] = _allESIMIdentifiers[_startIndex + i];
+        }
+
+        return batchIdentifiers;
+    }
+
+    /// @notice Binds each identifier in a batch to the wallet deployed for it
+    /// @dev The deployment returns the wallets in the order it was given the identifiers, which is
+    ///      what makes this pairing sound. It is the only proof later on that a wallet claiming an
+    ///      eSIM identifier is the one this contract deployed for it. This cannot run before the
+    ///      deployment, unlike the cursor, because the addresses do not exist until then.
+    function _recordDeployedESIMWallets(
+        string[] memory _batchIdentifiers,
+        address[] memory _eSIMWallets
+    ) private {
+        for(uint256 i=0; i<_batchIdentifiers.length; ++i) {
+            lazyDeployedESIMWallet[_batchIdentifiers[i]] = _eSIMWallets[i];
+        }
+    }
+
     /// @notice Rejects an identifier longer than the protocol accepts
     /// @param _identifier Device or eSIM identifier about to create a new binding
     function _requireBoundedIdentifier(string calldata _identifier) private pure {
         if(bytes(_identifier).length > MAX_IDENTIFIER_LENGTH) {
             revert Errors.IdentifierTooLong(_identifier, MAX_IDENTIFIER_LENGTH);
         }
+    }
+
+    /// @notice Address (owned/controlled by eSIM wallet project) that can upgrade contracts
+    /// @dev Reads through to the owner rather than holding its own copy. `_authorizeUpgrade` is
+    ///      gated on `onlyOwner`, so the owner is the upgrade authority by definition and a second
+    ///      copy could only ever disagree with it.
+    function upgradeManager() public view returns (address) {
+        return owner();
+    }
+
+    /// @notice Function to check if a lazy wallet has been deployed or not
+    /// @return Boolean. True if deployed, false otherwise
+    function isLazyWalletDeployed(string calldata _deviceUniqueIdentifier) public view returns (bool) {
+        if(registry.uniqueIdentifierToDeviceWallet(_deviceUniqueIdentifier) != address(0)) {
+            return true;
+        }
+
+        return false;
     }
 }
