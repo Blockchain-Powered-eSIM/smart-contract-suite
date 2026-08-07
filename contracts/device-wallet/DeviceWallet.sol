@@ -20,6 +20,21 @@ import {Errors} from "../Errors.sol";
 contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 {
     using Address for address;
 
+    /// @notice Registry contract instance
+    Registry public registry;
+
+    /// @notice eSIM wallet factory address
+    ESIMWalletFactory public eSIMWalletFactory;
+
+    /// @notice String identifier to uniquely identify user's device
+    string public deviceUniqueIdentifier;
+
+    /// @notice Set to true if the eSIM wallet belongs to this device wallet
+    mapping(address eSIMWalletAddress => bool isValid) public isValidESIMWallet;
+
+    /// @notice Tracks if an associated eSIM wallet can pull ETH or not
+    mapping(address eSIMWalletAddress => bool isAllowedToPullETH) public canPullETH;
+
     /// @notice Emitted when the contract pays ETH for data bundle
     event ETHPaidForDataBundle(address indexed _vault, address indexed _eSIMWallet, uint256 indexed _amount);
 
@@ -41,21 +56,6 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
 
     /// @notice Emitted when the eSIM being removed sends back ETH to this device wallet
     event ETHCalledBack(uint256 _amount);
-
-    /// @notice Registry contract instance
-    Registry public registry;
-
-    /// @notice eSIM wallet factory address
-    ESIMWalletFactory public eSIMWalletFactory;
-
-    /// @notice String identifier to uniquely identify user's device
-    string public deviceUniqueIdentifier;
-
-    /// @notice Set to true if the eSIM wallet belongs to this device wallet
-    mapping(address eSIMWalletAddress => bool isValid) public isValidESIMWallet;
-
-    /// @notice Tracks if an associated eSIM wallet can pull ETH or not
-    mapping(address eSIMWalletAddress => bool isAllowedToPullETH) public canPullETH;
 
     function _onlyRegistryOrDeviceWalletFactoryOrOwner() private view {
         if(
@@ -144,46 +144,9 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         registry = Registry(_registry);
         deviceUniqueIdentifier = _deviceUniqueIdentifier;
         eSIMWalletFactory = ESIMWalletFactory(_eSIMWalletFactory);
-        
+
         initialize(_deviceWalletOwnerKey);
         __ReentrancyGuard_init();
-    }
-
-    /// @notice Rejects a P256 public key that is not a point on the curve
-    /// @dev Same predicate the three deploy paths apply, repeated here because the factory holds
-    ///      its own copy privately and this contract is not in its inheritance chain. Sharing one
-    ///      copy would mean an external call on a path that must stay self-contained. The
-    ///      predicate also covers a key outside the field and the point at infinity.
-    /// @param _deviceWalletOwnerKey X,Y co-ordinates of the P256 key to check
-    function _requireValidOwnerKey(bytes32[2] memory _deviceWalletOwnerKey) private pure {
-        if(
-            !FCL_Elliptic_ZZ.ecAff_isOnCurve(
-                uint256(_deviceWalletOwnerKey[0]),
-                uint256(_deviceWalletOwnerKey[1])
-            )
-        ) revert Errors.InvalidDeviceWalletOwnerKey();
-    }
-
-    /// @inheritdoc Account4337
-    /// @dev The registry holds its own record of which key owns this wallet, and the deploy paths
-    ///      keep one key to one wallet. Rotating without telling it leaves the retired key named
-    ///      as the owner and leaves the key taking over unregistered, free for a second wallet to
-    ///      claim. `super` runs after the key check because it carries the `onlySelf` guard and
-    ///      because the registry call is an external one, so the local write has to land before it.
-    ///
-    ///      A key that cannot verify a signature bricks the wallet for good: this function is
-    ///      reachable only through `execute`, which needs a signature, so there is no rotating
-    ///      back and no reaching the balance. The deploy paths reject such a key and this path
-    ///      writes the same storage, so it has to reject it too.
-    function transferOwnership(
-        bytes32[2] memory newOwner
-    ) public override returns (bytes32[2] memory) {
-        _requireValidOwnerKey(newOwner);
-
-        bytes32[2] memory updatedOwner = super.transferOwnership(newOwner);
-        registry.updateDeviceWalletOwnerKey(newOwner);
-
-        return updatedOwner;
     }
 
     /// @notice Allow eSIMWalletAdmin to deploy new eSIM wallet whenever new eSIM is installed
@@ -199,24 +162,6 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         _addESIMWallet(eSIMWalletAddress, _hasAccessToETH);
 
         return eSIMWalletAddress;
-    }
-
-    /// @notice Allow wallet owner or admin to set unique identifier for their eSIM wallet
-    /// @dev Allow lazy wallet registry to call the function for fiat users who later decided to get a smart wallet
-    /// @param _eSIMWalletAddress Address of the eSIM wallet smart contract
-    /// @param _eSIMUniqueIdentifier String unique identifier for the eSIM wallet
-    function setESIMUniqueIdentifierForAnESIMWallet(
-        address _eSIMWalletAddress,
-        string calldata _eSIMUniqueIdentifier
-    ) public onlyESIMWalletAdminOrRegistry returns (string memory) {
-        if(registry.isESIMWalletValid(_eSIMWalletAddress) == address(0)) {
-            revert Errors.UnknownESIMWallet(_eSIMWalletAddress);
-        }
-
-        ESIMWallet eSIMWallet = ESIMWallet(payable(_eSIMWalletAddress));
-        eSIMWallet.setESIMUniqueIdentifier(_eSIMUniqueIdentifier);
-
-        return eSIMWallet.eSIMUniqueIdentifier();
     }
 
     /// @notice Allow the eSIM wallets associated with this device wallet to pay ETH for data bundles
@@ -249,10 +194,44 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         return _amount;
     }
 
-    /// @notice Fetches the vault address (that receives payment for data bundles) from the device wallet factory
-    /// @dev Mostly used by the associated eSIM wallets for reference
-    function getVaultAddress() public view returns (address) {
-        return registry.vault();
+    /// @inheritdoc Account4337
+    /// @dev The registry holds its own record of which key owns this wallet, and the deploy paths
+    ///      keep one key to one wallet. Rotating without telling it leaves the retired key named
+    ///      as the owner and leaves the key taking over unregistered, free for a second wallet to
+    ///      claim. `super` runs after the key check because it carries the `onlySelf` guard and
+    ///      because the registry call is an external one, so the local write has to land before it.
+    ///
+    ///      A key that cannot verify a signature bricks the wallet for good: this function is
+    ///      reachable only through `execute`, which needs a signature, so there is no rotating
+    ///      back and no reaching the balance. The deploy paths reject such a key and this path
+    ///      writes the same storage, so it has to reject it too.
+    function transferOwnership(
+        bytes32[2] memory newOwner
+    ) public override returns (bytes32[2] memory) {
+        _requireValidOwnerKey(newOwner);
+
+        bytes32[2] memory updatedOwner = super.transferOwnership(newOwner);
+        registry.updateDeviceWalletOwnerKey(newOwner);
+
+        return updatedOwner;
+    }
+
+    /// @notice Allow wallet owner or admin to set unique identifier for their eSIM wallet
+    /// @dev Allow lazy wallet registry to call the function for fiat users who later decided to get a smart wallet
+    /// @param _eSIMWalletAddress Address of the eSIM wallet smart contract
+    /// @param _eSIMUniqueIdentifier String unique identifier for the eSIM wallet
+    function setESIMUniqueIdentifierForAnESIMWallet(
+        address _eSIMWalletAddress,
+        string calldata _eSIMUniqueIdentifier
+    ) public onlyESIMWalletAdminOrRegistry returns (string memory) {
+        if(registry.isESIMWalletValid(_eSIMWalletAddress) == address(0)) {
+            revert Errors.UnknownESIMWallet(_eSIMWalletAddress);
+        }
+
+        ESIMWallet eSIMWallet = ESIMWallet(payable(_eSIMWalletAddress));
+        eSIMWallet.setESIMUniqueIdentifier(_eSIMUniqueIdentifier);
+
+        return eSIMWallet.eSIMUniqueIdentifier();
     }
 
     /// @notice Allow owner to revoke or give access to any associated eSIM wallet for pulling ETH
@@ -266,18 +245,6 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         emit ETHAccessUpdated(_eSIMWalletAddress, _hasAccessToETH);
     }
 
-    function _transferETH(address _recipient, uint256 _amount) internal virtual {
-        uint256 balance = address(this).balance;
-        if(_amount > balance) revert Errors.InsufficientBalance(balance, _amount);
-        if(_recipient == address(0)) revert Errors.ZeroAddress("_recipient");
-
-        if (_amount > 0) {
-            (bool success,) = _recipient.call{value: _amount}("");
-            if (!success) revert Errors.FailedToTransfer();
-            else emit ETHSent(_recipient, _amount);
-        }
-    }
-
     /// @notice Allow the device wallet factory or the wallet owner to add new eSIM wallet to this device wallet
     /// @param _eSIMWalletAddress Address of the eSIM wallet to be added
     /// @param _hasAccessToETH `true` if the eSIM wallet is allowed to pull ETH from this device wallet, `false` otherwise
@@ -286,33 +253,6 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         bool _hasAccessToETH
     ) public onlyRegistryOrDeviceWalletFactoryOrOwner {
         _addESIMWallet(_eSIMWalletAddress, _hasAccessToETH);
-    }
-
-    /// @notice Internal function for binding eSIM wallet with the device wallet
-    function _addESIMWallet(
-        address _eSIMWalletAddress,
-        bool _hasAccessToETH
-    ) internal {
-        if(isValidESIMWallet[_eSIMWalletAddress]) revert Errors.ESIMWalletAlreadyAdded(_eSIMWalletAddress);
-        // If the eSIM wallet is a newly deployed one, then the owner will definitely be set
-        // during initialisation. This device wallet will be the owner.
-        // If the eSIM wallet already existed, then the previous owner (device wallet)
-        // must transfer the ownership to the eSIM wallet, and mark its status as standby. 
-        // And this device wallet must accept the ownership before calling the addESIMWallet function
-        address eSIMWalletOwner = ESIMWallet(payable(_eSIMWalletAddress)).owner();
-        if(eSIMWalletOwner != address(this)) {
-            revert Errors.ESIMWalletNotOwnedByThisDeviceWallet(_eSIMWalletAddress, eSIMWalletOwner);
-        }
-
-        isValidESIMWallet[_eSIMWalletAddress] = true;
-        canPullETH[_eSIMWalletAddress] = _hasAccessToETH;
-
-        // Inform the registry that this device wallet now holds the eSIM wallet. The call writes the
-        // association and, if a release was outstanding, lowers the transit marker. The two records
-        // are independent and this is the only call that touches both.
-        registry.bindESIMWallet(_eSIMWalletAddress, address(this));
-
-        emit ESIMWalletAdded(_eSIMWalletAddress, _hasAccessToETH, msg.sender);
     }
 
     /// @notice Allow the device wallet owner or the eSIM wallet to remove any eSIM wallet bound with this device wallet
@@ -348,6 +288,66 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
                 emit NoETHToCallback();
             }
         }
+    }
+
+    /// @notice Internal function for binding eSIM wallet with the device wallet
+    function _addESIMWallet(
+        address _eSIMWalletAddress,
+        bool _hasAccessToETH
+    ) internal {
+        if(isValidESIMWallet[_eSIMWalletAddress]) revert Errors.ESIMWalletAlreadyAdded(_eSIMWalletAddress);
+        // If the eSIM wallet is a newly deployed one, then the owner will definitely be set
+        // during initialisation. This device wallet will be the owner.
+        // If the eSIM wallet already existed, then the previous owner (device wallet)
+        // must transfer the ownership to the eSIM wallet, and mark its status as standby.
+        // And this device wallet must accept the ownership before calling the addESIMWallet function
+        address eSIMWalletOwner = ESIMWallet(payable(_eSIMWalletAddress)).owner();
+        if(eSIMWalletOwner != address(this)) {
+            revert Errors.ESIMWalletNotOwnedByThisDeviceWallet(_eSIMWalletAddress, eSIMWalletOwner);
+        }
+
+        isValidESIMWallet[_eSIMWalletAddress] = true;
+        canPullETH[_eSIMWalletAddress] = _hasAccessToETH;
+
+        // Inform the registry that this device wallet now holds the eSIM wallet. The call writes the
+        // association and, if a release was outstanding, lowers the transit marker. The two records
+        // are independent and this is the only call that touches both.
+        registry.bindESIMWallet(_eSIMWalletAddress, address(this));
+
+        emit ESIMWalletAdded(_eSIMWalletAddress, _hasAccessToETH, msg.sender);
+    }
+
+    function _transferETH(address _recipient, uint256 _amount) internal virtual {
+        uint256 balance = address(this).balance;
+        if(_amount > balance) revert Errors.InsufficientBalance(balance, _amount);
+        if(_recipient == address(0)) revert Errors.ZeroAddress("_recipient");
+
+        if (_amount > 0) {
+            (bool success,) = _recipient.call{value: _amount}("");
+            if (!success) revert Errors.FailedToTransfer();
+            else emit ETHSent(_recipient, _amount);
+        }
+    }
+
+    /// @notice Rejects a P256 public key that is not a point on the curve
+    /// @dev Same predicate the three deploy paths apply, repeated here because the factory holds
+    ///      its own copy privately and this contract is not in its inheritance chain. Sharing one
+    ///      copy would mean an external call on a path that must stay self-contained. The
+    ///      predicate also covers a key outside the field and the point at infinity.
+    /// @param _deviceWalletOwnerKey X,Y co-ordinates of the P256 key to check
+    function _requireValidOwnerKey(bytes32[2] memory _deviceWalletOwnerKey) private pure {
+        if(
+            !FCL_Elliptic_ZZ.ecAff_isOnCurve(
+                uint256(_deviceWalletOwnerKey[0]),
+                uint256(_deviceWalletOwnerKey[1])
+            )
+        ) revert Errors.InvalidDeviceWalletOwnerKey();
+    }
+
+    /// @notice Fetches the vault address (that receives payment for data bundles) from the device wallet factory
+    /// @dev Mostly used by the associated eSIM wallets for reference
+    function getVaultAddress() public view returns (address) {
+        return registry.vault();
     }
 
     // ETH is received through the receive function Account4337 declares
