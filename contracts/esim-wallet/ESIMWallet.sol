@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-
 pragma solidity 0.8.36;
 
 // Libraries
@@ -123,9 +122,9 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         _disableInitializers();
     }
 
-    /// @notice ESIMWallet initialize function to initialise the contract
-    /// @dev If _eSIMUniqueIdentifier is empty, the eSIM wallet is being deployed before buying an eSIM
-    ///      If _eSIMUniqueIdentifier is non-empty, the eSIM wallet is being deployed after the eSIM has been bought by the user
+    /// @notice Binds a freshly deployed eSIM wallet to its factory and its owning device wallet
+    /// @dev The eSIM identifier is not set here. It does not exist until the eSIM itself has been
+    ///      bought, so it arrives later through `setESIMUniqueIdentifier`.
     /// @param _eSIMWalletFactoryAddress eSIM wallet factory contract address
     /// @param _deviceWalletAddress Device wallet contract address (the contract that deploys this eSIM wallet)
     function initialize(
