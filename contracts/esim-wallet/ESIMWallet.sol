@@ -14,6 +14,27 @@ import "../CustomStructs.sol";
 contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable {
     using Address for address;
 
+    /// @notice Address of the eSIM wallet factory contract
+    address public eSIMWalletFactory;
+
+    /// @notice String identifier to uniquely identify eSIM wallet
+    string public eSIMUniqueIdentifier;
+
+    /// @notice Device wallet contract instance associated with this eSIM wallet
+    DeviceWallet public deviceWallet;
+
+    /// @notice Array of all the data bundle purchase
+    DataBundleDetails[] public transactionHistory;
+
+    /// @notice Address of the owner (device wallet) that becomes the new owner
+    address public newRequestedOwner;
+
+    /// @notice Most this wallet may be charged for one data bundle, or zero to follow the registry
+    /// @dev Appended, and this contract is a leaf, so the slot lands past everything a live proxy
+    ///      already holds and reads zero there. Zero has to keep meaning "no limit of my own" for
+    ///      that reason, which is why the fallback lives on the registry rather than here.
+    uint256 public dataBundlePriceCap;
+
     /// Emitted when the eSIM wallet is deployed
     event ESIMWalletDeployed(
         address indexed _eSIMWalletAddress,
@@ -47,27 +68,6 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
 
     /// @notice Emitted when the owner sets this wallet's own price ceiling
     event DataBundlePriceCapUpdated(uint256 _cap);
-
-    /// @notice Address of the eSIM wallet factory contract
-    address public eSIMWalletFactory;
-
-    /// @notice String identifier to uniquely identify eSIM wallet
-    string public eSIMUniqueIdentifier;
-
-    /// @notice Device wallet contract instance associated with this eSIM wallet
-    DeviceWallet public deviceWallet;
-
-    /// @notice Array of all the data bundle purchase
-    DataBundleDetails[] public transactionHistory;
-
-    /// @notice Address of the owner (device wallet) that becomes the new owner
-    address public newRequestedOwner;
-
-    /// @notice Most this wallet may be charged for one data bundle, or zero to follow the registry
-    /// @dev Appended, and this contract is a leaf, so the slot lands past everything a live proxy
-    ///      already holds and reads zero there. Zero has to keep meaning "no limit of my own" for
-    ///      that reason, which is why the fallback lives on the registry rather than here.
-    uint256 public dataBundlePriceCap;
 
     modifier onlyDeviceWallet() {
         if (msg.sender != address(deviceWallet)) revert Errors.OnlyDeviceWallet();
@@ -137,38 +137,6 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         emit ESIMUniqueIdentifierInitialised(_eSIMUniqueIdentifier);
     }
 
-    /// @notice Function to make payment for the data bundle
-    /// @param _dataBundleDetail Details of the data bundle being bought. (dataBundleID, dataBundlePrice)
-    /// @return True if the transaction is successful
-    function buyDataBundle(
-        DataBundleDetails memory _dataBundleDetail
-    ) public payable onlyDeviceWalletOrESIMWalletAdmin nonReentrant returns (bool) {
-        Registry registry = deviceWallet.registry();
-        registry.requireNotPaused();
-        if(bytes(_dataBundleDetail.dataBundleID).length == 0) revert Errors.EmptyDataBundleID();
-        if(_dataBundleDetail.dataBundlePrice == 0) revert Errors.ZeroDataBundlePrice();
-        _requirePriceWithinCap(_dataBundleDetail.dataBundlePrice, registry);
-
-        // 1. msg.value is received by contract
-        // 2. if wallet balance is less than dataBundlePrice, pull ETH from device wallet
-        // 3. send dataBundlePrice amount of ETH to vault
-        uint256 walletBalance = address(this).balance;
-
-        if (walletBalance < _dataBundleDetail.dataBundlePrice) {
-            uint256 remainingETH = _dataBundleDetail.dataBundlePrice - walletBalance;
-            deviceWallet.pullETH(remainingETH);
-        }
-
-        address vault = deviceWallet.getVaultAddress();
-        _transferETH(vault, _dataBundleDetail.dataBundlePrice);
-
-        transactionHistory.push(_dataBundleDetail);
-
-        emit DataBundleBought(_dataBundleDetail.dataBundleID, _dataBundleDetail.dataBundlePrice, msg.value);
-
-        return true;
-    }
-
     /// @notice Sets the most this wallet may be charged for one data bundle
     /// @dev Only the owning device wallet, which means the person holding its P256 key: reaching
     ///      this needs a device wallet `execute`, and that needs a signature. The admin names the
@@ -178,23 +146,6 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     function setDataBundlePriceCap(uint256 _cap) external onlyDeviceWallet {
         dataBundlePriceCap = _cap;
         emit DataBundlePriceCapUpdated(_cap);
-    }
-
-    /// @notice Rejects a price above whichever ceiling applies to this wallet
-    /// @dev The wallet's own ceiling wins when it has one. Zero is not a ceiling of zero, because
-    ///      every wallet deployed before this existed reads zero and would otherwise be unable to
-    ///      buy anything.
-    /// @param _price Price being charged
-    /// @param _registry Registry holding the fallback ceiling
-    function _requirePriceWithinCap(uint256 _price, Registry _registry) private view {
-        uint256 cap = dataBundlePriceCap;
-        if (cap == 0) {
-            cap = _registry.defaultDataBundlePriceCap();
-        }
-
-        if (cap != 0 && _price > cap) {
-            revert Errors.DataBundlePriceAboveCap(_price, cap);
-        }
     }
 
     /// @notice Appends pre-deployment purchase history, one batch at a time, on behalf of the lazy
@@ -217,15 +168,10 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         return true;
     }
 
-    /// @dev Returns the current owner of the wallet
-    function owner() public view override returns (address) {
-        return OwnableUpgradeable.owner();
-    }
-
     /// @notice Function to request transfer of ownership (a 2-step transfer) to a new device wallet
     /// If the owner revokes the transfer, they have to manually add the eSIM wallet from their device wallet
     /// @param _newOwner Address of the new device wallet to transfer ownership of this wallet
-    /** 
+    /**
     *   @dev newRequestedOwner is deliberately not checked for address(0).
     *   This helps in scenario where the owner sends ownership request to a wrong address
     *   The owner (device wallet) can simply call this function to overwrite the request
@@ -234,7 +180,7 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         Registry registry = deviceWallet.registry();
         if(!registry.isDeviceWalletValid(_newOwner)) revert Errors.NotADeviceWallet(_newOwner);
 
-        // If the owner wants to retain the ownership of the contract, 
+        // If the owner wants to retain the ownership of the contract,
         // they simply revoke the request by requesting a transfer to themselves
         if(_newOwner == owner()) {
             address revokedAddress = newRequestedOwner;
@@ -279,6 +225,38 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         return _amount;
     }
 
+    /// @notice Function to make payment for the data bundle
+    /// @param _dataBundleDetail Details of the data bundle being bought. (dataBundleID, dataBundlePrice)
+    /// @return True if the transaction is successful
+    function buyDataBundle(
+        DataBundleDetails memory _dataBundleDetail
+    ) public payable onlyDeviceWalletOrESIMWalletAdmin nonReentrant returns (bool) {
+        Registry registry = deviceWallet.registry();
+        registry.requireNotPaused();
+        if(bytes(_dataBundleDetail.dataBundleID).length == 0) revert Errors.EmptyDataBundleID();
+        if(_dataBundleDetail.dataBundlePrice == 0) revert Errors.ZeroDataBundlePrice();
+        _requirePriceWithinCap(_dataBundleDetail.dataBundlePrice, registry);
+
+        // 1. msg.value is received by contract
+        // 2. if wallet balance is less than dataBundlePrice, pull ETH from device wallet
+        // 3. send dataBundlePrice amount of ETH to vault
+        uint256 walletBalance = address(this).balance;
+
+        if (walletBalance < _dataBundleDetail.dataBundlePrice) {
+            uint256 remainingETH = _dataBundleDetail.dataBundlePrice - walletBalance;
+            deviceWallet.pullETH(remainingETH);
+        }
+
+        address vault = deviceWallet.getVaultAddress();
+        _transferETH(vault, _dataBundleDetail.dataBundlePrice);
+
+        transactionHistory.push(_dataBundleDetail);
+
+        emit DataBundleBought(_dataBundleDetail.dataBundleID, _dataBundleDetail.dataBundlePrice, msg.value);
+
+        return true;
+    }
+
     /// @notice Do not allow owner to directly call OwnableUpgradeable's transferOwnership function
     /// The owner should first call requestTransferOwnership and specify the recipient (new owner)
     /// The recipient (new owner) should accept the ownership using acceptOwnershipTransfer
@@ -317,6 +295,28 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
             if (!success) revert Errors.FailedToTransfer();
             else emit ETHSent(_recipient, _amount);
         }
+    }
+
+    /// @notice Rejects a price above whichever ceiling applies to this wallet
+    /// @dev The wallet's own ceiling wins when it has one. Zero is not a ceiling of zero, because
+    ///      every wallet deployed before this existed reads zero and would otherwise be unable to
+    ///      buy anything.
+    /// @param _price Price being charged
+    /// @param _registry Registry holding the fallback ceiling
+    function _requirePriceWithinCap(uint256 _price, Registry _registry) private view {
+        uint256 cap = dataBundlePriceCap;
+        if (cap == 0) {
+            cap = _registry.defaultDataBundlePriceCap();
+        }
+
+        if (cap != 0 && _price > cap) {
+            revert Errors.DataBundlePriceAboveCap(_price, cap);
+        }
+    }
+
+    /// @dev Returns the current owner of the wallet
+    function owner() public view override returns (address) {
+        return OwnableUpgradeable.owner();
     }
 
     receive() external payable {
