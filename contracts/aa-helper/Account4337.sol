@@ -76,7 +76,11 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
      * a new implementation of SimpleAccount must be deployed with the new EntryPoint address, then upgrading
      * the implementation by calling `upgradeTo()`
      */
-    function initialize(bytes32[2] memory anOwner) public virtual initializer {
+    /// @dev Internal on purpose. A public setup function guarded only by `initializer` names no
+    ///      caller, so a proxy created without its init call in the same transaction could be
+    ///      claimed by anyone with an owner key of their choosing and none of the protocol wiring.
+    ///      Internal keeps the subclass path working and leaves no other way in.
+    function initialize(bytes32[2] memory anOwner) internal virtual initializer {
         _initialize(anOwner);
     }
 

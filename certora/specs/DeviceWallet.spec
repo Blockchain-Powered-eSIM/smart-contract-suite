@@ -148,25 +148,22 @@ rule removalWithdrawsMembershipAndTheRightToPullTogether(address eSIMWallet, boo
 /// against it, and a key written by anything other than the one guarded path is a wallet taken
 /// over.
 ///
-/// Both initialisers are filtered out, and the second one had to be added after the prover reported
-/// it. `init` is the obvious one, the function the deploy paths call. `initialize` is the inherited
-/// one it wraps, public and carrying nothing but the `initializer` modifier, and the prover reaches
-/// it by starting from a wallet that has never been initialised and writing the key straight in.
-/// That state does not exist: both deploy paths pass the `init` call as the proxy's constructor
-/// argument, so a device wallet is initialised in the same transaction that creates it and there is
-/// no window between the two. What makes the prover disagree is one line of OpenZeppelin's
-/// `initializer`, `construction = initialized == 1 && address(this).code.length == 0`, which is how
-/// a nested initialiser is allowed to run inside a constructor. The prover models this contract as
-/// already carrying code, so that branch is false for it, which is also why the reachability check
-/// reports `init` unreachable in the rule above: the nested `initialize` inside it can never pass.
+/// `init` is filtered out, being the function the deploy paths call to write the key in the first
+/// place. Both deploy paths pass that call as the proxy's constructor argument, so a device wallet
+/// is initialised in the same transaction that creates it and there is no window between the two.
+/// The prover disagrees about reachability because of one line of OpenZeppelin's `initializer`,
+/// `construction = initialized == 1 && address(this).code.length == 0`, which is how a nested
+/// initialiser is allowed to run inside a constructor. The prover models this contract as already
+/// carrying code, so that branch is false for it, which is why the reachability check reports `init`
+/// unreachable in the rule above: the nested `initialize` inside it can never pass.
 ///
-/// The residue worth writing down is that `initialize` is public and its only guard is the
-/// `initializer` modifier. Nothing about the function refuses a caller. What keeps it closed is
-/// entirely the atomicity of the deploy paths, so a future path that deploys the proxy first and
-/// initialises it second would hand the wallet to whoever called in between.
+/// This rule once needed a second filter. The inherited `initialize(bytes32[2])` was public with
+/// nothing but the `initializer` modifier on it, so the prover reached it from a wallet that had
+/// never been initialised and wrote the key straight in. Nothing about the function refused a
+/// caller; what kept it closed was entirely the atomicity of the deploy paths. It is internal now,
+/// so there is no selector left to filter.
 rule theOwnerKeyMovesOnlyThroughItsOwnEntryPoint(method f) filtered {
     f -> f.selector != sig:init(address, bytes32[2], string, address).selector
-      && f.selector != sig:initialize(bytes32[2]).selector
 } {
     bytes32 xBefore = owner(0);
     bytes32 yBefore = owner(1);

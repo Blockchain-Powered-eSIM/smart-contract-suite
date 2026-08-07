@@ -133,7 +133,7 @@ methods {
     function FCL_Elliptic_ZZ.ecAff_isOnCurve(uint256 x, uint256 y) internal returns (bool) => NONDET;
 }
 
-/// The four initialisers, filtered out of every rule below.
+/// The three initialisers, filtered out of every rule below.
 ///
 /// Each writes the storage the rules are about, straight in, with no guard but the `initializer`
 /// modifier. That is a state no deployment reaches: all three contracts are set up in the same
@@ -141,9 +141,11 @@ methods {
 /// prover disagrees because OpenZeppelin's `initializer` recognises a constructor by
 /// `initialized == 1 && address(this).code.length == 0`, and the prover models these contracts as
 /// carrying code, so it starts from an uninitialised wallet no proxy ever is.
+///
+/// The inherited `initialize(bytes32[2])` used to need a fourth entry here. It is internal now, so
+/// the prover no longer enumerates it as a method at all.
 definition isInitialiser(method f) returns bool =
     f.selector == sig:DeviceWallet.init(address, bytes32[2], string, address).selector
- || f.selector == sig:DeviceWallet.initialize(bytes32[2]).selector
  || f.selector == sig:ESIMWallet.initialize(address, address).selector
  || f.selector == sig:Registry.initialize(address, address, address, address, address, address).selector;
 

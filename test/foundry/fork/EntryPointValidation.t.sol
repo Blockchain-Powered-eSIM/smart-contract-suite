@@ -11,6 +11,23 @@ import {Account4337} from "contracts/aa-helper/Account4337.sol";
 import {P256Verifier} from "contracts/P256Verifier.sol";
 import {WebAuthnSigner} from "test/utils/WebAuthnSigner.sol";
 
+/// @notice Exposes the base account's owner setup so a bare proxy can be stood up without the rest
+///         of the protocol around it.
+/// @dev `Account4337.initialize` is internal, so the only production path into it is
+///      `DeviceWallet.init`, which also demands a registry, a factory and a device identifier. None
+///      of those change what the EntryPoint sees, so this test drives the base account directly.
+///      The wrapper exists in test code alone and is never deployed.
+contract Account4337Harness is Account4337 {
+
+    constructor(IEntryPoint _entryPoint, P256Verifier _verifier) Account4337(_entryPoint, _verifier) {}
+
+    /// @notice Sets the owner key, once, from the proxy's constructor
+    /// @param anOwner X,Y co-ordinates of the P256 key that owns the account
+    function initializeOwner(bytes32[2] memory anOwner) external {
+        initialize(anOwner);
+    }
+}
+
 /// @notice Runs a user operation through the deployed EntryPoint on both chains the protocol
 ///         lives on.
 /// @dev The mock cannot answer the question this asks. The wallet builds its challenge around
@@ -50,7 +67,7 @@ contract EntryPointValidationForkTest is Test {
 
         // Deployed with CREATE2 so the wallet lands at one address on every chain, which is both
         // what the live protocol does and what lets a signature be carried between forks
-        Account4337 implementation = new Account4337{salt: bytes32(0)}(
+        Account4337Harness implementation = new Account4337Harness{salt: bytes32(0)}(
             ENTRY_POINT,
             new P256Verifier{salt: bytes32(0)}()
         );
@@ -58,7 +75,7 @@ contract EntryPointValidationForkTest is Test {
             payable(
                 new ERC1967Proxy{salt: bytes32(0)}(
                     address(implementation),
-                    abi.encodeCall(Account4337.initialize, (WebAuthnSigner.publicKey()))
+                    abi.encodeCall(Account4337Harness.initializeOwner, (WebAuthnSigner.publicKey()))
                 )
             )
         );
