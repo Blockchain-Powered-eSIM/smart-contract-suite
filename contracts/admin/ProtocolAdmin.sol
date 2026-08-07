@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
-
 pragma solidity 0.8.36;
 
-import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
-
+// Interfaces
 import {IOwnable2Step} from "../interfaces/IOwnable2Step.sol";
 import {IPausable} from "../interfaces/IPausable.sol";
+
+// Contracts
+import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
 
 /// @notice Owner of the four upgradeable protocol contracts, with a delay on every change
 /// @dev Replaces the single externally owned account that owns `Registry`, `LazyWalletRegistry`,
@@ -137,6 +138,10 @@ contract ProtocolAdmin is TimelockController {
         _grantRole(EXECUTOR_ROLE, address(0));
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // Delay floor
+    // ---------------------------------------------------------------------------------------------
+
     /// @inheritdoc TimelockController
     /// @dev Held at the floor whatever `updateDelay` last wrote. `schedule` reads this rather than
     ///      the stored value, so the floor binds every new operation without needing to intercept
@@ -146,6 +151,10 @@ contract ProtocolAdmin is TimelockController {
 
         return delay < minDelayFloor ? minDelayFloor : delay;
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // Guardian powers
+    // ---------------------------------------------------------------------------------------------
 
     /// @notice Releases a pause on a protocol contract immediately
     /// @dev The selector is fixed in the interface rather than passed in, so this cannot be pointed
@@ -179,6 +188,10 @@ contract ProtocolAdmin is TimelockController {
             emit CancellerRevoked(account, _msgSender());
         }
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // Ownership handover
+    // ---------------------------------------------------------------------------------------------
 
     /// @notice Completes the handover of every contract that has offered this one its ownership
     /// @dev Permissionless, and safe to be: it only takes ownership that the current owner already
