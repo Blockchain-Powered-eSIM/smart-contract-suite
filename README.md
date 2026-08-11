@@ -91,7 +91,7 @@ Two gas baselines, measuring different things. `.gas-snapshot` is the whole-test
 
 **Audit.** Reviewed by CD Security in March 2025. The report is in [audits/2025-03-CDSecurity.pdf](./audits/2025-03-CDSecurity.pdf).
 
-**Formal verification.** Six Certora specs, 51 rules.
+**Formal verification.** Seven Certora specs, 60 rules.
 
 | Spec | Rules | Subject |
 |---|---|---|
@@ -99,10 +99,11 @@ Two gas baselines, measuring different things. `.gas-snapshot` is the whole-test
 | `ProtocolAdmin.spec` | 10 | The delay nothing gets around, and the two things a guardian can say |
 | `ESIMWallet.spec` | 9 | Ownership state machine, price ceiling, deploying factory |
 | `DeviceWalletFactory.spec` | 9 | Deterministic deployment and beacon control |
+| `ESIMWalletFactory.spec` | 9 | Registry wiring, beacon control, the record of what it deployed |
 | `DeviceWallet.spec` | 8 | Owner key, eSIM wallet set, ETH access flags |
 | `RegistryCrossContract.spec` | 4 | `Registry`, `DeviceWallet` and `ESIMWallet` agreeing on who holds an eSIM wallet |
 
-Three caveats attach to every proof. Loops unroll three times, so a result covers batches of at most three rather than all batches. Hashing of unbounded arguments is assumed within 224 bytes. External calls are summarised one signature at a time.
+Three caveats attach to every proof. Loops unroll three times, so a result covers batches of at most three rather than all batches. Hashing of unbounded arguments is assumed within 224 bytes, raised to 1600 in `ESIMWalletFactory.spec` so its CREATE2 address prediction stays reachable. External calls are summarised one signature at a time.
 
 `LazyWalletRegistry` has no spec, and the reason is every mapping in it is string-keyed, and Certora's storage analysis fails on any method taking a `string`.
 Its properties are carried by Foundry invariants instead.
