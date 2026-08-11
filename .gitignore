@@ -11,3 +11,7 @@ broadcast/
 lcov.info
 .env
 .DS_Store
+
+# Editor settings are per developer. The remappings inside are generated from remappings.txt
+# anyway, so a stale copy here is worse than no copy.
+.vscode/
