@@ -395,7 +395,7 @@ _A zero amount is a no-op rather than a revert._
 function getVaultAddress() public view returns (address)
 ```
 
-Fetches the vault address (that receives payment for data bundles) from the device wallet factory
+Fetches the vault address that receives payment for data bundles
 
 _Read through to the registry rather than cached, so a vault change reaches every
      wallet at once. The associated eSIM wallets call this before paying._

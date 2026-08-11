@@ -39,13 +39,6 @@
     {
       "slot": "5",
       "offset": 0,
-      "bytes": "20",
-      "label": "vault",
-      "type": "t_address"
-    },
-    {
-      "slot": "6",
-      "offset": 0,
       "bytes": "32",
       "label": "deviceWalletInfoAdded",
       "type": "t_mapping(t_address,t_bool)"

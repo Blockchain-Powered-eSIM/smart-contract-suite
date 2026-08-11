@@ -1,11 +1,12 @@
 {
   "acceptAdminUpdate": "4921",
   "pause": "30702",
-  "requestAdminUpdate": "31634",
+  "requestAdminUpdate": "31656",
   "setDefaultDataBundlePriceCap": "30732",
   "toggleESIMWalletStandbyStatus: off standby": "3632",
   "toggleESIMWalletStandbyStatus: onto standby": "23532",
   "unpause": "4056",
   "updateDeviceWalletInfo: first device, cold storage": "122094",
-  "updateDeviceWalletInfo: second device, warm storage": "115594"
+  "updateDeviceWalletInfo: second device, warm storage": "115594",
+  "updateVaultAddress": "14091"
 }

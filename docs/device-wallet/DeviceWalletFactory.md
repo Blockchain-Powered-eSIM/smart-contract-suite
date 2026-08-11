@@ -52,14 +52,6 @@ contract ESIMWalletFactory eSIMWalletFactory
 
 eSIM wallet factory contract instance
 
-### vault
-
-```solidity
-address vault
-```
-
-Vault address that receives payments for eSIM data bundles
-
 ### deviceWalletInfoAdded
 
 ```solidity
@@ -71,18 +63,10 @@ Tracks all the device wallets that have their data added into the registry upon 
 ### DeviceWalletFactoryDeployed
 
 ```solidity
-event DeviceWalletFactoryDeployed(address _vault, address _upgradeManager, address _deviceWalletImplementation, address _beacon)
+event DeviceWalletFactoryDeployed(address _upgradeManager, address _deviceWalletImplementation, address _beacon)
 ```
 
 Emitted when factory is deployed
-
-### VaultAddressUpdated
-
-```solidity
-event VaultAddressUpdated(address _updatedVaultAddress)
-```
-
-Emitted when the Vault address is updated
 
 ### DeviceWalletDeployed
 
@@ -108,14 +92,6 @@ event AddedRegistry(address registry)
 
 Emitted when the registry is added to the factory contract
 
-### onlyAdmin
-
-```solidity
-modifier onlyAdmin()
-```
-
-Restricts a call to the eSIM wallet admin
-
 ### onlyAdminOrRegistry
 
 ```solidity
@@ -138,20 +114,20 @@ _Locks the implementation contract itself. Without this, anyone can call initial
 ### initialize
 
 ```solidity
-function initialize(address _deviceWalletImplementation, address _vault, address _upgradeManager, address _eSIMWalletFactoryAddress, contract IEntryPoint _entryPoint, contract P256Verifier _verifier) external
+function initialize(address _deviceWalletImplementation, address _upgradeManager, address _eSIMWalletFactoryAddress, contract IEntryPoint _entryPoint, contract P256Verifier _verifier) external
 ```
 
 Deploys the beacon and hands ownership of this factory to the upgrade manager
 
-_The admin is not taken here. It comes from the registry, which is added afterwards
-     through addRegistryAddress, so admin functions stay closed until that is done._
+_Neither the admin nor the vault is taken here. Both come from the registry, which is
+     added afterwards through addRegistryAddress, so admin functions stay closed until that
+     is done and every payment reads one address._
 
 #### Parameters
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
 | _deviceWalletImplementation | address | First device wallet logic contract the beacon points at |
-| _vault | address | Address of the vault that receives payments for the data bundles |
 | _upgradeManager | address | Admin address responsible for upgrading contracts |
 | _eSIMWalletFactoryAddress | address | Factory the device wallets deploy their eSIM wallets through |
 | _entryPoint | contract IEntryPoint | ERC-4337 EntryPoint singleton for this chain |
@@ -248,28 +224,6 @@ _Not needed on the admin batch route, which writes the registry itself. Callable
 | _deviceWallet | address | Wallet that was deployed |
 | _deviceUniqueIdentifier | string | Identifier the device is reached by |
 | _deviceWalletOwnerKey | bytes32[2] | X,Y co-ordinates of the P256 key owning the wallet |
-
-### updateVaultAddress
-
-```solidity
-function updateVaultAddress(address _newVaultAddress) public returns (address)
-```
-
-Function to update vault address.
-
-_Can only be called by the admin_
-
-#### Parameters
-
-| Name | Type | Description |
-| ---- | ---- | ----------- |
-| _newVaultAddress | address | New vault address |
-
-#### Return Values
-
-| Name | Type | Description |
-| ---- | ---- | ----------- |
-| [0] | address | The vault address now in force |
 
 ### createAccount
 

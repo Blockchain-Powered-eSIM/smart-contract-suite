@@ -169,6 +169,35 @@ Takes up the admin role, callable only by the nominated address
 | ---- | ---- | ----------- |
 | [0] | address | Address of the new admin |
 
+### updateVaultAddress
+
+```solidity
+function updateVaultAddress(address _newVaultAddress) external returns (address)
+```
+
+Points every data bundle payment at a different vault
+
+_Owner and not admin, deliberately. This is the destination of every payment the protocol
+     collects, so moving it is a fund-flow change and belongs behind the same delay as an
+     upgrade rather than on the hot key that signs backend batches all day.
+
+     Device wallets read `vault` here on every purchase instead of caching it, so one write
+     reaches all of them in the same transaction. This used to live on `DeviceWalletFactory`,
+     which nothing on the payment path ever read, so rotating the vault there changed nothing
+     and the real address could not be moved at all._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _newVaultAddress | address | Address that receives payments for the data bundles from now on |
+
+#### Return Values
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| [0] | address | The vault address now in force |
+
 ### pause
 
 ```solidity

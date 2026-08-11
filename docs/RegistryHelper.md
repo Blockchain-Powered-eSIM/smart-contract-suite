@@ -168,6 +168,14 @@ event AdminUpdateRevoked(address _currentAdmin, address _revokedAddress)
 
 Emitted when the current admin revokes the transfer of the admin role
 
+### VaultAddressUpdated
+
+```solidity
+event VaultAddressUpdated(address _updatedVaultAddress)
+```
+
+Emitted when the owner points data bundle payments at a different vault
+
 ### Paused
 
 ```solidity
