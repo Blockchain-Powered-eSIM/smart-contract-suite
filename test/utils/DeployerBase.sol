@@ -118,7 +118,7 @@ contract DeployerBase is Test {
             address(deviceWalletFactoryImpl),
             abi.encodeCall(
                 deviceWalletFactoryImpl.initialize,
-                (address(deviceWalletImpl), vault, upgradeManager, address(eSIMWalletFactoryProxy), typeCastEntryPoint, p256Verifier)
+                (address(deviceWalletImpl), upgradeManager, address(eSIMWalletFactoryProxy), typeCastEntryPoint, p256Verifier)
             )
         );
         deviceWalletFactory = DeviceWalletFactory(address(deviceWalletFactoryProxy));

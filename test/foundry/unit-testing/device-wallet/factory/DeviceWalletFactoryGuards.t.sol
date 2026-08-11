@@ -58,17 +58,16 @@ contract DeviceWalletFactoryGuardsTest is DeployerBase {
             address(implementation),
             abi.encodeCall(
                 implementation.initialize,
-                (address(deviceWalletImpl), vault, upgradeManager, address(eSIMWalletFactory), typeCastEntryPoint, p256Verifier)
+                (address(deviceWalletImpl), upgradeManager, address(eSIMWalletFactory), typeCastEntryPoint, p256Verifier)
             )
         );
         return DeviceWalletFactory(address(proxy));
     }
 
     /// @notice Calls initialize with one argument replaced, expecting the given revert string
-    /// @param _vault The vault address to pass
     /// @param _upgradeManager The upgrade manager address to pass
     /// @param _error The encoded error expected
-    function _expectInitializeToRevert(address _vault, address _upgradeManager, bytes memory _error) internal {
+    function _expectInitializeToRevert(address _upgradeManager, bytes memory _error) internal {
         DeviceWalletFactory implementation = new DeviceWalletFactory();
 
         vm.expectRevert(_error);
@@ -76,7 +75,7 @@ contract DeviceWalletFactoryGuardsTest is DeployerBase {
             address(implementation),
             abi.encodeCall(
                 implementation.initialize,
-                (address(deviceWalletImpl), _vault, _upgradeManager, address(eSIMWalletFactory), typeCastEntryPoint, p256Verifier)
+                (address(deviceWalletImpl), _upgradeManager, address(eSIMWalletFactory), typeCastEntryPoint, p256Verifier)
             )
         );
     }
@@ -99,7 +98,7 @@ contract DeviceWalletFactoryGuardsTest is DeployerBase {
             address(implementation),
             abi.encodeCall(
                 implementation.initialize,
-                (address(deviceWalletImpl), vault, upgradeManager, _eSIMWalletFactory, _entryPoint, _verifier)
+                (address(deviceWalletImpl), upgradeManager, _eSIMWalletFactory, _entryPoint, _verifier)
             )
         );
     }
@@ -108,16 +107,10 @@ contract DeviceWalletFactoryGuardsTest is DeployerBase {
     // Wiring
     // ---------------------------------------------------------------------------------------------
 
-    /// @notice A factory without a vault cannot be initialized
-    /// @dev The vault has no setter that accepts zero, so a zero here would be permanent.
-    function test_initialize_rejectsAZeroVault() public {
-        _expectInitializeToRevert(address(0), upgradeManager, abi.encodeWithSelector(Errors.ZeroAddress.selector, "_vault"));
-    }
-
     /// @notice A factory without an owner cannot be initialized
     /// @dev The owner is the only caller that can upgrade this contract or the beacon under it.
     function test_initialize_rejectsAZeroUpgradeManager() public {
-        _expectInitializeToRevert(vault, address(0), abi.encodeWithSelector(Errors.ZeroAddress.selector, "_upgradeManager"));
+        _expectInitializeToRevert(address(0), abi.encodeWithSelector(Errors.ZeroAddress.selector, "_upgradeManager"));
     }
 
     /// @notice The three wiring addresses cannot be zero either
@@ -155,9 +148,11 @@ contract DeviceWalletFactoryGuardsTest is DeployerBase {
 
         assertEq(factory.eSIMWalletAdmin(), address(0), "An unwired factory must report no admin");
 
+        bytes32[2] memory ownerKey;
+
         vm.prank(eSIMWalletAdmin);
-        vm.expectRevert(Errors.OnlyAdmin.selector);
-        factory.updateVaultAddress(user1);
+        vm.expectRevert(Errors.OnlyAdminOrRegistry.selector);
+        factory.postCreateAccount(user1, "Device_1", ownerKey);
     }
 
     // ---------------------------------------------------------------------------------------------

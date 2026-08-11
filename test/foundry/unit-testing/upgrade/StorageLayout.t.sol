@@ -296,13 +296,10 @@ contract StorageLayoutTest is DeployerBase {
             "DeviceWalletFactory.eSIMWalletFactory must read slot 4"
         );
 
-        vm.store(_target, bytes32(uint256(5)), bytes32(uint256(uint160(SENTINEL))));
-        assertEq(deviceWalletFactory.vault(), SENTINEL, "DeviceWalletFactory.vault must read slot 5");
-
-        vm.store(_target, _entry(SENTINEL, 6), bytes32(uint256(1)));
+        vm.store(_target, _entry(SENTINEL, 5), bytes32(uint256(1)));
         assertTrue(
             deviceWalletFactory.deviceWalletInfoAdded(SENTINEL),
-            "DeviceWalletFactory.deviceWalletInfoAdded must read slot 6"
+            "DeviceWalletFactory.deviceWalletInfoAdded must read slot 5"
         );
     }
 

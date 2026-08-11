@@ -40,45 +40,6 @@ contract DeviceWalletFactoryConfigTest is DeviceWalletFactoryFixture {
         vm.stopPrank();
     }
 
-    function test_updateVaultAddress_withoutAdmin() public {
-        vm.startPrank(user1);
-        vm.expectRevert(bytes4(keccak256("OnlyAdmin()")));
-        deviceWalletFactory.updateVaultAddress(user2);
-        vm.stopPrank();
-    }
-
-    function test_updateVaultAddress_sameAddress() public {
-        address currentVault = deviceWalletFactory.vault();
-        assertNotEq(currentVault, address(0), "Vault cannot be address(0)");
-
-        vm.startPrank(eSIMWalletAdmin);
-        vm.expectRevert(abi.encodeWithSelector(Errors.VaultUnchanged.selector, currentVault));
-        deviceWalletFactory.updateVaultAddress(currentVault);
-        vm.stopPrank();
-    }
-
-    function test_updateVaultAddress_zeroAddress() public {
-        address currentVault = deviceWalletFactory.vault();
-        assertNotEq(currentVault, address(0), "Vault cannot be address(0)");
-
-        vm.startPrank(eSIMWalletAdmin);
-        vm.expectRevert(abi.encodeWithSelector(Errors.ZeroAddress.selector, "_newVaultAddress"));
-        deviceWalletFactory.updateVaultAddress(address(0));
-        vm.stopPrank();
-    }
-
-    function test_updateVaultAddress() public {
-        address currentVault = deviceWalletFactory.vault();
-        assertNotEq(currentVault, address(0), "Vault cannot be address(0)");
-
-        vm.startPrank(eSIMWalletAdmin);
-        deviceWalletFactory.updateVaultAddress(user2);
-        vm.stopPrank();
-
-        address newVault = deviceWalletFactory.vault();
-        assertEq(newVault, user2, "Vault should have updated");
-    }
-
     function test_updateDeviceWalletImplementation_admin() public {
         address admin = deviceWalletFactory.eSIMWalletAdmin();
 

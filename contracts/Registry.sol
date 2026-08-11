@@ -185,6 +185,31 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
     }
 
     // ---------------------------------------------------------------------------------------------
+    // Vault
+    // ---------------------------------------------------------------------------------------------
+
+    /// @notice Points every data bundle payment at a different vault
+    /// @dev Owner and not admin, deliberately. This is the destination of every payment the protocol
+    ///      collects, so moving it is a fund-flow change and belongs behind the same delay as an
+    ///      upgrade rather than on the hot key that signs backend batches all day.
+    ///
+    ///      Device wallets read `vault` here on every purchase instead of caching it, so one write
+    ///      reaches all of them in the same transaction. This used to live on `DeviceWalletFactory`,
+    ///      which nothing on the payment path ever read, so rotating the vault there changed nothing
+    ///      and the real address could not be moved at all.
+    /// @param _newVaultAddress Address that receives payments for the data bundles from now on
+    /// @return The vault address now in force
+    function updateVaultAddress(address _newVaultAddress) external onlyOwner returns (address) {
+        if(_newVaultAddress == address(0)) revert Errors.ZeroAddress("_newVaultAddress");
+        if(vault == _newVaultAddress) revert Errors.VaultUnchanged(vault);
+
+        vault = _newVaultAddress;
+        emit VaultAddressUpdated(vault);
+
+        return vault;
+    }
+
+    // ---------------------------------------------------------------------------------------------
     // Pause and price ceiling
     // ---------------------------------------------------------------------------------------------
 

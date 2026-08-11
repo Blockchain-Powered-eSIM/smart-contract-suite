@@ -49,6 +49,29 @@ contract RegistryInitializeTest is DeployerBase {
         );
     }
 
+    /// @notice A zero vault is rejected at initialization
+    /// @dev This is the address every data bundle payment lands on, and the setter refuses zero, so
+    ///      the only way one could get in is here.
+    function test_initialize_revertsWhenVaultIsZero() public {
+        MockRegistry registryImpl = new MockRegistry();
+
+        vm.expectRevert(abi.encodeWithSelector(Errors.ZeroAddress.selector, "_vault"));
+        new ERC1967Proxy(
+            address(registryImpl),
+            abi.encodeCall(
+                registryImpl.initialize,
+                (
+                    eSIMWalletAdmin,
+                    address(0),
+                    upgradeManager,
+                    address(deviceWalletFactory),
+                    address(eSIMWalletFactory),
+                    typeCastEntryPoint
+                )
+            )
+        );
+    }
+
     /// @notice Both factories are still recorded when neither is zero
     /// @dev Guards the guards: proves the new checks do not reject the intended deployment.
     function test_initialize_recordsBothFactories() public view {

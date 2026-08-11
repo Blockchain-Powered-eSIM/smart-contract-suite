@@ -63,6 +63,13 @@ contract RegistryOperationsGasTest is GasBase {
         vm.snapshotGasLastCall(NAMESPACE, "setDefaultDataBundlePriceCap");
     }
 
+    /// @notice Pointing every data bundle payment at a different vault
+    function test_updateVaultAddress() public {
+        vm.prank(upgradeManager);
+        registry.updateVaultAddress(user5);
+        vm.snapshotGasLastCall(NAMESPACE, "updateVaultAddress");
+    }
+
     /// @notice Putting a deployed eSIM wallet on standby and taking it off again
     function test_toggleESIMWalletStandbyStatus() public {
         (MockDeviceWallet deviceWallet, MockESIMWallet eSIMWallet) = _deployDeviceWallet(

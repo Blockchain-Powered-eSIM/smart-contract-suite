@@ -11,6 +11,10 @@ import "test/utils/DeployerBase.sol";
 /// itself and the readers following it.
 contract RegistryTest is DeployerBase {
 
+    // Redeclared so expectEmit can name it. An inherited event is not reachable through a contract
+    // instance, and this test contract does not inherit RegistryHelper.
+    event VaultAddressUpdated(address indexed _updatedVaultAddress);
+
     function test_requestAdminUpdate_withoutAdmin() public {
         assertEq(registry.eSIMWalletAdmin(), eSIMWalletAdmin, "Admin should have been eSIMWalletAdmin");
 
@@ -110,13 +114,17 @@ contract RegistryTest is DeployerBase {
             "The registry must report the rotated admin to the lazy registry and the eSIM wallets"
         );
 
+        // The retired key is stopped at the gate, and the incoming one gets past it and is stopped
+        // by the input check behind it. Reaching a different revert is what proves the gate opened.
+        bytes32[2] memory ownerKey;
+
         vm.prank(eSIMWalletAdmin);
-        vm.expectRevert(Errors.OnlyAdmin.selector);
-        deviceWalletFactory.updateVaultAddress(user4);
+        vm.expectRevert(Errors.OnlyAdminOrRegistry.selector);
+        deviceWalletFactory.postCreateAccount(user4, "", ownerKey);
 
         vm.prank(user3);
-        deviceWalletFactory.updateVaultAddress(user4);
-        assertEq(deviceWalletFactory.vault(), user4, "The rotated admin's write must have landed");
+        vm.expectRevert(Errors.EmptyDeviceIdentifier.selector);
+        deviceWalletFactory.postCreateAccount(user4, "", ownerKey);
     }
 
     /// @notice The admin trips the pause, so an operator watching the backend can act without
@@ -211,5 +219,49 @@ contract RegistryTest is DeployerBase {
         vm.prank(registry.owner());
         registry.setDefaultDataBundlePriceCap(1 ether);
         assertEq(registry.defaultDataBundlePriceCap(), 1 ether, "The owner must be able to set it");
+    }
+
+    /// @notice Moving the vault is the owner's, not the admin's. It is the destination of every
+    /// payment the protocol collects, so it belongs behind the same delay as an upgrade.
+    function test_updateVaultAddress_rejectsTheAdmin() public {
+        address admin = registry.eSIMWalletAdmin();
+
+        vm.prank(admin);
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", admin));
+        registry.updateVaultAddress(user2);
+
+        vm.prank(user1);
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", user1));
+        registry.updateVaultAddress(user2);
+
+        assertEq(registry.vault(), vault, "Neither the admin nor a stranger may move the vault");
+    }
+
+    /// @notice A zero vault would send every data bundle payment to an address nobody holds.
+    function test_updateVaultAddress_rejectsTheZeroAddress() public {
+        vm.prank(registry.owner());
+        vm.expectRevert(abi.encodeWithSelector(Errors.ZeroAddress.selector, "_newVaultAddress"));
+        registry.updateVaultAddress(address(0));
+
+        assertEq(registry.vault(), vault, "The vault must be unchanged after a rejected write");
+    }
+
+    /// @notice Rewriting the same address is rejected, so an emitted event always means a real move.
+    function test_updateVaultAddress_rejectsTheCurrentAddress() public {
+        vm.prank(registry.owner());
+        vm.expectRevert(abi.encodeWithSelector(Errors.VaultUnchanged.selector, vault));
+        registry.updateVaultAddress(vault);
+    }
+
+    /// @notice The owner can move the vault, and the write announces itself.
+    function test_updateVaultAddress() public {
+        vm.expectEmit(true, false, false, true, address(registry));
+        emit VaultAddressUpdated(user2);
+
+        vm.prank(registry.owner());
+        address inForce = registry.updateVaultAddress(user2);
+
+        assertEq(inForce, user2, "The call must report the address now in force");
+        assertEq(registry.vault(), user2, "The registry must hold the new vault");
     }
 }

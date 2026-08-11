@@ -74,7 +74,6 @@ contract Deployer is DeployerBase {
         assertEq(address(deviceWalletFactory.entryPoint()), address(entryPoint));
         assertEq(address(deviceWalletFactory.verifier()), address(p256Verifier));
         assertEq(address(deviceWalletFactory.eSIMWalletAdmin()), eSIMWalletAdmin);
-        assertEq(address(deviceWalletFactory.vault()), vault);
         assertEq(address(deviceWalletFactory.registry()), address(registry));
         assertNotEq(address(deviceWalletFactory.beacon()), address(0));
 

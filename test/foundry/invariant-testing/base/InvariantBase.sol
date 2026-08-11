@@ -80,7 +80,6 @@ contract InvariantBase is Test {
                 deviceWalletFactoryImpl.initialize,
                 (
                     address(deviceWalletImpl),
-                    VAULT,
                     UPGRADE_MANAGER,
                     address(eSIMWalletFactory),
                     IEntryPoint(address(entryPoint)),

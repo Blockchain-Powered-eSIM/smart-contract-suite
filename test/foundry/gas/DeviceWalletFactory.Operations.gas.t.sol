@@ -74,11 +74,4 @@ contract DeviceWalletFactoryOperationsGasTest is GasBase {
         deviceWalletFactory.deployDeviceWalletForUsers{value: 1 ether}(identifiers, keys, salts, deposits);
         vm.snapshotGasLastCall(NAMESPACE, "deployDeviceWalletForUsers: batch of 1, funded");
     }
-
-    /// @notice Rotating the vault the factory hands to new wallets
-    function test_updateVaultAddress() public {
-        vm.prank(eSIMWalletAdmin);
-        deviceWalletFactory.updateVaultAddress(user5);
-        vm.snapshotGasLastCall(NAMESPACE, "updateVaultAddress");
-    }
 }

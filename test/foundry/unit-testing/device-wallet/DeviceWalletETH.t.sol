@@ -95,6 +95,24 @@ contract DeviceWalletETHTest is DeviceWalletFixture {
         assertEq(vaultAddress, vault, "Vault address should have matched");
     }
 
+    /// @notice One write in the registry has to reach every wallet, because a wallet reads the vault
+    /// on each purchase rather than caching it.
+    /// @dev The address used to sit on the device wallet factory as well, where nothing on the
+    /// payment path ever read it, so the only copy anyone could rotate was the one that never
+    /// received the money.
+    function test_getVaultAddress_followsTheRegistry() public {
+        deployWallets();
+
+        assertEq(deviceWallet.getVaultAddress(), vault, "The wallet must start on the deployed vault");
+        assertEq(deviceWallet2.getVaultAddress(), vault, "The second wallet must start there too");
+
+        vm.prank(registry.owner());
+        registry.updateVaultAddress(user5);
+
+        assertEq(deviceWallet.getVaultAddress(), user5, "The wallet must follow in the same transaction");
+        assertEq(deviceWallet2.getVaultAddress(), user5, "Every wallet must follow, not just one");
+    }
+
     function test_toggleAccessToETH_unauthorised() public {
         deployWallets();
 

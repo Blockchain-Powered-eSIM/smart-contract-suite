@@ -47,22 +47,15 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     /// @notice eSIM wallet factory contract instance
     ESIMWalletFactory public eSIMWalletFactory;
 
-    /// @notice Vault address that receives payments for eSIM data bundles
-    address public vault;
-
     /// @notice Tracks all the device wallets that have their data added into the registry upon deployment
     mapping(address deviceWallet => bool isAdded) public deviceWalletInfoAdded;
 
     /// @notice Emitted when factory is deployed
     event DeviceWalletFactoryDeployed(
-        address _vault,
         address indexed _upgradeManager,
         address indexed _deviceWalletImplementation,
         address indexed _beacon
     );
-
-    /// @notice Emitted when the Vault address is updated
-    event VaultAddressUpdated(address indexed _updatedVaultAddress);
 
     /// @notice Emitted when a new device wallet is deployed
     event DeviceWalletDeployed(
@@ -77,20 +70,9 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     /// @notice Emitted when the registry is added to the factory contract
     event AddedRegistry(address indexed registry);
 
-    /// @notice Reverts unless the caller is the eSIM wallet admin
+    /// @notice Reverts unless the caller is the eSIM wallet admin or the registry
     /// @dev Private rather than inline in the modifier, so the check is emitted once instead of at
     ///      every use site. Keep each of these next to the modifier that calls it.
-    function _onlyAdmin() private view {
-        if (msg.sender != eSIMWalletAdmin()) revert Errors.OnlyAdmin();
-    }
-
-    /// @notice Restricts a call to the eSIM wallet admin
-    modifier onlyAdmin() {
-        _onlyAdmin();
-        _;
-    }
-
-    /// @notice Reverts unless the caller is the eSIM wallet admin or the registry
     function _onlyAdminOrRegistry() private view {
         if (
             msg.sender != eSIMWalletAdmin() &&
@@ -118,29 +100,26 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     }
 
     /// @notice Deploys the beacon and hands ownership of this factory to the upgrade manager
-    /// @dev The admin is not taken here. It comes from the registry, which is added afterwards
-    ///      through addRegistryAddress, so admin functions stay closed until that is done.
+    /// @dev Neither the admin nor the vault is taken here. Both come from the registry, which is
+    ///      added afterwards through addRegistryAddress, so admin functions stay closed until that
+    ///      is done and every payment reads one address.
     /// @param _deviceWalletImplementation First device wallet logic contract the beacon points at
-    /// @param _vault Address of the vault that receives payments for the data bundles
     /// @param _upgradeManager Admin address responsible for upgrading contracts
     /// @param _eSIMWalletFactoryAddress Factory the device wallets deploy their eSIM wallets through
     /// @param _entryPoint ERC-4337 EntryPoint singleton for this chain
     /// @param _verifier Contract the device wallets verify WebAuthn assertions through
     function initialize(
         address _deviceWalletImplementation,
-        address _vault,
         address _upgradeManager,
         address _eSIMWalletFactoryAddress,
         IEntryPoint _entryPoint,
         P256Verifier _verifier
     ) external initializer {
-        if(_vault == address(0)) revert Errors.ZeroAddress("_vault");
         if(_upgradeManager == address(0)) revert Errors.ZeroAddress("_upgradeManager");
         if(address(_entryPoint) == address(0)) revert Errors.ZeroAddress("_entryPoint");
         if(address(_verifier) == address(0)) revert Errors.ZeroAddress("_verifier");
         if(_eSIMWalletFactoryAddress == address(0)) revert Errors.ZeroAddress("_eSIMWalletFactoryAddress");
 
-        vault = _vault;
         entryPoint = _entryPoint;
         verifier = _verifier;
         eSIMWalletFactory = ESIMWalletFactory(_eSIMWalletFactoryAddress);
@@ -149,7 +128,6 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         beacon = new UpgradeableBeacon(_deviceWalletImplementation, address(this));
 
         emit DeviceWalletFactoryDeployed(
-            _vault,
             _upgradeManager,
             getCurrentDeviceWalletImplementation(),
             address(beacon)
@@ -285,22 +263,8 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Vault and deployment through the EntryPoint
+    // Deployment through the EntryPoint
     // ---------------------------------------------------------------------------------------------
-
-    /// @notice Function to update vault address.
-    /// @dev Can only be called by the admin
-    /// @param _newVaultAddress New vault address
-    /// @return The vault address now in force
-    function updateVaultAddress(address _newVaultAddress) public onlyAdmin returns (address) {
-        if(vault == _newVaultAddress) revert Errors.VaultUnchanged(vault);
-        if(_newVaultAddress == address(0)) revert Errors.ZeroAddress("_newVaultAddress");
-
-        vault = _newVaultAddress;
-        emit VaultAddressUpdated(vault);
-
-        return vault;
-    }
 
     /// @notice Deploys a device wallet, returning the existing one if that address already holds it
     /// @dev Called by the EntryPoint during a user operation, so it must not read or write any

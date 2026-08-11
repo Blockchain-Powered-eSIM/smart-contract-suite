@@ -127,7 +127,6 @@ contract Deploy is Script {
                 DeviceWalletFactory.initialize,
                 (
                     deployed.deviceWalletImplementation,
-                    config.vault,
                     config.deployer,
                     deployed.eSIMWalletFactory,
                     config.entryPoint,

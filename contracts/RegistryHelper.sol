@@ -114,6 +114,9 @@ contract RegistryHelper {
     /// @notice Emitted when the current admin revokes the transfer of the admin role
     event AdminUpdateRevoked(address indexed _currentAdmin, address indexed _revokedAddress);
 
+    /// @notice Emitted when the owner points data bundle payments at a different vault
+    event VaultAddressUpdated(address indexed _updatedVaultAddress);
+
     /// @notice Emitted when the admin stops the ETH-moving paths protocol-wide
     event Paused(address indexed _admin);
 

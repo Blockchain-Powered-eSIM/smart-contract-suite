@@ -67,7 +67,6 @@ contract ImplementationLocksTest is Test {
             address(this),
             attacker,
             attacker,
-            attacker,
             IEntryPoint(attacker),
             P256Verifier(attacker)
         );

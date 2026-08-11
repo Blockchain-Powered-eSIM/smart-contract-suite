@@ -411,7 +411,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         ) revert Errors.InvalidDeviceWalletOwnerKey();
     }
 
-    /// @notice Fetches the vault address (that receives payment for data bundles) from the device wallet factory
+    /// @notice Fetches the vault address that receives payment for data bundles
     /// @dev Read through to the registry rather than cached, so a vault change reaches every
     ///      wallet at once. The associated eSIM wallets call this before paying.
     /// @return The vault address
