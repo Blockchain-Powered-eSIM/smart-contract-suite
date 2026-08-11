@@ -1,12 +1,31 @@
 const hre = require("hardhat");
-const {ethers} = hre;
+const {ethers, network} = hre;
 const dotenv = require("dotenv");
-const ADDRESS = require("../deployments/address.json");
+const ADDRESS = require("../../deployments/address.json");
 
 dotenv.config();
 
+// The deployment record is keyed by chain name and chain id together, so that a mainnet entry can
+// never sit where a testnet one was. Built the same way DeployConfig.recordKey does it.
+const CHAIN_LABELS = {
+    1: "mainnet",
+    10: "optimism",
+    8453: "base",
+    11155111: "sepolia",
+    11155420: "optimism-sepolia",
+    84532: "base-sepolia",
+    31337: "anvil",
+};
+
+function recordFor(chainId) {
+    const key = `${CHAIN_LABELS[chainId] ?? "chain"}-${chainId}`;
+    const entry = ADDRESS[key];
+    if (!entry) throw new Error(`No deployment recorded under ${key}`);
+    return entry;
+}
+
 async function main () {
-    
+
     const {
         keccak256,
         getCreate2Address,
@@ -27,9 +46,10 @@ async function main () {
     const deviceUniqueIdentifier = "Device_11";
     const salt = 111n; // bigint or number
     
-    const registry = ADDRESS[network.config.name].RegistryProxy;
-    const deviceWalletFactoryAddress = ADDRESS[network.config.name].DeviceWalletFactoryProxy;
-    const eSIMWalletFactoryAddress = ADDRESS[network.config.name].ESIMWalletFactoryProxy;
+    const deployment = recordFor(network.config.chainId);
+    const registry = deployment.contracts.RegistryProxy.address;
+    const deviceWalletFactoryAddress = deployment.contracts.DeviceWalletFactoryProxy.address;
+    const eSIMWalletFactoryAddress = deployment.contracts.ESIMWalletFactoryProxy.address;
 
     console.log("registry: ", registry);
     console.log("deviceWalletFactoryAddress: ", deviceWalletFactoryAddress);

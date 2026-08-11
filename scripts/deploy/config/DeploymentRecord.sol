@@ -13,9 +13,10 @@ import {DeployConfig} from "./DeployConfig.sol";
 ///      command line is how the wrong proxy gets upgraded, so each script looks its targets up here
 ///      instead and fails loudly when an entry is missing.
 ///
-///      Records are keyed by network, so writing one chain never touches another. Everything under
-///      a network key is written by the scripts and nothing is hand edited: a hand edited address
-///      is indistinguishable from a deployed one to every reader of this file.
+///      Records are keyed by chain name and chain id together, `base-sepolia-84532`, so writing one
+///      chain never touches another and the key cannot disagree with the chain it came from.
+///      Everything under a key is written by the scripts and nothing is hand edited: a hand edited
+///      address is indistinguishable from a deployed one to every reader of this file.
 library DeploymentRecord {
 
     string internal constant PATH = "deployments/address.json";
@@ -34,7 +35,7 @@ library DeploymentRecord {
     /// @param key Contract name as recorded, for example `RegistryProxy`
     /// @return target Address recorded for this contract on the current chain
     function readAddress(string memory key) internal view returns (address target) {
-        string memory network = DeployConfig.networkName();
+        string memory network = DeployConfig.recordKey();
         string memory json = vm.readFile(PATH);
         string memory pointer = string.concat(".", network, ".contracts.", key, ".address");
 
@@ -50,7 +51,7 @@ library DeploymentRecord {
     /// @param path Dotted path below the network key, for example `admin.protocolAdmin`
     /// @return value Address at that path
     function readRaw(string memory path) internal view returns (address value) {
-        string memory network = DeployConfig.networkName();
+        string memory network = DeployConfig.recordKey();
         string memory json = vm.readFile(PATH);
         string memory pointer = string.concat(".", network, ".", path);
 
@@ -63,7 +64,7 @@ library DeploymentRecord {
     /// @param path Dotted path below the network key
     /// @return value Number at that path
     function readUint(string memory path) internal view returns (uint256 value) {
-        string memory network = DeployConfig.networkName();
+        string memory network = DeployConfig.recordKey();
         string memory json = vm.readFile(PATH);
         string memory pointer = string.concat(".", network, ".", path);
 
@@ -76,7 +77,7 @@ library DeploymentRecord {
     /// @param path Dotted path below the network key
     /// @return value Bytes at that path
     function readBytes(string memory path) internal view returns (bytes memory value) {
-        string memory network = DeployConfig.networkName();
+        string memory network = DeployConfig.recordKey();
         string memory json = vm.readFile(PATH);
         string memory pointer = string.concat(".", network, ".", path);
 
@@ -89,7 +90,7 @@ library DeploymentRecord {
     /// @param path Dotted path below the network key
     /// @return value Word at that path
     function readBytes32(string memory path) internal view returns (bytes32 value) {
-        string memory network = DeployConfig.networkName();
+        string memory network = DeployConfig.recordKey();
         string memory json = vm.readFile(PATH);
         string memory pointer = string.concat(".", network, ".", path);
 
@@ -109,7 +110,7 @@ library DeploymentRecord {
         vm.writeJson(
             done ? "true" : "false",
             PATH,
-            string.concat(".", DeployConfig.networkName(), ".status.", key)
+            string.concat(".", DeployConfig.recordKey(), ".status.", key)
         );
     }
 
@@ -121,7 +122,7 @@ library DeploymentRecord {
     /// @param path Dotted path below the network key
     /// @param json Serialized object to write there
     function writeObject(string memory path, string memory json) internal {
-        vm.writeJson(json, PATH, string.concat(".", DeployConfig.networkName(), ".", path));
+        vm.writeJson(json, PATH, string.concat(".", DeployConfig.recordKey(), ".", path));
     }
 
     /// @notice True when the record already holds an entry at this path for the current chain
@@ -131,7 +132,7 @@ library DeploymentRecord {
         string memory json = vm.readFile(PATH);
         present = vm.keyExistsJson(
             json,
-            string.concat(".", DeployConfig.networkName(), ".", path)
+            string.concat(".", DeployConfig.recordKey(), ".", path)
         );
     }
 }

@@ -77,7 +77,7 @@ contract Deploy is Script {
         // Refuse to write over a chain that already has a deployment. Overwriting the record is
         // how a live proxy stops being reachable by any script, since nothing else remembers it.
         if(DeploymentRecord.has("contracts.RegistryProxy")) {
-            revert AlreadyDeployed(DeployConfig.networkName());
+            revert AlreadyDeployed(DeployConfig.recordKey());
         }
 
         _logPlan(config);
@@ -208,7 +208,7 @@ contract Deploy is Script {
 
     /// @notice Writes the deployment record for this chain
     function _record(DeployConfig.Config memory config, Deployed memory deployed) private {
-        string memory network = DeployConfig.networkName();
+        string memory network = DeployConfig.recordKey();
 
         string memory record = vm.serializeString("record", "build", _buildProvenance());
         record = vm.serializeString("record", "chain", _chainSection(config));
@@ -239,7 +239,8 @@ contract Deploy is Script {
         returns (string memory section)
     {
         vm.serializeUint("chain", "chainId", config.chainId);
-        vm.serializeString("chain", "network", DeployConfig.networkName());
+        vm.serializeString("chain", "network", DeployConfig.chainLabel());
+        vm.serializeString("chain", "recordKey", DeployConfig.recordKey());
         vm.serializeUint("chain", "deployedAtBlock", block.number);
         vm.serializeUint("chain", "deployedAtTimestamp", block.timestamp);
         section = vm.serializeAddress("chain", "deployer", config.deployer);
@@ -359,8 +360,9 @@ contract Deploy is Script {
     }
 
     function _logPlan(DeployConfig.Config memory config) private view {
-        console.log("Network        ", DeployConfig.networkName());
+        console.log("Network        ", DeployConfig.chainLabel());
         console.log("Chain id       ", config.chainId);
+        console.log("Record key     ", DeployConfig.recordKey());
         console.log("Deployer       ", config.deployer);
         console.log("EntryPoint     ", address(config.entryPoint));
         console.log("eSIM admin     ", config.eSIMWalletAdmin);

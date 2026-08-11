@@ -116,12 +116,28 @@ library DeployConfig {
         }
     }
 
-    /// @notice Name this chain is recorded under in `deployments/address.json`
-    /// @dev Keyed by chain id rather than by forge's `--chain` string, so the same record is
-    ///      written whichever way the script is invoked. Unknown chains fall back to the id, which
-    ///      keeps a local or forked run from overwriting a real network's entry.
-    /// @return name Key for this chain in the deployment record
-    function networkName() internal view returns (string memory name) {
+    /// @notice Key this chain's entry lives under in `deployments/address.json`
+    /// @dev The chain id is part of the key, not just a field inside the entry. A name on its own
+    ///      is a label somebody chose, and two chains sharing one is how a mainnet deployment
+    ///      overwrites a testnet one that is still being used. The id is what the chain answers
+    ///      with, so the key cannot be wrong about which chain it describes.
+    ///
+    ///      Forge writes its own broadcast logs under `broadcast/<script>/<chainId>/` already, so
+    ///      this puts the record on the same footing.
+    ///
+    ///      This does not tell a local fork apart from the chain it forked, because a fork keeps
+    ///      the original chain id unless it is overridden. `Deploy.s.sol` refusing to write over an
+    ///      existing entry is what covers that case; pass `--chain-id 31337` to anvil to be sure.
+    /// @return key Key for this chain in the deployment record, for example `base-sepolia-84532`
+    function recordKey() internal view returns (string memory key) {
+        key = string.concat(chainLabel(), "-", vm.toString(block.chainid));
+    }
+
+    /// @notice Readable name for this chain, for logs and for the record's own `chain` section
+    /// @dev Unknown chains fall back to `chain`, so an unrecognised id still produces a key that
+    ///      names it rather than colliding with anything.
+    /// @return name Human readable chain name
+    function chainLabel() internal view returns (string memory name) {
         uint256 id = block.chainid;
 
         if(id == 11155111) return "sepolia";
@@ -132,6 +148,6 @@ library DeployConfig {
         if(id == 8453) return "base";
         if(id == 31337) return "anvil";
 
-        return string.concat("chain-", vm.toString(id));
+        return "chain";
     }
 }
