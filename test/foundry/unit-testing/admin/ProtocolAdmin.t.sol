@@ -177,7 +177,7 @@ contract ProtocolAdminTest is AdminBase {
     /// @dev The point of open execution: once the wait is served the protocol does not depend on
     ///      any particular key still being available to press the button.
     function test_execute_allowsAnyoneOnceTheDelayHasPassed() public {
-        assertEq(registry.defaultDataBundlePriceCap(), 0);
+        assertEq(registry.defaultDataBundlePriceCap(), defaultDataBundlePriceCap);
 
         _runThroughTheDelay(
             address(registry),
@@ -377,7 +377,11 @@ contract ProtocolAdminTest is AdminBase {
         vm.expectRevert();
         protocolAdmin.executeBatch(targets, values, payloads, bytes32(0), bytes32(0));
 
-        assertEq(registry.defaultDataBundlePriceCap(), 0, "the first call must not have stuck");
+        assertEq(
+            registry.defaultDataBundlePriceCap(),
+            defaultDataBundlePriceCap,
+            "the first call must not have stuck"
+        );
     }
 
     function test_executeBatch_rejectsMismatchedArrayLengths() public {

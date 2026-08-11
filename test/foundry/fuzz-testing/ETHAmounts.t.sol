@@ -16,9 +16,9 @@ import {FuzzBase} from "test/foundry/fuzz-testing/base/FuzzBase.sol";
 ///      the balance behind it fails rather than moving a partial amount.
 ///
 ///      The cap resolution is the part worth fuzzing rather than enumerating: the wallet's own cap
-///      wins when set, the registry default applies when it is not, and zero means unlimited at
-///      both levels. That last rule is the one a later change is most likely to break, because
-///      zero reads as "no cap configured" and as "cap of nothing" equally well.
+///      wins when set, and the registry default applies when it is not. Zero on the wallet still
+///      means "follow the registry", but the registry itself can never hold zero: `initialize` and
+///      `setDefaultDataBundlePriceCap` both refuse it, so a real ceiling always applies somewhere.
 contract ETHAmountsTest is FuzzBase {
 
     /// @dev Keeps fuzzed amounts inside what vm.deal can fund without the totals overflowing
@@ -45,6 +45,11 @@ contract ETHAmountsTest is FuzzBase {
         uint256 price = bound(_price, 1, MAX_FUZZED_ETH);
         uint256 walletBalance = bound(_walletBalance, 0, MAX_FUZZED_ETH);
         uint256 deviceBalance = bound(_deviceBalance, price, MAX_FUZZED_ETH);
+
+        // This test is about conservation of ETH on a successful purchase, not cap behaviour, so
+        // the wallet's own cap is raised above the fuzzed price range and out of the way.
+        vm.prank(address(fuzzDeviceWallet));
+        fuzzESIMWallet.setDataBundlePriceCap(MAX_FUZZED_ETH);
 
         vm.deal(address(fuzzESIMWallet), walletBalance);
         vm.deal(address(fuzzDeviceWallet), deviceBalance);
@@ -129,16 +134,20 @@ contract ETHAmountsTest is FuzzBase {
         assertEq(vault.balance - vaultBefore, price, "The wallet's own cap must be the one that applies");
     }
 
-    /// @notice Zero at both levels means unlimited rather than a cap of nothing
-    /// @dev The rule a later change is most likely to invert, since zero reads as "not configured"
-    ///      and as "nothing allowed" equally well. Inverting it stops every purchase on every
-    ///      wallet that never set a cap, which is all of them by default.
+    /// @notice A price within the registry default set at deployment succeeds without either
+    /// wallet or admin ever configuring a cap of their own
+    /// @dev The wallet-level zero still means "follow the registry", but the registry itself can
+    /// never hold zero, so this is the uncapped-looking path that is actually always bounded.
     /// forge-config: default.fuzz.runs = 5000
-    function testFuzz_buyDataBundle_zeroCapMeansUnlimited(uint256 _price) public {
-        uint256 price = bound(_price, 1, MAX_FUZZED_ETH);
+    function testFuzz_buyDataBundle_withinTheDeployTimeDefaultSucceeds(uint256 _price) public {
+        uint256 price = bound(_price, 1, defaultDataBundlePriceCap);
 
         assertEq(fuzzESIMWallet.dataBundlePriceCap(), 0, "The wallet must have no cap of its own");
-        assertEq(registry.defaultDataBundlePriceCap(), 0, "The registry must have no default cap");
+        assertEq(
+            registry.defaultDataBundlePriceCap(),
+            defaultDataBundlePriceCap,
+            "The registry must hold the cap it was deployed with"
+        );
 
         vm.deal(address(fuzzDeviceWallet), MAX_FUZZED_ETH);
         uint256 vaultBefore = vault.balance;
@@ -146,7 +155,7 @@ contract ETHAmountsTest is FuzzBase {
         vm.prank(eSIMWalletAdmin);
         fuzzESIMWallet.buyDataBundle(DataBundleDetails("DB_FUZZ", price));
 
-        assertEq(vault.balance - vaultBefore, price, "A zero cap must not refuse any price");
+        assertEq(vault.balance - vaultBefore, price, "A price within the default must not be refused");
     }
 
     /// @notice Pulling more than the device wallet holds fails and moves nothing

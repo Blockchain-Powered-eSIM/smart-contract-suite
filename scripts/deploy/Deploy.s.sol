@@ -145,7 +145,8 @@ contract Deploy is Script {
                     config.deployer,
                     deployed.deviceWalletFactory,
                     deployed.eSIMWalletFactory,
-                    config.entryPoint
+                    config.entryPoint,
+                    config.dataBundlePriceCap
                 )
             )
         );

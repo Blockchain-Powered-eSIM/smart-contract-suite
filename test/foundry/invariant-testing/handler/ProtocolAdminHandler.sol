@@ -68,6 +68,11 @@ contract ProtocolAdminHandler is Test {
         guardian = _guardian;
         walletAdmin = _walletAdmin;
 
+        // The registry never holds a zero cap: `initialize` and `setDefaultDataBundlePriceCap`
+        // both refuse it. Starting the tracker from whatever the registry was deployed with, rather
+        // than from zero, is what keeps it matching a value no operation in this campaign wrote.
+        expectedCap = _registry.defaultDataBundlePriceCap();
+
         for(uint256 i = 0; i < _cancellers.length; ++i) {
             cancellers.push(_cancellers[i]);
         }

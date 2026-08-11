@@ -38,6 +38,7 @@ contract InvariantBase is Test {
     address internal constant UPGRADE_MANAGER = address(0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2);
     address internal constant VAULT = address(0x78731D3Ca6b7E34aC0F824c42a7cC18A495cabaB);
     address internal constant ATTACKER = address(0xbADc0DE000000000000000000000000000000001);
+    uint256 internal constant DEFAULT_DATA_BUNDLE_PRICE_CAP = 1 ether;
 
     /// @notice The address the admin role rotates onto, and back off
     /// @dev Carries a budget of its own. Every admin path reads the role out of the registry, so
@@ -100,7 +101,8 @@ contract InvariantBase is Test {
                     UPGRADE_MANAGER,
                     address(deviceWalletFactory),
                     address(eSIMWalletFactory),
-                    IEntryPoint(address(entryPoint))
+                    IEntryPoint(address(entryPoint)),
+                    DEFAULT_DATA_BUNDLE_PRICE_CAP
                 )
             )
         );

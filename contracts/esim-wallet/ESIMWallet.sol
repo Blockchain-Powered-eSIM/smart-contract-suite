@@ -350,9 +350,9 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     }
 
     /// @notice Rejects a price above whichever ceiling applies to this wallet
-    /// @dev The wallet's own ceiling wins when it has one. Zero is not a ceiling of zero, because
-    ///      every wallet deployed before this existed reads zero and would otherwise be unable to
-    ///      buy anything.
+    /// @dev The wallet's own ceiling wins when it has one. Zero here means "follow the registry",
+    ///      not "no ceiling": the registry default is guaranteed non-zero by `Registry.initialize`
+    ///      and `setDefaultDataBundlePriceCap`, so `cap` always resolves to a real ceiling.
     /// @param _price Price being charged
     /// @param _registry Registry holding the fallback ceiling
     function _requirePriceWithinCap(uint256 _price, Registry _registry) private view {

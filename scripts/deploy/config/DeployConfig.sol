@@ -55,6 +55,9 @@ library DeployConfig {
     /// @notice A required environment variable resolved to the zero address
     error MissingAddress(string variable);
 
+    /// @notice A required numeric environment variable resolved to zero
+    error MissingValue(string variable);
+
     /// @notice A required address list was empty
     error EmptyList(string variable);
 
@@ -82,10 +85,10 @@ library DeployConfig {
         config.vault = vm.envAddress("VAULT");
         if(config.vault == address(0)) revert MissingAddress("VAULT");
 
-        // Zero is a valid answer and means no ceiling, which is what the protocol does when the
-        // registry default is unset. Stated as a default rather than required, so a deployment
-        // that has not decided yet is explicit about running without one.
-        config.dataBundlePriceCap = vm.envOr("DATA_BUNDLE_PRICE_CAP", uint256(0));
+        // Required, and never zero: `Registry.initialize` refuses a zero cap, since zero would
+        // read as "no ceiling" for every wallet that never sets its own.
+        config.dataBundlePriceCap = vm.envUint("DATA_BUNDLE_PRICE_CAP");
+        if(config.dataBundlePriceCap == 0) revert MissingValue("DATA_BUNDLE_PRICE_CAP");
 
         config.entryPoint = IEntryPoint(ENTRY_POINT_V08);
         if(ENTRY_POINT_V08.code.length == 0) {

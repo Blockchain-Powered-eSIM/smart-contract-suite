@@ -65,9 +65,9 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
 
     /// @notice Most an eSIM wallet may be charged for one data bundle unless it sets its own limit
     /// @dev Held here rather than only on each wallet because a wallet deployed before this existed
-    ///      reads zero, and there is no enumerable list to write a value into. Zero here means no
-    ///      ceiling, which is what every wallet had before, so setting this once is what closes the
-    ///      exposure for all of them at the same time.
+    ///      reads zero, and there is no enumerable list to write a value into. Never zero: `initialize`
+    ///      and `setDefaultDataBundlePriceCap` both reject it, since a zero here or on a wallet's own
+    ///      cap reads as "no ceiling" in `ESIMWallet._requirePriceWithinCap`.
     uint256 public defaultDataBundlePriceCap;
 
     /// @notice Restricts a call to a device wallet this registry has recorded
@@ -109,13 +109,16 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
     /// @param _deviceWalletFactory Factory that deploys device wallets
     /// @param _eSIMWalletFactory Factory that deploys eSIM wallets
     /// @param _entryPoint ERC-4337 EntryPoint singleton for this chain
+    /// @param _defaultDataBundlePriceCap Starting price ceiling. Must be non-zero: a zero cap, here
+    ///        or on a wallet's own, reads as "no ceiling" in `ESIMWallet._requirePriceWithinCap`.
     function initialize(
         address _eSIMWalletAdmin,
         address _vault,
         address _upgradeManager,
         address _deviceWalletFactory,
         address _eSIMWalletFactory,
-        IEntryPoint _entryPoint
+        IEntryPoint _entryPoint,
+        uint256 _defaultDataBundlePriceCap
     ) external initializer {
         if(_eSIMWalletAdmin == address(0)) revert Errors.ZeroAddress("_eSIMWalletAdmin");
         if(_vault == address(0)) revert Errors.ZeroAddress("_vault");
@@ -127,10 +130,12 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
         // ESIMWalletFactory's caller check dead, recoverable only by an upgrade.
         if(_deviceWalletFactory == address(0)) revert Errors.ZeroAddress("_deviceWalletFactory");
         if(_eSIMWalletFactory == address(0)) revert Errors.ZeroAddress("_eSIMWalletFactory");
+        if(_defaultDataBundlePriceCap == 0) revert Errors.ZeroDataBundlePriceCap();
 
         eSIMWalletAdmin = _eSIMWalletAdmin;
         entryPoint = _entryPoint;
         vault = _vault;
+        defaultDataBundlePriceCap = _defaultDataBundlePriceCap;
 
         deviceWalletFactory = DeviceWalletFactory(_deviceWalletFactory);
         eSIMWalletFactory = ESIMWalletFactory(_eSIMWalletFactory);
@@ -145,6 +150,7 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
             address(deviceWalletFactory),
             address(eSIMWalletFactory)
         );
+        emit DefaultDataBundlePriceCapUpdated(_defaultDataBundlePriceCap);
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -239,10 +245,13 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
 
     /// @notice Sets the price ceiling eSIM wallets fall back to when they hold none of their own
     /// @dev Owner and not admin, deliberately. The admin is the party this ceiling constrains, so
-    ///      letting it raise its own limit would leave the ceiling meaningless. Setting zero
-    ///      restores the unlimited behaviour for every wallet that has not set its own.
-    /// @param _cap Maximum price in wei, or zero for no ceiling
+    ///      letting it raise its own limit would leave the ceiling meaningless. Zero is refused:
+    ///      it would read as "no ceiling" in `ESIMWallet._requirePriceWithinCap` for every wallet
+    ///      that has not set its own.
+    /// @param _cap Maximum price in wei, non-zero
     function setDefaultDataBundlePriceCap(uint256 _cap) external onlyOwner {
+        if(_cap == 0) revert Errors.ZeroDataBundlePriceCap();
+
         defaultDataBundlePriceCap = _cap;
         emit DefaultDataBundlePriceCapUpdated(_cap);
     }

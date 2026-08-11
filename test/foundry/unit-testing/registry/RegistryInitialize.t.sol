@@ -22,7 +22,8 @@ contract RegistryInitializeTest is DeployerBase {
                     upgradeManager,
                     address(0),
                     address(eSIMWalletFactory),
-                    typeCastEntryPoint
+                    typeCastEntryPoint,
+                    defaultDataBundlePriceCap
                 )
             )
         );
@@ -43,7 +44,8 @@ contract RegistryInitializeTest is DeployerBase {
                     upgradeManager,
                     address(deviceWalletFactory),
                     address(0),
-                    typeCastEntryPoint
+                    typeCastEntryPoint,
+                    defaultDataBundlePriceCap
                 )
             )
         );
@@ -66,9 +68,44 @@ contract RegistryInitializeTest is DeployerBase {
                     upgradeManager,
                     address(deviceWalletFactory),
                     address(eSIMWalletFactory),
-                    typeCastEntryPoint
+                    typeCastEntryPoint,
+                    defaultDataBundlePriceCap
                 )
             )
+        );
+    }
+
+    /// @notice A zero price cap is rejected at initialization
+    /// @dev A zero cap, wallet-level or registry-level, reads as "no ceiling" in
+    ///      `ESIMWallet._requirePriceWithinCap`. Refusing it here is what guarantees the registry
+    ///      default is always a real ceiling.
+    function test_initialize_revertsWhenPriceCapIsZero() public {
+        MockRegistry registryImpl = new MockRegistry();
+
+        vm.expectRevert(Errors.ZeroDataBundlePriceCap.selector);
+        new ERC1967Proxy(
+            address(registryImpl),
+            abi.encodeCall(
+                registryImpl.initialize,
+                (
+                    eSIMWalletAdmin,
+                    vault,
+                    upgradeManager,
+                    address(deviceWalletFactory),
+                    address(eSIMWalletFactory),
+                    typeCastEntryPoint,
+                    0
+                )
+            )
+        );
+    }
+
+    /// @notice The price cap passed at initialization is recorded
+    function test_initialize_recordsThePriceCap() public view {
+        assertEq(
+            registry.defaultDataBundlePriceCap(),
+            defaultDataBundlePriceCap,
+            "Registry should record the price cap passed at initialization"
         );
     }
 

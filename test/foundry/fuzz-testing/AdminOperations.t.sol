@@ -69,7 +69,8 @@ contract AdminOperationsFuzzTest is AdminBase {
         vm.assume(uint160(_caller) > 0x0a);
         vm.assume(_caller != address(vm));
 
-        bytes memory data = abi.encodeCall(registry.setDefaultDataBundlePriceCap, (_cap));
+        uint96 cap = uint96(bound(_cap, 1, type(uint96).max));
+        bytes memory data = abi.encodeCall(registry.setDefaultDataBundlePriceCap, (cap));
         _schedule(address(registry), data, bytes32(0));
 
         vm.warp(block.timestamp + DELAY);
@@ -77,7 +78,7 @@ contract AdminOperationsFuzzTest is AdminBase {
         vm.prank(_caller);
         protocolAdmin.execute(address(registry), 0, data, bytes32(0), bytes32(0));
 
-        assertEq(registry.defaultDataBundlePriceCap(), _cap);
+        assertEq(registry.defaultDataBundlePriceCap(), cap);
     }
 
     /// @notice An operation is executable at its ready time and not one second before
@@ -157,8 +158,13 @@ contract AdminOperationsFuzzTest is AdminBase {
         vm.assume(_caps.length > 0);
         uint256 count = _caps.length < MAX_FUZZED_BATCH ? _caps.length : MAX_FUZZED_BATCH;
 
+        uint96[] memory caps = new uint96[](count);
+        for(uint256 i = 0; i < count; ++i) {
+            caps[i] = uint96(bound(_caps[i], 1, type(uint96).max));
+        }
+
         (address[] memory targets, uint256[] memory values, bytes[] memory payloads) =
-            _capBatch(_caps, count);
+            _capBatch(caps, count);
 
         vm.prank(proposer);
         protocolAdmin.scheduleBatch(targets, values, payloads, bytes32(0), bytes32(0), DELAY);
@@ -168,7 +174,7 @@ contract AdminOperationsFuzzTest is AdminBase {
         vm.prank(outsider);
         protocolAdmin.executeBatch(targets, values, payloads, bytes32(0), bytes32(0));
 
-        assertEq(registry.defaultDataBundlePriceCap(), _caps[count - 1], "the last call must win");
+        assertEq(registry.defaultDataBundlePriceCap(), caps[count - 1], "the last call must win");
     }
 
     /// @notice Nothing a guardian names loses anything but the cancel power
@@ -202,9 +208,11 @@ contract AdminOperationsFuzzTest is AdminBase {
     /// @notice The guardian's unpause can never reach a second selector on its target
     /// forge-config: default.fuzz.runs = 512
     function testFuzz_unpauseInstantly_leavesEveryOtherRegistrySettingAlone(uint96 _cap) public {
+        uint96 cap = uint96(bound(_cap, 1, type(uint96).max));
+
         _runThroughTheDelay(
             address(registry),
-            abi.encodeCall(registry.setDefaultDataBundlePriceCap, (_cap)),
+            abi.encodeCall(registry.setDefaultDataBundlePriceCap, (cap)),
             bytes32(0)
         );
 
@@ -215,7 +223,7 @@ contract AdminOperationsFuzzTest is AdminBase {
         protocolAdmin.unpauseInstantly(address(registry));
 
         assertFalse(registry.paused());
-        assertEq(registry.defaultDataBundlePriceCap(), _cap, "only the pause may have moved");
+        assertEq(registry.defaultDataBundlePriceCap(), cap, "only the pause may have moved");
         assertEq(registry.owner(), address(protocolAdmin));
     }
 
@@ -235,7 +243,7 @@ contract AdminOperationsFuzzTest is AdminBase {
 
     /// @dev Split out because building the arrays and asserting on them together runs the stack up.
     function _capBatch(
-        uint96[] calldata _caps,
+        uint96[] memory _caps,
         uint256 _count
     ) private view returns (address[] memory targets, uint256[] memory values, bytes[] memory payloads) {
         targets = new address[](_count);

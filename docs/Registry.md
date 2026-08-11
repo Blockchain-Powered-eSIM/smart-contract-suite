@@ -77,9 +77,9 @@ uint256 defaultDataBundlePriceCap
 Most an eSIM wallet may be charged for one data bundle unless it sets its own limit
 
 _Held here rather than only on each wallet because a wallet deployed before this existed
-     reads zero, and there is no enumerable list to write a value into. Zero here means no
-     ceiling, which is what every wallet had before, so setting this once is what closes the
-     exposure for all of them at the same time._
+     reads zero, and there is no enumerable list to write a value into. Never zero: `initialize`
+     and `setDefaultDataBundlePriceCap` both reject it, since a zero here or on a wallet's own
+     cap reads as "no ceiling" in `ESIMWallet._requirePriceWithinCap`._
 
 ### onlyDeviceWallet
 
@@ -121,7 +121,7 @@ _Locks the implementation contract itself. Without this, anyone can call initial
 ### initialize
 
 ```solidity
-function initialize(address _eSIMWalletAdmin, address _vault, address _upgradeManager, address _deviceWalletFactory, address _eSIMWalletFactory, contract IEntryPoint _entryPoint) external
+function initialize(address _eSIMWalletAdmin, address _vault, address _upgradeManager, address _deviceWalletFactory, address _eSIMWalletFactory, contract IEntryPoint _entryPoint, uint256 _defaultDataBundlePriceCap) external
 ```
 
 Wires the registry to the two factories and sets the protocol's addresses
@@ -136,6 +136,7 @@ Wires the registry to the two factories and sets the protocol's addresses
 | _deviceWalletFactory | address | Factory that deploys device wallets |
 | _eSIMWalletFactory | address | Factory that deploys eSIM wallets |
 | _entryPoint | contract IEntryPoint | ERC-4337 EntryPoint singleton for this chain |
+| _defaultDataBundlePriceCap | uint256 | Starting price ceiling. Must be non-zero: a zero cap, here        or on a wallet's own, reads as "no ceiling" in `ESIMWallet._requirePriceWithinCap`. |
 
 ### requestAdminUpdate
 
@@ -241,14 +242,15 @@ function setDefaultDataBundlePriceCap(uint256 _cap) external
 Sets the price ceiling eSIM wallets fall back to when they hold none of their own
 
 _Owner and not admin, deliberately. The admin is the party this ceiling constrains, so
-     letting it raise its own limit would leave the ceiling meaningless. Setting zero
-     restores the unlimited behaviour for every wallet that has not set its own._
+     letting it raise its own limit would leave the ceiling meaningless. Zero is refused:
+     it would read as "no ceiling" in `ESIMWallet._requirePriceWithinCap` for every wallet
+     that has not set its own._
 
 #### Parameters
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| _cap | uint256 | Maximum price in wei, or zero for no ceiling |
+| _cap | uint256 | Maximum price in wei, non-zero |
 
 ### updateDeviceWalletInfo
 

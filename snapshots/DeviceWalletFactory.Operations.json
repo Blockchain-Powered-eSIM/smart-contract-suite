@@ -1,7 +1,7 @@
 {
   "createAccount: first wallet, cold factory storage": "326361",
   "createAccount: second wallet, warm factory storage": "308861",
-  "deployDeviceWalletForUsers: batch of 1": "879383",
-  "deployDeviceWalletForUsers: batch of 1, funded": "887200",
-  "deployDeviceWalletForUsers: batch of 5": "4189311"
+  "deployDeviceWalletForUsers: batch of 1": "879515",
+  "deployDeviceWalletForUsers: batch of 1, funded": "887332",
+  "deployDeviceWalletForUsers: batch of 5": "4189883"
 }

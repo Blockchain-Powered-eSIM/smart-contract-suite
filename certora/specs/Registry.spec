@@ -211,7 +211,7 @@ rule aValidDeviceWalletNeverBecomesInvalid(method f, address d) {
 /// Split from the admin below because the plan states all three as initialize-only and that is
 /// wrong for two of them. This one is genuinely write-once.
 rule theEntryPointMovesOnlyAtInitialization(method f) filtered {
-    f -> f.selector != sig:initialize(address, address, address, address, address, address).selector
+    f -> f.selector != sig:initialize(address, address, address, address, address, address, uint256).selector
 } {
     address entryPointBefore = entryPoint();
 
@@ -229,7 +229,7 @@ rule theEntryPointMovesOnlyAtInitialization(method f) filtered {
 /// factory as well, where nothing on the payment path read it, which left the only rotatable copy
 /// pointing somewhere the money never went.
 rule theVaultMovesOnlyThroughItsSetter(method f) filtered {
-    f -> f.selector != sig:initialize(address, address, address, address, address, address).selector
+    f -> f.selector != sig:initialize(address, address, address, address, address, address, uint256).selector
 } {
     address vaultBefore = vault();
 
@@ -258,7 +258,7 @@ rule theVaultIsNeverSetToZero(address newVault) {
 /// nothing. It moves through a two-step handover, and the property worth having is that the
 /// handover is the only route and that it lands on the address that was nominated.
 rule theAdminMovesOnlyToTheNominatedAddress(method f) filtered {
-    f -> f.selector != sig:initialize(address, address, address, address, address, address).selector
+    f -> f.selector != sig:initialize(address, address, address, address, address, address, uint256).selector
 } {
     address adminBefore = eSIMWalletAdmin();
     address nominated = newRequestedAdmin();

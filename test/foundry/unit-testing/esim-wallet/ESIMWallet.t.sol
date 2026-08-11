@@ -661,21 +661,26 @@ contract ESIMWalletTest is DeployerBase {
         eSIMWallet1.buyDataBundle(DataBundleDetails("DB_ID_2", 2 ether));
     }
 
-    /// @notice With no ceiling set anywhere the wallet spends as it always did.
-    /// @dev Deliberate. Both variables read zero on every wallet and registry already deployed, so
-    ///      zero has to keep meaning unlimited or an upgrade would stop existing wallets buying
-    ///      anything. Setting the registry default is the single action that closes the exposure.
-    function test_buyDataBundle_isUncappedUntilADefaultIsSet() public {
+    /// @notice A wallet with no ceiling of its own is still bound by the registry default set at
+    /// deployment.
+    /// @dev `Registry.initialize` and `setDefaultDataBundlePriceCap` both refuse zero, so a wallet
+    /// that never sets its own cap is never actually uncapped, only deferring to whatever the
+    /// registry was given at deploy time.
+    function test_buyDataBundle_rejectsAPriceAboveTheRegistryDefault() public {
         deployWallets();
         vm.deal(address(deviceWallet), 5 ether);
 
-        assertEq(registry.defaultDataBundlePriceCap(), 0, "The registry must start with no default");
-        assertEq(eSIMWallet1.dataBundlePriceCap(), 0, "The wallet must start with no ceiling");
+        assertEq(eSIMWallet1.dataBundlePriceCap(), 0, "The wallet must hold no ceiling of its own");
+
+        uint256 price = defaultDataBundlePriceCap + 1;
 
         vm.prank(eSIMWalletAdmin);
-        eSIMWallet1.buyDataBundle(DataBundleDetails("DB_ID_1", 3 ether));
+        vm.expectRevert(
+            abi.encodeWithSelector(Errors.DataBundlePriceAboveCap.selector, price, defaultDataBundlePriceCap)
+        );
+        eSIMWallet1.buyDataBundle(DataBundleDetails("DB_ID_1", price));
 
-        assertEq(vault.balance, 3 ether, "Without a ceiling anywhere the admin still sets the price");
+        assertEq(vault.balance, 0, "The vault must receive nothing above the registry default");
     }
 
     /// @notice The admin names the price, so it must not also be able to raise the ceiling.

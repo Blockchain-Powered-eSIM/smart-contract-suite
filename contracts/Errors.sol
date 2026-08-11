@@ -90,6 +90,7 @@ interface Errors {
     error ESIMIdentifierAlreadySet(string eSIMUniqueIdentifier);
     error EmptyDataBundleID();
     error ZeroDataBundlePrice();
+    error ZeroDataBundlePriceCap();
     error NotADeviceWallet(address account);
     error OnlyRequestedOwner(address newRequestedOwner);
     error UseAcceptOwnershipTransfer();

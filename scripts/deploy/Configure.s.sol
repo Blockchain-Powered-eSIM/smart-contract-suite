@@ -92,16 +92,11 @@ contract Configure is Script {
         console.log("Registry: lazy wallet registry set");
     }
 
-    /// @notice Sets the fallback ceiling on what an eSIM wallet may be charged for a data bundle
-    /// @dev Zero means no ceiling, which is also the value the registry starts at, so a zero
-    ///      configuration is skipped and said out loud rather than written. Leaving it unset is a
-    ///      decision, not a default, and it is the one that turns the ceiling off for every wallet
-    ///      that has not set its own.
+    /// @notice Rotates the fallback ceiling on what an eSIM wallet may be charged for a data bundle
+    /// @dev `Registry.initialize` already required a non-zero cap, so this only ever handles a
+    ///      later change to it. Zero is not a legal configuration at any point after deployment
+    ///      either: `setDefaultDataBundlePriceCap` refuses it the same way `initialize` does.
     function _setPriceCap(address registryAddress, uint256 cap) private {
-        if(cap == 0) {
-            console.log("Registry: no price cap configured, wallets are uncapped");
-            return;
-        }
         if(Registry(registryAddress).defaultDataBundlePriceCap() == cap) {
             console.log("Registry: price cap already set, skipping");
             return;

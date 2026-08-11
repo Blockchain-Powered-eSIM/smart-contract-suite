@@ -326,6 +326,12 @@ error EmptyDataBundleID()
 error ZeroDataBundlePrice()
 ```
 
+### ZeroDataBundlePriceCap
+
+```solidity
+error ZeroDataBundlePriceCap()
+```
+
 ### NotADeviceWallet
 
 ```solidity

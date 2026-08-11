@@ -52,10 +52,11 @@ contract UpgradeManagerHandler is HandlerBase {
     }
 
     /// @notice The upgrade manager sets the ceiling wallets fall back to when they hold none
-    /// @dev Picked off a ladder rather than bounded over a range, because zero is the value that
-    ///      means unlimited and a range wide enough to be interesting would never land on it. The
-    ///      top of the ladder sits above what the admin can charge, so the ceiling is sometimes
-    ///      binding and sometimes not.
+    /// @dev Picked off a ladder rather than bounded over a range, because a range wide enough to be
+    ///      interesting would rarely land on the values worth exercising. Zero is on the ladder on
+    ///      purpose: `setDefaultDataBundlePriceCap` refuses it, so that entry is what exercises the
+    ///      rejection rather than the ceiling. The top of the ladder sits above what the admin can
+    ///      charge, so the ceiling is sometimes binding and sometimes not.
     /// @param seed Chooses the ceiling
     function setDefaultPriceCap(uint256 seed) external counted {
         uint256[4] memory ladder = [uint256(0), 1 gwei, 1 ether, 100 ether];

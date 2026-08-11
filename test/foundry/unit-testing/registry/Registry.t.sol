@@ -214,11 +214,24 @@ contract RegistryTest is DeployerBase {
         vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", admin));
         registry.setDefaultDataBundlePriceCap(100 ether);
 
-        assertEq(registry.defaultDataBundlePriceCap(), 0, "The admin must not be able to set the ceiling");
+        assertEq(
+            registry.defaultDataBundlePriceCap(),
+            defaultDataBundlePriceCap,
+            "The admin must not be able to change the ceiling"
+        );
 
         vm.prank(registry.owner());
-        registry.setDefaultDataBundlePriceCap(1 ether);
-        assertEq(registry.defaultDataBundlePriceCap(), 1 ether, "The owner must be able to set it");
+        registry.setDefaultDataBundlePriceCap(2 ether);
+        assertEq(registry.defaultDataBundlePriceCap(), 2 ether, "The owner must be able to set it");
+    }
+
+    /// @notice The fallback price ceiling can never be lowered to zero.
+    /// @dev A zero cap here reads as "no ceiling" in `ESIMWallet._requirePriceWithinCap` for every
+    /// wallet that has not set its own, so the setter refuses it the same way `initialize` does.
+    function test_setDefaultDataBundlePriceCap_rejectsZero() public {
+        vm.prank(registry.owner());
+        vm.expectRevert(Errors.ZeroDataBundlePriceCap.selector);
+        registry.setDefaultDataBundlePriceCap(0);
     }
 
     /// @notice Moving the vault is the owner's, not the admin's. It is the destination of every
