@@ -68,6 +68,6 @@ jobs:
       # so a difference here is a real layout change.
       - name: Check storage layouts
         run: |
-          python3 script/storage-layouts.py
+          python3 scripts/checks/storage-layouts.py
           git diff --exit-code -- storage-layouts/
         id: storage-layout

@@ -23,7 +23,7 @@ import re
 import subprocess
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 OUT = ROOT / "storage-layouts"
 
 # Every contract under contracts/ that declares storage, plus P256Verifier, which declares none and

@@ -64,7 +64,7 @@ That parity depends on `bytecode_hash = "none"` in `foundry.toml` and `metadata.
 
 Branch coverage is 94.27%, or 181 of 192 arms, with `WebAuthn` at 80% the lowest and
 `RegistryHelper`, `Account4337` and `ProtocolAdmin` at 100%.
-Measure it with `script/branch-coverage.py` rather than reading forge's own percentage:
+Measure it with `scripts/checks/branch-coverage.py` rather than reading forge's own percentage:
 `forge coverage --ir-minimum` does not count `require(cond, "string")` as a branch, so those sites
 report zero hits on both arms however often they run. The contracts use custom errors throughout, so nothing is currently excluded, but the raw number stops meaning anything the moment a `require`
 string is added.
@@ -72,7 +72,7 @@ string is added.
 ```bash
 forge coverage --ir-minimum --report lcov --report-file lcov.info \
     --no-match-path "test/foundry/{fork,invariant-testing}/*"
-python3 script/branch-coverage.py lcov.info
+python3 scripts/checks/branch-coverage.py lcov.info
 ```
 
 The fork tests read `ALCHEMY_OP_SEPOLIA_HTTPS` and `ALCHEMY_BASE_SEPOLIA_HTTPS`. They skip rather

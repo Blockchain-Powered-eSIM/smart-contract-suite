@@ -27,7 +27,7 @@ import collections
 import pathlib
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 
 
 def parse(lcov_path):
