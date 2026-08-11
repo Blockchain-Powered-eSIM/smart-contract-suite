@@ -206,22 +206,52 @@ rule aValidDeviceWalletNeverBecomesInvalid(method f, address d) {
     assert isDeviceWalletValid(d), "a device wallet lost its validity";
 }
 
-/// R-06, first half. The vault and the entry point are set once and never move.
+/// R-06, first half. The entry point is set once and never moves.
 ///
 /// Split from the admin below because the plan states all three as initialize-only and that is
-/// wrong for one of them. These two are genuinely write-once.
-rule theVaultAndEntryPointMoveOnlyAtInitialization(method f) filtered {
+/// wrong for two of them. This one is genuinely write-once.
+rule theEntryPointMovesOnlyAtInitialization(method f) filtered {
     f -> f.selector != sig:initialize(address, address, address, address, address, address).selector
 } {
-    address vaultBefore = vault();
     address entryPointBefore = entryPoint();
 
     env callEnv;
     calldataarg args;
     f(callEnv, args);
 
-    assert vault() == vaultBefore, "the vault address moved outside initialization";
     assert entryPoint() == entryPointBefore, "the entry point moved outside initialization";
+}
+
+/// The vault moves only through its own setter.
+///
+/// The vault is where every data bundle payment lands, and it is read here on each purchase rather
+/// than cached anywhere, so this one write reaches every wallet. It used to sit on the device wallet
+/// factory as well, where nothing on the payment path read it, which left the only rotatable copy
+/// pointing somewhere the money never went.
+rule theVaultMovesOnlyThroughItsSetter(method f) filtered {
+    f -> f.selector != sig:initialize(address, address, address, address, address, address).selector
+} {
+    address vaultBefore = vault();
+
+    env callEnv;
+    calldataarg args;
+    f(callEnv, args);
+
+    assert vault() != vaultBefore => f.selector == sig:updateVaultAddress(address).selector,
+        "the vault address moved through something other than its setter";
+}
+
+/// The vault is never set to the zero address.
+///
+/// A zero vault would send every subsequent data bundle payment to an address nobody holds. The
+/// setter checks for it and this says the check has no way around it.
+rule theVaultIsNeverSetToZero(address newVault) {
+    require vault() != 0;
+
+    env callEnv;
+    updateVaultAddress@withrevert(callEnv, newVault);
+
+    assert !lastReverted => vault() != 0, "the vault was set to the zero address";
 }
 
 /// R-06, second half. The admin is not write-once, and stating it as such would have proved

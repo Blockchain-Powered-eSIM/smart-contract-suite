@@ -121,37 +121,6 @@ rule reportingAWalletTwiceAlwaysReverts(address deviceWallet) {
     assert lastReverted, "a device wallet already reported to the registry was reported again";
 }
 
-/// The vault moves only through its own setter.
-///
-/// The vault is where every data bundle payment lands. Not in the milestone list, and the more
-/// interesting rule of the two about it, because the setter is admin-gated rather than owner-gated
-/// and the admin is a hot key.
-rule theVaultMovesOnlyThroughItsSetter(method f) filtered {
-    f -> f.selector != sig:initialize(address, address, address, address, address, address).selector
-} {
-    address vaultBefore = vault();
-
-    env callEnv;
-    calldataarg args;
-    f(callEnv, args);
-
-    assert vault() != vaultBefore => f.selector == sig:updateVaultAddress(address).selector,
-        "the vault address moved through something other than its setter";
-}
-
-/// The vault is never set to the zero address.
-///
-/// A zero vault would send every subsequent data bundle payment to an address nobody holds. The
-/// setter checks for it and this says the check has no way around it.
-rule theVaultIsNeverSetToZero(address newVault) {
-    require vault() != 0;
-
-    env callEnv;
-    updateVaultAddress@withrevert(callEnv, newVault);
-
-    assert !lastReverted => vault() != 0, "the vault was set to the zero address";
-}
-
 /// The beacon and the rest of the wiring are written once.
 ///
 /// The beacon is the one address that decides what every device wallet in the protocol executes.
@@ -160,7 +129,7 @@ rule theVaultIsNeverSetToZero(address newVault) {
 /// would leave every deployed wallet pointing at an object this factory no longer controls, and the
 /// upgrade path that is supposed to be used goes through the beacon, not around it.
 rule theBeaconAndTheWiringAreWriteOnce(method f) filtered {
-    f -> f.selector != sig:initialize(address, address, address, address, address, address).selector
+    f -> f.selector != sig:initialize(address, address, address, address, address).selector
 } {
     address beaconBefore = beacon();
     address entryPointBefore = entryPoint();
@@ -185,7 +154,7 @@ rule theBeaconAndTheWiringAreWriteOnce(method f) filtered {
 /// overridden to revert. Stated parametrically so a method added later that clears the owner without
 /// going through the two-step handover fails here.
 rule ownershipIsNeverGivenUp(method f) filtered {
-    f -> f.selector != sig:initialize(address, address, address, address, address, address).selector
+    f -> f.selector != sig:initialize(address, address, address, address, address).selector
 } {
     require owner() != 0;
 
@@ -210,7 +179,7 @@ rule ownershipIsNeverGivenUp(method f) filtered {
 /// `Ownable2Step` is used deliberately here: a one-step transfer to a wrong address would hand away
 /// the only key that can move the beacon, with nobody able to accept it back.
 rule theOwnerMovesOnlyThroughTheHandover(method f) filtered {
-    f -> f.selector != sig:initialize(address, address, address, address, address, address).selector
+    f -> f.selector != sig:initialize(address, address, address, address, address).selector
 } {
     address ownerBefore = owner();
 
