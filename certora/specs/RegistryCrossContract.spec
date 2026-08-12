@@ -171,10 +171,12 @@ function requireLinkedScene() {
 /// without consulting either wallet's mapping, so if a device wallet could still be holding the
 /// eSIM wallet while a request stood, acceptance would hand ownership away from underneath it.
 ///
-/// What rules that out is the order inside `requestTransferOwnership`: it calls `removeESIMWallet`
-/// on the current holder before it writes `newRequestedOwner`, so the flag is already down by the
-/// time the request exists. The revoke path writes zero and touches no mapping, and the re-add path
-/// runs after acceptance has cleared the request, so neither reopens the gap.
+/// What rules that out is the order inside `requestTransferOwnership`: it removes the eSIM wallet
+/// from the current holder, if it is still held, before it writes `newRequestedOwner`, so the flag
+/// is already down by the time the request exists. Re-targeting an outstanding request takes the
+/// skipped branch and finds the flag down from the first request. The revoke path writes zero and
+/// touches no mapping, and the re-add path runs after acceptance has cleared the request, so
+/// neither reopens the gap.
 rule aTransferRequestMeansTheHolderHasAlreadyLetGo(method f) filtered { f -> !isInitialiser(f) } {
     requireLinkedScene();
     require eSIMWallet.newRequestedOwner() != 0 => !deviceWallet.isValidESIMWallet(eSIMWallet);
@@ -192,7 +194,7 @@ rule aTransferRequestMeansTheHolderHasAlreadyLetGo(method f) filtered { f -> !is
 /// This is the precondition the registry rule below needs, and it is worth proving on its own: it is
 /// the fact that keeps the two ownership records from drifting. `_addESIMWallet` refuses a wallet
 /// whose `owner()` is not the calling device wallet, and ownership only moves through
-/// `requestTransferOwnership`, which calls `removeESIMWallet` on the current holder before it writes
+/// `requestTransferOwnership`, which takes the wallet off the current holder before it writes
 /// anything. So the holding flag and the ownership always move in the same call.
 ///
 /// Stated as a transition rule rather than an invariant for the same reason as everywhere else in
