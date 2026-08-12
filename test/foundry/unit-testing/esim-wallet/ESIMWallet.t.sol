@@ -124,6 +124,27 @@ contract ESIMWalletTest is DeployerBase {
         assertEq(eSIMWallet2.owner(), address(deviceWallet), "ESIMWallet2 owner should have been device wallet");
     }
 
+    /// @notice Deploys one more device wallet, for tests that need a third party to nominate
+    function _anotherDeviceWallet(uint256 keyIndex, uint256 salt) internal returns (address) {
+        string[] memory deviceUniqueIdentifiers = new string[](1);
+        bytes32[2][] memory listOfKeys = new bytes32[2][](1);
+        uint256[] memory salts = new uint256[](1);
+        uint256[] memory deposits = new uint256[](1);
+
+        deviceUniqueIdentifiers[0] = customDeviceUniqueIdentifiers[keyIndex];
+        listOfKeys[0] = listOfOwnerKeys[keyIndex];
+        salts[0] = salt;
+        deposits[0] = 0;
+
+        vm.prank(deviceWalletFactory.eSIMWalletAdmin());
+        return deviceWalletFactory.deployDeviceWalletForUsers(
+            deviceUniqueIdentifiers,
+            listOfKeys,
+            salts,
+            deposits
+        )[0].deviceWallet;
+    }
+
     function test_setESIMUniqueIdentifier_unauthorised() public {
         deployWallets();
 
@@ -342,6 +363,63 @@ contract ESIMWalletTest is DeployerBase {
         assertEq(deviceWallet.canPullETH(address(eSIMWallet1)), false, "ETH access is not restored");
         assertEq(registry.isESIMWalletOnStandby(address(eSIMWallet1)), false, "standby must be cleared");
         assertEq(registry.isESIMWalletValid(address(eSIMWallet1)), currentOwner, "the association is unchanged");
+    }
+
+    /// @notice An outstanding request can be pointed at a different device wallet in one call
+    /// @dev The two writes the general branch makes have different idempotency: the nominee is
+    ///      overwritable but the removal is not, so an unguarded removal made the second call
+    ///      revert and the owner had to self-cancel first, which costs the wallet its ETH access.
+    function test_requestTransferOwnership_retargetsAnOutstandingRequest() public {
+        test_requestTransferOwnership();
+
+        address currentOwner = eSIMWallet1.owner();
+        address deviceWallet3 = _anotherDeviceWallet(2, 929);
+        uint256 ownerBalance = currentOwner.balance;
+
+        vm.prank(currentOwner);
+        eSIMWallet1.requestTransferOwnership(deviceWallet3);
+
+        assertEq(eSIMWallet1.newRequestedOwner(), deviceWallet3, "the nominee must have moved");
+        assertEq(eSIMWallet1.owner(), currentOwner, "the owner does not change until acceptance");
+        assertEq(currentOwner.balance, ownerBalance, "the ETH was already swept by the first request");
+
+        // The removal happened on the first request and must not be attempted again
+        assertEq(deviceWallet.isValidESIMWallet(address(eSIMWallet1)), false, "still off its device wallet");
+        assertEq(registry.isESIMWalletOnStandby(address(eSIMWallet1)), true, "the release is still outstanding");
+    }
+
+    /// @notice The nominee that was replaced can no longer accept, and the new one can
+    function test_requestTransferOwnership_retargetDropsTheOldNominee() public {
+        test_requestTransferOwnership();
+
+        address deviceWallet3 = _anotherDeviceWallet(2, 939);
+
+        vm.prank(eSIMWallet1.owner());
+        eSIMWallet1.requestTransferOwnership(deviceWallet3);
+
+        vm.prank(address(deviceWallet2));
+        vm.expectRevert(abi.encodeWithSelector(Errors.OnlyRequestedOwner.selector, deviceWallet3));
+        eSIMWallet1.acceptOwnershipTransfer();
+
+        vm.prank(deviceWallet3);
+        eSIMWallet1.acceptOwnershipTransfer();
+
+        assertEq(eSIMWallet1.owner(), deviceWallet3, "the wallet must land with the second nominee");
+        assertEq(eSIMWallet1.newRequestedOwner(), address(0), "the request must be cleared on acceptance");
+    }
+
+    /// @notice Re-issuing the same request is accepted rather than refused
+    /// @dev What a dropped or replaced transaction gets resubmitted into. Nothing moves, which is
+    ///      the point: the wallet is already off its device wallet and already on standby.
+    function test_requestTransferOwnership_reissuingTheSameRequest() public {
+        test_requestTransferOwnership();
+
+        vm.prank(eSIMWallet1.owner());
+        eSIMWallet1.requestTransferOwnership(address(deviceWallet2));
+
+        assertEq(eSIMWallet1.newRequestedOwner(), address(deviceWallet2), "the nominee must be unchanged");
+        assertEq(deviceWallet.isValidESIMWallet(address(eSIMWallet1)), false, "still off its device wallet");
+        assertEq(registry.isESIMWalletOnStandby(address(eSIMWallet1)), true, "the release is still outstanding");
     }
 
     function test_acceptOwnershipTransfer() public {
