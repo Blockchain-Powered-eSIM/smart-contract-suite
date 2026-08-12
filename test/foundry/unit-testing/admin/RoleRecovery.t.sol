@@ -285,6 +285,89 @@ contract RoleRecoveryTest is AdminBase {
         assertTrue(protocolAdmin.hasRole(cancellerRole, outsider));
     }
 
+    /// @dev The constructor hands a guardian `EXECUTOR_ROLE` too. A guardian installed later has to
+    ///      land in the same state, or the two install paths disagree about what the role is.
+    function test_grantRole_pairsExecutionWithAGuardianGrantedLater() public {
+        bytes32 guardianRole = protocolAdmin.GUARDIAN_ROLE();
+        bytes memory grant = abi.encodeCall(protocolAdmin.grantRole, (guardianRole, outsider));
+
+        _runThroughTheDelay(address(protocolAdmin), grant, bytes32(0));
+
+        assertTrue(protocolAdmin.hasRole(guardianRole, outsider));
+        assertTrue(protocolAdmin.hasRole(protocolAdmin.EXECUTOR_ROLE(), outsider));
+    }
+
+    /// @dev What the pairing is for. Stripping the zero address of `EXECUTOR_ROLE` closes open
+    ///      execution, and from there a guardian that was never given the role cannot press the
+    ///      button on anything, including the operation putting the protocol back together.
+    function test_grantRole_keepsALaterGuardianExecutingOnceExecutionIsClosed() public {
+        address newGuardian = makeAddr("newGuardian");
+        bytes32 guardianRole = protocolAdmin.GUARDIAN_ROLE();
+
+        _runThroughTheDelay(
+            address(protocolAdmin),
+            abi.encodeCall(protocolAdmin.revokeRole, (protocolAdmin.EXECUTOR_ROLE(), address(0))),
+            bytes32(0)
+        );
+
+        bytes memory grant = abi.encodeCall(protocolAdmin.grantRole, (guardianRole, newGuardian));
+        _schedule(address(protocolAdmin), grant, bytes32(uint256(1)));
+        vm.warp(block.timestamp + protocolAdmin.getMinDelay());
+
+        // The standing guardian is the only account left that can execute
+        vm.prank(guardian);
+        protocolAdmin.execute(address(protocolAdmin), 0, grant, bytes32(0), bytes32(uint256(1)));
+
+        bytes memory priceCap = abi.encodeCall(registry.setDefaultDataBundlePriceCap, (3 ether));
+        _schedule(address(registry), priceCap, bytes32(uint256(2)));
+        vm.warp(block.timestamp + protocolAdmin.getMinDelay());
+
+        vm.prank(newGuardian);
+        protocolAdmin.execute(address(registry), 0, priceCap, bytes32(0), bytes32(uint256(2)));
+
+        assertEq(registry.defaultDataBundlePriceCap(), 3 ether);
+    }
+
+    /// @dev The grant is paired and the revocation is not, because `revokeRole` cannot tell a
+    ///      guardian's executor grant from one an account holds in its own right.
+    function test_revokeRole_leavesAnEvictedGuardianAbleToExecute() public {
+        bytes32 guardianRole = protocolAdmin.GUARDIAN_ROLE();
+        bytes memory eviction = abi.encodeCall(protocolAdmin.revokeRole, (guardianRole, guardian));
+
+        _runThroughTheDelay(address(protocolAdmin), eviction, bytes32(0));
+
+        assertFalse(protocolAdmin.hasRole(guardianRole, guardian));
+        assertTrue(protocolAdmin.hasRole(protocolAdmin.EXECUTOR_ROLE(), guardian));
+    }
+
+    /// @dev So a full eviction is two revocations in one operation. Batched rather than scheduled
+    ///      separately, since the gap between two operations is a window where the account is half
+    ///      removed.
+    function test_revokeRole_evictsAGuardianCompletelyInOneBatch() public {
+        bytes32 guardianRole = protocolAdmin.GUARDIAN_ROLE();
+        bytes32 executorRole = protocolAdmin.EXECUTOR_ROLE();
+
+        address[] memory targets = new address[](2);
+        uint256[] memory values = new uint256[](2);
+        bytes[] memory payloads = new bytes[](2);
+
+        targets[0] = address(protocolAdmin);
+        targets[1] = address(protocolAdmin);
+        payloads[0] = abi.encodeCall(protocolAdmin.revokeRole, (guardianRole, guardian));
+        payloads[1] = abi.encodeCall(protocolAdmin.revokeRole, (executorRole, guardian));
+
+        vm.prank(proposer);
+        protocolAdmin.scheduleBatch(targets, values, payloads, bytes32(0), bytes32(0), DELAY);
+
+        vm.warp(block.timestamp + DELAY);
+
+        vm.prank(outsider);
+        protocolAdmin.executeBatch(targets, values, payloads, bytes32(0), bytes32(0));
+
+        assertFalse(protocolAdmin.hasRole(guardianRole, guardian));
+        assertFalse(protocolAdmin.hasRole(executorRole, guardian));
+    }
+
     /// @dev Rotating a signer set touches nothing outside this contract. The four protocol
     ///      contracts keep the same owner throughout, so no proxy moves and no wallet notices.
     function test_recovery_leavesTheProtocolContractsUntouched() public {
