@@ -44,7 +44,7 @@ import {TimelockController} from "@openzeppelin/contracts/governance/TimelockCon
 contract ProtocolAdmin is TimelockController {
 
     /// @notice Releases a pause and strips a canceller, both without waiting for the delay
-    /// @dev Also granted `EXECUTOR_ROLE` at construction, which keeps the role useful if open
+    /// @dev Always granted `EXECUTOR_ROLE` alongside it, which keeps the role useful if open
     ///      execution is ever closed off. Deliberately not granted `CANCELLER_ROLE`; see the note on
     ///      the contract for why that pairing is what makes a guardian un-evictable.
     bytes32 public constant GUARDIAN_ROLE = keccak256("GUARDIAN_ROLE");
@@ -174,6 +174,11 @@ contract ProtocolAdmin is TimelockController {
     ///      deliberately not repeated here. That one shapes the deployment, keeping a veto key off
     ///      the schedule path. It is not a safety property, and pairing the two roles later is a
     ///      legitimate decision for a scheduled operation to make.
+    ///
+    ///      A guardian granted here picks up `EXECUTOR_ROLE` with it, as the constructor does, so
+    ///      the two ways of installing one leave the same state behind. The reverse is not paired:
+    ///      `revokeRole` cannot tell that grant from an independent one, so evicting a guardian
+    ///      means scheduling both revocations in one batch.
     function grantRole(bytes32 role, address account)
         public
         virtual
@@ -187,6 +192,8 @@ contract ProtocolAdmin is TimelockController {
             if(hasRole(CANCELLER_ROLE, account) || hasRole(PROPOSER_ROLE, account)) {
                 revert RolesMustNotOverlap(account);
             }
+
+            _grantRole(EXECUTOR_ROLE, account);
         }
 
         _grantRole(role, account);
