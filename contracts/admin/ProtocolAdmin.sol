@@ -6,6 +6,7 @@ import {IOwnable2Step} from "../interfaces/IOwnable2Step.sol";
 import {IPausable} from "../interfaces/IPausable.sol";
 
 // Contracts
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
 
 /// @notice Owner of the four upgradeable protocol contracts, with a delay on every change
@@ -70,6 +71,9 @@ contract ProtocolAdmin is TimelockController {
     /// @notice No guardian was named at construction
     error NoGuardians();
 
+    /// @notice No proposer was named at construction
+    error NoProposers();
+
     /// @notice A zero address appeared in one of the constructor role lists
     error ZeroAddress(string parameter);
 
@@ -112,6 +116,7 @@ contract ProtocolAdmin is TimelockController {
     ) TimelockController(_initialDelay, _proposers, new address[](0), address(0)) {
         if(_initialDelay < _minDelayFloor) revert DelayBelowFloor(_initialDelay, _minDelayFloor);
         if(_guardians.length == 0) revert NoGuardians();
+        if(_proposers.length == 0) revert NoProposers();
 
         for(uint256 i = 0; i < _proposers.length; ++i) {
             if(_proposers[i] == address(0)) revert ZeroAddress("_proposers");
@@ -150,6 +155,23 @@ contract ProtocolAdmin is TimelockController {
         uint256 delay = super.getMinDelay();
 
         return delay < minDelayFloor ? minDelayFloor : delay;
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Role overlap
+    // ---------------------------------------------------------------------------------------------
+
+    /// @inheritdoc AccessControl
+    /// @dev The constructor refuses these overlaps and nothing else did. Granting is a scheduled
+    ///      operation like any other, so without this a single proposer can schedule the pairing that
+    ///      makes a guardian un-evictable and anyone can execute it once the delay is served.
+    function grantRole(bytes32 role, address account) public virtual override {
+        if(role == CANCELLER_ROLE && hasRole(GUARDIAN_ROLE, account)) revert RolesMustNotOverlap(account);
+        if(role == PROPOSER_ROLE && hasRole(GUARDIAN_ROLE, account)) revert RolesMustNotOverlap(account);
+        if(role == GUARDIAN_ROLE && (hasRole(CANCELLER_ROLE, account) || hasRole(PROPOSER_ROLE, account))) {
+            revert RolesMustNotOverlap(account);
+        }
+        super.grantRole(role, account);
     }
 
     // ---------------------------------------------------------------------------------------------

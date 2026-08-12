@@ -282,8 +282,11 @@ contract GuardianPowersTest is AdminBase {
         protocolAdmin.cancel(id);
     }
 
+    /// @dev Granting `DEFAULT_ADMIN_ROLE` rather than `PROPOSER_ROLE`, since granting the guardian
+    ///      a role it holds no overlap restriction against would now revert on that check first
+    ///      rather than on the missing admin authority this test is about.
     function test_guardian_cannotGrantItselfAnythingDirectly() public {
-        bytes32 role = protocolAdmin.PROPOSER_ROLE();
+        bytes32 role = protocolAdmin.DEFAULT_ADMIN_ROLE();
         bytes32 adminRole = protocolAdmin.DEFAULT_ADMIN_ROLE();
 
         vm.prank(guardian);

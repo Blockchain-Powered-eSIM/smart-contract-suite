@@ -272,3 +272,20 @@ rule acceptingOwnershipWritesNoAdminState(bytes32 role, address account, bytes32
     assert getTimestamp(id) == timestampBefore, "taking ownership moved an operation";
     assert getMinDelay() == delayBefore, "taking ownership moved the delay";
 }
+
+/// A-10. A guardian never also holds the cancel power, whatever call sequence ran.
+///
+/// The constructor refuses this overlap and used to be the only place that did: an account holding
+/// both could revoke every other canceller, become the only one, and cancel its own eviction
+/// forever. `grantRole` now refuses it too, so this restates A-06's guardian exception as a standing
+/// invariant of the role table rather than only a constructor-time check.
+rule theGuardianAndCancellerRolesNeverOverlap(method f, address account) {
+    require !(hasRole(GUARDIAN_ROLE(), account) && hasRole(CANCELLER_ROLE(), account));
+
+    env callEnv;
+    calldataarg args;
+    f(callEnv, args);
+
+    assert !(hasRole(GUARDIAN_ROLE(), account) && hasRole(CANCELLER_ROLE(), account)),
+        "an account ended up holding both the guardian role and the cancel power";
+}

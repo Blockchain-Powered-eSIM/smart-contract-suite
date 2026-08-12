@@ -220,6 +220,71 @@ contract RoleRecoveryTest is AdminBase {
         assertFalse(protocolAdmin.hasRole(cancellerRole, canceller), "the instant path takes it straight back");
     }
 
+    /// @dev The overlap the constructor refuses was still reachable at runtime through an ordinary
+    ///      scheduled grant, which is what would make an evicted guardian un-evictable again.
+    function test_grantRole_rejectsMakingAGuardianACanceller() public {
+        bytes32 cancellerRole = protocolAdmin.CANCELLER_ROLE();
+        bytes memory overlap = abi.encodeCall(protocolAdmin.grantRole, (cancellerRole, guardian));
+        bytes32 id = _schedule(address(protocolAdmin), overlap, bytes32(0));
+
+        vm.warp(block.timestamp + protocolAdmin.getMinDelay());
+
+        vm.prank(outsider);
+        vm.expectRevert(
+            abi.encodeWithSelector(ProtocolAdmin.RolesMustNotOverlap.selector, guardian)
+        );
+        protocolAdmin.execute(address(protocolAdmin), 0, overlap, bytes32(0), bytes32(0));
+
+        assertFalse(protocolAdmin.hasRole(cancellerRole, guardian));
+        assertFalse(protocolAdmin.isOperationDone(id));
+    }
+
+    /// @dev The same pairing, granted from the other side.
+    function test_grantRole_rejectsMakingACancellerAGuardian() public {
+        bytes32 guardianRole = protocolAdmin.GUARDIAN_ROLE();
+        bytes memory overlap = abi.encodeCall(protocolAdmin.grantRole, (guardianRole, canceller));
+
+        _schedule(address(protocolAdmin), overlap, bytes32(0));
+        vm.warp(block.timestamp + protocolAdmin.getMinDelay());
+
+        vm.prank(outsider);
+        vm.expectRevert(
+            abi.encodeWithSelector(ProtocolAdmin.RolesMustNotOverlap.selector, canceller)
+        );
+        protocolAdmin.execute(address(protocolAdmin), 0, overlap, bytes32(0), bytes32(0));
+
+        assertFalse(protocolAdmin.hasRole(guardianRole, canceller));
+    }
+
+    /// @dev A proposer holding the guardian role could never touch `PROPOSER_ROLE`, since that
+    ///      pairing is what makes reaching zero proposers unrecoverable.
+    function test_grantRole_rejectsMakingAProposerAGuardian() public {
+        bytes32 guardianRole = protocolAdmin.GUARDIAN_ROLE();
+        bytes memory overlap = abi.encodeCall(protocolAdmin.grantRole, (guardianRole, proposer));
+
+        _schedule(address(protocolAdmin), overlap, bytes32(0));
+        vm.warp(block.timestamp + protocolAdmin.getMinDelay());
+
+        vm.prank(outsider);
+        vm.expectRevert(
+            abi.encodeWithSelector(ProtocolAdmin.RolesMustNotOverlap.selector, proposer)
+        );
+        protocolAdmin.execute(address(protocolAdmin), 0, overlap, bytes32(0), bytes32(0));
+
+        assertFalse(protocolAdmin.hasRole(guardianRole, proposer));
+    }
+
+    /// @dev Guards the three guards above: an ordinary grant naming no forbidden pairing still
+    ///      lands.
+    function test_grantRole_stillAllowsAnUnrelatedGrant() public {
+        bytes32 cancellerRole = protocolAdmin.CANCELLER_ROLE();
+        bytes memory grant = abi.encodeCall(protocolAdmin.grantRole, (cancellerRole, outsider));
+
+        _runThroughTheDelay(address(protocolAdmin), grant, bytes32(0));
+
+        assertTrue(protocolAdmin.hasRole(cancellerRole, outsider));
+    }
+
     /// @dev Rotating a signer set touches nothing outside this contract. The four protocol
     ///      contracts keep the same owner throughout, so no proxy moves and no wallet notices.
     function test_recovery_leavesTheProtocolContractsUntouched() public {

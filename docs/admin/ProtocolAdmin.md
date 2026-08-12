@@ -101,6 +101,14 @@ error NoGuardians()
 
 No guardian was named at construction
 
+### NoProposers
+
+```solidity
+error NoProposers()
+```
+
+No proposer was named at construction
+
 ### ZeroAddress
 
 ```solidity
@@ -175,6 +183,16 @@ function getMinDelay() public view virtual returns (uint256)
 _Held at the floor whatever `updateDelay` last wrote. `schedule` reads this rather than
      the stored value, so the floor binds every new operation without needing to intercept
      the setter._
+
+### grantRole
+
+```solidity
+function grantRole(bytes32 role, address account) public virtual
+```
+
+_The constructor refuses these overlaps and nothing else did. Granting is a scheduled
+     operation like any other, so without this a single proposer can schedule the pairing that
+     makes a guardian un-evictable and anyone can execute it once the delay is served._
 
 ### unpauseInstantly
 

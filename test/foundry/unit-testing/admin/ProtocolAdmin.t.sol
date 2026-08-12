@@ -87,6 +87,13 @@ contract ProtocolAdminTest is AdminBase {
         new ProtocolAdmin(DELAY, DELAY_FLOOR, _proposerSet(), _cancellerSet(), new address[](1));
     }
 
+    /// @dev Zero proposers is unrecoverable: re-granting any role needs a scheduled operation, and
+    ///      scheduling needs a proposer, so an admin deployed with none could never do anything.
+    function test_constructor_rejectsAnEmptyProposerList() public {
+        vm.expectRevert(ProtocolAdmin.NoProposers.selector);
+        new ProtocolAdmin(DELAY, DELAY_FLOOR, new address[](0), _cancellerSet(), _guardianSet());
+    }
+
     /// @dev The separation the whole recovery story rests on, refused at construction rather than
     ///      written down. A guardian holding the cancel power could strip every other canceller,
     ///      become the only one, and cancel its own eviction for as long as it liked.
