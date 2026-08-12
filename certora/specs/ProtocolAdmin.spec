@@ -57,8 +57,6 @@ methods {
     function minDelayFloor() external returns (uint256) envfree;
     function getMinDelay() external returns (uint256) envfree;
     function getTimestamp(bytes32) external returns (uint256) envfree;
-    function isOperationDone(bytes32) external returns (bool) envfree;
-    function isOperationPending(bytes32) external returns (bool) envfree;
 
     /// The two `Ownable2Step` methods and the pause release all have resolved selectors and an
     /// unknown callee, so the unresolved default below never applies to them and the prover would
@@ -123,18 +121,23 @@ rule nothingIsScheduledToMatureInsideTheFloor(method f, bytes32 id) {
 /// Both halves of the precondition are load-bearing. Waiting and done are told apart by the stored
 /// timestamp alone, done being the literal 1, so `getTimestamp(id) > block.timestamp` does not on its
 /// own exclude a done operation: at `block.timestamp == 0` it admits a timestamp of 1, which is done
-/// already, and the rule then fails on every method including pure views. `isOperationPending` is
-/// exactly `getTimestamp(id) > 1`, which is what separates the two.
+/// already, and the rule then fails on every method including pure views. Pending is exactly
+/// `getTimestamp(id) > 1`, which is what separates the two.
+///
+/// Stated through `getTimestamp` rather than through `isOperationPending` and `isOperationDone`
+/// because those two read the clock to tell a waiting operation from a ready one, which no rule here
+/// asks about, and reading it makes them ineligible for `envfree`. The stored timestamp answers both
+/// questions on its own.
 rule nothingCompletesBeforeItsTimestamp(method f, bytes32 id) {
     env callEnv;
     calldataarg args;
 
-    require isOperationPending(id);
+    require getTimestamp(id) > 1;
     require getTimestamp(id) > callEnv.block.timestamp;
 
     f(callEnv, args);
 
-    assert !isOperationDone(id),
+    assert getTimestamp(id) != 1,
         "an operation completed before its delay had been served";
 }
 
@@ -145,13 +148,13 @@ rule nothingCompletesBeforeItsTimestamp(method f, bytes32 id) {
 /// its own identifier, and the identifier is a hash of the payload, so replaying one means running
 /// the same calls again with no new wait.
 rule aCompletedOperationIsNeverReopened(method f, bytes32 id) {
-    require isOperationDone(id);
+    require getTimestamp(id) == 1;
 
     env callEnv;
     calldataarg args;
     f(callEnv, args);
 
-    assert isOperationDone(id),
+    assert getTimestamp(id) == 1,
         "a completed operation was reopened";
 }
 
@@ -279,6 +282,24 @@ rule acceptingOwnershipWritesNoAdminState(bytes32 role, address account, bytes32
 /// both could revoke every other canceller, become the only one, and cancel its own eviction
 /// forever. `grantRole` now refuses it too, so this restates A-06's guardian exception as a standing
 /// invariant of the role table rather than only a constructor-time check.
+///
+/// This rule is expected to report one violation on `grantRole` under via-IR, on a counterexample
+/// where `account` is the zero address. It is a prover artifact, not a defect: the same source and
+/// the same rule verify when the contract is compiled without via-IR, job
+/// `bd9b8400f48045538134cbae342d9eb5`. The override at `ProtocolAdmin.grantRole` reverts on exactly
+/// the state the counterexample reaches, so no call can produce it.
+///
+/// The counterexample state is also inert, which is worth stating because the zero address means
+/// two different things in this contract. `GUARDIAN_ROLE`, `CANCELLER_ROLE` and `PROPOSER_ROLE` are
+/// all read through `onlyRole`, which compares the holder against `msg.sender`, and no transaction
+/// has a sender of zero. Zero holding one of those roles therefore empowers nobody, and zero
+/// holding both empowers nobody twice. `EXECUTOR_ROLE` is the single exception: it is read through
+/// `onlyRoleOrOpenRole`, which treats a grant to the zero address as a sentinel meaning execution
+/// is open to everyone. That reading applies at two call sites in `TimelockController`, both for
+/// `EXECUTOR_ROLE`, and nowhere else.
+///
+/// Do not narrow this rule with `require account != 0` to make the via-IR job read clean. That
+/// would hide a genuine overlap at any other account just as effectively as it hides this one.
 rule theGuardianAndCancellerRolesNeverOverlap(method f, address account) {
     require !(hasRole(GUARDIAN_ROLE(), account) && hasRole(CANCELLER_ROLE(), account));
 
