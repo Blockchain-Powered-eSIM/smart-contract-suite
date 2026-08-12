@@ -693,4 +693,35 @@ contract ESIMWalletTest is DeployerBase {
 
         assertEq(eSIMWallet1.dataBundlePriceCap(), 0, "The admin must not be able to set a ceiling");
     }
+
+    /// @notice The purchase is already in history by the time the vault receives its ETH
+    /// @dev A vault that is a contract runs on receipt, so if the record landed after the transfer
+    /// it would see a history one entry short of the purchase that just paid it.
+    function test_buyDataBundle_recordsTheHistoryBeforeTheVaultIsPaid() public {
+        deployWallets();
+        vm.deal(address(deviceWallet), 1 ether);
+
+        HistoryReadingVault historyReadingVault = new HistoryReadingVault(address(eSIMWallet1));
+        vm.prank(registry.owner());
+        registry.updateVaultAddress(address(historyReadingVault));
+
+        vm.prank(eSIMWalletAdmin);
+        eSIMWallet1.buyDataBundle(DataBundleDetails("DB_ID_1", 0.1 ether));
+
+        assertEq(historyReadingVault.historyLengthSeen(), 1, "The vault must see the purchase already recorded");
+    }
+}
+
+/// @notice Reads back the paying wallet's transaction history length as it receives ETH
+contract HistoryReadingVault {
+    MockESIMWallet private immutable eSIMWallet;
+    uint256 public historyLengthSeen;
+
+    constructor(address _eSIMWallet) {
+        eSIMWallet = MockESIMWallet(payable(_eSIMWallet));
+    }
+
+    receive() external payable {
+        historyLengthSeen = eSIMWallet.getTransactionHistory().length;
+    }
 }

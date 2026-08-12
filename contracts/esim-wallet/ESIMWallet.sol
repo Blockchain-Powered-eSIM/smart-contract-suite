@@ -286,9 +286,12 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         }
 
         address vault = deviceWallet.getVaultAddress();
-        _transferETH(vault, _dataBundleDetail.dataBundlePrice);
 
+        // Recorded before the transfer, so a vault that is a contract cannot observe a purchase
+        // that is not yet in the history it would be reading.
         transactionHistory.push(_dataBundleDetail);
+
+        _transferETH(vault, _dataBundleDetail.dataBundlePrice);
 
         emit DataBundleBought(_dataBundleDetail.dataBundleID, _dataBundleDetail.dataBundlePrice, msg.value);
 
