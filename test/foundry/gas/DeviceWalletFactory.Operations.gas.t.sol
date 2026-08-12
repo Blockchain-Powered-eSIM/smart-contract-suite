@@ -27,6 +27,22 @@ contract DeviceWalletFactoryOperationsGasTest is GasBase {
         vm.snapshotGasLastCall(NAMESPACE, "createAccount: second wallet, warm factory storage");
     }
 
+    /// @notice The registration that follows a permissionless deploy
+    /// @dev Priced separately from `createAccount` because the two are always paid together on that
+    ///      route, and the sum is what the backend budgets. Most of it is the four registry writes;
+    ///      the re-derivation of the wallet address hashes the beacon proxy creation code, which is
+    ///      the one part that scales with nothing the caller controls.
+    function test_postCreateAccount() public {
+        vm.prank(user1);
+        address wallet = address(
+            deviceWalletFactory.createAccount(customDeviceUniqueIdentifiers[0], pubKey1, 8401)
+        );
+
+        vm.prank(eSIMWalletAdmin);
+        deviceWalletFactory.postCreateAccount(wallet, customDeviceUniqueIdentifiers[0], pubKey1, 8401);
+        vm.snapshotGasLastCall(NAMESPACE, "postCreateAccount: registering a wallet");
+    }
+
     /// @notice The admin batch at one entry, which carries the whole fixed cost
     function test_deployDeviceWalletForUsers_singleEntry() public {
         (
