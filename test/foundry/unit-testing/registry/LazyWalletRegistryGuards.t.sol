@@ -259,4 +259,18 @@ contract LazyWalletRegistryGuardsTest is DeployerBase {
 
         _expectSwitchToRevert(ESIM, DEVICE, DEVICE, abi.encodeWithSelector(Errors.CannotSwitchToTheSameDevice.selector, DEVICE));
     }
+
+    /// @notice A desynced association record reverts cleanly instead of panicking
+    /// @dev The two records are always written together in production, so this forces the gap
+    ///      directly: the identifier names DEVICE without ever entering DEVICE's associated
+    ///      list. The find-and-swap-remove loop then never finds it, and on an empty list the
+    ///      unguarded version underflows computing the last index instead of reverting cleanly.
+    function test_switchESIMIdentifierToNewDeviceIdentifier_revertsWhenTheIdentifierIsNotFound() public {
+        lazyWalletRegistry.setESIMIdentifierToDeviceIdentifier(ESIM, DEVICE);
+
+        _expectSwitchToRevert(
+            ESIM, DEVICE, OTHER_DEVICE,
+            abi.encodeWithSelector(Errors.ESIMIdentifierNotFound.selector, ESIM, DEVICE)
+        );
+    }
 }

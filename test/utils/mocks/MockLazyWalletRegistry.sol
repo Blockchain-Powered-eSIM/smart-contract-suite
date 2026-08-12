@@ -24,4 +24,14 @@ contract MockLazyWalletRegistry is LazyWalletRegistry {
     ) public view returns (string[] memory) {
         return eSIMIdentifiersAssociatedWithDeviceIdentifier[_deviceUniqueIdentifier];
     }
+
+    /// @notice Writes the identifier mapping directly, without touching the associated array
+    /// @dev The two are always written together in production. This exists so a test can force
+    ///      the gap between them and exercise the guard that catches it.
+    function setESIMIdentifierToDeviceIdentifier(
+        string calldata _eSIMIdentifier,
+        string calldata _deviceIdentifier
+    ) external {
+        eSIMIdentifierToDeviceIdentifier[_eSIMIdentifier] = _deviceIdentifier;
+    }
 }

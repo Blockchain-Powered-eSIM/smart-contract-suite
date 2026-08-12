@@ -60,22 +60,31 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     /// @notice Emitted when the eSIM being removed sends back ETH to this device wallet
     event ETHCalledBack(uint256 _amount);
 
-    /// @notice Reverts unless the caller is the registry, the device wallet factory or this wallet
+    /// @notice Reverts unless the caller is the registry, the device wallet factory, this wallet
+    ///         itself, or the eSIM wallet the registry still names this device wallet as holding
     /// @dev Private rather than inline in the modifier, so the check is emitted once instead of at
     ///      every use site. Keep each of these next to the modifier that calls it.
-    function _onlyRegistryOrDeviceWalletFactoryOrOwner() private view {
+    ///
+    ///      The eSIM wallet branch is checked against the registry's own association rather than
+    ///      the caller's own owner(), because a caller naming itself as `_eSIMWalletAddress`
+    ///      controls what its own owner() returns. The registry association can only reach this
+    ///      device wallet's address through a prior bindESIMWallet call, which already required
+    ///      real ownership at that time and is not something a caller can forge.
+    function _onlyRegistryOrDeviceWalletFactoryOrOwner(address _eSIMWalletAddress) private view {
         if(
             msg.sender != address(registry) &&
             msg.sender != address(registry.deviceWalletFactory()) &&
-            msg.sender != address(this)
+            msg.sender != address(this) &&
+            !(msg.sender == _eSIMWalletAddress && registry.isESIMWalletValid(_eSIMWalletAddress) == address(this))
         ) {
             revert Errors.OnlyRegistryOrDeviceWalletFactoryOrOwner();
         }
     }
 
-    /// @notice Restricts a call to the registry, the device wallet factory or this wallet itself
-    modifier onlyRegistryOrDeviceWalletFactoryOrOwner() {
-        _onlyRegistryOrDeviceWalletFactoryOrOwner();
+    /// @notice Restricts a call to the registry, the device wallet factory, this wallet itself, or
+    ///         the named eSIM wallet re-adding itself
+    modifier onlyRegistryOrDeviceWalletFactoryOrOwner(address _eSIMWalletAddress) {
+        _onlyRegistryOrDeviceWalletFactoryOrOwner(_eSIMWalletAddress);
         _;
     }
 
@@ -284,7 +293,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     function addESIMWallet(
         address _eSIMWalletAddress,
         bool _hasAccessToETH
-    ) public onlyRegistryOrDeviceWalletFactoryOrOwner {
+    ) public onlyRegistryOrDeviceWalletFactoryOrOwner(_eSIMWalletAddress) {
         _addESIMWallet(_eSIMWalletAddress, _hasAccessToETH);
     }
 

@@ -252,8 +252,8 @@ Nominates a new device wallet to take this eSIM wallet over, in two steps
 
 _Any outstanding request is overwritten rather than refused, so an owner who nominated
      the wrong address just calls this again. Nominating the current owner cancels the
-     request outright, and the eSIM wallet then has to be added back from the device wallet
-     by hand._
+     request and re-binds the wallet to its device wallet in the same call, with ETH access
+     left off since the flag it had before the removal is not recorded anywhere._
 
 #### Parameters
 

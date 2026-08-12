@@ -49,6 +49,7 @@ interface Errors {
     error NoESIMIdentifiersForDevice(string deviceIdentifier);
     error UnknownESIMIdentifier(string eSIMIdentifier);
     error ESIMBoundToADifferentDevice(string eSIMIdentifier, string boundDeviceIdentifier);
+    error ESIMIdentifierNotFound(string eSIMIdentifier, string deviceIdentifier);
     error CannotSwitchToTheSameDevice(string deviceIdentifier);
     error ESIMWalletNotLazyDeployed(string eSIMIdentifier);
     error HistoryAlreadyCopied(string eSIMIdentifier);

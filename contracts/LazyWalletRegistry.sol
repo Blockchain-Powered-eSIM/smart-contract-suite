@@ -625,6 +625,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
                 break;
             }
         }
+        if(i == associated) revert Errors.ESIMIdentifierNotFound(_eSIMIdentifier, _oldDeviceIdentifier);
 
         // Swap element to be removed with the element at the last index, and then pop last element
         eSIMIdentifierOfOldDevice[i] = eSIMIdentifierOfOldDevice[eSIMIdentifierOfOldDevice.length - 1];

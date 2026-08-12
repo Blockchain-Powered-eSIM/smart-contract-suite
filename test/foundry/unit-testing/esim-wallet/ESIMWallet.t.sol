@@ -320,6 +320,30 @@ contract ESIMWalletTest is DeployerBase {
         vm.stopPrank();
     }
 
+    /// @notice Cancelling a pending transfer re-binds the wallet to its device wallet
+    /// @dev requestTransferOwnership's general branch removes the wallet from its device wallet
+    ///      before the new owner has accepted anything. Self-cancelling used to clear the pending
+    ///      request and stop there, leaving the wallet orphaned: still owned by the same device
+    ///      wallet, but no longer in its isValidESIMWallet set and still marked on standby at the
+    ///      registry. ETH access is deliberately not restored, since the flag it had before the
+    ///      removal was never recorded anywhere.
+    function test_requestTransferOwnership_selfCancelRestoresTheBinding() public {
+        test_requestTransferOwnership();
+
+        address currentOwner = eSIMWallet1.owner();
+        assertEq(deviceWallet.isValidESIMWallet(address(eSIMWallet1)), false, "removed pending the transfer");
+        assertEq(registry.isESIMWalletOnStandby(address(eSIMWallet1)), true, "on standby pending the transfer");
+
+        vm.prank(currentOwner);
+        eSIMWallet1.requestTransferOwnership(currentOwner);
+
+        assertEq(eSIMWallet1.newRequestedOwner(), address(0), "the pending request must be cleared");
+        assertEq(deviceWallet.isValidESIMWallet(address(eSIMWallet1)), true, "the binding must be restored");
+        assertEq(deviceWallet.canPullETH(address(eSIMWallet1)), false, "ETH access is not restored");
+        assertEq(registry.isESIMWalletOnStandby(address(eSIMWallet1)), false, "standby must be cleared");
+        assertEq(registry.isESIMWalletValid(address(eSIMWallet1)), currentOwner, "the association is unchanged");
+    }
+
     function test_acceptOwnershipTransfer() public {
         test_requestTransferOwnership();
 

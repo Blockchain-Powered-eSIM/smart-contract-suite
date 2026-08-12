@@ -102,10 +102,11 @@ Emitted when the eSIM being removed sends back ETH to this device wallet
 ### onlyRegistryOrDeviceWalletFactoryOrOwner
 
 ```solidity
-modifier onlyRegistryOrDeviceWalletFactoryOrOwner()
+modifier onlyRegistryOrDeviceWalletFactoryOrOwner(address _eSIMWalletAddress)
 ```
 
-Restricts a call to the registry, the device wallet factory or this wallet itself
+Restricts a call to the registry, the device wallet factory, this wallet itself, or
+        the named eSIM wallet re-adding itself
 
 ### onlySelfOrESIMWalletBeingRemoved
 

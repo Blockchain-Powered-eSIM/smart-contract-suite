@@ -201,8 +201,8 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     /// @notice Nominates a new device wallet to take this eSIM wallet over, in two steps
     /// @dev Any outstanding request is overwritten rather than refused, so an owner who nominated
     ///      the wrong address just calls this again. Nominating the current owner cancels the
-    ///      request outright, and the eSIM wallet then has to be added back from the device wallet
-    ///      by hand.
+    ///      request and re-binds the wallet to its device wallet in the same call, with ETH access
+    ///      left off since the flag it had before the removal is not recorded anywhere.
     /// @param _newOwner Address of the new device wallet to transfer ownership of this wallet
     function requestTransferOwnership(address _newOwner) external onlyDeviceWallet nonReentrant {
         Registry registry = deviceWallet.registry();
@@ -214,6 +214,12 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
             address revokedAddress = newRequestedOwner;
             newRequestedOwner = address(0);
             emit OwnershipTransferRevoked(owner(), revokedAddress);
+
+            // The request being cancelled took this wallet off its device wallet, if it was ever
+            // sent. A request revoked before that removal landed leaves the wallet already bound.
+            if(!deviceWallet.isValidESIMWallet(address(this))) {
+                deviceWallet.addESIMWallet(address(this), false);
+            }
             return;
         }
 

@@ -152,6 +152,12 @@ error UnknownESIMIdentifier(string eSIMIdentifier)
 error ESIMBoundToADifferentDevice(string eSIMIdentifier, string boundDeviceIdentifier)
 ```
 
+### ESIMIdentifierNotFound
+
+```solidity
+error ESIMIdentifierNotFound(string eSIMIdentifier, string deviceIdentifier)
+```
+
 ### CannotSwitchToTheSameDevice
 
 ```solidity
