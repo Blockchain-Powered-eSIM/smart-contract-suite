@@ -150,18 +150,15 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgrad
             revert Errors.OnlyDeployForSelf();
         }
 
+        // CREATE2 reverts with no data when something already sits at the address, which leaves
+        // the caller nothing to go on. The salt is its own input, so name it back.
+        address predicted = getCounterFactualAddress(_deviceWalletAddress, _salt);
+        if(predicted.code.length > 0) revert Errors.SaltAlreadyUsed(_deviceWalletAddress, _salt);
+
         bytes memory initialisation = abi.encodeCall(
             ESIMWallet.initialize,
             (address(this), _deviceWalletAddress)
         );
-
-        // CREATE2 reverts with no data when something already sits at the address, which leaves
-        // the caller nothing to go on. The salt is its own input, so name it back.
-        address predicted = Create2.computeAddress(
-            bytes32(_salt),
-            keccak256(abi.encodePacked(type(BeaconProxy).creationCode, abi.encode(address(beacon), initialisation)))
-        );
-        if(predicted.code.length > 0) revert Errors.SaltAlreadyUsed(_deviceWalletAddress, _salt);
 
         address eSIMWalletAddress = address(
             payable(
@@ -176,6 +173,26 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgrad
         emit ESIMWalletDeployed(eSIMWalletAddress, _deviceWalletAddress, msg.sender);
 
         return eSIMWalletAddress;
+    }
+
+    /// @notice The address deployESIMWallet would land on for these inputs
+    /// @dev Lets a caller probe a salt for occupancy before spending a deployment on it.
+    /// @param _deviceWalletAddress Device wallet the eSIM wallet would be bound to
+    /// @param _salt CREATE2 salt
+    /// @return The predicted eSIM wallet address
+    function getCounterFactualAddress(
+        address _deviceWalletAddress,
+        uint256 _salt
+    ) public view returns (address) {
+        bytes memory initialisation = abi.encodeCall(
+            ESIMWallet.initialize,
+            (address(this), _deviceWalletAddress)
+        );
+
+        return Create2.computeAddress(
+            bytes32(_salt),
+            keccak256(abi.encodePacked(type(BeaconProxy).creationCode, abi.encode(address(beacon), initialisation)))
+        );
     }
 
     // ---------------------------------------------------------------------------------------------

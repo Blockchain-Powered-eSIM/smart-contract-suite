@@ -155,6 +155,29 @@ Deploys an eSIM wallet at a deterministic address and binds it to a device walle
 | ---- | ---- | ----------- |
 | [0] | address | Address of the newly deployed eSIM wallet |
 
+### getCounterFactualAddress
+
+```solidity
+function getCounterFactualAddress(address _deviceWalletAddress, uint256 _salt) public view returns (address)
+```
+
+The address deployESIMWallet would land on for these inputs
+
+_Lets a caller probe a salt for occupancy before spending a deployment on it._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _deviceWalletAddress | address | Device wallet the eSIM wallet would be bound to |
+| _salt | uint256 | CREATE2 salt |
+
+#### Return Values
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| [0] | address | The predicted eSIM wallet address |
+
 ### updateESIMWalletImplementation
 
 ```solidity

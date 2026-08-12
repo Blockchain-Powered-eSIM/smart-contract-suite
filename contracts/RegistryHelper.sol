@@ -19,6 +19,11 @@ import {ESIMWallet} from "./esim-wallet/ESIMWallet.sol";
 ///      this file; everything else goes through `Registry` itself.
 contract RegistryHelper {
 
+    /// @notice Most alternative salts tried before a lazy deployment gives up
+    /// @dev Each attempt costs one address derivation and no storage. Bounded because an unbounded
+    ///      loop would let one occupied range make the whole batch unpriceable.
+    uint256 private constant MAX_SALT_PROBES = 8;
+
     /// @notice Address of the Lazy wallet registry
     address public lazyWalletRegistry;
 
@@ -288,7 +293,18 @@ contract RegistryHelper {
         uint256 _salt,
         string calldata _eSIMUniqueIdentifier
     ) internal returns (address) {
-        address eSIMWallet = eSIMWalletFactory.deployESIMWallet(_deviceWallet, _salt);
+        uint256 salt = _salt;
+        // A salt inside a device's reserved range can already be taken, because an eSIM wallet
+        // deployed through the ordinary route shares this CREATE2 address space and nothing
+        // coordinates the two. Probing into a derived space rather than forward along the range
+        // means a probe can never take the natural salt of a later identifier in the same
+        // reservation.
+        for(uint256 probe = 0; probe < MAX_SALT_PROBES; ++probe) {
+            if(eSIMWalletFactory.getCounterFactualAddress(_deviceWallet, salt).code.length == 0) break;
+            salt = uint256(keccak256(abi.encode(_salt, probe)));
+        }
+
+        address eSIMWallet = eSIMWalletFactory.deployESIMWallet(_deviceWallet, salt);
 
         // Updates the Device wallet storage variables as well as for the registry
         DeviceWallet(payable(_deviceWallet)).addESIMWallet(eSIMWallet, true);
