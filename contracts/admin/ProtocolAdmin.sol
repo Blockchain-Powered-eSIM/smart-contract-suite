@@ -163,15 +163,33 @@ contract ProtocolAdmin is TimelockController {
 
     /// @inheritdoc AccessControl
     /// @dev The constructor refuses these overlaps and nothing else did. Granting is a scheduled
-    ///      operation like any other, so without this a single proposer can schedule the pairing that
-    ///      makes a guardian un-evictable and anyone can execute it once the delay is served.
-    function grantRole(bytes32 role, address account) public virtual override {
-        if(role == CANCELLER_ROLE && hasRole(GUARDIAN_ROLE, account)) revert RolesMustNotOverlap(account);
-        if(role == PROPOSER_ROLE && hasRole(GUARDIAN_ROLE, account)) revert RolesMustNotOverlap(account);
-        if(role == GUARDIAN_ROLE && (hasRole(CANCELLER_ROLE, account) || hasRole(PROPOSER_ROLE, account))) {
-            revert RolesMustNotOverlap(account);
+    ///      operation like any other, so without this a single proposer can schedule the pairing
+    ///      that makes a guardian un-evictable and anyone can execute it once the delay is served.
+    ///
+    ///      Authority is checked first, exactly where the base checks it, so a caller with no right
+    ///      to grant the role still gets `AccessControlUnauthorizedAccount`. Answering that caller
+    ///      with an overlap instead would name a problem it never reached.
+    ///
+    ///      The constructor's other rule, that `_cancellers` and `_proposers` do not intersect, is
+    ///      deliberately not repeated here. That one shapes the deployment, keeping a veto key off
+    ///      the schedule path. It is not a safety property, and pairing the two roles later is a
+    ///      legitimate decision for a scheduled operation to make.
+    function grantRole(bytes32 role, address account)
+        public
+        virtual
+        override
+        onlyRole(getRoleAdmin(role))
+    {
+        if(role == CANCELLER_ROLE || role == PROPOSER_ROLE) {
+            if(hasRole(GUARDIAN_ROLE, account)) revert RolesMustNotOverlap(account);
         }
-        super.grantRole(role, account);
+        else if(role == GUARDIAN_ROLE) {
+            if(hasRole(CANCELLER_ROLE, account) || hasRole(PROPOSER_ROLE, account)) {
+                revert RolesMustNotOverlap(account);
+            }
+        }
+
+        _grantRole(role, account);
     }
 
     // ---------------------------------------------------------------------------------------------
