@@ -209,13 +209,17 @@ _Each entry deploys a device wallet, its first eSIM wallet and the registry reco
 ### postCreateAccount
 
 ```solidity
-function postCreateAccount(address _deviceWallet, string _deviceUniqueIdentifier, bytes32[2] _deviceWalletOwnerKey) external
+function postCreateAccount(address _deviceWallet, string _deviceUniqueIdentifier, bytes32[2] _deviceWalletOwnerKey, uint256 _salt) external
 ```
 
 Records a wallet the EntryPoint deployed through createAccount
 
 _Not needed on the admin batch route, which writes the registry itself. Callable by the
-     admin directly and by the registry on the lazy deployment path._
+     admin directly and by the registry on the lazy deployment path.
+
+     The wallet was not deployed in this call, so nothing binds the arguments to it. The
+     re-derivation does: the key and the identifier are proxy constructor arguments, so an
+     address matching the derivation and holding code was deployed here with exactly those._
 
 #### Parameters
 
@@ -224,6 +228,7 @@ _Not needed on the admin batch route, which writes the registry itself. Callable
 | _deviceWallet | address | Wallet that was deployed |
 | _deviceUniqueIdentifier | string | Identifier the device is reached by |
 | _deviceWalletOwnerKey | bytes32[2] | X,Y co-ordinates of the P256 key owning the wallet |
+| _salt | uint256 | CREATE2 salt the wallet was deployed with |
 
 ### createAccount
 

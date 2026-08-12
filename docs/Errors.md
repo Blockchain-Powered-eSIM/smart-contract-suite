@@ -272,6 +272,18 @@ error EmptyBatch()
 error DeviceWalletInfoAlreadyAdded(address deviceWallet)
 ```
 
+### DeviceWalletMismatch
+
+```solidity
+error DeviceWalletMismatch(address deviceWallet, address derived)
+```
+
+### DeviceWalletNotDeployed
+
+```solidity
+error DeviceWalletNotDeployed(address deviceWallet)
+```
+
 ### OnlySelf
 
 ```solidity

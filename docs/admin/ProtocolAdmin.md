@@ -191,8 +191,17 @@ function grantRole(bytes32 role, address account) public virtual
 ```
 
 _The constructor refuses these overlaps and nothing else did. Granting is a scheduled
-     operation like any other, so without this a single proposer can schedule the pairing that
-     makes a guardian un-evictable and anyone can execute it once the delay is served._
+     operation like any other, so without this a single proposer can schedule the pairing
+     that makes a guardian un-evictable and anyone can execute it once the delay is served.
+
+     Authority is checked first, exactly where the base checks it, so a caller with no right
+     to grant the role still gets `AccessControlUnauthorizedAccount`. Answering that caller
+     with an overlap instead would name a problem it never reached.
+
+     The constructor's other rule, that `_cancellers` and `_proposers` do not intersect, is
+     deliberately not repeated here. That one shapes the deployment, keeping a veto key off
+     the schedule path. It is not a safety property, and pairing the two roles later is a
+     legitimate decision for a scheduled operation to make._
 
 ### unpauseInstantly
 
