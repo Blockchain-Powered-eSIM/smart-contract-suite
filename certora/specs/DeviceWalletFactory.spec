@@ -29,14 +29,21 @@
 /// Loops unroll three times, so every statement about `deployDeviceWalletForUsers` covers batches of
 /// at most three. Hashing of unbounded arguments is assumed within 224 bytes.
 ///
-/// That hashing bound costs two methods outright, and it is worth knowing which. `createAccount` and
-/// `getCounterFactualAddress` both hash `type(BeaconProxy).creationCode`, which is thousands of
-/// bytes, so under the bound they always revert and no rule below says anything about them. They
-/// show up as `rule_not_vacuous` records reading verified. Neither writes any of the storage these
-/// rules are about, so what is lost is the confirmation rather than the property, but the honest
-/// statement is that the counterfactual address derivation is not covered here at all. Raising the
-/// bound to cover the creation code would make every other hash in the contract more expensive, and
-/// the return on it is one confirmation, so it is left where it is.
+/// That hashing bound costs three methods outright, and it is worth knowing which. `createAccount`,
+/// `getCounterFactualAddress` and `postCreateAccount` all hash `type(BeaconProxy).creationCode`,
+/// which is thousands of bytes, so under the bound they always revert and no rule below says
+/// anything about them. They show up as `rule_not_vacuous` records reading verified. None of them
+/// writes any of the storage these rules are about, so what is lost is the confirmation rather than
+/// the property, but the honest statement is that the counterfactual address derivation is not
+/// covered here at all. Raising the bound to cover the creation code would make every other hash in
+/// the contract more expensive, and the return on it is one confirmation, so it is left where it is.
+///
+/// `postCreateAccount` joined that list when it started re-deriving the address it is being asked to
+/// record, which is what binds the identifier and the owner key to the wallet. The consequence for
+/// the rule below is specific: `reportingAWalletTwiceAlwaysReverts` still passes, but it now passes
+/// because every call reverts rather than because the flag is checked, so it has stopped being
+/// evidence of anything. The guard itself is carried by
+/// `test_postCreateAccount_rejectsAWalletAlreadyRecorded` instead.
 ///
 /// `renounceOwnership` also reads unreachable, and correctly: it is overridden to revert.
 ///
@@ -116,7 +123,8 @@ rule reportingAWalletTwiceAlwaysReverts(address deviceWallet) {
     env callEnv;
     string identifier;
     bytes32[2] ownerKey;
-    postCreateAccount@withrevert(callEnv, deviceWallet, identifier, ownerKey);
+    uint256 salt;
+    postCreateAccount@withrevert(callEnv, deviceWallet, identifier, ownerKey, salt);
 
     assert lastReverted, "a device wallet already reported to the registry was reported again";
 }
