@@ -182,7 +182,10 @@ function getMinDelay() public view virtual returns (uint256)
 
 _Held at the floor whatever `updateDelay` last wrote. `schedule` reads this rather than
      the stored value, so the floor binds every new operation without needing to intercept
-     the setter._
+     the setter.
+
+     Anything reporting the delay should call this rather than follow `MinDelayChange`,
+     which carries the value `updateDelay` stored and not the floor that overrides it._
 
 ### grantRole
 
