@@ -311,6 +311,31 @@ contract LazyWalletRegistryTest is DeployerBase {
         }
     }
 
+    /// @notice The lazy deploy path never leaves ETH behind for the registry to refund
+    /// @dev The registry is msg.sender on this path and declares neither a receive nor a
+    ///      fallback, so a refund reaching it would revert and take the whole deployment down.
+    ///      Nothing refunds today because the identifier is always fresh here, but nothing in the
+    ///      type system enforces that. This pins the property so a future change to the call graph
+    ///      fails a test instead of silently reopening the path.
+    function test_deployLazyWallet_spendsItsWholeDeposit() public {
+        test_batchPopulateHistory();
+
+        uint256 registryBalanceBefore = address(registry).balance;
+
+        vm.deal(eSIMWalletAdmin, 3 ether);
+        vm.prank(eSIMWalletAdmin);
+        (address deviceWalletAddress,,) = lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier{value: 3 ether}(
+            pubKey1,
+            customDeviceUniqueIdentifiers[0],
+            998,
+            3 ether,
+            FULL_BATCH
+        );
+
+        assertEq(address(registry).balance, registryBalanceBefore, "the registry must never hold a refund from the deploy");
+        assertEq(deviceWalletAddress.balance, 3 ether, "the device wallet must hold the whole deposit");
+    }
+
     /// @notice A funded lazy deployment survives anyone deploying its wallet first.
     /// @dev createAccount is permissionless and the address it lands on depends only on the owner
     ///      key, the device identifier and the salt, all three of which sit in the admin's pending
