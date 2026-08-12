@@ -75,6 +75,8 @@ interface Errors {
     error VaultUnchanged(address vault);
     error EmptyBatch();
     error DeviceWalletInfoAlreadyAdded(address deviceWallet);
+    error DeviceWalletMismatch(address deviceWallet, address derived);
+    error DeviceWalletNotDeployed(address deviceWallet);
 
     // Account4337, and so DeviceWallet through it
     error OnlySelf();

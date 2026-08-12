@@ -330,11 +330,11 @@ contract RegistryHelper {
         string calldata _deviceUniqueIdentifier,
         bytes32[2] memory _deviceWalletOwnerKey
     ) internal {
-        // Both mappings are meant to be one-to-one. The deploy paths check that before they get
-        // here, but postCreateAccount only checks that the wallet address is new, so without this
-        // a second wallet can take over an identifier or a key that already belongs to another.
-        // The overwrite is silent and unrecoverable: the identifier keeps resolving to the wrong
-        // wallet and the original can never be redeployed against it.
+        // Both mappings are meant to be one-to-one. The callers check that against the wallet they
+        // are recording, but a second wallet under the same identifier or key with a different salt
+        // reaches a different address and passes those checks, so without this it can take over a
+        // record belonging to another. The overwrite is silent and unrecoverable: the identifier
+        // keeps resolving to the wrong wallet and the original can never be redeployed against it.
         if(uniqueIdentifierToDeviceWallet[_deviceUniqueIdentifier] != address(0)) {
             revert Errors.DeviceIdentifierAlreadyRegistered(_deviceUniqueIdentifier);
         }

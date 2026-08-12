@@ -244,22 +244,40 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     /// @notice Records a wallet the EntryPoint deployed through createAccount
     /// @dev Not needed on the admin batch route, which writes the registry itself. Callable by the
     ///      admin directly and by the registry on the lazy deployment path.
+    ///
+    ///      The wallet was not deployed in this call, so nothing binds the arguments to it. The
+    ///      re-derivation does: the key and the identifier are proxy constructor arguments, so an
+    ///      address matching the derivation and holding code was deployed here with exactly those.
     /// @param _deviceWallet Wallet that was deployed
     /// @param _deviceUniqueIdentifier Identifier the device is reached by
     /// @param _deviceWalletOwnerKey X,Y co-ordinates of the P256 key owning the wallet
+    /// @param _salt CREATE2 salt the wallet was deployed with
     function postCreateAccount(
         address _deviceWallet,
         string memory _deviceUniqueIdentifier,
-        bytes32[2] memory _deviceWalletOwnerKey
+        bytes32[2] memory _deviceWalletOwnerKey,
+        uint256 _salt
     ) external onlyAdminOrRegistry {
         if(deviceWalletInfoAdded[_deviceWallet]) revert Errors.DeviceWalletInfoAlreadyAdded(_deviceWallet);
         if(bytes(_deviceUniqueIdentifier).length == 0) revert Errors.EmptyDeviceIdentifier();
+        _requireValidOwnerKey(_deviceWalletOwnerKey);
+
+        address derived = getCounterFactualAddress(
+            _deviceWalletOwnerKey,
+            _deviceUniqueIdentifier,
+            _salt
+        );
+        if(derived != _deviceWallet) revert Errors.DeviceWalletMismatch(_deviceWallet, derived);
+
+        // The derivation answers for an address whether or not anything stands there, so the code
+        // check is what separates a wallet from a slot someone could still deploy into.
+        if(_deviceWallet.code.length == 0) revert Errors.DeviceWalletNotDeployed(_deviceWallet);
 
         // Flag set before the call so a second pass through here cannot reach the registry at all.
         // The registry already rejects a duplicate identifier or key, so this closes the window
         // rather than being the only thing holding it shut.
         deviceWalletInfoAdded[_deviceWallet] = true;
-        registry.updateDeviceWalletInfo(address(_deviceWallet), _deviceUniqueIdentifier, _deviceWalletOwnerKey);
+        registry.updateDeviceWalletInfo(_deviceWallet, _deviceUniqueIdentifier, _deviceWalletOwnerKey);
     }
 
     // ---------------------------------------------------------------------------------------------
