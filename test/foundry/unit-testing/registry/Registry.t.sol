@@ -120,11 +120,11 @@ contract RegistryTest is DeployerBase {
 
         vm.prank(eSIMWalletAdmin);
         vm.expectRevert(Errors.OnlyAdminOrRegistry.selector);
-        deviceWalletFactory.postCreateAccount(user4, "", ownerKey);
+        deviceWalletFactory.postCreateAccount(user4, "", ownerKey, 0);
 
         vm.prank(user3);
         vm.expectRevert(Errors.EmptyDeviceIdentifier.selector);
-        deviceWalletFactory.postCreateAccount(user4, "", ownerKey);
+        deviceWalletFactory.postCreateAccount(user4, "", ownerKey, 0);
     }
 
     /// @notice The admin trips the pause, so an operator watching the backend can act without

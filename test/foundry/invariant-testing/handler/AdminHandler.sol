@@ -69,9 +69,10 @@ contract AdminHandler is HandlerBase {
             state.unregisteredOwnerKeys(index, 0),
             state.unregisteredOwnerKeys(index, 1)
         ];
+        uint256 salt = state.unregisteredSalts(index);
 
         vm.prank(_currentAdmin());
-        try deviceWalletFactory.postCreateAccount(wallet, identifier, ownerKey) {
+        try deviceWalletFactory.postCreateAccount(wallet, identifier, ownerKey, salt) {
             state.recordDeviceWallet(wallet, identifier, ownerKey);
             state.removePending(index);
             state.recordCall("postCreateAccount");

@@ -192,7 +192,7 @@ contract ESIMWalletFactoryTest is DeployerBase {
         ));
 
         vm.prank(eSIMWalletAdmin);
-        deviceWalletFactory.postCreateAccount(deviceWalletAddress, _deviceUniqueIdentifier, _ownerKey);
+        deviceWalletFactory.postCreateAccount(deviceWalletAddress, _deviceUniqueIdentifier, _ownerKey, _salt);
 
         return MockDeviceWallet(payable(deviceWalletAddress));
     }
@@ -221,7 +221,8 @@ contract ESIMWalletFactoryTest is DeployerBase {
         deviceWalletFactory.postCreateAccount(
             address(deviceWallet),
             customDeviceUniqueIdentifiers[0],
-            pubKey1
+            pubKey1,
+            999
         );
         vm.stopPrank();
 

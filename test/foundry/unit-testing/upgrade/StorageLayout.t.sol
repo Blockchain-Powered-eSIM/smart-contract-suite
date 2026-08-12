@@ -44,7 +44,7 @@ contract StorageLayoutTest is DeployerBase {
         );
 
         vm.prank(eSIMWalletAdmin);
-        deviceWalletFactory.postCreateAccount(walletAddress, customDeviceUniqueIdentifiers[0], pubKey1);
+        deviceWalletFactory.postCreateAccount(walletAddress, customDeviceUniqueIdentifiers[0], pubKey1, 501);
 
         return MockDeviceWallet(payable(walletAddress));
     }

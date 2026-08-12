@@ -113,7 +113,8 @@ contract DeviceWalletFactoryCreateAccountTest is DeviceWalletFactoryFixture {
         deviceWalletFactory.postCreateAccount(
             address(deviceWallet),
             customDeviceUniqueIdentifiers[0],
-            pubKey1
+            pubKey1,
+            salt
         );
         vm.stopPrank();
     }
@@ -153,7 +154,8 @@ contract DeviceWalletFactoryCreateAccountTest is DeviceWalletFactoryFixture {
         deviceWalletFactory.postCreateAccount(
             address(deviceWallet),
             customDeviceUniqueIdentifiers[0],
-            pubKey1
+            pubKey1,
+            salt
         );
         vm.stopPrank();
 
@@ -209,7 +211,8 @@ contract DeviceWalletFactoryCreateAccountTest is DeviceWalletFactoryFixture {
         deviceWalletFactory.postCreateAccount(
             address(deviceWallet),
             customDeviceUniqueIdentifiers[0],
-            pubKey1
+            pubKey1,
+            salt
         );
         vm.stopPrank();
 
@@ -309,9 +312,12 @@ contract DeviceWalletFactoryCreateAccountTest is DeviceWalletFactoryFixture {
         _assertDepositHeldByWallet(deviceWallet, 0);
     }
 
-    /// @notice postCreateAccount only checks that the wallet address is new, so a second wallet
-    /// used to be able to take over a device identifier that already belonged to another. The
-    /// registry binding must survive the attempt untouched.
+    /// @notice A second wallet honestly deployed against an identifier that is already registered
+    /// must not take it over. The registry binding survives the attempt untouched.
+    /// @dev The salt is the only argument that differs, which is what makes this reachable at all
+    /// now that the identifier is bound to the wallet address. Both wallets really carry the
+    /// identifier, so the derivation is satisfied and the registry's own duplicate guard is what
+    /// refuses the second one.
     function test_postCreateAccount_revertsOnRegisteredIdentifier() public {
         vm.prank(user1);
         address firstWallet = address(deviceWalletFactory.createAccount(
@@ -320,14 +326,15 @@ contract DeviceWalletFactoryCreateAccountTest is DeviceWalletFactoryFixture {
             111
         ));
         vm.prank(eSIMWalletAdmin);
-        deviceWalletFactory.postCreateAccount(firstWallet, customDeviceUniqueIdentifiers[0], pubKey1);
+        deviceWalletFactory.postCreateAccount(firstWallet, customDeviceUniqueIdentifiers[0], pubKey1, 111);
 
         vm.prank(user2);
         address secondWallet = address(deviceWalletFactory.createAccount(
-            customDeviceUniqueIdentifiers[1],
+            customDeviceUniqueIdentifiers[0],
             pubKey2,
             222
         ));
+        assertTrue(secondWallet != firstWallet, "A different salt must reach a different address");
 
         vm.prank(eSIMWalletAdmin);
         vm.expectRevert(
@@ -336,7 +343,7 @@ contract DeviceWalletFactoryCreateAccountTest is DeviceWalletFactoryFixture {
                 customDeviceUniqueIdentifiers[0]
             )
         );
-        deviceWalletFactory.postCreateAccount(secondWallet, customDeviceUniqueIdentifiers[0], pubKey2);
+        deviceWalletFactory.postCreateAccount(secondWallet, customDeviceUniqueIdentifiers[0], pubKey2, 222);
 
         assertEq(
             registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[0]),
@@ -345,7 +352,7 @@ contract DeviceWalletFactoryCreateAccountTest is DeviceWalletFactoryFixture {
         );
     }
 
-    /// @notice The same hole reached through the P256 key rather than the identifier. A key that
+    /// @notice The same case reached through the P256 key rather than the identifier. A key that
     /// already resolves to a wallet must keep resolving to it.
     function test_postCreateAccount_revertsOnRegisteredOwnerKey() public {
         vm.prank(user1);
@@ -355,12 +362,12 @@ contract DeviceWalletFactoryCreateAccountTest is DeviceWalletFactoryFixture {
             111
         ));
         vm.prank(eSIMWalletAdmin);
-        deviceWalletFactory.postCreateAccount(firstWallet, customDeviceUniqueIdentifiers[0], pubKey1);
+        deviceWalletFactory.postCreateAccount(firstWallet, customDeviceUniqueIdentifiers[0], pubKey1, 111);
 
         vm.prank(user2);
         address secondWallet = address(deviceWalletFactory.createAccount(
             customDeviceUniqueIdentifiers[1],
-            pubKey2,
+            pubKey1,
             222
         ));
 
@@ -370,7 +377,7 @@ contract DeviceWalletFactoryCreateAccountTest is DeviceWalletFactoryFixture {
         vm.expectRevert(
             abi.encodeWithSelector(Errors.OwnerKeyAlreadyRegistered.selector, reusedKeyHash)
         );
-        deviceWalletFactory.postCreateAccount(secondWallet, customDeviceUniqueIdentifiers[1], pubKey1);
+        deviceWalletFactory.postCreateAccount(secondWallet, customDeviceUniqueIdentifiers[1], pubKey1, 222);
 
         assertEq(
             registry.registeredP256Keys(reusedKeyHash),

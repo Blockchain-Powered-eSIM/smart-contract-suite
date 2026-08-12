@@ -58,6 +58,12 @@ contract ProtocolState {
     /// @notice Owner key of each unregistered wallet, at the same index
     bytes32[2][] public unregisteredOwnerKeys;
 
+    /// @notice CREATE2 salt each unregistered wallet was deployed with, at the same index
+    /// @dev `postCreateAccount` re-derives the counterfactual address from the identifier, the key
+    ///      and this, so a binding cannot be attempted without carrying the salt forward from the
+    ///      deploy that produced the wallet.
+    uint256[] public unregisteredSalts;
+
     // ----------------------------------------------------------------------------------------
     // Identifiers and keys
     // ----------------------------------------------------------------------------------------
@@ -228,12 +234,14 @@ contract ProtocolState {
     function addPending(
         address wallet,
         string memory identifier,
-        bytes32[2] memory ownerKey
+        bytes32[2] memory ownerKey,
+        uint256 salt
     ) external {
         account(wallet);
         unregisteredDeviceWallets.push(wallet);
         unregisteredIdentifiers.push(identifier);
         unregisteredOwnerKeys.push(ownerKey);
+        unregisteredSalts.push(salt);
     }
 
     /// @notice Drops a pending wallet once it has been bound
@@ -243,9 +251,11 @@ contract ProtocolState {
         unregisteredDeviceWallets[index] = unregisteredDeviceWallets[last];
         unregisteredIdentifiers[index] = unregisteredIdentifiers[last];
         unregisteredOwnerKeys[index] = unregisteredOwnerKeys[last];
+        unregisteredSalts[index] = unregisteredSalts[last];
         unregisteredDeviceWallets.pop();
         unregisteredIdentifiers.pop();
         unregisteredOwnerKeys.pop();
+        unregisteredSalts.pop();
     }
 
     /// @notice Records a device identifier the lazy path now carries history for

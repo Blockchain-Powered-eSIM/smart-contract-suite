@@ -152,7 +152,7 @@ contract DeviceWalletFactoryGuardsTest is DeployerBase {
 
         vm.prank(eSIMWalletAdmin);
         vm.expectRevert(Errors.OnlyAdminOrRegistry.selector);
-        factory.postCreateAccount(user1, "Device_1", ownerKey);
+        factory.postCreateAccount(user1, "Device_1", ownerKey, 0);
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -384,13 +384,173 @@ contract DeviceWalletFactoryGuardsTest is DeployerBase {
 
         vm.prank(eSIMWalletAdmin);
         vm.expectRevert(abi.encodeWithSelector(Errors.DeviceWalletInfoAlreadyAdded.selector, deployed.deviceWallet));
-        deviceWalletFactory.postCreateAccount(deployed.deviceWallet, customDeviceUniqueIdentifiers[1], pubKey2);
+        deviceWalletFactory.postCreateAccount(deployed.deviceWallet, customDeviceUniqueIdentifiers[1], pubKey2, 7001);
     }
 
     /// @notice Registration with an empty device identifier is refused
     function test_postCreateAccount_rejectsAnEmptyDeviceIdentifier() public {
         vm.prank(eSIMWalletAdmin);
         vm.expectRevert(Errors.EmptyDeviceIdentifier.selector);
-        deviceWalletFactory.postCreateAccount(user1, "", pubKey1);
+        deviceWalletFactory.postCreateAccount(user1, "", pubKey1, 0);
+    }
+
+    /// @notice Registration with a key that is not a point on the curve is refused
+    /// @dev The same predicate both deploy paths apply. A wallet recorded under a key that can
+    ///      never verify a signature holds an identifier and a key hash the protocol cannot
+    ///      release, and this path used to be the one that skipped the check.
+    function test_postCreateAccount_rejectsAnOffCurveOwnerKey() public {
+        vm.prank(user1);
+        address wallet = address(
+            deviceWalletFactory.createAccount(customDeviceUniqueIdentifiers[0], pubKey1, 7101)
+        );
+
+        bytes32[2] memory offCurve = [bytes32(uint256(1)), bytes32(uint256(1))];
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(Errors.InvalidDeviceWalletOwnerKey.selector);
+        deviceWalletFactory.postCreateAccount(wallet, customDeviceUniqueIdentifiers[0], offCurve, 7101);
+    }
+
+    /// @notice A key the wallet does not hold cannot be recorded against it
+    /// @dev The owner key is a constructor argument of the proxy, so it is folded into the CREATE2
+    ///      address. Presenting a different one derives a different address and is refused.
+    ///      Without this the registry names a key the wallet cannot sign with, and the key the
+    ///      wallet does hold is left unreserved for a second wallet to claim.
+    function test_postCreateAccount_rejectsAKeyTheWalletDoesNotHold() public {
+        vm.prank(user1);
+        address wallet = address(
+            deviceWalletFactory.createAccount(customDeviceUniqueIdentifiers[0], pubKey1, 7201)
+        );
+
+        address derived = deviceWalletFactory.getCounterFactualAddress(
+            pubKey2,
+            customDeviceUniqueIdentifiers[0],
+            7201
+        );
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(abi.encodeWithSelector(Errors.DeviceWalletMismatch.selector, wallet, derived));
+        deviceWalletFactory.postCreateAccount(wallet, customDeviceUniqueIdentifiers[0], pubKey2, 7201);
+
+        assertEq(
+            registry.getDeviceWalletToOwner(wallet)[0],
+            bytes32(0),
+            "A refused registration must leave the registry with no record of the wallet"
+        );
+    }
+
+    /// @notice An identifier the wallet does not carry cannot be recorded against it
+    /// @dev The identifier is folded into the address the same way. A wrong one here is
+    ///      unrecoverable, since the registry then refuses the correct binding as a duplicate.
+    function test_postCreateAccount_rejectsAnIdentifierTheWalletDoesNotCarry() public {
+        vm.prank(user1);
+        address wallet = address(
+            deviceWalletFactory.createAccount(customDeviceUniqueIdentifiers[0], pubKey1, 7301)
+        );
+
+        address derived = deviceWalletFactory.getCounterFactualAddress(
+            pubKey1,
+            customDeviceUniqueIdentifiers[1],
+            7301
+        );
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(abi.encodeWithSelector(Errors.DeviceWalletMismatch.selector, wallet, derived));
+        deviceWalletFactory.postCreateAccount(wallet, customDeviceUniqueIdentifiers[1], pubKey1, 7301);
+
+        assertEq(
+            registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[1]),
+            address(0),
+            "A refused registration must leave the identifier unclaimed"
+        );
+    }
+
+    /// @notice The salt has to be the one the wallet was deployed with
+    /// @dev Everything else matching still derives a different address, which is what makes the
+    ///      salt worth carrying through the backend rather than being guessed at.
+    function test_postCreateAccount_rejectsTheWrongSalt() public {
+        vm.prank(user1);
+        address wallet = address(
+            deviceWalletFactory.createAccount(customDeviceUniqueIdentifiers[0], pubKey1, 7401)
+        );
+
+        address derived = deviceWalletFactory.getCounterFactualAddress(
+            pubKey1,
+            customDeviceUniqueIdentifiers[0],
+            7402
+        );
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(abi.encodeWithSelector(Errors.DeviceWalletMismatch.selector, wallet, derived));
+        deviceWalletFactory.postCreateAccount(wallet, customDeviceUniqueIdentifiers[0], pubKey1, 7402);
+    }
+
+    /// @notice An arbitrary address cannot be recorded as a device wallet
+    /// @dev `isDeviceWalletValid` is an authorisation gate on the registry, the eSIM wallet factory
+    ///      and the eSIM wallet transfer path, so an address that was never a device wallet
+    ///      carrying it is a hole in all three.
+    function test_postCreateAccount_rejectsAnAddressThatIsNotADeviceWallet() public {
+        address derived = deviceWalletFactory.getCounterFactualAddress(
+            pubKey1,
+            customDeviceUniqueIdentifiers[0],
+            7501
+        );
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(abi.encodeWithSelector(Errors.DeviceWalletMismatch.selector, user1, derived));
+        deviceWalletFactory.postCreateAccount(user1, customDeviceUniqueIdentifiers[0], pubKey1, 7501);
+
+        assertFalse(
+            registry.isDeviceWalletValid(user1),
+            "An externally owned account must not be recorded as a device wallet"
+        );
+    }
+
+    /// @notice A counterfactual address nothing has been deployed to is refused
+    /// @dev The derivation alone answers for an address whether or not it holds code. Recording an
+    ///      empty one would reserve the identifier and the key against a wallet that does not
+    ///      exist and might never be deployed.
+    function test_postCreateAccount_rejectsAnAddressWithNoCode() public {
+        address derived = deviceWalletFactory.getCounterFactualAddress(
+            pubKey1,
+            customDeviceUniqueIdentifiers[0],
+            7601
+        );
+        assertEq(derived.code.length, 0, "The address must be empty for this to be the case under test");
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(abi.encodeWithSelector(Errors.DeviceWalletNotDeployed.selector, derived));
+        deviceWalletFactory.postCreateAccount(derived, customDeviceUniqueIdentifiers[0], pubKey1, 7601);
+    }
+
+    /// @notice The matching arguments still register the wallet
+    /// @dev The counterpart to every refusal above. The added derivation has to leave the path it
+    ///      guards working, and the registry has to end up holding what the wallet itself holds.
+    function test_postCreateAccount_recordsAWalletWithMatchingArguments() public {
+        vm.prank(user1);
+        address wallet = address(
+            deviceWalletFactory.createAccount(customDeviceUniqueIdentifiers[0], pubKey1, 7701)
+        );
+
+        vm.prank(eSIMWalletAdmin);
+        deviceWalletFactory.postCreateAccount(wallet, customDeviceUniqueIdentifiers[0], pubKey1, 7701);
+
+        assertTrue(deviceWalletFactory.deviceWalletInfoAdded(wallet), "The wallet must carry the record flag");
+        assertTrue(registry.isDeviceWalletValid(wallet), "The registry must accept the wallet as valid");
+        assertEq(
+            registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[0]),
+            wallet,
+            "The identifier must resolve to the wallet"
+        );
+        assertEq(
+            registry.getDeviceWalletToOwner(wallet)[0],
+            pubKey1[0],
+            "The registry must name the key the wallet holds"
+        );
+        assertEq(
+            registry.getDeviceWalletToOwner(wallet)[1],
+            pubKey1[1],
+            "The registry must name the key the wallet holds"
+        );
     }
 }

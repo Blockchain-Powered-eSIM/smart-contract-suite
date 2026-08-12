@@ -806,7 +806,7 @@ contract LazyWalletRegistryTest is DeployerBase {
         vm.prank(user2);
         address ordinaryWallet = address(deviceWalletFactory.createAccount(device, pubKey1, 6601));
         vm.prank(eSIMWalletAdmin);
-        deviceWalletFactory.postCreateAccount(ordinaryWallet, device, pubKey1);
+        deviceWalletFactory.postCreateAccount(ordinaryWallet, device, pubKey1, 6601);
         assertEq(
             registry.uniqueIdentifierToDeviceWallet(device),
             ordinaryWallet,

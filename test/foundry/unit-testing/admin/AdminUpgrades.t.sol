@@ -213,7 +213,7 @@ contract AdminUpgradesTest is AdminBase {
         );
 
         vm.prank(eSIMWalletAdmin);
-        deviceWalletFactory.postCreateAccount(wallet, customDeviceUniqueIdentifiers[0], pubKey1);
+        deviceWalletFactory.postCreateAccount(wallet, customDeviceUniqueIdentifiers[0], pubKey1, 701);
 
         return wallet;
     }

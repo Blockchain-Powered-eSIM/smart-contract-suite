@@ -41,7 +41,7 @@ contract AttackerHandler is HandlerBase {
         try deviceWalletFactory.createAccount{value: value}(identifier, ownerKey, salt) returns (
             DeviceWallet wallet
         ) {
-            state.addPending(address(wallet), identifier, ownerKey);
+            state.addPending(address(wallet), identifier, ownerKey, salt);
             state.recordCall("createAccountPermissionless");
         } catch {
             state.recordRevert("createAccountPermissionless");

@@ -115,7 +115,7 @@ contract DeviceWalletFactoryBatchDeployTest is DeviceWalletFactoryFixture {
         ));
 
         vm.prank(eSIMWalletAdmin);
-        deviceWalletFactory.postCreateAccount(deployedWallet, customDeviceUniqueIdentifiers[0], pubKey1);
+        deviceWalletFactory.postCreateAccount(deployedWallet, customDeviceUniqueIdentifiers[0], pubKey1, salt);
         assertEq(registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[0]), deployedWallet, "Registry should now hold the wallet");
 
         (
@@ -324,7 +324,7 @@ contract DeviceWalletFactoryBatchDeployTest is DeviceWalletFactoryFixture {
         ));
 
         vm.prank(eSIMWalletAdmin);
-        deviceWalletFactory.postCreateAccount(deployedWallet, customDeviceUniqueIdentifiers[0], pubKey1);
+        deviceWalletFactory.postCreateAccount(deployedWallet, customDeviceUniqueIdentifiers[0], pubKey1, salt);
 
         (
             string[] memory identifiers,
