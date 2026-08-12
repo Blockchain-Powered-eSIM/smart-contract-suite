@@ -300,10 +300,12 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
     /// @notice Verifies the signature carried by a user operation
     /// @dev The challenge is the EIP-191 digest over version, validUntil and `userOpHash`. The
     ///      user operation's own fields need no separate binding because the EntryPoint already
-    ///      folds them into `userOpHash`.
+    ///      folds them into `userOpHash`. A zero validUntil is refused outright, since the
+    ///      EntryPoint reads it as never-expires.
     /// @param userOp The packed user operation
     /// @param userOpHash Hash the EntryPoint computed for it
-    /// @return validationData Packed validAfter (0) and validUntil, or SIG_VALIDATION_FAILED
+    /// @return validationData Packed validAfter (0) and validUntil, or SIG_VALIDATION_FAILED for a
+    ///         signature that fails to verify or carries a zero validUntil
     function _validateUserOpSignature(
         PackedUserOperation calldata userOp,
         bytes32 userOpHash
@@ -318,6 +320,10 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
         uint8 version = uint8(signature[0]);
         if(version == 1) {
             uint48 validUntil = uint48(bytes6(signature[1:SIGNATURE_HEADER_LENGTH]));
+            // Zero is "no expiry" to the EntryPoint and "already expired" to isValidSignature, and
+            // the two paths read the same six bytes. Refusing it here is what keeps one header
+            // from meaning two things.
+            if(validUntil == 0) return SIG_VALIDATION_FAILED;
             bytes calldata webAuthnSignatureBytes = bytes(signature[SIGNATURE_HEADER_LENGTH:]);
 
             bytes memory precursorBytes = abi.encodePacked(version, validUntil, userOpHash);

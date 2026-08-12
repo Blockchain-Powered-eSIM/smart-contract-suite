@@ -117,4 +117,28 @@ contract UserOpValidationTest is DeployerBase {
         vm.expectRevert(abi.encodeWithSelector(IEntryPoint.FailedOp.selector, 0, "AA22 expired or not due"));
         entryPoint.handleOps(ops, payable(vault));
     }
+
+    /// @notice A zero validUntil means never-expires to the EntryPoint, so it must be refused
+    /// rather than accepted as a permanently replayable signature.
+    function test_validateUserOp_rejectsAZeroValidUntil() public {
+        _deployWallet();
+        PackedUserOperation[] memory ops = new PackedUserOperation[](1);
+        ops[0] = _operation(1);
+        ops[0].signature = _sign(ops[0], 0);
+
+        vm.expectRevert(abi.encodeWithSelector(IEntryPoint.FailedOp.selector, 0, "AA24 signature error"));
+        entryPoint.handleOps(ops, payable(vault));
+    }
+
+    /// @notice Guards the guard above: an ordinary non-zero validUntil must still be accepted.
+    function test_validateUserOp_acceptsANonZeroValidUntil() public {
+        _deployWallet();
+        PackedUserOperation[] memory ops = new PackedUserOperation[](1);
+        ops[0] = _operation(1);
+
+        uint48 validUntil = uint48(block.timestamp + 1 days);
+        ops[0].signature = _sign(ops[0], validUntil);
+
+        entryPoint.handleOps(ops, payable(vault));
+    }
 }
