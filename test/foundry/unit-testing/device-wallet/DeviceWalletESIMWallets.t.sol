@@ -271,7 +271,9 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
 
     /// @notice A registered device wallet cannot release an eSIM wallet another one holds
     /// @dev Releasing is now the standby flag alone, so this is the gate that stops a sibling
-    ///      reaching it. Both halves are asserted afterwards to show a refused call moved neither.
+    ///      reaching it. The gate checks the real owner rather than the registry's own association,
+    ///      so a sibling fails it the same way an unrelated caller would. Both halves are asserted
+    ///      afterwards to show a refused call moved neither.
     function test_toggleESIMWalletStandbyStatus_rejectsAReleaseFromADeviceWalletThatDoesNotHoldIt()
         public
     {
@@ -279,7 +281,7 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
 
         vm.prank(address(deviceWallet2));
         vm.expectRevert(abi.encodeWithSelector(
-            Errors.NotTheAssociatedDeviceWallet.selector, address(eSIMWallet1), address(deviceWallet)
+            Errors.NotTheESIMWalletOwnerOrItsDeviceWallet.selector, address(eSIMWallet1)
         ));
         registry.toggleESIMWalletStandbyStatus(address(eSIMWallet1), true);
 

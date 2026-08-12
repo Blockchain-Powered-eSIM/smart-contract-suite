@@ -304,6 +304,10 @@ _The association is a registration: once the registry has named a device wallet 
      `toggleESIMWalletStandbyStatus` and leaves the association naming the last device
      wallet that held it.
 
+     Authorization reads `ESIMWallet.owner()` rather than the association above, because the
+     association can still name a former device wallet after an ownership transfer has been
+     accepted and never bound back through `addESIMWallet`.
+
      Taking a wallet on is the one moment both facts change together, which is why the flag
      is cleared here rather than in a second call. Nothing else in this function reads it._
 
@@ -324,7 +328,11 @@ Marks an eSIM wallet as being moved from one device wallet to another, or cancel
 
 _Only the flag moves here. The association is a separate fact and keeps naming the device
      wallet that last held the eSIM wallet, so raising standby on a wallet this caller still
-     holds is the ordinary case rather than a contradiction._
+     holds is the ordinary case rather than a contradiction.
+
+     Authorization reads `ESIMWallet.owner()` rather than the association, for the same reason
+     as `bindESIMWallet`: the association can still name a former device wallet after an
+     accepted transfer that was never bound back._
 
 #### Parameters
 

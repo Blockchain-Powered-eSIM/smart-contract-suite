@@ -295,6 +295,10 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
     ///      `toggleESIMWalletStandbyStatus` and leaves the association naming the last device
     ///      wallet that held it.
     ///
+    ///      Authorization reads `ESIMWallet.owner()` rather than the association above, because the
+    ///      association can still name a former device wallet after an ownership transfer has been
+    ///      accepted and never bound back through `addESIMWallet`.
+    ///
     ///      Taking a wallet on is the one moment both facts change together, which is why the flag
     ///      is cleared here rather than in a second call. Nothing else in this function reads it.
     /// @param _eSIMWalletAddress Address of the eSIM wallet
@@ -305,12 +309,7 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
     ) external onlyDeviceWallet {
         if(_deviceWalletAddress == address(0)) revert Errors.ZeroAddress("_deviceWalletAddress");
 
-        address associated = isESIMWalletValid[_eSIMWalletAddress];
-
-        if(
-            ESIMWallet(payable(_eSIMWalletAddress)).owner() != msg.sender &&
-            associated != msg.sender
-        ) {
+        if(ESIMWallet(payable(_eSIMWalletAddress)).owner() != msg.sender) {
             revert Errors.NotTheESIMWalletOwnerOrItsDeviceWallet(_eSIMWalletAddress);
         }
 
@@ -340,15 +339,18 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
     /// @dev Only the flag moves here. The association is a separate fact and keeps naming the device
     ///      wallet that last held the eSIM wallet, so raising standby on a wallet this caller still
     ///      holds is the ordinary case rather than a contradiction.
+    ///
+    ///      Authorization reads `ESIMWallet.owner()` rather than the association, for the same reason
+    ///      as `bindESIMWallet`: the association can still name a former device wallet after an
+    ///      accepted transfer that was never bound back.
     /// @param _eSIMWalletAddress Address of the eSIM wallet
     /// @param _isOnStandby True while a transfer is outstanding, false once it is settled or revoked
     function toggleESIMWalletStandbyStatus(
         address _eSIMWalletAddress,
         bool _isOnStandby
     ) public onlyDeviceWallet {
-        address associated = isESIMWalletValid[_eSIMWalletAddress];
-        if(associated != msg.sender) {
-            revert Errors.NotTheAssociatedDeviceWallet(_eSIMWalletAddress, associated);
+        if(ESIMWallet(payable(_eSIMWalletAddress)).owner() != msg.sender) {
+            revert Errors.NotTheESIMWalletOwnerOrItsDeviceWallet(_eSIMWalletAddress);
         }
 
         isESIMWalletOnStandby[_eSIMWalletAddress] = _isOnStandby;

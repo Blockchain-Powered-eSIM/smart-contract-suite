@@ -1,9 +1,10 @@
 /// DeviceWalletFactory: the addresses it is wired to, and the record of what it deployed.
 ///
 /// This contract owns the beacon every device wallet runs on, so it is the single point from which
-/// all of them can be moved at once. It also holds the vault that receives payment, the registry it
-/// reports deployments to, and a per-wallet flag saying that report was made. Nothing here is a
-/// balance, and the rules are about which of those may move and through what.
+/// all of them can be moved at once. It also holds the registry it reports deployments to, and a
+/// per-wallet flag saying that report was made. The vault that receives data bundle payment lives on
+/// the registry, not here. Nothing here is a balance, and the rules are about which of those may move
+/// and through what.
 ///
 /// Two rules the milestone list asked for are not here, and the reason is that the contract moved
 /// on. R-19 and R-20 are about `eSIMWalletAdmin` and `newRequestedAdmin`, and neither is storage
@@ -47,7 +48,6 @@
 
 methods {
     function registry() external returns (address) envfree;
-    function vault() external returns (address) envfree;
     function beacon() external returns (address) envfree;
     function eSIMWalletFactory() external returns (address) envfree;
     function entryPoint() external returns (address) envfree;
