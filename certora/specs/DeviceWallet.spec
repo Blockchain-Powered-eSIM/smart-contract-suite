@@ -2,17 +2,17 @@
 ///
 /// A device wallet holds user ETH and decides which eSIM wallets may reach it. Two mappings carry
 /// that decision, `isValidESIMWallet` for membership and `canPullETH` for the spending right, and
-/// the second is meaningless without the first: `pullETH` and `payETHForDataBundles` each check
-/// `canPullETH` on its own, so a wallet that kept the right after being let go would still be able
-/// to spend. The rules below fix the relation between the two, fix both ETH paths against the
-/// balance, and fix the P256 key that authorises everything this wallet does.
+/// the second is meaningless without the first: `pullETH` checks `canPullETH` on its own, so a
+/// wallet that kept the right after being let go would still be able to spend. The rules below fix
+/// the relation between the two, fix the one ETH path against the balance, and fix the P256 key
+/// that authorises everything this wallet does.
 ///
 /// Scope. Calls out of this wallet, into the registry, the two factories and the eSIM wallets, are
 /// summarised as NONDET, so what is proved is this contract's own storage. That is the same scope
 /// the earlier milestones used and it carries the same limit: NONDET returns an arbitrary value and
 /// writes nothing, so no rule here says anything about re-entrancy. The `nonReentrant` guard on the
-/// two paths that make an external call is what covers that, and it is covered by the unit tests
-/// rather than here.
+/// path that makes an external call is what covers that, and it is covered by the unit tests rather
+/// than here.
 ///
 /// A second consequence of those summaries is that every access check reading the registry becomes
 /// arbitrary. `onlyESIMWalletAdmin` asks the registry who the admin is and
@@ -87,11 +87,11 @@ rule theRightToPullETHNeverOutlivesMembership(method f, address eSIMWallet) {
         "an eSIM wallet kept the right to pull ETH without being recognised";
 }
 
-/// R-14. Neither ETH path pays out more than the wallet holds.
+/// R-14. The ETH path pays out no more than the wallet holds.
 ///
-/// Both routes end in `_transferETH`, which compares against the live balance. Stated over the two
-/// entry points rather than over the internal function, so the guard is proved where a caller meets
-/// it. Neither is payable, so the balance the call reads is the balance read here.
+/// The route ends in `_transferETH`, which compares against the live balance. Stated over the entry
+/// point rather than over the internal function, so the guard is proved where a caller meets it. It
+/// is not payable, so the balance the call reads is the balance read here.
 rule pullingMoreETHThanTheWalletHoldsAlwaysReverts(uint256 amount) {
     require amount > nativeBalances[currentContract];
 
@@ -99,15 +99,6 @@ rule pullingMoreETHThanTheWalletHoldsAlwaysReverts(uint256 amount) {
     pullETH@withrevert(callEnv, amount);
 
     assert lastReverted, "an eSIM wallet pulled more ETH than the device wallet held";
-}
-
-rule payingMoreETHThanTheWalletHoldsAlwaysReverts(uint256 amount) {
-    require amount > nativeBalances[currentContract];
-
-    env callEnv;
-    payETHForDataBundles@withrevert(callEnv, amount);
-
-    assert lastReverted, "the device wallet paid out more ETH than it held";
 }
 
 /// R-15. The registry and the eSIM wallet factory are written once.

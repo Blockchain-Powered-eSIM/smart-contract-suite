@@ -12,47 +12,6 @@ import {DeviceWalletFixture} from "test/foundry/unit-testing/device-wallet/base/
 /// @notice Every path ETH takes into and out of a device wallet, and who may open each one.
 contract DeviceWalletETHTest is DeviceWalletFixture {
 
-    function test_payETHForDataBundles_unauthorised() public {
-        deployWallets();
-
-        vm.deal(user1, 0.1 ether);
-        vm.startPrank(user1);
-        vm.expectRevert(bytes4(keccak256("OnlyAssociatedESIMWallets()")));
-        deviceWallet.payETHForDataBundles(100000000000000000);  // 0.1 ETH
-        vm.stopPrank();
-    }
-
-    function test_payETHForDataBundles_revokedESIMWallet() public {
-        deployWallets();
-
-        vm.deal(address(deviceWallet), 0.1 ether);
-        vm.startPrank(address(eSIMWallet2));
-        vm.expectRevert(abi.encodeWithSelector(Errors.ETHAccessRevoked.selector, address(eSIMWallet2)));
-        deviceWallet.payETHForDataBundles(100000000000000000);  // 0.1 ETH
-        vm.stopPrank();
-    }
-
-    function test_payETHForDataBundles_noFunds() public {
-        deployWallets();
-
-        vm.startPrank(address(eSIMWallet1));
-        vm.expectRevert(abi.encodeWithSelector(Errors.InsufficientBalance.selector, 0, 0.1 ether));
-        deviceWallet.payETHForDataBundles(100000000000000000);  // 0.1 ETH
-        vm.stopPrank();
-    }
-
-    function test_payETHForDataBundles() public {
-        deployWallets();
-
-        vm.deal(address(deviceWallet), 1 ether);
-        vm.startPrank(address(eSIMWallet1));
-        deviceWallet.payETHForDataBundles(100000000000000000);  // 0.1 ETH
-        vm.stopPrank();
-
-        assertEq(address(deviceWallet).balance, 0.9 ether, "Device wallet balance should have reduced to 0.9 ETH");
-        assertEq(vault.balance, 0.1 ether, "Vault balance should have increased to 0.2 ether");
-    }
-
     function test_pullETH_unauthorise() public {
         deployWallets();
 
@@ -325,21 +284,6 @@ contract DeviceWalletETHTest is DeviceWalletFixture {
         vm.prank(address(eSIMWallet1));
         deviceWallet.pullETH(1 ether);
         assertEq(address(deviceWallet).balance, 1 ether, "The release must restore the path");
-    }
-
-    /// @notice The other eSIM-driven exit sends straight to the vault, so it needs the same lever
-    function test_payETHForDataBundles_revertsWhilePaused() public {
-        deployWallets();
-        vm.deal(address(deviceWallet), 1 ether);
-
-        vm.prank(registry.eSIMWalletAdmin());
-        registry.pause();
-
-        vm.prank(address(eSIMWallet1));
-        vm.expectRevert(Errors.ProtocolPaused.selector);
-        deviceWallet.payETHForDataBundles(0.1 ether);
-
-        assertEq(vault.balance, 0, "The vault must receive nothing while paused");
     }
 
     /// @notice A pause stops the admin-driven and eSIM-driven flows, never an owner spending their

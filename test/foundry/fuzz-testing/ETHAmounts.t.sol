@@ -193,37 +193,16 @@ contract ETHAmountsTest is FuzzBase {
         assertEq(address(fuzzESIMWallet).balance - walletBefore, amount, "The eSIM wallet must gain exactly the amount");
     }
 
-    /// @notice Paying for a bundle straight from the device wallet conserves ETH
-    /// @dev The other exit, which skips the eSIM wallet's balance entirely and sends to the vault.
-    /// forge-config: default.fuzz.runs = 5000
-    function testFuzz_payETHForDataBundles_conservesETH(uint256 _balance, uint256 _amount) public {
-        uint256 balance = bound(_balance, 1, MAX_FUZZED_ETH);
-        uint256 amount = bound(_amount, 1, balance);
-
-        vm.deal(address(fuzzDeviceWallet), balance);
-        uint256 vaultBefore = vault.balance;
-
-        vm.prank(address(fuzzESIMWallet));
-        fuzzDeviceWallet.payETHForDataBundles(amount);
-
-        assertEq(vault.balance - vaultBefore, amount, "The vault must receive exactly the amount");
-        assertEq(address(fuzzDeviceWallet).balance, balance - amount, "The device wallet must lose exactly the amount");
-    }
-
-    /// @notice Both exits refuse a zero amount rather than succeeding as a no-op
-    /// @dev Why the two fuzz bounds above start at one. A zero-amount call that succeeded would
-    ///      emit a movement event carrying no movement, which is what an offchain indexer reading
-    ///      those events would have to filter for.
-    function test_zeroAmountsAreRefusedOnBothExits() public {
+    /// @notice A zero amount is refused rather than succeeding as a no-op
+    /// @dev Why the fuzz bound above starts at one. A zero-amount call that succeeded would emit a
+    ///      movement event carrying no movement, which is what an offchain indexer reading those
+    ///      events would have to filter for.
+    function test_zeroAmountIsRefused() public {
         vm.deal(address(fuzzDeviceWallet), 1 ether);
 
         vm.prank(address(fuzzESIMWallet));
         vm.expectRevert(Errors.ZeroAmount.selector);
         fuzzDeviceWallet.pullETH(0);
-
-        vm.prank(address(fuzzESIMWallet));
-        vm.expectRevert(Errors.ZeroAmount.selector);
-        fuzzDeviceWallet.payETHForDataBundles(0);
 
         assertEq(address(fuzzDeviceWallet).balance, 1 ether, "No ETH may move on a refused call");
     }

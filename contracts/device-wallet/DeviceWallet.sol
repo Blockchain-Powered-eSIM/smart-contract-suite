@@ -41,9 +41,6 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     /// @notice Tracks if an associated eSIM wallet can pull ETH or not
     mapping(address eSIMWalletAddress => bool isAllowedToPullETH) public canPullETH;
 
-    /// @notice Emitted when the contract pays ETH for data bundle
-    event ETHPaidForDataBundle(address indexed _vault, address indexed _eSIMWallet, uint256 indexed _amount);
-
     /// @notice Emitted when owner updates ETH access to a particular eSIM wallet
     event ETHAccessUpdated(address indexed _eSIMWalletAddress, bool _hasAccessToETH);
 
@@ -204,25 +201,6 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     // ---------------------------------------------------------------------------------------------
     // ETH movement
     // ---------------------------------------------------------------------------------------------
-
-    /// @notice Allow the eSIM wallets associated with this device wallet to pay ETH for data bundles
-    /// @dev Instead of pulling the ETH into the eSIM wallet and then sending to the vault,
-    ///      the eSIM wallet can directly request the device wallet to pay ETH for the data bundles
-    ///      Not called by the eSIM wallet today, and a candidate for removal if it stays unused.
-    /// @param _amount Amount of ETH to pull
-    /// @return The amount paid
-    function payETHForDataBundles(uint256 _amount) external onlyAssociatedESIMWallets nonReentrant returns (uint256) {
-        registry.requireNotPaused();
-        if(_amount == 0) revert Errors.ZeroAmount();
-        if(!canPullETH[msg.sender]) revert Errors.ETHAccessRevoked(msg.sender);
-
-        address vault = getVaultAddress();
-        _transferETH(vault, _amount);
-
-        emit ETHPaidForDataBundle(vault, msg.sender, _amount);
-
-        return _amount;
-    }
 
     /// @notice Allow the eSIM wallets associated with this device wallet to pull ETH (for data bundles)
     /// @dev Refused while the protocol is paused, and refused for a wallet whose ETH access the

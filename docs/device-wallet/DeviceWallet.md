@@ -49,14 +49,6 @@ mapping(address => bool) canPullETH
 
 Tracks if an associated eSIM wallet can pull ETH or not
 
-### ETHPaidForDataBundle
-
-```solidity
-event ETHPaidForDataBundle(address _vault, address _eSIMWallet, uint256 _amount)
-```
-
-Emitted when the contract pays ETH for data bundle
-
 ### ETHAccessUpdated
 
 ```solidity
@@ -206,30 +198,6 @@ _The new wallet has no eSIM identifier yet. That arrives through
 | Name | Type | Description |
 | ---- | ---- | ----------- |
 | [0] | address | eSIM wallet address |
-
-### payETHForDataBundles
-
-```solidity
-function payETHForDataBundles(uint256 _amount) external returns (uint256)
-```
-
-Allow the eSIM wallets associated with this device wallet to pay ETH for data bundles
-
-_Instead of pulling the ETH into the eSIM wallet and then sending to the vault,
-     the eSIM wallet can directly request the device wallet to pay ETH for the data bundles
-     Not called by the eSIM wallet today, and a candidate for removal if it stays unused._
-
-#### Parameters
-
-| Name | Type | Description |
-| ---- | ---- | ----------- |
-| _amount | uint256 | Amount of ETH to pull |
-
-#### Return Values
-
-| Name | Type | Description |
-| ---- | ---- | ----------- |
-| [0] | uint256 | The amount paid |
 
 ### pullETH
 

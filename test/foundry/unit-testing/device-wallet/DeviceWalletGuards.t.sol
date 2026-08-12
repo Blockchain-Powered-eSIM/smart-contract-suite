@@ -13,13 +13,6 @@ import {ESIMWallet} from "contracts/esim-wallet/ESIMWallet.sol";
 
 import "test/utils/DeployerBase.sol";
 
-/// @notice An account that refuses every payment sent to it
-contract ETHRefuser {
-    fallback() external payable {
-        revert("No ETH accepted");
-    }
-}
-
 /// @notice Covers the reject arms on `DeviceWallet` that the existing suite reaches past on its way
 ///         to a happy path.
 /// @dev The ETH access and removal behaviour is covered in `DeviceWallet.t.sol`. What is here is
@@ -137,16 +130,6 @@ contract DeviceWalletGuardsTest is DeployerBase {
         wallet.pullETH(0);
     }
 
-    /// @notice A zero payment is refused on the direct-to-vault path too
-    function test_payETHForDataBundles_rejectsAZeroAmount() public {
-        _deployWallet(customDeviceUniqueIdentifiers[0], pubKey1, 8005);
-        vm.deal(address(wallet), 1 ether);
-
-        vm.prank(eSIMWallet);
-        vm.expectRevert(Errors.ZeroAmount.selector);
-        wallet.payETHForDataBundles(0);
-    }
-
     // ---------------------------------------------------------------------------------------------
     // Addresses the wallet has never bound
     // ---------------------------------------------------------------------------------------------
@@ -196,23 +179,6 @@ contract DeviceWalletGuardsTest is DeployerBase {
     // ---------------------------------------------------------------------------------------------
     // ETH that cannot be delivered
     // ---------------------------------------------------------------------------------------------
-
-    /// @notice A payment the vault refuses takes the whole call down rather than being written off
-    /// @dev The low-level call returns false instead of reverting, so without the check the wallet
-    ///      would emit nothing, return normally, and report a data bundle as paid for while the ETH
-    ///      stayed put. The vault is an EOA today, but it is a settable address and could become a
-    ///      contract that reverts on receipt.
-    function test_payETHForDataBundles_revertsWhenTheVaultRefusesTheETH() public {
-        _deployWallet(customDeviceUniqueIdentifiers[0], pubKey1, 8009);
-        vm.deal(address(wallet), 1 ether);
-        vm.etch(vault, address(new ETHRefuser()).code);
-
-        vm.prank(eSIMWallet);
-        vm.expectRevert(Errors.FailedToTransfer.selector);
-        wallet.payETHForDataBundles(1 ether);
-
-        assertEq(address(wallet).balance, 1 ether, "A refused payment must leave the balance alone");
-    }
 
     /// @notice A removal completes even when the eSIM wallet cannot hand its ETH back
     /// @dev The callback is wrapped in try/catch on purpose. Every eSIM wallet shares one beacon,
