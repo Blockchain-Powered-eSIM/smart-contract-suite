@@ -88,10 +88,11 @@ contract AdminHandler is HandlerBase {
     }
 
     /// @notice The admin adds another eSIM wallet to a device wallet that already exists
+    /// @dev The ETH access flag is not drawn. False is its only valid value, so a fuzzed one would
+    ///      revert half the time and the action would never reach its share of the distribution.
     /// @param deviceIndex Which device wallet gets the new eSIM wallet
-    /// @param hasAccessToETH Whether the new wallet may pull ETH from its device wallet
     /// @param salt CREATE2 salt, kept small so collisions are reached rather than assumed away
-    function deployESIMWalletForDevice(uint256 deviceIndex, bool hasAccessToETH, uint256 salt)
+    function deployESIMWalletForDevice(uint256 deviceIndex, uint256 salt)
         external
         counted
     {
@@ -103,10 +104,11 @@ contract AdminHandler is HandlerBase {
         salt = bound(salt, 0, 1000);
 
         vm.prank(_currentAdmin());
-        try DeviceWallet(payable(device)).deployESIMWallet(hasAccessToETH, salt) returns (
+        try DeviceWallet(payable(device)).deployESIMWallet(false, salt) returns (
             address wallet
         ) {
             state.recordESIMWallet(wallet, device);
+            state.clearETHAccessGrant(device, wallet);
             state.recordCall("deployESIMWalletForDevice");
         } catch {
             state.recordRevert("deployESIMWalletForDevice");

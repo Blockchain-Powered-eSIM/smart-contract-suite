@@ -3,6 +3,7 @@
 pragma solidity 0.8.36;
 
 import {CampaignBase} from "test/foundry/invariant-testing/base/CampaignBase.sol";
+import {MockDeviceWallet} from "test/utils/mocks/MockDeviceWallet.sol";
 
 /// @notice Where the protocol's ETH is allowed to be after any sequence of calls.
 /// @dev Run settings come from `[profile.default.invariant]` in `foundry.toml`, and the long
@@ -35,5 +36,31 @@ contract ETHInvariantsTest is CampaignBase {
         assertEq(address(eSIMWalletFactory).balance, 0, "eSIM wallet factory is holding ETH");
         assertEq(address(registry).balance, 0, "Registry is holding ETH");
         assertEq(address(lazyWalletRegistry).balance, 0, "Lazy wallet registry is holding ETH");
+    }
+
+    /// @notice The right to pull ETH only ever comes from the device wallet owner
+    /// @dev `toggleAccessToETH` is `onlySelf` and every bind path refuses the flag, so a pair
+    ///      holding the right that the ghost has no grant for is access the campaign obtained some
+    ///      other way. Both the current holder and the last one are checked, since the two differ
+    ///      while a transfer is outstanding, and the ghost is keyed by the pair so a wallet that
+    ///      moved does not read as carrying its previous device wallet's grant.
+    function invariant_ETHAccessOnlyEverCameFromTheOwner() public view {
+        uint256 count = state.eSIMWalletCount();
+        for (uint256 i = 0; i < count; ++i) {
+            address wallet = state.eSIMWallets(i);
+            _assertGranted(state.ghost_esimToDevice(wallet), wallet);
+            _assertGranted(state.ghost_lastDevice(wallet), wallet);
+        }
+    }
+
+    /// @notice Fails if a pair may pull ETH without the owner having granted it
+    function _assertGranted(address device, address wallet) private view {
+        if (device == address(0)) return;
+        if (!MockDeviceWallet(payable(device)).canPullETH(wallet)) return;
+
+        assertTrue(
+            state.ghost_ethAccessGranted(device, wallet),
+            "An eSIM wallet may pull ETH without the owner ever having granted it"
+        );
     }
 }

@@ -90,6 +90,7 @@ contract WalletHandler is HandlerBase {
             );
 
             state.setESIMOwner(wallet, address(0));
+            state.clearETHAccessGrant(device, wallet);
             state.recordCall("removeESIMWallet");
         } catch {
             state.recordRevert("removeESIMWallet");
@@ -169,7 +170,7 @@ contract WalletHandler is HandlerBase {
         }
 
         vm.prank(device);
-        try DeviceWallet(payable(device)).addESIMWallet(wallet, true) {
+        try DeviceWallet(payable(device)).addESIMWallet(wallet, false) {
             // The mirror of the removal check. Three writes go in together, and a wallet that
             // arrived with only some of them set is one the two contracts disagree about from the
             // moment it is added
@@ -177,9 +178,9 @@ contract WalletHandler is HandlerBase {
                 DeviceWallet(payable(device)).isValidESIMWallet(wallet),
                 "An added eSIM wallet is not claimed by the device wallet that added it"
             );
-            assertTrue(
+            assertFalse(
                 DeviceWallet(payable(device)).canPullETH(wallet),
-                "An added eSIM wallet did not receive the access it was added with"
+                "An added eSIM wallet arrived with the right to pull ETH"
             );
             assertEq(
                 registry.isESIMWalletValid(wallet),
@@ -188,6 +189,7 @@ contract WalletHandler is HandlerBase {
             );
 
             state.setESIMOwner(wallet, device);
+            state.clearETHAccessGrant(device, wallet);
             state.recordCall("addESIMWallet");
         } catch {
             state.recordRevert("addESIMWallet");
@@ -211,6 +213,13 @@ contract WalletHandler is HandlerBase {
 
         vm.prank(device);
         try DeviceWallet(payable(device)).toggleAccessToETH(wallet, hasAccessToETH) {
+            // Recorded in ghost state rather than asserted here: an assertion that trips inside a
+            // handler reverts the call and the campaign reads it as a skipped action
+            if (hasAccessToETH) {
+                state.recordETHAccessGrant(device, wallet);
+            } else {
+                state.clearETHAccessGrant(device, wallet);
+            }
             state.recordCall("toggleAccessToETH");
         } catch {
             state.recordRevert("toggleAccessToETH");

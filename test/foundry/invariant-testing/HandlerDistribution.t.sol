@@ -68,7 +68,7 @@ contract HandlerDistributionTest is CampaignBase {
 
             attackerHandler.donateETH(round, 1 ether);
             attackerHandler.donateToSingleton(round, 1 ether);
-            adminHandler.deployESIMWalletForDevice(round, true, seed + 2000);
+            adminHandler.deployESIMWalletForDevice(round, seed + 2000);
             // Follows the deploy so there is always a wallet still waiting for an identifier
             adminHandler.setESIMIdentifier(round, seed + 3000, false);
             walletHandler.toggleAccessToETH(round, true);

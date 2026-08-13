@@ -43,6 +43,13 @@ contract ProtocolState {
     ///      finding it any other way means comparing every device wallet against every eSIM wallet.
     mapping(address eSIMWallet => address deviceWallet) public ghost_lastDevice;
 
+    /// @notice Set for each pair the owner has granted the right to pull ETH and not since revoked
+    /// @dev Keyed by the pair rather than by the eSIM wallet, so a wallet that moves to a second
+    ///      device wallet does not read as carrying the first one's grant. `toggleAccessToETH` is
+    ///      the only writer of a true, so any pair holding the right without an entry here is a
+    ///      grant that came from somewhere else.
+    mapping(address deviceWallet => mapping(address eSIMWallet => bool granted)) public ghost_ethAccessGranted;
+
     // ----------------------------------------------------------------------------------------
     // Wallets deployed but not yet bound
     // ----------------------------------------------------------------------------------------
@@ -223,6 +230,16 @@ contract ProtocolState {
     /// @notice Records which device wallet now holds an eSIM wallet, zero meaning detached
     function setESIMOwner(address wallet, address device) external {
         _setESIMOwner(wallet, device);
+    }
+
+    /// @notice Records that the owner granted an eSIM wallet the right to pull ETH
+    function recordETHAccessGrant(address device, address wallet) external {
+        ghost_ethAccessGranted[device][wallet] = true;
+    }
+
+    /// @notice Records that a pair no longer carries the right, through a revocation or an unbind
+    function clearETHAccessGrant(address device, address wallet) external {
+        ghost_ethAccessGranted[device][wallet] = false;
     }
 
     /// @notice Records the key a wallet now answers to, keeping the retired one in history
