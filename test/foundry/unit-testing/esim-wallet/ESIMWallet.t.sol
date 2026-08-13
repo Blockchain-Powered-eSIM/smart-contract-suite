@@ -14,6 +14,9 @@ import "test/utils/mocks/MockDeviceWallet.sol";
 
 contract ESIMWalletTest is DeployerBase {
 
+    // Redeclared so expectEmit can name it. This test contract does not inherit ESIMWallet.
+    event DataBundlePriceCapUpdated(uint256 _cap);
+
     /// @notice A rotated admin has to reach buyDataBundle, which the factory alone does not
     /// @dev This path pulls whatever price it is given out of the device wallet and sends it to
     ///      the vault, so an admin address that changes only on the factory leaves the retired key
@@ -794,6 +797,71 @@ contract ESIMWalletTest is DeployerBase {
         eSIMWallet1.setDataBundlePriceCap(100 ether);
 
         assertEq(eSIMWallet1.dataBundlePriceCap(), 0, "The admin must not be able to set a ceiling");
+    }
+
+    /// @notice A handover clears the outgoing owner's ceiling and announces it.
+    /// @dev Every other authority marker is re-decided by the incoming owner's addESIMWallet call.
+    /// The ceiling has no such step, so a wallet handed over carrying a raised one would bind its
+    /// new owner to a limit the last owner chose.
+    function test_acceptOwnershipTransfer_clearsTheOutgoingOwnersPriceCeiling() public {
+        test_requestTransferOwnership();
+
+        // Still owned by the first device wallet until the request is accepted
+        vm.prank(address(deviceWallet));
+        eSIMWallet1.setDataBundlePriceCap(type(uint256).max);
+
+        vm.expectEmit(false, false, false, true, address(eSIMWallet1));
+        emit DataBundlePriceCapUpdated(0);
+
+        vm.prank(address(deviceWallet2));
+        eSIMWallet1.acceptOwnershipTransfer();
+
+        assertEq(eSIMWallet1.owner(), address(deviceWallet2), "Ownership should have moved");
+        assertEq(eSIMWallet1.dataBundlePriceCap(), 0, "The new owner must start on the registry ceiling");
+    }
+
+    /// @notice A wallet that never set a ceiling emits nothing on handover.
+    function test_acceptOwnershipTransfer_emitsNoCapUpdateWhenThereWasNoCeiling() public {
+        test_requestTransferOwnership();
+        assertEq(eSIMWallet1.dataBundlePriceCap(), 0, "The wallet must hold no ceiling of its own");
+
+        vm.recordLogs();
+        vm.prank(address(deviceWallet2));
+        eSIMWallet1.acceptOwnershipTransfer();
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+
+        bytes32 capUpdated = keccak256("DataBundlePriceCapUpdated(uint256)");
+        for (uint256 i = 0; i < logs.length; ++i) {
+            if (logs[i].emitter == address(eSIMWallet1) && logs[i].topics.length > 0) {
+                assertNotEq(logs[i].topics[0], capUpdated, "An unchanged ceiling must announce nothing");
+            }
+        }
+    }
+
+    /// @notice The registry default applies again once a wallet changes hands.
+    /// @dev The consequence of the clear: an inherited ceiling of type(uint256).max would leave the
+    /// new owner with no effective limit on what the admin may charge it.
+    function test_buyDataBundle_theNewOwnerIsNotBoundByTheOldOwnersCeiling() public {
+        test_requestTransferOwnership();
+
+        vm.prank(address(deviceWallet));
+        eSIMWallet1.setDataBundlePriceCap(type(uint256).max);
+
+        vm.prank(address(deviceWallet2));
+        eSIMWallet1.acceptOwnershipTransfer();
+        vm.prank(address(deviceWallet2));
+        deviceWallet2.addESIMWallet(address(eSIMWallet1), true);
+
+        vm.deal(address(deviceWallet2), 5 ether);
+        uint256 price = defaultDataBundlePriceCap + 1;
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(
+            abi.encodeWithSelector(Errors.DataBundlePriceAboveCap.selector, price, defaultDataBundlePriceCap)
+        );
+        eSIMWallet1.buyDataBundle(DataBundleDetails("DB_ID_1", price));
+
+        assertEq(vault.balance, 0, "The registry default must bind the new owner");
     }
 
     /// @notice The purchase is already in history by the time the vault receives its ETH

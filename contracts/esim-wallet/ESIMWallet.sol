@@ -166,7 +166,8 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     /// @dev Only the owning device wallet, which means the person holding its P256 key: reaching
     ///      this needs a device wallet `execute`, and that needs a signature. The admin names the
     ///      price on `buyDataBundle`, so it must not also be able to raise the ceiling on that
-    ///      price. Setting zero hands the wallet back to the registry's ceiling.
+    ///      price. Setting zero hands the wallet back to the registry's ceiling. A handover clears
+    ///      it, so an incoming owner starts on the registry ceiling.
     /// @param _cap Maximum price in wei, or zero to follow the registry
     function setDataBundlePriceCap(uint256 _cap) external onlyDeviceWallet {
         dataBundlePriceCap = _cap;
@@ -329,13 +330,22 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         revert Errors.OwnershipCannotBeRenounced();
     }
 
-    /// @notice Completes a handover, moving `deviceWallet` and `owner()` together
+    /// @notice Completes a handover, moving `deviceWallet`, `owner()` and the price ceiling together
     /// @dev Clears the request before it writes anything, so a second acceptance finds nothing.
+    ///      The ceiling is the owner's own limit and only the owner can set it, so it goes with the
+    ///      owner rather than binding the incoming one to a figure it never chose.
     function _secureTransferOwnership() internal {
         address newOwner = newRequestedOwner;
         // Reset ownership transfer address
         newRequestedOwner = address(0);
         deviceWallet = DeviceWallet(payable(newOwner));
+
+        // Written only on a change, so a wallet that never set a ceiling emits nothing here
+        if(dataBundlePriceCap != 0) {
+            dataBundlePriceCap = 0;
+            emit DataBundlePriceCapUpdated(0);
+        }
+
         // Transfer ownership to the request address
         // _transferOwnership emits OwnershipTransferred, so this function must not emit it again
         _transferOwnership(newOwner);

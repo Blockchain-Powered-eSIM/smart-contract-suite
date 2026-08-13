@@ -206,21 +206,33 @@ rule theOwnerIsAlwaysTheDeviceWallet(method f) filtered {
 /// Lowering the optimizer to 200 does not shift it either. The property is real and stays owed, so
 /// it is carried by a Foundry invariant instead of a rule here.
 
-/// The wallet's own price ceiling moves through one entry point.
+/// The wallet's own price ceiling is only ever set by its setter, and only ever cleared by a
+/// handover.
 ///
 /// Not in the original milestone list, since the ceiling postdates it. Worth stating because the
 /// ceiling is what stops the admin naming its own price on `buyDataBundle`, and the guard on the
 /// setter is the whole of that protection.
-rule thePriceCeilingMovesOnlyThroughItsSetter(method f) {
+///
+/// The second assert is what makes the handover exception safe. A handover may only take the
+/// ceiling to zero, which hands the wallet to the registry default rather than to a figure the
+/// outgoing owner chose. Anything else on that path would be a second, unguarded writer.
+rule thePriceCeilingIsSetOnlyByItsSetter(method f) {
     uint256 capBefore = dataBundlePriceCap();
 
     env callEnv;
     calldataarg args;
     f(callEnv, args);
 
-    assert dataBundlePriceCap() != capBefore =>
-        f.selector == sig:setDataBundlePriceCap(uint256).selector,
-        "the price ceiling moved through something other than its setter";
+    uint256 capAfter = dataBundlePriceCap();
+
+    assert capAfter != capBefore =>
+        (f.selector == sig:setDataBundlePriceCap(uint256).selector ||
+         f.selector == sig:acceptOwnershipTransfer().selector),
+        "the price ceiling moved through something other than its setter or a handover";
+
+    assert (capAfter != capBefore && f.selector == sig:acceptOwnershipTransfer().selector) =>
+        capAfter == 0,
+        "a handover left the wallet on a ceiling rather than on the registry default";
 }
 
 /// The factory that deployed this wallet is write-once.
