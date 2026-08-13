@@ -36,8 +36,8 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
     uint256 public constant MAX_HISTORY_ENTRIES_PER_CALL = 50;
 
     /// @notice Most eSIM wallets a single call will deploy for one device
-    /// @dev A deployment costs roughly 450,000 gas per eSIM wallet, so a full batch is around
-    ///      9,000,000. As with the history cap this is set for retry cost rather than the block
+    /// @dev A deployment costs roughly 500,000 gas per eSIM wallet, so a full batch is around
+    ///      10,000,000. As with the history cap this is set for retry cost rather than the block
     ///      limit: a batch that runs out of gas is paid for and thrown away, and a device with forty
     ///      eSIMs should not lose a whole block's worth of gas to one bad estimate. It also leaves
     ///      room for `forge coverage --ir-minimum`, which inflates the same call by about a fifth.

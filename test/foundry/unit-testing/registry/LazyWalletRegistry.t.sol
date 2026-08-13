@@ -819,10 +819,10 @@ contract LazyWalletRegistryTest is DeployerBase {
     /// @dev The cap is set for retry cost rather than the block limit, so this is the figure that
     ///      justifies it. The deployment chains sit at 30,000,000 at their tightest.
     ///
-    ///      The real cost is 9,278,724, about 460,000 per eSIM wallet, and the bound sits above it so
-    ///      that `forge coverage --ir-minimum` passes too, where instrumentation adds about a fifth.
-    ///      It still fails on a regression that stops enforcing the cap, which would put the whole
-    ///      forty five eSIM deployment below back into one call at roughly 21,000,000.
+    ///      The real cost is 10,025,567, about 500,000 per eSIM wallet, and the bound sits above it
+    ///      so that `forge coverage --ir-minimum` passes too, where instrumentation adds about a
+    ///      fifth. It still fails on a regression that stops enforcing the cap, which would put the
+    ///      whole forty five eSIM deployment below back into one call at roughly 22,500,000.
     function test_deployLazyWalletAndSetESIMIdentifier_staysCheapAtAFullBatch() public {
         string memory device = customDeviceUniqueIdentifiers[0];
         _bindESIMs(device, 20, "full_batch_");
