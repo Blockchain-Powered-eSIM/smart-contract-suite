@@ -1,14 +1,14 @@
 {
   "batchPopulateHistory: 1 device, 5 eSIMs": "651167",
   "batchPopulateHistory: 5 devices, 22 eSIMs": "2540825",
-  "deployLazyWalletAndSetESIMIdentifier: batch of 1": "1001221",
-  "deployLazyWalletAndSetESIMIdentifier: batch of 10": "4903840",
-  "deployLazyWalletAndSetESIMIdentifier: batch of 20": "9289050",
-  "deployLazyWalletAndSetESIMIdentifier: batch of 5": "2715261",
-  "deployMoreESIMWalletsForLazyDevice: batch of 1": "454624",
-  "deployMoreESIMWalletsForLazyDevice: batch of 18": "7884493",
-  "deployMoreESIMWalletsForLazyDevice: batch of 5": "2199742",
-  "setHistoryForLazyWallet: 1 entry": "108692",
-  "setHistoryForLazyWallet: 10 entries": "508539",
-  "setHistoryForLazyWallet: 39 entries": "1938598"
+  "deployLazyWalletAndSetESIMIdentifier: batch of 1": "1004774",
+  "deployLazyWalletAndSetESIMIdentifier: batch of 10": "4919370",
+  "deployLazyWalletAndSetESIMIdentifier: batch of 20": "9320110",
+  "deployLazyWalletAndSetESIMIdentifier: batch of 5": "2721026",
+  "deployMoreESIMWalletsForLazyDevice: batch of 1": "454177",
+  "deployMoreESIMWalletsForLazyDevice: batch of 18": "7912447",
+  "deployMoreESIMWalletsForLazyDevice: batch of 5": "2207507",
+  "setHistoryForLazyWallet: 1 entry": "108730",
+  "setHistoryForLazyWallet: 10 entries": "508577",
+  "setHistoryForLazyWallet: 39 entries": "1938636"
 }

@@ -210,7 +210,8 @@ Sets the most this wallet may be charged for one data bundle
 _Only the owning device wallet, which means the person holding its P256 key: reaching
      this needs a device wallet `execute`, and that needs a signature. The admin names the
      price on `buyDataBundle`, so it must not also be able to raise the ceiling on that
-     price. Setting zero hands the wallet back to the registry's ceiling._
+     price. Setting zero hands the wallet back to the registry's ceiling. A handover clears
+     it, so an incoming owner starts on the registry ceiling._
 
 #### Parameters
 
@@ -349,9 +350,11 @@ _Renouncing leaves owner() at zero while deviceWallet still points at the old de
 function _secureTransferOwnership() internal
 ```
 
-Completes a handover, moving `deviceWallet` and `owner()` together
+Completes a handover, moving `deviceWallet`, `owner()` and the price ceiling together
 
-_Clears the request before it writes anything, so a second acceptance finds nothing._
+_Clears the request before it writes anything, so a second acceptance finds nothing.
+     The ceiling is the owner's own limit and only the owner can set it, so it goes with the
+     owner rather than binding the incoming one to a figure it never chose._
 
 ### _transferETH
 

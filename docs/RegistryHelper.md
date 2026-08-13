@@ -80,7 +80,9 @@ All the eSIM wallets deployed using this registry are valid and mapped to their 
 
 _This is the registration record. A non-zero entry means the protocol deployed this eSIM
      wallet, and it stays non-zero for the rest of the wallet's life. Mid-transfer it names
-     the device wallet that last held it, so it is never zero to mean "released"._
+     the device wallet that last held it, so it is never zero to mean "released".
+     `bindESIMWallet` is the only writer and it checks the deployment with the factory, which
+     is what makes the first sentence true rather than assumed._
 
 ### isESIMWalletOnStandby
 
