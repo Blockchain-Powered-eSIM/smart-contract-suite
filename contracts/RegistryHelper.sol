@@ -65,9 +65,19 @@ contract RegistryHelper {
     ///      device wallet has accepted it.
     mapping(address eSIMWalletAddress => bool isOnStandby) public isESIMWalletOnStandby;
 
+    /// @notice The eSIM wallet holding each eSIM identifier, protocol-wide
+    /// @dev An eSIM wallet's own identifier slot is set once, but nothing stopped two wallets from
+    ///      being set to the same identifier, one per deployment route. This is what makes the
+    ///      identifier answer with a single wallet. Keyed by hash for the same reason
+    ///      `registeredP256Keys` is: `eSIMWalletForIdentifier` takes the string.
+    ///
+    ///      Written once and never cleared, including through an ownership transfer, because the
+    ///      eSIM belongs to the wallet rather than to whichever device is holding it.
+    mapping(bytes32 hashOfESIMIdentifier => address eSIMWallet) public claimedESIMIdentifiers;
+
     /// @dev Registry inherits this contract and its own state begins directly after this gap, so
-    ///      a new variable here has to consume gap slots rather than follow them. One appended
-    ///      below moves every Registry variable on the deployed proxies.
+    ///      anything added above shifts every Registry variable. That is why the gap is here and
+    ///      not at the end of `Registry` itself.
     uint256[50] private __gap;
 
     /// @notice Emitted for each eSIM wallet deployed on behalf of the lazy wallet registry
@@ -90,6 +100,15 @@ contract RegistryHelper {
         address indexed _deviceWallet,
         bytes32[2] _oldOwnerKey,
         bytes32[2] _newOwnerKey
+    );
+
+    /// @notice Emitted the first and only time an eSIM identifier is bound to an eSIM wallet
+    /// @dev The identifier is carried unindexed as well as hashed, because indexing a dynamic type
+    ///      stores its hash and no consumer can read the value back out of that.
+    event ESIMIdentifierClaimed(
+        bytes32 indexed _hashOfESIMIdentifier,
+        string _eSIMUniqueIdentifier,
+        address indexed _eSIMWallet
     );
 
     /// @notice Emitted when an eSIM wallet is bound to a device wallet
@@ -401,5 +420,21 @@ contract RegistryHelper {
     /// @return True if the identifier is taken
     function isDeviceIdentifierAlreadyUsed(string calldata _deviceUniqueIdentifier) public view returns (bool) {
         return uniqueIdentifierToDeviceWallet[_deviceUniqueIdentifier] != address(0);
+    }
+
+    /// @notice The eSIM wallet holding an eSIM identifier, or zero if nobody holds it
+    /// @dev Takes the string so callers do not have to hash it themselves, which is the only
+    ///      difference from reading `claimedESIMIdentifiers` directly.
+    /// @param _eSIMUniqueIdentifier eSIM identifier being looked up
+    /// @return The wallet that claimed it
+    function eSIMWalletForIdentifier(string calldata _eSIMUniqueIdentifier) public view returns (address) {
+        return claimedESIMIdentifiers[keccak256(bytes(_eSIMUniqueIdentifier))];
+    }
+
+    /// @notice Whether an eSIM identifier is already held by a wallet
+    /// @param _eSIMUniqueIdentifier eSIM identifier being checked
+    /// @return True if the identifier is taken
+    function isESIMIdentifierClaimed(string calldata _eSIMUniqueIdentifier) public view returns (bool) {
+        return claimedESIMIdentifiers[keccak256(bytes(_eSIMUniqueIdentifier))] != address(0);
     }
 }

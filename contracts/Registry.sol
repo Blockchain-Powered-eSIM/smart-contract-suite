@@ -13,6 +13,7 @@ import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/acces
 import {RegistryHelper} from "./RegistryHelper.sol";
 import {LazyWalletRegistry} from "./LazyWalletRegistry.sol";
 import {DeviceWalletFactory} from "./device-wallet/DeviceWalletFactory.sol";
+import {DeviceWallet} from "./device-wallet/DeviceWallet.sol";
 import {ESIMWalletFactory} from "./esim-wallet/ESIMWalletFactory.sol";
 import {ESIMWallet} from "./esim-wallet/ESIMWallet.sol";
 import {Errors} from "./Errors.sol";
@@ -442,6 +443,43 @@ contract Registry is
         }
     }
 
+    /// @notice Records that an eSIM wallet now holds an eSIM identifier, refusing a second holder
+    /// @dev Called by a device wallet as it writes the identifier onto one of its eSIM wallets. It
+    ///      has to happen here rather than only in `DeviceWallet`, because a device wallet can
+    ///      reach this directly through `execute`, and a guard sitting on the wallet side would be
+    ///      skipped by doing exactly that.
+    ///
+    ///      Refusing an identifier reserved for someone else is the eSIM half of what
+    ///      `requireDeviceIdentifierNotReserved` does for devices. The reserving device identifier
+    ///      is compared against the caller's own rather than refused outright, because the lazy
+    ///      route reaches this while deploying against its own reservation. The caller's identifier
+    ///      is read from it rather than taken as an argument: `execute` would let a device wallet
+    ///      name any identifier it liked.
+    /// @param _eSIMUniqueIdentifier Identifier being claimed
+    /// @param _eSIMWalletAddress Wallet claiming it, which must be one the caller owns
+    function claimESIMIdentifier(
+        string calldata _eSIMUniqueIdentifier,
+        address _eSIMWalletAddress
+    ) external onlyDeviceWallet {
+        if(bytes(_eSIMUniqueIdentifier).length == 0) revert Errors.EmptyESIMIdentifier();
+
+        if(ESIMWallet(payable(_eSIMWalletAddress)).owner() != msg.sender) {
+            revert Errors.NotTheESIMWalletOwnerOrItsDeviceWallet(_eSIMWalletAddress);
+        }
+
+        bytes32 identifierHash = keccak256(bytes(_eSIMUniqueIdentifier));
+        address holder = claimedESIMIdentifiers[identifierHash];
+        if(holder != address(0)) {
+            revert Errors.ESIMIdentifierAlreadyClaimed(_eSIMUniqueIdentifier, holder);
+        }
+
+        _requireESIMIdentifierNotReservedElsewhere(_eSIMUniqueIdentifier);
+
+        claimedESIMIdentifiers[identifierHash] = _eSIMWalletAddress;
+
+        emit ESIMIdentifierClaimed(identifierHash, _eSIMUniqueIdentifier, _eSIMWalletAddress);
+    }
+
     /// @notice Marks an eSIM wallet as being moved from one device wallet to another, or cancels that
     /// @dev Only the flag moves here. The association is a separate fact and keeps naming the device
     ///      wallet that last held the eSIM wallet, so raising standby on a wallet this caller still
@@ -481,6 +519,27 @@ contract Registry is
         emit UpdatedLazyWalletRegistryAddress(_lazyWalletRegistry);
 
         return lazyWalletRegistry;
+    }
+
+    /// @notice Refuses an eSIM identifier a fiat user has reserved against a different device
+    /// @dev The device wallet's own identifier is fetched only once the identifier turns out to be
+    ///      reserved, so an ordinary claim pays for one call returning an empty string.
+    ///
+    ///      Passes while `lazyWalletRegistry` is unset, for the same reason as
+    ///      `requireDeviceIdentifierNotReserved`: nothing can be reserved before the contract that
+    ///      holds reservations exists.
+    /// @param _eSIMUniqueIdentifier Identifier the caller is about to claim
+    function _requireESIMIdentifierNotReservedElsewhere(string calldata _eSIMUniqueIdentifier) private view {
+        if(lazyWalletRegistry == address(0)) return;
+
+        string memory reservedFor =
+            LazyWalletRegistry(lazyWalletRegistry).eSIMIdentifierToDeviceIdentifier(_eSIMUniqueIdentifier);
+        if(bytes(reservedFor).length == 0) return;
+
+        string memory claimant = DeviceWallet(payable(msg.sender)).deviceUniqueIdentifier();
+        if(keccak256(bytes(reservedFor)) != keccak256(bytes(claimant))) {
+            revert Errors.ESIMIdentifierReservedForLazyWallet(_eSIMUniqueIdentifier);
+        }
     }
 
     /// @notice Ownership of this contract is never renounced

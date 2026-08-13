@@ -37,6 +37,8 @@ interface Errors {
     error DeviceWalletAlreadyExists(string deviceIdentifier, address deviceWallet);
     error NotAProtocolESIMWallet(address eSIMWallet);
     error DeviceIdentifierReservedForLazyWallet(string deviceIdentifier);
+    error ESIMIdentifierReservedForLazyWallet(string eSIMIdentifier);
+    error ESIMIdentifierAlreadyClaimed(string eSIMIdentifier, address eSIMWallet);
 
     // Any contract rejecting an identifier it was handed empty
     error EmptyDeviceIdentifier();

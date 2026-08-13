@@ -552,6 +552,15 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
             if(bytes(deviceUniqueIdentifier).length == 0) {
                 _requireBoundedIdentifier(eSIMUniqueIdentifier);
 
+                // A wallet already holds this eSIM onchain, so a lazy record under it would be
+                // purchases nobody can ever reach: the deployment refuses to hand a second wallet
+                // the same identifier. Only new bindings are checked, because once one exists the
+                // registry refuses the claim from any other device.
+                address holder = registry.eSIMWalletForIdentifier(eSIMUniqueIdentifier);
+                if(holder != address(0)) {
+                    revert Errors.ESIMIdentifierAlreadyClaimed(eSIMUniqueIdentifier, holder);
+                }
+
                 eSIMIdentifierToDeviceIdentifier[eSIMUniqueIdentifier] = _deviceUniqueIdentifier;
 
                 string[] storage associatedESIMIdentifiers = eSIMIdentifiersAssociatedWithDeviceIdentifier[_deviceUniqueIdentifier];
@@ -728,5 +737,15 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
     /// @return True if a lazy user is waiting on this identifier
     function isDeviceIdentifierReserved(string calldata _deviceUniqueIdentifier) public view returns (bool) {
         return eSIMIdentifiersAssociatedWithDeviceIdentifier[_deviceUniqueIdentifier].length != 0;
+    }
+
+    /// @notice Whether an eSIM identifier is bound to a device here
+    /// @dev The registry refuses a claim on a reserved identifier from any device but the one that
+    ///      reserved it, and reads `eSIMIdentifierToDeviceIdentifier` itself to make that
+    ///      comparison. This is the plain question, for a caller that only wants the fact.
+    /// @param _eSIMUniqueIdentifier eSIM identifier being checked
+    /// @return True if a lazy user is waiting on this identifier
+    function isESIMIdentifierReserved(string calldata _eSIMUniqueIdentifier) public view returns (bool) {
+        return bytes(eSIMIdentifierToDeviceIdentifier[_eSIMUniqueIdentifier]).length != 0;
     }
 }

@@ -259,6 +259,10 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     /// @notice Allow wallet owner or admin to set unique identifier for their eSIM wallet
     /// @dev The registry is also a caller, which is how a wallet deployed on the lazy path gets its
     ///      identifier in the same transaction as its deployment.
+    ///
+    ///      The claim goes in before the wallet is written, and the order matters: the wallet's own
+    ///      slot is set once and for good, so a claim that failed afterwards would leave a wallet
+    ///      holding an identifier the registry does not record.
     /// @param _eSIMWalletAddress Address of the eSIM wallet smart contract
     /// @param _eSIMUniqueIdentifier String unique identifier for the eSIM wallet
     /// @return The identifier now written on the eSIM wallet
@@ -269,6 +273,8 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         if(registry.isESIMWalletValid(_eSIMWalletAddress) == address(0)) {
             revert Errors.UnknownESIMWallet(_eSIMWalletAddress);
         }
+
+        registry.claimESIMIdentifier(_eSIMUniqueIdentifier, _eSIMWalletAddress);
 
         ESIMWallet eSIMWallet = ESIMWallet(payable(_eSIMWalletAddress));
         eSIMWallet.setESIMUniqueIdentifier(_eSIMUniqueIdentifier);
