@@ -193,7 +193,10 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     /// @notice Deploys an eSIM wallet for this device and binds it
     /// @dev The new wallet has no eSIM identifier yet. That arrives through
     ///      `setESIMUniqueIdentifierForAnESIMWallet` once the eSIM itself has been created.
-    /// @param _hasAccessToETH Set to true if the eSIM wallet is allowed to pull ETH from this wallet.
+    ///
+    ///      Must be called with `_hasAccessToETH` false. The owner grants ETH access afterwards
+    ///      with `toggleAccessToETH`, which is the only way it is ever granted.
+    /// @param _hasAccessToETH Must be false
     /// @param _salt CREATE2 salt for the new eSIM wallet
     /// @return eSIM wallet address
     function deployESIMWallet(
@@ -283,6 +286,8 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     }
 
     /// @notice Allow owner to revoke or give access to any associated eSIM wallet for pulling ETH
+    /// @dev The only way ETH access is ever granted. Binding a wallet never carries it, so a
+    ///      revocation stands until the owner signs a grant.
     /// @param _eSIMWalletAddress Address of the eSIM wallet to toggle ETH access for
     /// @param _hasAccessToETH Set to true to give access, false to revoke access
     function toggleAccessToETH(address _eSIMWalletAddress, bool _hasAccessToETH) public onlySelf {
@@ -295,7 +300,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
 
     /// @notice Allow the device wallet factory or the wallet owner to add new eSIM wallet to this device wallet
     /// @param _eSIMWalletAddress Address of the eSIM wallet to be added
-    /// @param _hasAccessToETH `true` if the eSIM wallet is allowed to pull ETH from this device wallet, `false` otherwise
+    /// @param _hasAccessToETH Must be false. ETH access is granted only through `toggleAccessToETH`
     function addESIMWallet(
         address _eSIMWalletAddress,
         bool _hasAccessToETH
@@ -341,12 +346,18 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     /// @notice Binds an eSIM wallet to this device wallet and records it with the registry
     /// @dev Refuses a wallet this device wallet does not already own, so binding cannot run ahead
     ///      of the ownership handover.
+    ///
+    ///      A bind never carries ETH access. `toggleAccessToETH` is the only writer of a `true`,
+    ///      and it is `onlySelf`, so the owner's revocation cannot be undone by anyone binding
+    ///      another wallet. Asking for access here reverts rather than being quietly downgraded,
+    ///      so a caller that believes it granted access finds out at the call.
     /// @param _eSIMWalletAddress Address of the eSIM wallet to bind
-    /// @param _hasAccessToETH True if it may pull ETH from this device wallet
+    /// @param _hasAccessToETH Must be false
     function _addESIMWallet(
         address _eSIMWalletAddress,
         bool _hasAccessToETH
     ) internal {
+        if(_hasAccessToETH) revert Errors.ETHAccessNotGrantableAtBind(_eSIMWalletAddress);
         if(isValidESIMWallet[_eSIMWalletAddress]) revert Errors.ESIMWalletAlreadyAdded(_eSIMWalletAddress);
         // If the eSIM wallet is a newly deployed one, then the owner will definitely be set
         // during initialisation. This device wallet will be the owner.
@@ -359,14 +370,16 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         }
 
         isValidESIMWallet[_eSIMWalletAddress] = true;
-        canPullETH[_eSIMWalletAddress] = _hasAccessToETH;
+        // Written rather than left alone so the property is readable here. `removeESIMWallet` is
+        // the only unbind and it already zeroes this, so the slot is false on arrival either way.
+        canPullETH[_eSIMWalletAddress] = false;
 
         // Inform the registry that this device wallet now holds the eSIM wallet. The call writes the
         // association and, if a release was outstanding, lowers the transit marker. The two records
         // are independent and this is the only call that touches both.
         registry.bindESIMWallet(_eSIMWalletAddress, address(this));
 
-        emit ESIMWalletAdded(_eSIMWalletAddress, _hasAccessToETH, msg.sender);
+        emit ESIMWalletAdded(_eSIMWalletAddress, false, msg.sender);
     }
 
     // ---------------------------------------------------------------------------------------------
