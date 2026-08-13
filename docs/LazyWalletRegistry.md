@@ -32,8 +32,8 @@ uint256 MAX_ESIM_WALLETS_PER_CALL
 
 Most eSIM wallets a single call will deploy for one device
 
-_A deployment costs roughly 450,000 gas per eSIM wallet, so a full batch is around
-     9,000,000. As with the history cap this is set for retry cost rather than the block
+_A deployment costs roughly 500,000 gas per eSIM wallet, so a full batch is around
+     10,000,000. As with the history cap this is set for retry cost rather than the block
      limit: a batch that runs out of gas is paid for and thrown away, and a device with forty
      eSIMs should not lose a whole block's worth of gas to one bad estimate. It also leaves
      room for `forge coverage --ir-minimum`, which inflates the same call by about a fifth.
@@ -448,13 +448,17 @@ _`_eSIMUniqueIdentifiers` may repeat an identifier, since one eSIM can have seve
 | _eSIMUniqueIdentifiers | string[] | One entry per purchase, naming the eSIM it was made for |
 | _dataBundleDetails | struct DataBundleDetails[] | The purchases themselves, aligned with the identifiers |
 
-### _updateDeviceIdentifierToESIMDetails
+### _moveESIMPurchaseHistory
 
 ```solidity
-function _updateDeviceIdentifierToESIMDetails(string _eSIMIdentifier, string _oldDeviceIdentifier, string _newDeviceIdentifier) internal
+function _moveESIMPurchaseHistory(string _eSIMIdentifier, string _oldDeviceIdentifier, string _newDeviceIdentifier) internal
 ```
 
-Moves an eSIM's stored purchase history to the device taking it over
+Moves what an eSIM bought to the device taking it over
+
+_Carries the purchase entries themselves. Its counterpart
+     `_moveESIMIdentifierBetweenDeviceLists` carries the membership record saying the eSIM
+     exists at all, and a switch needs both._
 
 #### Parameters
 
@@ -464,16 +468,18 @@ Moves an eSIM's stored purchase history to the device taking it over
 | _oldDeviceIdentifier | string | Device it is leaving |
 | _newDeviceIdentifier | string | Device it is joining |
 
-### _updateESIMIdentifiersAssociatedWithDeviceIdentifier
+### _moveESIMIdentifierBetweenDeviceLists
 
 ```solidity
-function _updateESIMIdentifiersAssociatedWithDeviceIdentifier(string _eSIMIdentifier, string _oldDeviceIdentifier, string _newDeviceIdentifier) internal
+function _moveESIMIdentifierBetweenDeviceLists(string _eSIMIdentifier, string _oldDeviceIdentifier, string _newDeviceIdentifier) internal
 ```
 
 Moves an eSIM identifier between the two devices' lists
 
-_The removal is a swap with the last element and a pop, so the old device's list keeps
-     its members but not their order._
+_Carries the membership record, which is what a deployment walks to know an eSIM exists.
+     Its counterpart `_moveESIMPurchaseHistory` carries the purchases. The removal is a swap
+     with the last element and a pop, so the old device's list keeps its members but not
+     their order._
 
 #### Parameters
 
@@ -495,26 +501,56 @@ _Reads through to the owner rather than holding its own copy. `_authorizeUpgrade
      gated on `onlyOwner`, so the owner is the upgrade authority by definition and a second
      copy could only ever disagree with it._
 
-### isLazyWalletDeployed
+### isDeviceIdentifierReserved
 
 ```solidity
-function isLazyWalletDeployed(string _deviceUniqueIdentifier) public view returns (bool)
+function isDeviceIdentifierReserved(string _deviceUniqueIdentifier) public view returns (bool)
 ```
 
-Function to check if a lazy wallet has been deployed or not
+Whether a device identifier has purchases recorded against it here
 
-_Asks the registry for a device wallet, so it is also true for a device deployed through
-     the ordinary route. That is deliberate: both cases have to block a lazy deployment._
+_The ordinary deployment route asks this before it takes an identifier, because a device
+     wallet created under one that a fiat user's eSIMs are already bound to strands every one
+     of them: this contract then refuses to deploy, refuses to copy the history, and refuses
+     to move the eSIMs to another device, all because the identifier reads as deployed.
+
+     Stays true after the lazy deployment finishes. That costs nothing, since the registry's
+     own identifier check refuses the second claim by then, and clearing it would need a walk
+     over the whole list._
 
 #### Parameters
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| _deviceUniqueIdentifier | string | Device being checked |
+| _deviceUniqueIdentifier | string | Device identifier being checked |
 
 #### Return Values
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| [0] | bool | Boolean. True if deployed, false otherwise |
+| [0] | bool | True if a lazy user is waiting on this identifier |
+
+### isESIMIdentifierReserved
+
+```solidity
+function isESIMIdentifierReserved(string _eSIMUniqueIdentifier) public view returns (bool)
+```
+
+Whether an eSIM identifier is bound to a device here
+
+_The registry refuses a claim on a reserved identifier from any device but the one that
+     reserved it, and reads `eSIMIdentifierToDeviceIdentifier` itself to make that
+     comparison. This is the plain question, for a caller that only wants the fact._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _eSIMUniqueIdentifier | string | eSIM identifier being checked |
+
+#### Return Values
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| [0] | bool | True if a lazy user is waiting on this identifier |
 

@@ -376,6 +376,29 @@ _Only the wallet itself can move its own bindings, so `msg.sender` is the subjec
 | ---- | ---- | ----------- |
 | _newOwnerKey | bytes32[2] | X,Y co-ordinates of the P256 key taking over |
 
+### requireDeviceIdentifierNotReserved
+
+```solidity
+function requireDeviceIdentifierNotReserved(string _deviceUniqueIdentifier) external view
+```
+
+Refuses a device identifier a fiat user's eSIMs are already waiting on
+
+_The ordinary deployment route calls this. Taking such an identifier used to succeed and
+     leave the lazy user with no way out at all: their purchases cannot be copied, their
+     eSIM wallets cannot be deployed, and the eSIMs cannot be moved to a clean device either,
+     because every one of those paths refuses an identifier that has a wallet.
+
+     Passes while `lazyWalletRegistry` is unset, which is the window between deploying this
+     contract and wiring the two together. Nothing can be reserved before the contract that
+     holds reservations exists, so the window is empty rather than unguarded._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _deviceUniqueIdentifier | string | Identifier the caller is about to take |
+
 ### bindESIMWallet
 
 ```solidity
@@ -403,6 +426,33 @@ _The association is a registration: once the registry has named a device wallet 
 | ---- | ---- | ----------- |
 | _eSIMWalletAddress | address | Address of the eSIM wallet |
 | _deviceWalletAddress | address | The device wallet taking it on, which must be the caller |
+
+### claimESIMIdentifier
+
+```solidity
+function claimESIMIdentifier(string _eSIMUniqueIdentifier, address _eSIMWalletAddress) external
+```
+
+Records that an eSIM wallet now holds an eSIM identifier, refusing a second holder
+
+_Called by a device wallet as it writes the identifier onto one of its eSIM wallets. It
+     has to happen here rather than only in `DeviceWallet`, because a device wallet can
+     reach this directly through `execute`, and a guard sitting on the wallet side would be
+     skipped by doing exactly that.
+
+     Refusing an identifier reserved for someone else is the eSIM half of what
+     `requireDeviceIdentifierNotReserved` does for devices. The reserving device identifier
+     is compared against the caller's own rather than refused outright, because the lazy
+     route reaches this while deploying against its own reservation. The caller's identifier
+     is read from it rather than taken as an argument: `execute` would let a device wallet
+     name any identifier it liked._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _eSIMUniqueIdentifier | string | Identifier being claimed |
+| _eSIMWalletAddress | address | Wallet claiming it, which must be one the caller owns |
 
 ### toggleESIMWalletStandbyStatus
 

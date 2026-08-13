@@ -67,61 +67,68 @@
     {
       "slot": "9",
       "offset": 0,
+      "bytes": "32",
+      "label": "claimedESIMIdentifiers",
+      "type": "t_mapping(t_bytes32,t_address)"
+    },
+    {
+      "slot": "10",
+      "offset": 0,
       "bytes": "1600",
       "label": "__gap",
       "type": "t_array(t_uint256)50_storage"
     },
     {
-      "slot": "59",
+      "slot": "60",
       "offset": 0,
       "bytes": "20",
       "label": "entryPoint",
       "type": "t_contract(IEntryPoint)"
     },
     {
-      "slot": "60",
+      "slot": "61",
       "offset": 0,
       "bytes": "20",
       "label": "adminOfRecord",
       "type": "t_address"
     },
     {
-      "slot": "61",
+      "slot": "62",
       "offset": 0,
       "bytes": "20",
       "label": "vault",
       "type": "t_address"
     },
     {
-      "slot": "62",
+      "slot": "63",
       "offset": 0,
       "bytes": "20",
       "label": "_retiredUpgradeManager",
       "type": "t_address"
     },
     {
-      "slot": "63",
+      "slot": "64",
       "offset": 0,
       "bytes": "20",
       "label": "newRequestedAdmin",
       "type": "t_address"
     },
     {
-      "slot": "63",
+      "slot": "64",
       "offset": 20,
       "bytes": "1",
       "label": "paused",
       "type": "t_bool"
     },
     {
-      "slot": "63",
+      "slot": "64",
       "offset": 21,
       "bytes": "1",
       "label": "adminDisabled",
       "type": "t_bool"
     },
     {
-      "slot": "64",
+      "slot": "65",
       "offset": 0,
       "bytes": "32",
       "label": "defaultDataBundlePriceCap",

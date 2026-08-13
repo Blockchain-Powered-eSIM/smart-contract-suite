@@ -67,6 +67,13 @@
     {
       "slot": "9",
       "offset": 0,
+      "bytes": "32",
+      "label": "claimedESIMIdentifiers",
+      "type": "t_mapping(t_bytes32,t_address)"
+    },
+    {
+      "slot": "10",
+      "offset": 0,
       "bytes": "1600",
       "label": "__gap",
       "type": "t_array(t_uint256)50_storage"

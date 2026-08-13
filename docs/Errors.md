@@ -110,6 +110,24 @@ error DeviceWalletAlreadyExists(string deviceIdentifier, address deviceWallet)
 error NotAProtocolESIMWallet(address eSIMWallet)
 ```
 
+### DeviceIdentifierReservedForLazyWallet
+
+```solidity
+error DeviceIdentifierReservedForLazyWallet(string deviceIdentifier)
+```
+
+### ESIMIdentifierReservedForLazyWallet
+
+```solidity
+error ESIMIdentifierReservedForLazyWallet(string eSIMIdentifier)
+```
+
+### ESIMIdentifierAlreadyClaimed
+
+```solidity
+error ESIMIdentifierAlreadyClaimed(string eSIMIdentifier, address eSIMWallet)
+```
+
 ### EmptyDeviceIdentifier
 
 ```solidity

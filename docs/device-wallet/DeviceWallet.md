@@ -263,7 +263,11 @@ function setESIMUniqueIdentifierForAnESIMWallet(address _eSIMWalletAddress, stri
 Allow wallet owner or admin to set unique identifier for their eSIM wallet
 
 _The registry is also a caller, which is how a wallet deployed on the lazy path gets its
-     identifier in the same transaction as its deployment._
+     identifier in the same transaction as its deployment.
+
+     The claim goes in before the wallet is written, and the order matters: the wallet's own
+     slot is set once and for good, so a claim that failed afterwards would leave a wallet
+     holding an identifier the registry does not record._
 
 #### Parameters
 

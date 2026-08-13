@@ -98,6 +98,22 @@ _If bool is `true`, the eSIM wallet is in a transient state. `isESIMWalletValid`
      hold transactions on this eSIM wallet until it reads false again, meaning the new
      device wallet has accepted it._
 
+### claimedESIMIdentifiers
+
+```solidity
+mapping(bytes32 => address) claimedESIMIdentifiers
+```
+
+The eSIM wallet holding each eSIM identifier, protocol-wide
+
+_An eSIM wallet's own identifier slot is set once, but nothing stopped two wallets from
+     being set to the same identifier, one per deployment route. This is what makes the
+     identifier answer with a single wallet. Keyed by hash for the same reason
+     `registeredP256Keys` is: `eSIMWalletForIdentifier` takes the string.
+
+     Written once and never cleared, including through an ownership transfer, because the
+     eSIM belongs to the wallet rather than to whichever device is holding it._
+
 ### LazyWalletDeployed
 
 ```solidity
@@ -121,6 +137,17 @@ event DeviceWalletOwnerKeyUpdated(address _deviceWallet, bytes32[2] _oldOwnerKey
 ```
 
 Emitted when a device wallet rotates the P256 key that owns it
+
+### ESIMIdentifierClaimed
+
+```solidity
+event ESIMIdentifierClaimed(bytes32 _hashOfESIMIdentifier, string _eSIMUniqueIdentifier, address _eSIMWallet)
+```
+
+Emitted the first and only time an eSIM identifier is bound to an eSIM wallet
+
+_The identifier is carried unindexed as well as hashed, because indexing a dynamic type
+     stores its hash and no consumer can read the value back out of that._
 
 ### UpdatedDeviceWalletassociatedWithESIMWallet
 
@@ -388,4 +415,70 @@ _The retired key comes from `deviceWalletToOwner` rather than from the caller, s
 | ---- | ---- | ----------- |
 | _deviceWallet | address | Wallet whose owner key is rotating |
 | _newOwnerKey | bytes32[2] | X,Y co-ordinates of the P256 key taking over |
+
+### isDeviceIdentifierAlreadyUsed
+
+```solidity
+function isDeviceIdentifierAlreadyUsed(string _deviceUniqueIdentifier) public view returns (bool)
+```
+
+Whether a device identifier already has a wallet recorded against it
+
+_True whichever route deployed it. Both routes have to refuse an identifier the other
+     already used, and this contract is the only place that knows about both._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _deviceUniqueIdentifier | string | Device identifier being checked |
+
+#### Return Values
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| [0] | bool | True if the identifier is taken |
+
+### eSIMWalletForIdentifier
+
+```solidity
+function eSIMWalletForIdentifier(string _eSIMUniqueIdentifier) public view returns (address)
+```
+
+The eSIM wallet holding an eSIM identifier, or zero if nobody holds it
+
+_Takes the string so callers do not have to hash it themselves, which is the only
+     difference from reading `claimedESIMIdentifiers` directly._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _eSIMUniqueIdentifier | string | eSIM identifier being looked up |
+
+#### Return Values
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| [0] | address | The wallet that claimed it |
+
+### isESIMIdentifierClaimed
+
+```solidity
+function isESIMIdentifierClaimed(string _eSIMUniqueIdentifier) public view returns (bool)
+```
+
+Whether an eSIM identifier is already held by a wallet
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _eSIMUniqueIdentifier | string | eSIM identifier being checked |
+
+#### Return Values
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| [0] | bool | True if the identifier is taken |
 
