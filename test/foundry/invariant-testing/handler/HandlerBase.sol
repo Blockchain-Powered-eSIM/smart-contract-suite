@@ -120,6 +120,52 @@ abstract contract HandlerBase is Test {
         return string.concat("E", vm.toString(seed % 1_000_000));
     }
 
+    /// @notice An eSIM identifier for the ordinary path, in its own namespace
+    function _ordinaryESIMIdentifier(uint256 seed) internal pure returns (string memory) {
+        return string.concat("O", vm.toString(seed % 1_000_000));
+    }
+
+    /// @notice How many identifiers the two deployment routes are made to contend over
+    /// @dev Small on purpose. The namespaces above never overlap, so a cross-route invariant would
+    ///      otherwise hold over a state no sequence ever reaches. Eight is enough that a five
+    ///      hundred call run has both routes reaching the same identifier repeatedly.
+    uint256 internal constant CONTESTED_IDENTIFIERS = 8;
+
+    /// @notice A device identifier both routes draw from
+    function _contestedDeviceIdentifier(uint256 seed) internal pure returns (string memory) {
+        return string.concat("CD", vm.toString(seed % CONTESTED_IDENTIFIERS));
+    }
+
+    /// @notice An eSIM identifier both routes draw from
+    function _contestedESIMIdentifier(uint256 seed) internal pure returns (string memory) {
+        return string.concat("CE", vm.toString(seed % CONTESTED_IDENTIFIERS));
+    }
+
+    /// @notice Finds an eSIM wallet with no identifier yet, and the device wallet holding it
+    /// @dev Scans forward from the fuzzed position rather than taking whatever sits there, because
+    ///      an identifier is set once per wallet and a plain pick would spend most of a run landing
+    ///      on wallets that already have one.
+    /// @param seed Where the scan starts
+    /// @return wallet The eSIM wallet, or zero if every known one is already named
+    /// @return device The device wallet that owns it
+    function _pickUnnamedESIMWallet(uint256 seed) internal view returns (address wallet, address device) {
+        uint256 count = state.eSIMWalletCount();
+        if (count == 0) return (address(0), address(0));
+
+        uint256 start = bound(seed, 0, count - 1);
+        for (uint256 i = 0; i < count; ++i) {
+            address candidate = state.eSIMWallets((start + i) % count);
+            if (bytes(MockESIMWallet(payable(candidate)).eSIMUniqueIdentifier()).length != 0) continue;
+
+            address owner = MockESIMWallet(payable(candidate)).owner();
+            if (!registry.isDeviceWalletValid(owner)) continue;
+
+            return (candidate, owner);
+        }
+
+        return (address(0), address(0));
+    }
+
     /// @notice A P256 public key that is genuinely on the curve
     /// @dev The deploy paths reject an off-curve key, so a random pair would spend the whole run
     ///      being refused before reaching any state. Walking x upward until the curve equation has

@@ -44,7 +44,7 @@ contract HandlerDistributionTest is CampaignBase {
         for (uint256 round = 0; round < DRIVE_ROUNDS; ++round) {
             uint256 seed = round * SEEDS_PER_ROUND;
 
-            adminHandler.deployDeviceWalletBatch(round, seed, 1 ether);
+            adminHandler.deployDeviceWalletBatch(round, seed, 1 ether, false);
             attackerHandler.createAccountPermissionless(seed + SEEDS_PER_ROUND - 1, round, false);
             adminHandler.postCreateAccount(round);
             walletHandler.rotateOwnerKey(round, seed + ROTATION_SEEDS);
@@ -56,7 +56,7 @@ contract HandlerDistributionTest is CampaignBase {
             // Three eSIMs rather than two because one is switched away below and the deploy is
             // deliberately given a batch of one, so two have to be left for the continuation to have
             // anything outstanding to reach
-            adminHandler.populateLazyHistory(seed, 3, false);
+            adminHandler.populateLazyHistory(seed, 3, false, false);
             uint256 lazyDevice = state.lazyDeviceIdentifierCount() - 1;
             uint256 lazyESIM = state.lazyESIMIdentifierCount() - 3;
             adminHandler.switchESIMIdentifier(lazyESIM, seed + SWITCH_SEEDS, false);
@@ -69,6 +69,8 @@ contract HandlerDistributionTest is CampaignBase {
             attackerHandler.donateETH(round, 1 ether);
             attackerHandler.donateToSingleton(round, 1 ether);
             adminHandler.deployESIMWalletForDevice(round, true, seed + 2000);
+            // Follows the deploy so there is always a wallet still waiting for an identifier
+            adminHandler.setESIMIdentifier(round, seed + 3000, false);
             walletHandler.toggleAccessToETH(round, true);
             walletHandler.setESIMWalletPriceCap(round, round);
             adminHandler.buyDataBundle(round, 1 gwei);
@@ -127,6 +129,7 @@ contract HandlerDistributionTest is CampaignBase {
         _assertExercised("donateETH");
         _assertExercised("donateToSingleton");
         _assertExercised("deployESIMWalletForDevice");
+        _assertExercised("setESIMIdentifier");
         _assertExercised("toggleAccessToETH");
         _assertExercised("buyDataBundle");
         _assertExercised("pullETH");

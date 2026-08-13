@@ -3,6 +3,7 @@
 pragma solidity 0.8.36;
 
 import {CampaignBase} from "test/foundry/invariant-testing/base/CampaignBase.sol";
+import {MockESIMWallet} from "test/utils/mocks/MockESIMWallet.sol";
 
 /// @notice What the registry's two one-to-one mappings have to keep promising.
 /// @dev Both bind a device wallet to something the outside world names it by, an identifier and a
@@ -68,6 +69,30 @@ contract RegistryInvariantsTest is CampaignBase {
                 state.ghost_currentKeyHash(reserved),
                 keyHash,
                 "A key a wallet has rotated away from is still reserved to it"
+            );
+        }
+    }
+
+    /// @notice An eSIM identifier resolves to the one wallet carrying it
+    /// @dev Read from the wallet side for the same reason the device identifier invariant is. Each
+    ///      wallet's own identifier slot is set once, which says nothing about any other wallet, so
+    ///      a second wallet taking the same identifier is only visible by asking the registry what
+    ///      that identifier resolves to and finding somebody else.
+    ///
+    ///      The claim survives an ownership transfer untouched, since the eSIM belongs to the wallet
+    ///      rather than to whichever device is holding it, and the campaign moves wallets between
+    ///      devices throughout.
+    function invariant_everyESIMIdentifierMapsToAtMostOneWallet() public view {
+        uint256 count = state.eSIMWalletCount();
+        for (uint256 i = 0; i < count; ++i) {
+            address wallet = state.eSIMWallets(i);
+            string memory identifier = MockESIMWallet(payable(wallet)).eSIMUniqueIdentifier();
+            if (bytes(identifier).length == 0) continue;
+
+            assertEq(
+                registry.eSIMWalletForIdentifier(identifier),
+                wallet,
+                "An eSIM identifier resolves to a wallet other than the one carrying it"
             );
         }
     }

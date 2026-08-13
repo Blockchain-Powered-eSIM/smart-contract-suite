@@ -190,6 +190,82 @@ contract IdentifiersAndArraysTest is FuzzBase {
         );
     }
 
+    /// @notice A device identifier is taken by one route or the other, never both
+    /// @dev Whichever route reaches an identifier first owns it, and the other is refused. Both
+    ///      orders are swept, over a pool small enough that the two keep landing on the same
+    ///      identifier. Exactly one succeeding is the whole property: two would mean the collision
+    ///      is back, and none would mean a guard that refuses the legitimate first claim too.
+    /// forge-config: default.fuzz.runs = 500
+    function testFuzz_anIdentifierIsNeverAcceptedByBothRoutes(uint256 _seed, bool _lazyFirst) public {
+        string memory device = string.concat("CONTESTED_", vm.toString(bound(_seed, 0, 7)));
+        string memory eSIMIdentifier = string.concat("CONTESTED_ESIM_", vm.toString(bound(_seed, 0, 7)));
+
+        bool lazyTook;
+        bool ordinaryTook;
+
+        if (_lazyFirst) {
+            lazyTook = _tryLazyRoute(device, eSIMIdentifier);
+            ordinaryTook = _tryOrdinaryRoute(device);
+        } else {
+            ordinaryTook = _tryOrdinaryRoute(device);
+            lazyTook = _tryLazyRoute(device, eSIMIdentifier);
+        }
+
+        assertTrue(
+            lazyTook != ordinaryTook,
+            "Exactly one route may take a device identifier"
+        );
+    }
+
+    /// @notice Records a purchase against a device identifier, reporting whether it was accepted
+    /// @param _deviceIdentifier Device the purchase belongs to
+    /// @param _eSIMIdentifier eSIM it was made for
+    /// @return True if the lazy registry accepted the identifier
+    function _tryLazyRoute(
+        string memory _deviceIdentifier,
+        string memory _eSIMIdentifier
+    ) private returns (bool) {
+        string[] memory devices = new string[](1);
+        devices[0] = _deviceIdentifier;
+
+        string[][] memory eSIMs = new string[][](1);
+        eSIMs[0] = new string[](1);
+        eSIMs[0][0] = _eSIMIdentifier;
+
+        DataBundleDetails[][] memory details = new DataBundleDetails[][](1);
+        details[0] = new DataBundleDetails[](1);
+        details[0][0] = DataBundleDetails("DB_FUZZ", 1 ether);
+
+        vm.prank(eSIMWalletAdmin);
+        try lazyWalletRegistry.batchPopulateHistory(devices, eSIMs, details) {
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    /// @notice Deploys a device wallet under an identifier, reporting whether it was accepted
+    /// @param _deviceIdentifier Identifier to deploy under
+    /// @return True if the factory accepted the identifier
+    function _tryOrdinaryRoute(string memory _deviceIdentifier) private returns (bool) {
+        string[] memory identifiers = new string[](1);
+        bytes32[2][] memory keys = new bytes32[2][](1);
+        uint256[] memory salts = new uint256[](1);
+
+        identifiers[0] = _deviceIdentifier;
+        keys[0] = pubKey1;
+        salts[0] = 4242;
+
+        vm.prank(eSIMWalletAdmin);
+        try deviceWalletFactory.deployDeviceWalletForUsers(
+            identifiers, keys, salts, new uint256[](1)
+        ) returns (Wallets[] memory) {
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
     /// @notice Sends one device, one eSIM identifier and one purchase through the batch entry point
     function _populateOne(
         string memory _deviceIdentifier,

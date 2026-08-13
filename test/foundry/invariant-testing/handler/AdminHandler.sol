@@ -22,7 +22,11 @@ contract AdminHandler is HandlerBase {
     /// @param count How many wallets the batch asks for
     /// @param seed Drives the identifiers, owner keys and salts
     /// @param deposit Total ETH offered for the batch, which may be less than the deposits ask for
-    function deployDeviceWalletBatch(uint256 count, uint256 seed, uint256 deposit) external counted {
+    /// @param contest Whether to draw identifiers from the pool the lazy route also uses
+    function deployDeviceWalletBatch(uint256 count, uint256 seed, uint256 deposit, bool contest)
+        external
+        counted
+    {
         count = bound(count, 1, 3);
         deposit = bound(deposit, 0, _spendable(_currentAdmin(), 10 ether));
 
@@ -33,7 +37,9 @@ contract AdminHandler is HandlerBase {
 
         uint256 perWallet = deposit / count;
         for (uint256 i = 0; i < count; ++i) {
-            identifiers[i] = _identifier(seed + i);
+            identifiers[i] = contest
+                ? _contestedDeviceIdentifier(seed + i)
+                : _identifier(seed + i);
             ownerKeys[i] = _ownerKey(seed + i);
             salts[i] = bound(uint256(keccak256(abi.encode(seed, i))), 0, 1000);
             deposits[i] = perWallet;
@@ -107,6 +113,34 @@ contract AdminHandler is HandlerBase {
         }
     }
 
+    /// @notice The admin writes an eSIM identifier onto a wallet deployed the ordinary way
+    /// @dev The lazy route sets its identifiers inside the deployment, so without this the campaign
+    ///      only ever saw one of the two paths that claim one. The contested pool is what makes the
+    ///      two collide.
+    /// @param eSIMIndex Where the scan for an unnamed wallet starts
+    /// @param seed Drives the identifier
+    /// @param contest Whether to draw the identifier from the pool the lazy route also uses
+    function setESIMIdentifier(uint256 eSIMIndex, uint256 seed, bool contest) external counted {
+        (address wallet, address device) = _pickUnnamedESIMWallet(eSIMIndex);
+        if (wallet == address(0)) {
+            state.recordRevert("setESIMIdentifier");
+            return;
+        }
+
+        string memory identifier = contest
+            ? _contestedESIMIdentifier(seed)
+            : _ordinaryESIMIdentifier(seed);
+
+        vm.prank(_currentAdmin());
+        try DeviceWallet(payable(device)).setESIMUniqueIdentifierForAnESIMWallet(wallet, identifier) returns (
+            string memory
+        ) {
+            state.recordCall("setESIMIdentifier");
+        } catch {
+            state.recordRevert("setESIMIdentifier");
+        }
+    }
+
     /// @notice The admin charges an eSIM wallet for a data bundle
     /// @dev The price is unbounded upward on purpose. The ceiling is the only thing standing
     ///      between the admin and a wallet's whole balance, so a run has to reach past it.
@@ -169,13 +203,20 @@ contract AdminHandler is HandlerBase {
     /// @param seed Drives the device and eSIM identifiers
     /// @param eSIMCount How many eSIM identifiers the batch carries
     /// @param reuseDevice Whether to present an identifier that already has history
-    function populateLazyHistory(uint256 seed, uint256 eSIMCount, bool reuseDevice) external counted {
+    /// @param contest Whether to draw identifiers from the pool the ordinary route also uses
+    function populateLazyHistory(uint256 seed, uint256 eSIMCount, bool reuseDevice, bool contest)
+        external
+        counted
+    {
         eSIMCount = bound(eSIMCount, 1, 3);
 
         uint256 lazyDevices = state.lazyDeviceIdentifierCount();
-        string memory deviceIdentifier = reuseDevice && lazyDevices > 0
-            ? state.lazyDeviceIdentifiers(seed % lazyDevices)
-            : _lazyIdentifier(seed);
+        // The contested pool already forces reuse, so `reuseDevice` has nothing left to add there
+        string memory deviceIdentifier = contest
+            ? _contestedDeviceIdentifier(seed)
+            : reuseDevice && lazyDevices > 0
+                ? state.lazyDeviceIdentifiers(seed % lazyDevices)
+                : _lazyIdentifier(seed);
 
         string[] memory deviceIdentifiers = new string[](1);
         deviceIdentifiers[0] = deviceIdentifier;
@@ -187,7 +228,9 @@ contract AdminHandler is HandlerBase {
         bundles[0] = new DataBundleDetails[](eSIMCount);
 
         for (uint256 i = 0; i < eSIMCount; ++i) {
-            eSIMIdentifiers[0][i] = _eSIMIdentifier(seed + i);
+            eSIMIdentifiers[0][i] = contest
+                ? _contestedESIMIdentifier(seed + i)
+                : _eSIMIdentifier(seed + i);
             bundles[0][i] = DataBundleDetails({dataBundleID: "bundle", dataBundlePrice: 1 gwei});
         }
 
