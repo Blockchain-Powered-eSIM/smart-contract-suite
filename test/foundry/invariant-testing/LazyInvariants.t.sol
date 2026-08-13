@@ -251,13 +251,12 @@ contract LazyInvariantsTest is CampaignBase {
     }
 
     /// @notice A device identifier a fiat user is waiting on is only ever deployed by the lazy route
-    /// @dev The collision case as a property. A wallet standing under a reserved identifier without
-    ///      this registry's cursor behind it came from the ordinary route, and that state has no way
-    ///      out: the deployment, the history copy and the switch to another device all refuse an
-    ///      identifier that has a wallet, so every eSIM bound to it is stranded for good.
+    /// @dev The collision case as a property. A wallet under a reserved identifier without this
+    ///      registry's cursor behind it came from the ordinary route, and that state strands every
+    ///      eSIM bound to it for good.
     ///
-    ///      Both routes draw device identifiers from a shared pool during the campaign, so this is
-    ///      reached rather than assumed away.
+    ///      Both routes draw device identifiers from a shared pool, so this is reached rather than
+    ///      assumed away.
     function invariant_aDeviceIdentifierIsOwnedByOneRouteOnly() public view {
         uint256 devices = state.lazyDeviceIdentifierCount();
         for (uint256 i = 0; i < devices; ++i) {

@@ -10,23 +10,18 @@ import {Errors} from "contracts/Errors.sol";
 import "test/utils/DeployerBase.sol";
 
 /// @notice The two deployment routes cannot take an identifier the other is already using.
-/// @dev A device wallet reaches the protocol either through `DeviceWalletFactory`, driven by the
-///      admin, or through `LazyWalletRegistry`, which records what a fiat user bought before they
-///      had a wallet. Nothing used to coordinate the two over identifiers, and the ordering hazard
-///      that produced was one-way and unrecoverable.
+/// @dev A device wallet arrives either through `DeviceWalletFactory`, driven by the admin, or
+///      through `LazyWalletRegistry`, which records what a fiat user bought before they had a
+///      wallet. Nothing used to coordinate the two over identifiers.
 ///
-///      Taking a reserved device identifier through the ordinary route closed every exit at once:
-///      the lazy deployment, the history copy and the switch to another device all refuse an
-///      identifier that has a wallet, so every eSIM bound to it was stranded protocol-wide rather
-///      than only its history being stuck. Recovering needed an upgrade.
+///      Taking a reserved device identifier through the ordinary route stranded every eSIM bound
+///      to it, since the lazy deployment, the history copy and the device switch all refuse an
+///      identifier that has a wallet. Recovering needed an upgrade. The eSIM half was quieter: two
+///      live wallets could carry the same identifier, with nothing onchain saying which held the
+///      eSIM.
 ///
-///      The eSIM half was quieter. An eSIM wallet's own identifier slot is set once, but nothing
-///      compared it against any other wallet, so two live wallets could carry the same identifier
-///      and nothing onchain could say which held the eSIM.
-///
-///      Each test here fails on the code as it stood before these guards. The regression cases,
-///      which prove the lazy route can still claim what it reserved, are as much the point as the
-///      refusals: a guard that refuses both routes is worse than no guard.
+///      The regression cases matter as much as the refusals: a guard that refuses both routes is
+///      worse than no guard.
 contract IdentifierCollisionTest is DeployerBase {
 
     /// @notice Records purchases for one device and its eSIM identifiers through the batch entry point

@@ -49,8 +49,7 @@ contract ESIMWalletGuardsTest is DeployerBase {
         deviceWallet = DeviceWallet(payable(wallets[0].deviceWallet));
         eSIMWallet = ESIMWallet(payable(wallets[0].eSIMWallet));
 
-        // A bind never carries ETH access, so the owner grants it here. The purchases below are
-        // funded from the device wallet, which the pull path reaches only once this has run.
+        // A bind never carries ETH access, and the purchases below are funded from the device wallet
         vm.prank(address(deviceWallet));
         deviceWallet.toggleAccessToETH(address(eSIMWallet), true);
     }

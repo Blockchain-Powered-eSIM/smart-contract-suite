@@ -253,9 +253,8 @@ contract DeviceWalletETHTest is DeviceWalletFixture {
     // ---------------------------------------------------------------------------------------------
 
     /// @notice The admin cannot hand a wallet ETH access at the moment it deploys it
-    /// @dev The flag used to be the admin's to set, which is what made a signed revocation
-    ///      pointless. It reverts now rather than being downgraded, so a caller that thinks it
-    ///      granted access finds out at the call.
+    /// @dev The flag used to be the admin's to set, which made a signed revocation pointless. It
+    ///      reverts now rather than being downgraded in silence.
     function test_deployESIMWallet_cannotGrantETHAccess() public {
         deployWallets();
 
@@ -265,8 +264,7 @@ contract DeviceWalletETHTest is DeviceWalletFixture {
     }
 
     /// @notice Not even the device wallet itself may grant access at bind time
-    /// @dev Pins that `toggleAccessToETH` is the single grant path rather than merely the non-admin
-    ///      one. The owner has a way to grant, and this is not it.
+    /// @dev Pins `toggleAccessToETH` as the single grant path, not merely the non-admin one.
     function test_addESIMWallet_cannotGrantETHAccessEvenFromTheWalletItself() public {
         deployWallets();
 
@@ -278,9 +276,8 @@ contract DeviceWalletETHTest is DeviceWalletFixture {
     }
 
     /// @notice A signed revocation stands, whatever the admin deploys afterwards
-    /// @dev The finding itself. The owner revokes on one wallet, the admin reaches for a second
-    ///      carrying access and is refused, and the wallet it can deploy reaches no further than
-    ///      the first: the device wallet's balance is untouched and the purchase is refused.
+    /// @dev The finding itself. The owner revokes on one wallet, and the second the admin deploys
+    ///      reaches no further: the purchase is refused and the balance is untouched.
     function test_theAdminCannotUndoARevocationByDeployingAnotherWallet() public {
         deployWallets();
         vm.deal(address(deviceWallet), 10 ether);
@@ -306,9 +303,8 @@ contract DeviceWalletETHTest is DeviceWalletFixture {
     }
 
     /// @notice Both deployment routes leave a wallet without ETH access
-    /// @dev The batch route the factory drives and the single deploy the admin drives used to pass
-    ///      the flag set, so a wallet arrived able to pull before the owner had said anything. The
-    ///      batch is run here rather than through the fixture, which grants access on its way past.
+    /// @dev Both routes used to pass the flag set. The batch is run here rather than through the
+    ///      fixture, which grants access on its way past.
     function test_aFreshESIMWalletStartsWithNoETHAccess() public {
         string[] memory identifiers = new string[](1);
         bytes32[2][] memory keys = new bytes32[2][](1);

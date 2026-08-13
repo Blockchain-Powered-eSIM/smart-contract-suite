@@ -26,8 +26,7 @@ contract DeviceWalletOperationsGasTest is GasBase {
 
     /// @notice Adding another eSIM wallet to a device that already has one
     /// @dev The first eSIM wallet comes with the device deployment, so this is the marginal cost of
-    ///      the second and every one after it. Every deploy costs the same now that the flag has
-    ///      only one valid value; the grant is measured separately in `test_toggleAccessToETH`.
+    ///      the second and every one after it. The grant is measured in `test_toggleAccessToETH`.
     function test_deployESIMWallet() public {
         _deploy();
 

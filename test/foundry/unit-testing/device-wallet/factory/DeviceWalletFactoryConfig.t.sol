@@ -72,8 +72,7 @@ contract DeviceWalletFactoryConfigTest is DeviceWalletFactoryFixture {
         )[0];
         vm.stopPrank();
 
-        // Granted before the upgrade so the assertion below checks a true survives the move,
-        // which the deploy path no longer sets on its own.
+        // Granted before the upgrade, so the assertion below checks a true survives the move
         vm.prank(wallet.deviceWallet);
         MockDeviceWallet(payable(wallet.deviceWallet)).toggleAccessToETH(wallet.eSIMWallet, true);
 

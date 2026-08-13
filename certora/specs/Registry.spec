@@ -325,11 +325,10 @@ rule acceptingTheAdminHandoverClearsTheNomination() {
 
 /// An eSIM identifier is claimed once and never moves.
 ///
-/// The whole point of the record is that an identifier answers with one wallet. A second write
-/// would put it back where it was before the record existed, where two wallets could carry the same
-/// identifier and nothing could say which held the eSIM. The claim deliberately survives an
-/// ownership transfer, since the eSIM belongs to the wallet rather than to whichever device holds
-/// it, which is why this is stated over every method rather than left to the one entry point.
+/// The point of the record is that an identifier answers with one wallet, and a second write puts
+/// it back where two could carry the same one. The claim survives an ownership transfer, since the
+/// eSIM belongs to the wallet rather than to whichever device holds it, which is why this is stated
+/// over every method rather than left to the one entry point.
 rule theESIMIdentifierClaimIsWriteOnce(method f, bytes32 identifierHash) {
     address holderBefore = claimedESIMIdentifiers(identifierHash);
     require holderBefore != 0;

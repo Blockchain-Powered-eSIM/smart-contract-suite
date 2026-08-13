@@ -74,14 +74,12 @@ contract RegistryInvariantsTest is CampaignBase {
     }
 
     /// @notice An eSIM identifier resolves to the one wallet carrying it
-    /// @dev Read from the wallet side for the same reason the device identifier invariant is. Each
-    ///      wallet's own identifier slot is set once, which says nothing about any other wallet, so
-    ///      a second wallet taking the same identifier is only visible by asking the registry what
-    ///      that identifier resolves to and finding somebody else.
+    /// @dev Read from the wallet side, like the device identifier invariant. A wallet's own slot is
+    ///      set once and says nothing about any other wallet, so a second wallet taking the same
+    ///      identifier shows up only by asking the registry and finding somebody else.
     ///
-    ///      The claim survives an ownership transfer untouched, since the eSIM belongs to the wallet
-    ///      rather than to whichever device is holding it, and the campaign moves wallets between
-    ///      devices throughout.
+    ///      The claim survives an ownership transfer, since the eSIM belongs to the wallet rather
+    ///      than to whichever device holds it, and the campaign moves wallets throughout.
     function invariant_everyESIMIdentifierMapsToAtMostOneWallet() public view {
         uint256 count = state.eSIMWalletCount();
         for (uint256 i = 0; i < count; ++i) {

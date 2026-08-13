@@ -71,8 +71,7 @@ abstract contract DeviceWalletFixture is DeployerBase {
         userDeviceWallet.setESIMUniqueIdentifierForAnESIMWallet(address(userESIMWallet), "ESIM_0_0");
         vm.stopPrank();
 
-        // A bind never carries ETH access, so the owner grants it here. Every deploy path leaves
-        // the wallet without it, and this is the only function that hands it out.
+        // A bind never carries ETH access, so the owner grants it here
         vm.prank(address(userDeviceWallet));
         userDeviceWallet.toggleAccessToETH(address(userESIMWallet), true);
 
@@ -155,9 +154,7 @@ abstract contract DeviceWalletFixture is DeployerBase {
         deviceWallet2.setESIMUniqueIdentifierForAnESIMWallet(address(eSIMWallet3), "ESIM_1_1");
         vm.stopPrank();
 
-        // A bind never carries ETH access, so the two wallets that need it are granted it here.
-        // Every deploy path leaves the wallet without it, and this is the only function that
-        // hands it out.
+        // A bind never carries ETH access, so the two wallets that need it are granted it here
         vm.prank(address(deviceWallet));
         deviceWallet.toggleAccessToETH(address(eSIMWallet1), true);
         vm.prank(address(deviceWallet2));

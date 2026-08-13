@@ -208,10 +208,9 @@ contract ETHAmountsTest is FuzzBase {
     }
 
     /// @notice No caller binds a wallet with the right to pull ETH, whoever they are
-    /// @dev The four callers the bind paths admit are drawn against a fifth that none of them do.
-    ///      Access control runs first, so an unauthorised caller is turned away before the flag is
-    ///      looked at, and the two authorised ones are refused on the flag itself. Either way the
-    ///      wallet ends up without the access, which is the property.
+    /// @dev Access control runs first, so an unauthorised caller is turned away before the flag is
+    ///      read, and an authorised one is refused on the flag itself. Either way the wallet ends
+    ///      up without the access.
     /// forge-config: default.fuzz.runs = 2000
     function testFuzz_noCallerEverBindsWithETHAccess(uint256 _caller) public {
         address[5] memory callers = [
@@ -223,8 +222,8 @@ contract ETHAmountsTest is FuzzBase {
         ];
         address caller = callers[bound(_caller, 0, callers.length - 1)];
 
-        // Released and rebound rather than deployed fresh, so the draw does not have to carry a
-        // salt through a CREATE2 space the base fixture already occupies
+        // Released and rebound rather than deployed fresh, to avoid a salt collision with the
+        // wallets the base fixture already placed
         address wallet = address(fuzzESIMWallet);
         vm.prank(address(fuzzDeviceWallet));
         fuzzDeviceWallet.removeESIMWallet(wallet, false);

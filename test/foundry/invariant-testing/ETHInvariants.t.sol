@@ -39,11 +39,9 @@ contract ETHInvariantsTest is CampaignBase {
     }
 
     /// @notice The right to pull ETH only ever comes from the device wallet owner
-    /// @dev `toggleAccessToETH` is `onlySelf` and every bind path refuses the flag, so a pair
-    ///      holding the right that the ghost has no grant for is access the campaign obtained some
-    ///      other way. Both the current holder and the last one are checked, since the two differ
-    ///      while a transfer is outstanding, and the ghost is keyed by the pair so a wallet that
-    ///      moved does not read as carrying its previous device wallet's grant.
+    /// @dev A pair holding the right with no grant recorded is access the campaign got some other
+    ///      way. Both the current device wallet and the last one are checked, since the two differ
+    ///      while a transfer is outstanding.
     function invariant_ETHAccessOnlyEverCameFromTheOwner() public view {
         uint256 count = state.eSIMWalletCount();
         for (uint256 i = 0; i < count; ++i) {

@@ -194,8 +194,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     /// @dev The new wallet has no eSIM identifier yet. That arrives through
     ///      `setESIMUniqueIdentifierForAnESIMWallet` once the eSIM itself has been created.
     ///
-    ///      Must be called with `_hasAccessToETH` false. The owner grants ETH access afterwards
-    ///      with `toggleAccessToETH`, which is the only way it is ever granted.
+    ///      ETH access is granted only afterwards, by the owner, with `toggleAccessToETH`.
     /// @param _hasAccessToETH Must be false
     /// @param _salt CREATE2 salt for the new eSIM wallet
     /// @return eSIM wallet address
@@ -347,10 +346,9 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     /// @dev Refuses a wallet this device wallet does not already own, so binding cannot run ahead
     ///      of the ownership handover.
     ///
-    ///      A bind never carries ETH access. `toggleAccessToETH` is the only writer of a `true`,
-    ///      and it is `onlySelf`, so the owner's revocation cannot be undone by anyone binding
-    ///      another wallet. Asking for access here reverts rather than being quietly downgraded,
-    ///      so a caller that believes it granted access finds out at the call.
+    ///      A bind never carries ETH access. `toggleAccessToETH` is `onlySelf` and the only writer
+    ///      of a `true`, so no bind can undo the owner's revocation. Asking for access here reverts
+    ///      rather than being downgraded in silence.
     /// @param _eSIMWalletAddress Address of the eSIM wallet to bind
     /// @param _hasAccessToETH Must be false
     function _addESIMWallet(
@@ -370,8 +368,8 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         }
 
         isValidESIMWallet[_eSIMWalletAddress] = true;
-        // Written rather than left alone so the property is readable here. `removeESIMWallet` is
-        // the only unbind and it already zeroes this, so the slot is false on arrival either way.
+        // Already false on arrival, since `removeESIMWallet` zeroes it. Written anyway so the
+        // property is readable here.
         canPullETH[_eSIMWalletAddress] = false;
 
         // Inform the registry that this device wallet now holds the eSIM wallet. The call writes the

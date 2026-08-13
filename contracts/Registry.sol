@@ -369,13 +369,12 @@ contract Registry is
 
     /// @notice Refuses a device identifier a fiat user's eSIMs are already waiting on
     /// @dev The ordinary deployment route calls this. Taking such an identifier used to succeed and
-    ///      leave the lazy user with no way out at all: their purchases cannot be copied, their
-    ///      eSIM wallets cannot be deployed, and the eSIMs cannot be moved to a clean device either,
-    ///      because every one of those paths refuses an identifier that has a wallet.
+    ///      strand the lazy user: the history copy, the wallet deployment and the device switch all
+    ///      refuse an identifier that has a wallet.
     ///
-    ///      Passes while `lazyWalletRegistry` is unset, which is the window between deploying this
-    ///      contract and wiring the two together. Nothing can be reserved before the contract that
-    ///      holds reservations exists, so the window is empty rather than unguarded.
+    ///      Passes while `lazyWalletRegistry` is unset, the window between deploying this contract
+    ///      and wiring the two together. Nothing can be reserved before the contract holding
+    ///      reservations exists, so the window is empty rather than unguarded.
     /// @param _deviceUniqueIdentifier Identifier the caller is about to take
     function requireDeviceIdentifierNotReserved(string calldata _deviceUniqueIdentifier) external view {
         if(lazyWalletRegistry == address(0)) return;
@@ -444,17 +443,13 @@ contract Registry is
     }
 
     /// @notice Records that an eSIM wallet now holds an eSIM identifier, refusing a second holder
-    /// @dev Called by a device wallet as it writes the identifier onto one of its eSIM wallets. It
-    ///      has to happen here rather than only in `DeviceWallet`, because a device wallet can
-    ///      reach this directly through `execute`, and a guard sitting on the wallet side would be
-    ///      skipped by doing exactly that.
+    /// @dev The guard lives here rather than in `DeviceWallet` because a device wallet can reach
+    ///      this directly through `execute`, which would skip anything sitting on the wallet side.
+    ///      For the same reason the caller's device identifier is read from it rather than taken as
+    ///      an argument.
     ///
-    ///      Refusing an identifier reserved for someone else is the eSIM half of what
-    ///      `requireDeviceIdentifierNotReserved` does for devices. The reserving device identifier
-    ///      is compared against the caller's own rather than refused outright, because the lazy
-    ///      route reaches this while deploying against its own reservation. The caller's identifier
-    ///      is read from it rather than taken as an argument: `execute` would let a device wallet
-    ///      name any identifier it liked.
+    ///      A reservation is compared against the caller's own identifier rather than refused
+    ///      outright, since the lazy route reaches this while deploying against its own.
     /// @param _eSIMUniqueIdentifier Identifier being claimed
     /// @param _eSIMWalletAddress Wallet claiming it, which must be one the caller owns
     function claimESIMIdentifier(

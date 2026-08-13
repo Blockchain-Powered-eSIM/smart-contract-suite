@@ -44,10 +44,8 @@ contract ProtocolState {
     mapping(address eSIMWallet => address deviceWallet) public ghost_lastDevice;
 
     /// @notice Set for each pair the owner has granted the right to pull ETH and not since revoked
-    /// @dev Keyed by the pair rather than by the eSIM wallet, so a wallet that moves to a second
-    ///      device wallet does not read as carrying the first one's grant. `toggleAccessToETH` is
-    ///      the only writer of a true, so any pair holding the right without an entry here is a
-    ///      grant that came from somewhere else.
+    /// @dev Keyed by the pair, so a wallet that moves to a second device wallet does not read as
+    ///      carrying the first one's grant.
     mapping(address deviceWallet => mapping(address eSIMWallet => bool granted)) public ghost_ethAccessGranted;
 
     // ----------------------------------------------------------------------------------------

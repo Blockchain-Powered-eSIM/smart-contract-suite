@@ -198,14 +198,10 @@ rule togglingETHAccessOnAnUnknownWalletAlwaysReverts(address eSIMWallet, bool ha
 
 /// The right to pull ETH is only ever granted by the owner.
 ///
-/// `toggleAccessToETH` is `onlySelf`, so a grant costs a signature the owner key produced. Every
-/// bind path refuses the flag outright, which is what makes a revocation stand: the admin used to
-/// undo one by deploying a second eSIM wallet with the flag set, reaching the whole device wallet
-/// balance through a wallet the owner never asked for.
+/// `toggleAccessToETH` is `onlySelf` and every bind path refuses the flag, so a revocation stands.
+/// The admin used to undo one by deploying a second eSIM wallet with the flag set.
 ///
-/// Stated over the whole method set rather than over the bind paths, so a later function that writes
-/// the flag has to answer this too. The caller check is not restated here: it belongs to
-/// `onlySelf` and is what the rule leans on rather than what it proves.
+/// Stated over the whole method set, so a later function that writes the flag has to answer it too.
 rule onlyToggleAccessToETHGrantsETHAccess(method f, address eSIMWallet) {
     require !canPullETH(eSIMWallet);
 
