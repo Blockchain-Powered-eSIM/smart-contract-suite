@@ -72,6 +72,11 @@ contract DeviceWalletFactoryConfigTest is DeviceWalletFactoryFixture {
         )[0];
         vm.stopPrank();
 
+        // Granted before the upgrade so the assertion below checks a true survives the move,
+        // which the deploy path no longer sets on its own.
+        vm.prank(wallet.deviceWallet);
+        MockDeviceWallet(payable(wallet.deviceWallet)).toggleAccessToETH(wallet.eSIMWallet, true);
+
         // Now upgrade the Device Wallet implementation contract
         address owner = deviceWalletFactory.owner();
         assertEq(owner, upgradeManager, "Upgrade manager should have been the owner");

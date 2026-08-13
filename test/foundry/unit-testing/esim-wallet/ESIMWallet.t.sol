@@ -79,6 +79,10 @@ contract ESIMWalletTest is DeployerBase {
         deviceWallet.setESIMUniqueIdentifierForAnESIMWallet(address(eSIMWallet1), "ESIM_0_1");
         vm.stopPrank();
 
+        // A bind never carries ETH access, so the owner grants it here
+        vm.prank(address(deviceWallet));
+        deviceWallet.toggleAccessToETH(address(eSIMWallet1), true);
+
         vm.startPrank(admin);
         // eSIMWallet2 -> no access to ETH, no eSIM identifier set
         address newESIMWallet = deviceWallet.deployESIMWallet(false, 919);
@@ -490,9 +494,11 @@ contract ESIMWalletTest is DeployerBase {
         requestedOwner = eSIMWallet1.newRequestedOwner();
         assertEq(requestedOwner, address(0), "newRequestedOwner should have reset to address(0)");
 
-        // New owner adds eSIM wallet to their device wallet, and removes eSIM wallet from standBy
+        // New owner adds eSIM wallet to their device wallet, and removes eSIM wallet from standBy.
+        // The bind carries no ETH access, so the new owner grants it separately.
         vm.startPrank(address(deviceWallet2));
-        deviceWallet2.addESIMWallet(address(eSIMWallet1), true);
+        deviceWallet2.addESIMWallet(address(eSIMWallet1), false);
+        deviceWallet2.toggleAccessToETH(address(eSIMWallet1), true);
         vm.stopPrank();
 
         assertEq(address(deviceWallet).balance, 11 ether, "Device wallet balance should have increased to 11 ETH");
@@ -850,7 +856,7 @@ contract ESIMWalletTest is DeployerBase {
         vm.prank(address(deviceWallet2));
         eSIMWallet1.acceptOwnershipTransfer();
         vm.prank(address(deviceWallet2));
-        deviceWallet2.addESIMWallet(address(eSIMWallet1), true);
+        deviceWallet2.addESIMWallet(address(eSIMWallet1), false);
 
         vm.deal(address(deviceWallet2), 5 ether);
         uint256 price = defaultDataBundlePriceCap + 1;

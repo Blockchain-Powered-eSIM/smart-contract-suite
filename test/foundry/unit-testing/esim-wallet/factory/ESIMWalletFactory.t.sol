@@ -236,7 +236,7 @@ contract ESIMWalletFactoryTest is DeployerBase {
 
         // Add eSIM wallet to device wallet
         vm.startPrank(address(registry));
-        deviceWallet.addESIMWallet(eSIMWalletAddress, true);
+        deviceWallet.addESIMWallet(eSIMWalletAddress, false);
         vm.stopPrank();
 
         // Set eSIM unique identifier

@@ -8,6 +8,8 @@ import "contracts/CustomStructs.sol";
 import {Errors} from "contracts/Errors.sol";
 
 import {DeviceWalletFixture} from "test/foundry/unit-testing/device-wallet/base/DeviceWalletFixture.sol";
+import {MockDeviceWallet} from "test/utils/mocks/MockDeviceWallet.sol";
+import {MockESIMWallet} from "test/utils/mocks/MockESIMWallet.sol";
 
 /// @notice Every path ETH takes into and out of a device wallet, and who may open each one.
 contract DeviceWalletETHTest is DeviceWalletFixture {
@@ -244,6 +246,118 @@ contract DeviceWalletETHTest is DeviceWalletFixture {
         assertEq(history.length, 1, "Transaction history should have been updated");
         assertEq(history[0].dataBundleID, "DB_ID_0", "Data bundle ID should have been correct");
         assertEq(history[0].dataBundlePrice, 0.1 ether, "Data bundle price should have been correct");
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // A bind never carries ETH access
+    // ---------------------------------------------------------------------------------------------
+
+    /// @notice The admin cannot hand a wallet ETH access at the moment it deploys it
+    /// @dev The flag used to be the admin's to set, which is what made a signed revocation
+    ///      pointless. It reverts now rather than being downgraded, so a caller that thinks it
+    ///      granted access finds out at the call.
+    function test_deployESIMWallet_cannotGrantETHAccess() public {
+        deployWallets();
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectPartialRevert(Errors.ETHAccessNotGrantableAtBind.selector);
+        deviceWallet.deployESIMWallet(true, 4242);
+    }
+
+    /// @notice Not even the device wallet itself may grant access at bind time
+    /// @dev Pins that `toggleAccessToETH` is the single grant path rather than merely the non-admin
+    ///      one. The owner has a way to grant, and this is not it.
+    function test_addESIMWallet_cannotGrantETHAccessEvenFromTheWalletItself() public {
+        deployWallets();
+
+        vm.prank(address(deviceWallet));
+        vm.expectRevert(abi.encodeWithSelector(
+            Errors.ETHAccessNotGrantableAtBind.selector, address(eSIMWallet3)
+        ));
+        deviceWallet.addESIMWallet(address(eSIMWallet3), true);
+    }
+
+    /// @notice A signed revocation stands, whatever the admin deploys afterwards
+    /// @dev The finding itself. The owner revokes on one wallet, the admin reaches for a second
+    ///      carrying access and is refused, and the wallet it can deploy reaches no further than
+    ///      the first: the device wallet's balance is untouched and the purchase is refused.
+    function test_theAdminCannotUndoARevocationByDeployingAnotherWallet() public {
+        deployWallets();
+        vm.deal(address(deviceWallet), 10 ether);
+
+        vm.prank(address(deviceWallet));
+        deviceWallet.toggleAccessToETH(address(eSIMWallet1), false);
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectPartialRevert(Errors.ETHAccessNotGrantableAtBind.selector);
+        deviceWallet.deployESIMWallet(true, 4243);
+
+        vm.prank(eSIMWalletAdmin);
+        address fresh = deviceWallet.deployESIMWallet(false, 4243);
+
+        assertFalse(deviceWallet.canPullETH(fresh), "The fresh wallet must arrive with no ETH access");
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(abi.encodeWithSelector(Errors.ETHAccessRevoked.selector, fresh));
+        MockESIMWallet(payable(fresh)).buyDataBundle(DataBundleDetails("DB_ID_0", 1 ether));
+
+        assertEq(address(deviceWallet).balance, 10 ether, "No ETH may leave through a wallet the user never granted");
+        assertEq(vault.balance, 0, "The vault must have been paid nothing");
+    }
+
+    /// @notice Both deployment routes leave a wallet without ETH access
+    /// @dev The batch route the factory drives and the single deploy the admin drives used to pass
+    ///      the flag set, so a wallet arrived able to pull before the owner had said anything. The
+    ///      batch is run here rather than through the fixture, which grants access on its way past.
+    function test_aFreshESIMWalletStartsWithNoETHAccess() public {
+        string[] memory identifiers = new string[](1);
+        bytes32[2][] memory keys = new bytes32[2][](1);
+        uint256[] memory salts = new uint256[](1);
+        uint256[] memory deposits = new uint256[](1);
+
+        identifiers[0] = customDeviceUniqueIdentifiers[3];
+        keys[0] = listOfOwnerKeys[3];
+        salts[0] = 4244;
+        deposits[0] = 0;
+
+        vm.prank(eSIMWalletAdmin);
+        Wallets memory batch = deviceWalletFactory.deployDeviceWalletForUsers(
+            identifiers,
+            keys,
+            salts,
+            deposits
+        )[0];
+
+        MockDeviceWallet fresh = MockDeviceWallet(payable(batch.deviceWallet));
+        assertFalse(
+            fresh.canPullETH(batch.eSIMWallet),
+            "The batch deployed wallet must arrive with no ETH access"
+        );
+
+        vm.prank(eSIMWalletAdmin);
+        address second = fresh.deployESIMWallet(false, 4245);
+        assertFalse(fresh.canPullETH(second), "The admin deployed wallet must arrive with no ETH access");
+    }
+
+    /// @notice The owner grants after the bind, and the purchase then goes through
+    /// @dev The regression guard on the other side of the change. Withholding access at bind time
+    ///      is only correct if the owner still has a way to hand it over.
+    function test_theOwnerGrantsAfterBinding() public {
+        deployWallets();
+        vm.deal(address(deviceWallet), 10 ether);
+
+        vm.prank(eSIMWalletAdmin);
+        address fresh = deviceWallet.deployESIMWallet(false, 4245);
+
+        vm.prank(address(deviceWallet));
+        deviceWallet.toggleAccessToETH(fresh, true);
+        assertTrue(deviceWallet.canPullETH(fresh), "The grant must land");
+
+        vm.prank(eSIMWalletAdmin);
+        MockESIMWallet(payable(fresh)).buyDataBundle(DataBundleDetails("DB_ID_0", 1 ether));
+
+        assertEq(vault.balance, 1 ether, "The vault must have been paid");
+        assertEq(address(deviceWallet).balance, 9 ether, "The price must have come out of the device wallet");
     }
 
     /// @notice Naming a function the wallet does not have must revert, while plain ETH still lands

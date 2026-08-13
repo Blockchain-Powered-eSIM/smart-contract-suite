@@ -160,7 +160,7 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
         ));
         deviceWallet.addESIMWallet(
             address(eSIMWallet3),
-            true
+            false
         );
         vm.stopPrank();
     }
@@ -172,7 +172,7 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
         vm.expectRevert(abi.encodeWithSelector(Errors.ESIMWalletAlreadyAdded.selector, address(eSIMWallet1)));
         deviceWallet.addESIMWallet(
             address(eSIMWallet1),
-            true
+            false
         );
         vm.stopPrank();
     }

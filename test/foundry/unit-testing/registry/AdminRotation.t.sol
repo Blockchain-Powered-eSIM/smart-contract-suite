@@ -121,7 +121,7 @@ contract AdminRotationTest is DeployerBase {
 
         vm.prank(eSIMWalletAdmin);
         vm.expectRevert(Errors.OnlyESIMWalletAdmin.selector);
-        DeviceWallet(payable(deviceWallet)).deployESIMWallet(true, 99);
+        DeviceWallet(payable(deviceWallet)).deployESIMWallet(false, 99);
 
         DataBundleDetails memory bundle = DataBundleDetails("bundle", 1);
         vm.prank(eSIMWalletAdmin);
@@ -291,7 +291,7 @@ contract AdminRotationTest is DeployerBase {
 
         vm.prank(eSIMWalletAdmin);
         vm.expectRevert(Errors.OnlyESIMWalletAdmin.selector);
-        DeviceWallet(payable(deviceWallet)).deployESIMWallet(true, 99);
+        DeviceWallet(payable(deviceWallet)).deployESIMWallet(false, 99);
 
         DataBundleDetails memory bundle = DataBundleDetails("bundle", 1);
         vm.prank(eSIMWalletAdmin);

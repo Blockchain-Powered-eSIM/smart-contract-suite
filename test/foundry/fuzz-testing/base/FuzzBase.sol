@@ -56,6 +56,11 @@ abstract contract FuzzBase is DeployerBase {
 
         fuzzDeviceWallet = MockDeviceWallet(payable(wallets[0].deviceWallet));
         fuzzESIMWallet = MockESIMWallet(payable(wallets[0].eSIMWallet));
+
+        // A bind never carries ETH access, so the owner grants it here. The pull path is what most
+        // of these suites are measuring, and it is closed until this call.
+        vm.prank(address(fuzzDeviceWallet));
+        fuzzDeviceWallet.toggleAccessToETH(address(fuzzESIMWallet), true);
     }
 
     /// @notice Builds a string of the requested byte length out of a repeating filler

@@ -102,7 +102,7 @@ contract DeviceWalletGuardsTest is DeployerBase {
 
         vm.prank(address(wallet));
         vm.expectRevert(Errors.OnlyESIMWalletAdmin.selector);
-        wallet.deployESIMWallet(true, 8002);
+        wallet.deployESIMWallet(false, 8002);
     }
 
     /// @notice An eSIM identifier cannot be written onto a wallet this device does not hold

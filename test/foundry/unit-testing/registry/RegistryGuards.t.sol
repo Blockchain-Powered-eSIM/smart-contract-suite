@@ -265,7 +265,7 @@ contract RegistryGuardsTest is DeployerBase {
 
         vm.prank(address(device));
         vm.expectRevert(abi.encodeWithSelector(Errors.NotAProtocolESIMWallet.selector, address(impostor)));
-        device.addESIMWallet(address(impostor), true);
+        device.addESIMWallet(address(impostor), false);
 
         assertEq(
             registry.isESIMWalletValid(address(impostor)),
@@ -290,7 +290,7 @@ contract RegistryGuardsTest is DeployerBase {
 
         vm.prank(address(attacker));
         vm.expectRevert(abi.encodeWithSelector(Errors.NotAProtocolESIMWallet.selector, address(impostor)));
-        attacker.addESIMWallet(address(impostor), true);
+        attacker.addESIMWallet(address(impostor), false);
 
         vm.prank(eSIMWalletAdmin);
         vm.expectRevert(abi.encodeWithSelector(Errors.UnknownESIMWallet.selector, address(impostor)));
@@ -306,7 +306,7 @@ contract RegistryGuardsTest is DeployerBase {
         DeviceWallet device = _deployDeviceWallet(customDeviceUniqueIdentifiers[1], pubKey2, 8004);
 
         vm.prank(eSIMWalletAdmin);
-        address eSIMWallet = device.deployESIMWallet(true, 8005);
+        address eSIMWallet = device.deployESIMWallet(false, 8005);
 
         assertTrue(eSIMWalletFactory.isESIMWalletDeployed(eSIMWallet), "The factory must record its own deployment");
         assertEq(
