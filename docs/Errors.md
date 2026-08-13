@@ -416,6 +416,12 @@ error ZeroAmount()
 error ETHAccessRevoked(address eSIMWallet)
 ```
 
+### ETHAccessNotGrantableAtBind
+
+```solidity
+error ETHAccessNotGrantableAtBind(address eSIMWallet)
+```
+
 ### ESIMWalletAlreadyAdded
 
 ```solidity

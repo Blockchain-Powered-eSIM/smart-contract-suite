@@ -185,13 +185,16 @@ function deployESIMWallet(bool _hasAccessToETH, uint256 _salt) external returns 
 Deploys an eSIM wallet for this device and binds it
 
 _The new wallet has no eSIM identifier yet. That arrives through
-     `setESIMUniqueIdentifierForAnESIMWallet` once the eSIM itself has been created._
+     `setESIMUniqueIdentifierForAnESIMWallet` once the eSIM itself has been created.
+
+     Must be called with `_hasAccessToETH` false. The owner grants ETH access afterwards
+     with `toggleAccessToETH`, which is the only way it is ever granted._
 
 #### Parameters
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| _hasAccessToETH | bool | Set to true if the eSIM wallet is allowed to pull ETH from this wallet. |
+| _hasAccessToETH | bool | Must be false |
 | _salt | uint256 | CREATE2 salt for the new eSIM wallet |
 
 #### Return Values
@@ -290,6 +293,9 @@ function toggleAccessToETH(address _eSIMWalletAddress, bool _hasAccessToETH) pub
 
 Allow owner to revoke or give access to any associated eSIM wallet for pulling ETH
 
+_The only way ETH access is ever granted. Binding a wallet never carries it, so a
+     revocation stands until the owner signs a grant._
+
 #### Parameters
 
 | Name | Type | Description |
@@ -310,7 +316,7 @@ Allow the device wallet factory or the wallet owner to add new eSIM wallet to th
 | Name | Type | Description |
 | ---- | ---- | ----------- |
 | _eSIMWalletAddress | address | Address of the eSIM wallet to be added |
-| _hasAccessToETH | bool | `true` if the eSIM wallet is allowed to pull ETH from this device wallet, `false` otherwise |
+| _hasAccessToETH | bool | Must be false. ETH access is granted only through `toggleAccessToETH` |
 
 ### removeESIMWallet
 
@@ -336,14 +342,19 @@ function _addESIMWallet(address _eSIMWalletAddress, bool _hasAccessToETH) intern
 Binds an eSIM wallet to this device wallet and records it with the registry
 
 _Refuses a wallet this device wallet does not already own, so binding cannot run ahead
-     of the ownership handover._
+     of the ownership handover.
+
+     A bind never carries ETH access. `toggleAccessToETH` is the only writer of a `true`,
+     and it is `onlySelf`, so the owner's revocation cannot be undone by anyone binding
+     another wallet. Asking for access here reverts rather than being quietly downgraded,
+     so a caller that believes it granted access finds out at the call._
 
 #### Parameters
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
 | _eSIMWalletAddress | address | Address of the eSIM wallet to bind |
-| _hasAccessToETH | bool | True if it may pull ETH from this device wallet |
+| _hasAccessToETH | bool | Must be false |
 
 ### _transferETH
 
