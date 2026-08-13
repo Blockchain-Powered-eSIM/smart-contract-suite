@@ -214,9 +214,17 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         uint256 availableETH = msg.value;
         Wallets[] memory walletsDeployed = new Wallets[](numberOfDeviceWallets);
 
+        // The lazy route reaches this through the registry and is deploying against its own
+        // reservation, so only a direct admin batch is checked. Read once rather than per entry.
+        bool checkReservations = msg.sender != address(registry);
+
         for (uint256 i = 0; i < numberOfDeviceWallets; ++i) {
             if(_depositAmounts[i] > availableETH) {
                 revert Errors.InsufficientBalance(availableETH, _depositAmounts[i]);
+            }
+
+            if(checkReservations) {
+                registry.requireDeviceIdentifierNotReserved(_deviceUniqueIdentifiers[i]);
             }
 
             uint256 spentETH;
@@ -261,6 +269,13 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         if(deviceWalletInfoAdded[_deviceWallet]) revert Errors.DeviceWalletInfoAlreadyAdded(_deviceWallet);
         if(bytes(_deviceUniqueIdentifier).length == 0) revert Errors.EmptyDeviceIdentifier();
         _requireValidOwnerKey(_deviceWalletOwnerKey);
+
+        // Same reason as the batch route: only a direct admin call is claiming a fresh identifier.
+        // This is also where the permissionless `createAccount` route gets checked, since that one
+        // runs inside ERC-4337 validation and may not read another contract's storage.
+        if(msg.sender != address(registry)) {
+            registry.requireDeviceIdentifierNotReserved(_deviceUniqueIdentifier);
+        }
 
         address derived = getCounterFactualAddress(
             _deviceWalletOwnerKey,

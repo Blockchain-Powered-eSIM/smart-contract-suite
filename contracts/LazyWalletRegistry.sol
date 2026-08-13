@@ -714,4 +714,19 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
     function upgradeManager() public view returns (address) {
         return owner();
     }
+
+    /// @notice Whether a device identifier has purchases recorded against it here
+    /// @dev The ordinary deployment route asks this before it takes an identifier, because a device
+    ///      wallet created under one that a fiat user's eSIMs are already bound to strands every one
+    ///      of them: this contract then refuses to deploy, refuses to copy the history, and refuses
+    ///      to move the eSIMs to another device, all because the identifier reads as deployed.
+    ///
+    ///      Stays true after the lazy deployment finishes. That costs nothing, since the registry's
+    ///      own identifier check refuses the second claim by then, and clearing it would need a walk
+    ///      over the whole list.
+    /// @param _deviceUniqueIdentifier Device identifier being checked
+    /// @return True if a lazy user is waiting on this identifier
+    function isDeviceIdentifierReserved(string calldata _deviceUniqueIdentifier) public view returns (bool) {
+        return eSIMIdentifiersAssociatedWithDeviceIdentifier[_deviceUniqueIdentifier].length != 0;
+    }
 }

@@ -36,6 +36,7 @@ interface Errors {
     error SaltTooHigh(uint256 salt, uint256 count);
     error DeviceWalletAlreadyExists(string deviceIdentifier, address deviceWallet);
     error NotAProtocolESIMWallet(address eSIMWallet);
+    error DeviceIdentifierReservedForLazyWallet(string deviceIdentifier);
 
     // Any contract rejecting an identifier it was handed empty
     error EmptyDeviceIdentifier();

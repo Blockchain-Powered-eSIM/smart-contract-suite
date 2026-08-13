@@ -798,24 +798,17 @@ contract LazyWalletRegistryTest is DeployerBase {
         assertEq(lazyWalletRegistry.eSIMWalletsDeployed(device), 5, "The cursor must reach the list length");
     }
 
-    /// @notice A device deployed through the ordinary route cannot be continued as a lazy one
-    /// @dev The marker is the cursor and not the registry's device wallet record. Reading the record
-    ///      instead would let anyone who registers a device under an identifier a fiat user's eSIMs
-    ///      are bound to receive those wallets, and through them that user's purchase history.
-    function test_deployMoreESIMWalletsForLazyDevice_refusesADeviceTheOrdinaryRouteDeployed() public {
+    /// @notice A device whose first batch never ran cannot be continued
+    /// @dev The marker is the deploy cursor and not the registry's device wallet record. The record
+    ///      would read true for a device the ordinary route deployed, and handing that device a
+    ///      fiat user's eSIM wallets would hand it their purchase history with them. That collision
+    ///      is refused at the door now, so the two can no longer disagree, and the cursor is still
+    ///      what this reads.
+    function test_deployMoreESIMWalletsForLazyDevice_refusesADeviceWithNoFirstBatch() public {
         string memory device = customDeviceUniqueIdentifiers[0];
         _bindESIMs(device, 3, "hijack_");
 
-        // Anyone can deploy a device wallet against an unclaimed identifier
-        vm.prank(user2);
-        address ordinaryWallet = address(deviceWalletFactory.createAccount(device, pubKey1, 6601));
-        vm.prank(eSIMWalletAdmin);
-        deviceWalletFactory.postCreateAccount(ordinaryWallet, device, pubKey1, 6601);
-        assertEq(
-            registry.uniqueIdentifierToDeviceWallet(device),
-            ordinaryWallet,
-            "The identifier must resolve to the ordinary wallet"
-        );
+        assertEq(registry.uniqueIdentifierToDeviceWallet(device), address(0), "No wallet may exist yet");
 
         vm.prank(eSIMWalletAdmin);
         vm.expectRevert(abi.encodeWithSelector(Errors.LazyWalletNotDeployed.selector, device));

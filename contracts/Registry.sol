@@ -11,6 +11,7 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 import {RegistryHelper} from "./RegistryHelper.sol";
+import {LazyWalletRegistry} from "./LazyWalletRegistry.sol";
 import {DeviceWalletFactory} from "./device-wallet/DeviceWalletFactory.sol";
 import {ESIMWalletFactory} from "./esim-wallet/ESIMWalletFactory.sol";
 import {ESIMWallet} from "./esim-wallet/ESIMWallet.sol";
@@ -363,6 +364,24 @@ contract Registry is
     /// @param _newOwnerKey X,Y co-ordinates of the P256 key taking over
     function updateDeviceWalletOwnerKey(bytes32[2] memory _newOwnerKey) external onlyDeviceWallet {
         _updateDeviceWalletOwnerKey(msg.sender, _newOwnerKey);
+    }
+
+    /// @notice Refuses a device identifier a fiat user's eSIMs are already waiting on
+    /// @dev The ordinary deployment route calls this. Taking such an identifier used to succeed and
+    ///      leave the lazy user with no way out at all: their purchases cannot be copied, their
+    ///      eSIM wallets cannot be deployed, and the eSIMs cannot be moved to a clean device either,
+    ///      because every one of those paths refuses an identifier that has a wallet.
+    ///
+    ///      Passes while `lazyWalletRegistry` is unset, which is the window between deploying this
+    ///      contract and wiring the two together. Nothing can be reserved before the contract that
+    ///      holds reservations exists, so the window is empty rather than unguarded.
+    /// @param _deviceUniqueIdentifier Identifier the caller is about to take
+    function requireDeviceIdentifierNotReserved(string calldata _deviceUniqueIdentifier) external view {
+        if(lazyWalletRegistry == address(0)) return;
+
+        if(LazyWalletRegistry(lazyWalletRegistry).isDeviceIdentifierReserved(_deviceUniqueIdentifier)) {
+            revert Errors.DeviceIdentifierReservedForLazyWallet(_deviceUniqueIdentifier);
+        }
     }
 
     // ---------------------------------------------------------------------------------------------
