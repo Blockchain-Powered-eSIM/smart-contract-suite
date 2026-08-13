@@ -277,7 +277,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         uint256 remaining
     ) {
         if(_depositAmount != msg.value) revert Errors.DepositDoesNotMatchValue(_depositAmount, msg.value);
-        if(isLazyWalletDeployed(_deviceUniqueIdentifier)) {
+        if(registry.isDeviceIdentifierAlreadyUsed(_deviceUniqueIdentifier)) {
             revert Errors.LazyWalletAlreadyDeployed(_deviceUniqueIdentifier);
         }
 
@@ -479,18 +479,18 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         // This is also what closes the window while a deployment is still running. The first batch
         // creates the device wallet, so both checks below start refusing from that point rather than
         // from the last batch, and no eSIM can move out from under a cursor walking its list.
-        if(isLazyWalletDeployed(_oldDeviceIdentifier)) {
+        if(registry.isDeviceIdentifierAlreadyUsed(_oldDeviceIdentifier)) {
             revert Errors.LazyWalletAlreadyDeployed(_oldDeviceIdentifier);
         }
-        if(isLazyWalletDeployed(_newDeviceIdentifier)) {
+        if(registry.isDeviceIdentifierAlreadyUsed(_newDeviceIdentifier)) {
             revert Errors.LazyWalletAlreadyDeployed(_newDeviceIdentifier);
         }
 
         eSIMIdentifierToDeviceIdentifier[_eSIMIdentifier] = _newDeviceIdentifier;
         emit NewDeviceIdentifierAssociatedWithESIMIdentifier(_eSIMIdentifier, currentDeviceIdentifier, _newDeviceIdentifier);
 
-        _updateDeviceIdentifierToESIMDetails(_eSIMIdentifier, _oldDeviceIdentifier, _newDeviceIdentifier);
-        _updateESIMIdentifiersAssociatedWithDeviceIdentifier(_eSIMIdentifier, _oldDeviceIdentifier, _newDeviceIdentifier);
+        _moveESIMPurchaseHistory(_eSIMIdentifier, _oldDeviceIdentifier, _newDeviceIdentifier);
+        _moveESIMIdentifierBetweenDeviceLists(_eSIMIdentifier, _oldDeviceIdentifier, _newDeviceIdentifier);
 
         emit ESIMIdentifierSwitchedToNewDeviceIdentifier(_eSIMIdentifier, _oldDeviceIdentifier, currentDeviceIdentifier);
 
@@ -534,7 +534,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
     ) internal {
         if(bytes(_deviceUniqueIdentifier).length == 0) revert Errors.EmptyDeviceIdentifier();
         _requireBoundedIdentifier(_deviceUniqueIdentifier);
-        if(isLazyWalletDeployed(_deviceUniqueIdentifier)) {
+        if(registry.isDeviceIdentifierAlreadyUsed(_deviceUniqueIdentifier)) {
             revert Errors.LazyWalletAlreadyDeployed(_deviceUniqueIdentifier);
         }
 
@@ -576,11 +576,14 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         emit DataUpdatedForDevice(_deviceUniqueIdentifier, _eSIMUniqueIdentifiers, _dataBundleDetails);
     }
 
-    /// @notice Moves an eSIM's stored purchase history to the device taking it over
+    /// @notice Moves what an eSIM bought to the device taking it over
+    /// @dev Carries the purchase entries themselves. Its counterpart
+    ///      `_moveESIMIdentifierBetweenDeviceLists` carries the membership record saying the eSIM
+    ///      exists at all, and a switch needs both.
     /// @param _eSIMIdentifier eSIM being switched
     /// @param _oldDeviceIdentifier Device it is leaving
     /// @param _newDeviceIdentifier Device it is joining
-    function _updateDeviceIdentifierToESIMDetails(
+    function _moveESIMPurchaseHistory(
         string calldata _eSIMIdentifier,
         string calldata _oldDeviceIdentifier,
         string calldata _newDeviceIdentifier
@@ -602,12 +605,14 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
     }
 
     /// @notice Moves an eSIM identifier between the two devices' lists
-    /// @dev The removal is a swap with the last element and a pop, so the old device's list keeps
-    ///      its members but not their order.
+    /// @dev Carries the membership record, which is what a deployment walks to know an eSIM exists.
+    ///      Its counterpart `_moveESIMPurchaseHistory` carries the purchases. The removal is a swap
+    ///      with the last element and a pop, so the old device's list keeps its members but not
+    ///      their order.
     /// @param _eSIMIdentifier eSIM being switched
     /// @param _oldDeviceIdentifier Device it is leaving
     /// @param _newDeviceIdentifier Device it is joining
-    function _updateESIMIdentifiersAssociatedWithDeviceIdentifier(
+    function _moveESIMIdentifierBetweenDeviceLists(
         string calldata _eSIMIdentifier,
         string calldata _oldDeviceIdentifier,
         string calldata _newDeviceIdentifier
@@ -708,18 +713,5 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
     ///      copy could only ever disagree with it.
     function upgradeManager() public view returns (address) {
         return owner();
-    }
-
-    /// @notice Function to check if a lazy wallet has been deployed or not
-    /// @dev Asks the registry for a device wallet, so it is also true for a device deployed through
-    ///      the ordinary route. That is deliberate: both cases have to block a lazy deployment.
-    /// @param _deviceUniqueIdentifier Device being checked
-    /// @return Boolean. True if deployed, false otherwise
-    function isLazyWalletDeployed(string calldata _deviceUniqueIdentifier) public view returns (bool) {
-        if(registry.uniqueIdentifierToDeviceWallet(_deviceUniqueIdentifier) != address(0)) {
-            return true;
-        }
-
-        return false;
     }
 }

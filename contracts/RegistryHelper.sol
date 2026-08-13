@@ -389,4 +389,17 @@ contract RegistryHelper {
 
         emit DeviceWalletOwnerKeyUpdated(_deviceWallet, oldOwnerKey, _newOwnerKey);
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // Identifier records
+    // ---------------------------------------------------------------------------------------------
+
+    /// @notice Whether a device identifier already has a wallet recorded against it
+    /// @dev True whichever route deployed it. Both routes have to refuse an identifier the other
+    ///      already used, and this contract is the only place that knows about both.
+    /// @param _deviceUniqueIdentifier Device identifier being checked
+    /// @return True if the identifier is taken
+    function isDeviceIdentifierAlreadyUsed(string calldata _deviceUniqueIdentifier) public view returns (bool) {
+        return uniqueIdentifierToDeviceWallet[_deviceUniqueIdentifier] != address(0);
+    }
 }

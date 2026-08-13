@@ -440,8 +440,8 @@ contract LazyWalletRegistryTest is DeployerBase {
         string memory deployedDeviceIdentifier = customDeviceUniqueIdentifiers[0];
         string memory newDeviceIdentifier = customDeviceUniqueIdentifiers[1];
 
-        assertEq(lazyWalletRegistry.isLazyWalletDeployed(deployedDeviceIdentifier), true, "Old device should be deployed");
-        assertEq(lazyWalletRegistry.isLazyWalletDeployed(newDeviceIdentifier), false, "New device should not be deployed");
+        assertEq(registry.isDeviceIdentifierAlreadyUsed(deployedDeviceIdentifier), true, "Old device should be deployed");
+        assertEq(registry.isDeviceIdentifierAlreadyUsed(newDeviceIdentifier), false, "New device should not be deployed");
 
         vm.prank(eSIMWalletAdmin);
         vm.expectRevert(
@@ -475,8 +475,8 @@ contract LazyWalletRegistryTest is DeployerBase {
         string memory oldDeviceIdentifier = customDeviceUniqueIdentifiers[1];
         string memory deployedDeviceIdentifier = customDeviceUniqueIdentifiers[0];
 
-        assertEq(lazyWalletRegistry.isLazyWalletDeployed(oldDeviceIdentifier), false, "Old device should not be deployed");
-        assertEq(lazyWalletRegistry.isLazyWalletDeployed(deployedDeviceIdentifier), true, "New device should be deployed");
+        assertEq(registry.isDeviceIdentifierAlreadyUsed(oldDeviceIdentifier), false, "Old device should not be deployed");
+        assertEq(registry.isDeviceIdentifierAlreadyUsed(deployedDeviceIdentifier), true, "New device should be deployed");
 
         vm.prank(eSIMWalletAdmin);
         vm.expectRevert(
@@ -500,30 +500,34 @@ contract LazyWalletRegistryTest is DeployerBase {
         );
     }
 
-    function test_isLazyWalletDeployed_unregisteredIdentfier() public view {
-        bool isDeployed = lazyWalletRegistry.isLazyWalletDeployed(customDeviceUniqueIdentifiers[0]);
-        assertEq(isDeployed, false);
+    /// @notice An identifier nobody has touched is free
+    function test_isDeviceIdentifierAlreadyUsed_unregisteredIdentfier() public view {
+        bool isUsed = registry.isDeviceIdentifierAlreadyUsed(customDeviceUniqueIdentifiers[0]);
+        assertEq(isUsed, false);
     }
 
-    function test_isLazyWalletDeployed_registeredIdentfier() public {
+    /// @notice Recording purchases against an identifier does not make it used
+    function test_isDeviceIdentifierAlreadyUsed_registeredIdentfier() public {
         test_batchPopulateHistory();
 
-        bool isDeployed = lazyWalletRegistry.isLazyWalletDeployed(customDeviceUniqueIdentifiers[0]);
-        assertEq(isDeployed, false);
+        bool isUsed = registry.isDeviceIdentifierAlreadyUsed(customDeviceUniqueIdentifiers[0]);
+        assertEq(isUsed, false);
     }
 
-    function test_isLazyWalletDeployed_registeredIdentfier_addNewData() public {
+    /// @notice A second round of purchases against the same identifier does not either
+    function test_isDeviceIdentifierAlreadyUsed_registeredIdentfier_addNewData() public {
         test_batchPopulateHistory_addNewData();
 
-        bool isDeployed = lazyWalletRegistry.isLazyWalletDeployed(customDeviceUniqueIdentifiers[0]);
-        assertEq(isDeployed, false);
+        bool isUsed = registry.isDeviceIdentifierAlreadyUsed(customDeviceUniqueIdentifiers[0]);
+        assertEq(isUsed, false);
     }
 
-    function test_isLazyWalletDeployed() public {
+    /// @notice Deploying the wallet is what marks the identifier used
+    function test_isDeviceIdentifierAlreadyUsed() public {
         test_deployLazyWalletAndSetESIMIdentifier();
 
-        bool isDeployed = lazyWalletRegistry.isLazyWalletDeployed(customDeviceUniqueIdentifiers[0]);
-        assertEq(isDeployed, true);
+        bool isUsed = registry.isDeviceIdentifierAlreadyUsed(customDeviceUniqueIdentifiers[0]);
+        assertEq(isUsed, true);
     }
 
     /// @notice Binds `_count` freshly named eSIM identifiers to one device in a single admin call
