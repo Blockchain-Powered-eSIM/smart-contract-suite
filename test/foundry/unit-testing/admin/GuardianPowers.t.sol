@@ -3,6 +3,7 @@
 pragma solidity 0.8.36;
 
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
+import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
 
 import {ProtocolAdmin} from "contracts/admin/ProtocolAdmin.sol";
 
@@ -22,9 +23,13 @@ contract MockPausable {
 }
 
 /// @notice Everything a guardian can do, and the much longer list of what it cannot.
-/// @dev The role holds two powers and no general fast path. Half of this file is the second half of
-///      that sentence: a guardian that could schedule, cancel, or run an arbitrary payload would
+/// @dev The role holds three powers and no general fast path. Half of this file is the second half
+///      of that sentence: a guardian that could schedule, cancel, or run an arbitrary payload would
 ///      make every other guarantee in the contract advisory.
+///
+///      All three powers take something away, and the tests below check the matching negative for
+///      each: releasing a pause cannot apply one, stripping a canceller cannot grant one, and
+///      suspending the admin cannot reinstate it or choose its replacement.
 contract GuardianPowersTest is AdminBase {
 
     /// @dev The reason the role exists. The admin key trips the pause and the owner clears it, so
@@ -337,5 +342,177 @@ contract GuardianPowersTest is AdminBase {
             )
         );
         protocolAdmin.execute(address(registry), 0, data, bytes32(0), bytes32(uint256(2)));
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Suspending the admin
+    // ---------------------------------------------------------------------------------------------
+
+    /// @dev The other reason the role exists. The admin key holds `pause`, so leaving its removal
+    ///      to the delay means an outage running for the whole wait while the key re-applies the
+    ///      pause after every release.
+    function test_disableAdminInstantly_suspendsWithoutWaiting() public {
+        uint256 before = block.timestamp;
+
+        vm.prank(guardian);
+        protocolAdmin.disableAdminInstantly(address(registry));
+
+        assertTrue(registry.adminDisabled(), "the admin must be suspended");
+        assertEq(registry.eSIMWalletAdmin(), address(0), "and no longer able to act");
+        assertEq(registry.adminOfRecord(), eSIMWalletAdmin, "while its address stays on the books");
+        assertEq(block.timestamp, before, "no time may have passed");
+    }
+
+    function test_disableAdminInstantly_emitsTheSuspension() public {
+        vm.expectEmit(true, true, false, true, address(protocolAdmin));
+        emit ProtocolAdmin.AdminDisabled(address(registry), guardian);
+
+        vm.prank(guardian);
+        protocolAdmin.disableAdminInstantly(address(registry));
+    }
+
+    /// @dev The whole point: a compromised admin key could re-apply the pause after every release,
+    ///      and the only call that removed it needed that key to sign. Taking its powers away first
+    ///      is what makes the release stick.
+    function test_disableAdminInstantly_endsThePauseLoop() public {
+        vm.prank(eSIMWalletAdmin);
+        registry.pause();
+
+        vm.prank(guardian);
+        protocolAdmin.unpauseInstantly(address(registry));
+
+        // Unchecked, the key simply does it again.
+        vm.prank(eSIMWalletAdmin);
+        registry.pause();
+        assertTrue(registry.paused(), "the key still has the protocol stopped");
+
+        vm.prank(guardian);
+        protocolAdmin.disableAdminInstantly(address(registry));
+
+        vm.prank(guardian);
+        protocolAdmin.unpauseInstantly(address(registry));
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(Errors.OnlyAdmin.selector);
+        registry.pause();
+
+        assertFalse(registry.paused(), "and this time the release holds");
+    }
+
+    /// @dev The power only takes away. Handing it back is an owner action and waits, or a guardian
+    ///      and a compromised admin key together could hold the role live against the owner
+    ///      indefinitely, which is the deadlock this whole mechanism exists to break.
+    function test_disableAdminInstantly_cannotReinstate() public {
+        vm.prank(guardian);
+        protocolAdmin.disableAdminInstantly(address(registry));
+
+        vm.prank(guardian);
+        vm.expectRevert(
+            abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", guardian)
+        );
+        registry.enableAdmin();
+
+        assertTrue(registry.adminDisabled(), "the suspension must still be in place");
+
+        // The owner's route works, and it is the only one.
+        _runThroughTheDelay(
+            address(registry),
+            abi.encodeCall(registry.enableAdmin, ()),
+            bytes32(uint256(7))
+        );
+
+        assertFalse(registry.adminDisabled(), "the owner lifted it after the delay");
+    }
+
+    /// @dev A guardian must not be able to choose who holds the role either. An admin of its own
+    ///      choosing would reach `ESIMWallet.buyDataBundle` and every wallet holding ETH access.
+    function test_disableAdminInstantly_cannotChooseAReplacement() public {
+        vm.prank(guardian);
+        vm.expectRevert(
+            abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", guardian)
+        );
+        registry.requestAdminUpdate(outsider);
+
+        vm.prank(guardian);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                TimelockController.TimelockUnauthorizedCaller.selector, guardian
+            )
+        );
+        protocolAdmin.disableAndNominate(address(registry), outsider);
+
+        assertEq(registry.newRequestedAdmin(), address(0), "no nomination may have landed");
+    }
+
+    function test_disableAdminInstantly_rejectsAnAccountWithoutTheGuardianRole() public {
+        bytes32 role = protocolAdmin.GUARDIAN_ROLE();
+
+        vm.prank(outsider);
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, outsider, role)
+        );
+        protocolAdmin.disableAdminInstantly(address(registry));
+
+        vm.prank(proposer);
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, proposer, role)
+        );
+        protocolAdmin.disableAdminInstantly(address(registry));
+
+        assertFalse(registry.adminDisabled(), "the rejected calls must leave the admin running");
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Replacing the admin, which waits
+    // ---------------------------------------------------------------------------------------------
+
+    /// @dev Not a fast path and holds no role of its own. Everything that skips the delay on this
+    ///      contract is a guardian function, and this is not one.
+    function test_disableAndNominate_rejectsEveryCallerButTheTimelock() public {
+        address[3] memory callers = [outsider, proposer, canceller];
+
+        for(uint256 i = 0; i < callers.length; ++i) {
+            vm.prank(callers[i]);
+            vm.expectRevert(
+                abi.encodeWithSelector(
+                    TimelockController.TimelockUnauthorizedCaller.selector, callers[i]
+                )
+            );
+            protocolAdmin.disableAndNominate(address(registry), outsider);
+        }
+
+        assertEq(registry.newRequestedAdmin(), address(0), "no nomination may have landed");
+    }
+
+    /// @dev Scheduled like anything else. The two effects land together: the incumbent is stripped
+    ///      the moment the nomination is outstanding, and the nominee still has to accept.
+    function test_disableAndNominate_stripsAndNominatesOnceTheDelayIsServed() public {
+        bytes memory data = abi.encodeCall(
+            protocolAdmin.disableAndNominate, (address(registry), outsider)
+        );
+        bytes32 salt = bytes32(uint256(8));
+
+        // Scheduling emits its own events, so the expectation goes right before the execution
+        // rather than before the whole run through the delay.
+        _schedule(address(protocolAdmin), data, salt);
+        vm.warp(block.timestamp + protocolAdmin.getMinDelay());
+
+        vm.expectEmit(true, true, false, true, address(protocolAdmin));
+        emit ProtocolAdmin.AdminDisabledAndNominated(address(registry), outsider);
+
+        vm.prank(outsider);
+        protocolAdmin.execute(address(protocolAdmin), 0, data, bytes32(0), salt);
+
+        assertEq(registry.newRequestedAdmin(), outsider, "the nominee is recorded");
+        assertEq(registry.eSIMWalletAdmin(), address(0), "and the incumbent is already stripped");
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(Errors.OnlyAdmin.selector);
+        registry.pause();
+
+        vm.prank(outsider);
+        registry.acceptAdminUpdate();
+
+        assertEq(registry.eSIMWalletAdmin(), outsider, "the nominee holds the role once it accepts");
     }
 }
