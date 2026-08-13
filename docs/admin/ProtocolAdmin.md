@@ -13,12 +13,21 @@ _Replaces the single externally owned account that owns `Registry`, `LazyWalletR
      announcement is what the delay buys, and once the wait is served there is no reason to make
      the protocol depend on one key still being available to press the button.
 
-     A guardian does not get a general fast path. It can say exactly two things, and both are
-     written here as their own functions rather than as payloads, so no third sentence is
+     A guardian does not get a general fast path. It can say exactly three things, and each is
+     written here as its own function rather than as a payload, so no fourth sentence is
      expressible however the role is held:
 
      1. Release a pause. An upgrade that waits is reviewable; an outage that waits is an outage.
      2. Take `CANCELLER_ROLE` away from an account.
+     3. Suspend the protocol's admin key.
+
+     All three take something away and none of them grants anything, which is what keeps the
+     role away from user funds. Releasing a pause cannot move ETH, stripping a canceller cannot,
+     and a suspended admin is an admin that has stopped being able to spend rather than one
+     chosen by the guardian. Restoring any of the three is an owner action and waits, so the
+     side taking power away always wins the race against the side handing it back. A guardian
+     able to reinstate an admin would lose that, and a guardian able to appoint one would reach
+     `ESIMWallet.buyDataBundle` and every wallet holding ETH access through it.
 
      The second one exists because without it a compromised canceller is permanent. Evicting any
      role holder means scheduling `revokeRole`, a scheduled operation can be cancelled by any
@@ -76,6 +85,22 @@ event CancellerRevoked(address account, address guardian)
 ```
 
 A guardian took the cancel power away from an account
+
+### AdminDisabled
+
+```solidity
+event AdminDisabled(address target, address guardian)
+```
+
+A guardian suspended a protocol contract's admin key
+
+### AdminDisabledAndNominated
+
+```solidity
+event AdminDisabledAndNominated(address target, address newAdmin)
+```
+
+A scheduled operation suspended an admin key and nominated its replacement
 
 ### OwnershipAccepted
 
@@ -253,6 +278,54 @@ _Only `CANCELLER_ROLE`, never anything else, and adding it back is an ordinary s
 | Name | Type | Description |
 | ---- | ---- | ----------- |
 | accounts | address[] | Accounts to strip |
+
+### disableAdminInstantly
+
+```solidity
+function disableAdminInstantly(address target) external
+```
+
+Suspends a protocol contract's admin key immediately
+
+_The lever against a compromised hot key. That key holds `Registry.pause`, so leaving
+     its removal to the delay would mean an outage running for the whole wait while the key
+     re-applies the pause after every release. Suspending it is what makes
+     `unpauseInstantly` stick.
+
+     Takes powers away and hands none out. The suspended address stays on the target's
+     books, and only the owner can reinstate it or name a replacement, both of which wait.
+     Whatever a guardian does here, the worst outcome reachable is a stopped backend, which
+     the owner ends._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| target | address | Contract whose admin is being suspended |
+
+### disableAndNominate
+
+```solidity
+function disableAndNominate(address target, address newAdmin) external
+```
+
+Suspends the current admin and nominates its replacement in one operation
+
+_Scheduled like anything else, so this is not a fast path and holds no role of its own.
+     It exists because the two effects belong in one transaction: the target strips the
+     incumbent the moment a nomination is outstanding, so scheduling the nomination alone
+     already suspends the old key, and naming the compound effect is the difference between
+     a reviewer reading the intent off the operation and having to infer it from a payload.
+
+     The nominee still has to accept, so this cannot hand the role to an address that
+     cannot act, and the role stays dormant until it does._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| target | address | Contract whose admin is being replaced |
+| newAdmin | address | Address nominated to take the role |
 
 ### acceptOwnershipBatch
 

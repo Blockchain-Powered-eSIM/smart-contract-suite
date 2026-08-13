@@ -82,7 +82,7 @@
       "slot": "60",
       "offset": 0,
       "bytes": "20",
-      "label": "eSIMWalletAdmin",
+      "label": "adminOfRecord",
       "type": "t_address"
     },
     {
@@ -111,6 +111,13 @@
       "offset": 20,
       "bytes": "1",
       "label": "paused",
+      "type": "t_bool"
+    },
+    {
+      "slot": "63",
+      "offset": 21,
+      "bytes": "1",
+      "label": "adminDisabled",
       "type": "t_bool"
     },
     {

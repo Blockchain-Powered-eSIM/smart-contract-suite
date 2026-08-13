@@ -10,10 +10,12 @@ _Holds the admin address, the vault, the pause flag and the price ceiling in one
      list, so there is no way to write a value into each of them: one write here is how a change
      reaches all of them in the same transaction.
 
-     `IPausable` is declared so the compiler checks the one signature `ProtocolAdmin` calls
-     through it. A guardian releases a pause with no delay, so the two drifting apart would only
-     show as a revert during an incident. `pause()` stays outside the interface deliberately: it
-     is the hot admin key's lever, while releasing it is the timelock's._
+     `IPausable` and `IRegistryAdmin` are declared so the compiler checks the signatures
+     `ProtocolAdmin` calls through them. A guardian acts with no delay, so a drift between the
+     two would only show as a revert during an incident. What each interface leaves out is
+     deliberate: `pause()` is the hot admin key's lever while releasing it is the timelock's,
+     and `enableAdmin()` is absent for the same reason in reverse, so nothing invites a fast
+     path for handing a suspended key its powers back._
 
 ### entryPoint
 
@@ -23,18 +25,22 @@ contract IEntryPoint entryPoint
 
 Entry point contract address (one entryPoint per chain)
 
-### eSIMWalletAdmin
+### adminOfRecord
 
 ```solidity
-address eSIMWalletAdmin
+address adminOfRecord
 ```
 
-Admin address of the eSIM wallet project
+Address holding the admin role, whether or not its powers are currently live
 
 _The only copy in the protocol. `DeviceWalletFactory`, `DeviceWallet`, `ESIMWallet` and
      `LazyWalletRegistry` all read it from here, so rotating it below reaches every one of
      them in the same transaction. Holding it in more than one place is what previously let
-     a rotation update some readers and leave the rest authorising the retired key._
+     a rotation update some readers and leave the rest authorising the retired key.
+
+     Read `eSIMWalletAdmin()` rather than this to find out who may act: this is the address
+     on the books, and it keeps naming a suspended admin so the suspension can be lifted
+     without anyone having to remember who it was._
 
 ### vault
 
@@ -52,8 +58,9 @@ address newRequestedAdmin
 
 Address of the admin to be appointed
 
-_Only the current admin can request the transfer. The nominated address has to accept
-     it, and this resets once they do._
+_Only the owner can request the transfer. The nominated address has to accept it, and
+     this resets once they do. While it is set the incumbent has no powers, so a handover
+     that is never accepted leaves the role dormant rather than shared._
 
 ### paused
 
@@ -67,6 +74,19 @@ _Held here for the same reason the admin address is: device wallets and eSIM wal
      beacon proxies tracked by a mapping with no enumerable list, so there is no way to
      write a flag into each of them. Both already read this contract on their guarded paths,
      so one write here reaches every wallet in the same transaction._
+
+### adminDisabled
+
+```solidity
+bool adminDisabled
+```
+
+True while the admin's powers are suspended, leaving the address on the books
+
+_Packs into the spare bytes beside `paused`, so it costs no slot of its own. Suspension
+     is the lever against a compromised admin key: it is instant through a guardian, while
+     lifting it is an owner action and therefore waits. A key that could restore itself as
+     fast as it was suspended would leave the two sides trading transactions forever._
 
 ### defaultDataBundlePriceCap
 
@@ -106,7 +126,9 @@ modifier onlyESIMWalletAdmin()
 Restricts a call to the current eSIM wallet admin
 
 _The hot key the backend signs with, not the owner. It can trip the pause but not
-     release it, and cannot upgrade anything._
+     release it, and cannot upgrade anything. Reads the accessor rather than the stored
+     address, so a suspended admin is refused here for the same reason it is refused
+     everywhere else._
 
 ### constructor
 
@@ -146,9 +168,19 @@ function requestAdminUpdate(address _newAdmin) external
 
 Nominates the next eSIM wallet admin, who then has to accept
 
-_Deliberately does not check for an existing request. If the current admin nominates an
-     unintended address, calling this again overrides it. Nominating the current admin
-     revokes any outstanding request._
+_Owner and not the admin, deliberately. An admin that had to nominate its own
+     replacement could not be removed once its key was in someone else's hands, and the
+     pause is the admin's own lever, so a compromised key could hold the protocol stopped
+     for as long as it liked and no other key could end it.
+
+     Nominating strips the incumbent at once, through the accessor rather than through a
+     write: a handover in flight leaves the role dormant until the nominee accepts, so the
+     two never hold it at the same time. A rotation therefore has a gap in it, and the
+     nomination and the acceptance belong close together.
+
+     Deliberately does not check for an existing request, so an unintended nomination is
+     overridden by calling this again. Naming the incumbent withdraws the request and hands
+     the powers back, which also lifts a suspension, so one call undoes either mistake._
 
 #### Parameters
 
@@ -164,11 +196,65 @@ function acceptAdminUpdate() external returns (address)
 
 Takes up the admin role, callable only by the nominated address
 
+_Clears the suspension as well as the request. The suspension names a key, not the
+     role, so a fresh key accepting is the end of the incident rather than something that
+     has to be lifted separately afterwards._
+
 #### Return Values
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
 | [0] | address | Address of the new admin |
+
+### disableAdmin
+
+```solidity
+function disableAdmin() external
+```
+
+Suspends the admin's powers protocol-wide, leaving its address on the books
+
+_Every gate in the protocol reads `eSIMWalletAdmin()`, which answers zero from here on,
+     and no transaction can arrive from the zero address, so one write closes all of them
+     in the same transaction. The address itself is kept so the suspension can be lifted
+     without anyone having to supply it again.
+
+     Owner gated, which is what lets `ProtocolAdmin` offer a guardian an instant route to
+     it. Refuses a repeat rather than passing quietly: a guardian doing this during an
+     incident should not be left believing it acted when it did not._
+
+### enableAdmin
+
+```solidity
+function enableAdmin() external
+```
+
+Hands a suspended admin its powers back
+
+_Owner only, with no instant route for anyone. Suspending is instant and restoring
+     waits, so a compromised key cannot undo its own suspension as fast as it is applied.
+     Reversing that would recreate the deadlock the suspension exists to break.
+
+     Does nothing for an outstanding handover, which keeps the incumbent powerless on its
+     own. Withdraw that with `requestAdminUpdate` naming the incumbent._
+
+### eSIMWalletAdmin
+
+```solidity
+function eSIMWalletAdmin() public view returns (address)
+```
+
+Admin address every gated call in the protocol is checked against
+
+_Zero while the admin is suspended or while a handover is outstanding, which is how
+     both states close every gate at once: `msg.sender` is never zero, so no caller matches.
+     `adminOfRecord` holds the address itself either way._
+
+#### Return Values
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| [0] | address | The address that may act as admin right now, or zero if nobody may |
 
 ### updateVaultAddress
 

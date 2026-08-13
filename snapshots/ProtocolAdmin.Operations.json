@@ -1,14 +1,14 @@
 {
-  "acceptOwnershipBatch: four contracts": "36028",
-  "cancel": "4581",
-  "execute: one call, delay served": "21086",
-  "executeBatch: both wallet beacons": "68954",
-  "executeBatch: four calls, delay served": "46488",
-  "executeBatch: four proxy upgrades": "87183",
-  "revokeCancellersInstantly: one account": "11832",
-  "revokeCancellersInstantly: three accounts": "27690",
-  "schedule: one call": "32996",
-  "scheduleBatch: four calls": "45503",
-  "scheduleBatch: four proxy upgrades": "50273",
-  "unpauseInstantly: release a protocol wide pause": "8964"
+  "acceptOwnershipBatch: four contracts": "36271",
+  "cancel": "4694",
+  "execute: one call, delay served": "21132",
+  "executeBatch: both wallet beacons": "69122",
+  "executeBatch: four calls, delay served": "46838",
+  "executeBatch: four proxy upgrades": "87401",
+  "revokeCancellersInstantly: one account": "11893",
+  "revokeCancellersInstantly: three accounts": "27789",
+  "schedule: one call": "32998",
+  "scheduleBatch: four calls": "45546",
+  "scheduleBatch: four proxy upgrades": "50310",
+  "unpauseInstantly: release a protocol wide pause": "9056"
 }

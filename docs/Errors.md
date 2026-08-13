@@ -56,6 +56,18 @@ error ESIMWalletOwnershipTransferPending(address eSIMWallet, address newRequeste
 error NotTheAssociatedDeviceWallet(address eSIMWallet, address associatedDeviceWallet)
 ```
 
+### AdminAlreadyDisabled
+
+```solidity
+error AdminAlreadyDisabled()
+```
+
+### AdminNotDisabled
+
+```solidity
+error AdminNotDisabled()
+```
+
 ### ProtocolPaused
 
 ```solidity

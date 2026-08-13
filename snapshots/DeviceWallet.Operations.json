@@ -1,10 +1,10 @@
 {
   "addDeposit: 1 ether": "35038",
-  "deployESIMWallet: second wallet on the device": "355571",
-  "deployESIMWallet: third wallet, with ETH access": "375471",
+  "deployESIMWallet: second wallet on the device": "356077",
+  "deployESIMWallet: third wallet, with ETH access": "375977",
   "execute: ETH transfer to an EOA": "36295",
   "executeBatch: 3 ETH transfers": "79971",
-  "pullETH: 1 ether to the eSIM wallet": "15282",
+  "pullETH: 1 ether to the eSIM wallet": "13326",
   "toggleAccessToETH: grant": "3541",
   "toggleAccessToETH: revoke": "3541"
 }

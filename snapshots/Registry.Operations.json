@@ -1,12 +1,12 @@
 {
-  "acceptAdminUpdate": "4943",
-  "pause": "30724",
-  "requestAdminUpdate": "31656",
-  "setDefaultDataBundlePriceCap": "13676",
-  "toggleESIMWalletStandbyStatus: off standby": "5178",
-  "toggleESIMWalletStandbyStatus: onto standby": "25078",
-  "unpause": "4078",
+  "acceptAdminUpdate": "4962",
+  "pause": "30988",
+  "requestAdminUpdate": "27368",
+  "setDefaultDataBundlePriceCap": "13720",
+  "toggleESIMWalletStandbyStatus: off standby": "5244",
+  "toggleESIMWalletStandbyStatus: onto standby": "25144",
+  "unpause": "4100",
   "updateDeviceWalletInfo: first device, cold storage": "122094",
   "updateDeviceWalletInfo: second device, warm storage": "115594",
-  "updateVaultAddress": "14091"
+  "updateVaultAddress": "14179"
 }

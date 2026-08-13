@@ -150,7 +150,10 @@ Emitted once, when the registry is initialised
 event AdminUpdateRequested(address eSIMWalletAdmin, address _newAdmin)
 ```
 
-Emitted when the current admin requests to transfer the admin role to a new address
+Emitted when the owner nominates a new address for the admin role
+
+_The incumbent is powerless from here until the nominee accepts, so a reader following
+     the admin has to treat this as the moment the role went dormant._
 
 ### AdminUpdated
 
@@ -163,10 +166,26 @@ Emitted when the newly requested admin accepts the role
 ### AdminUpdateRevoked
 
 ```solidity
-event AdminUpdateRevoked(address _currentAdmin, address _revokedAddress)
+event AdminUpdateRevoked(address _caller, address _revokedAddress)
 ```
 
-Emitted when the current admin revokes the transfer of the admin role
+Emitted when the owner withdraws an outstanding nomination
+
+### AdminDisabled
+
+```solidity
+event AdminDisabled(address _adminOfRecord, address _caller)
+```
+
+Emitted when the admin's powers are suspended, naming the address left on the books
+
+### AdminEnabled
+
+```solidity
+event AdminEnabled(address _adminOfRecord, address _caller)
+```
+
+Emitted when a suspended admin is given its powers back
 
 ### VaultAddressUpdated
 
