@@ -509,14 +509,13 @@ function isDeviceIdentifierReserved(string _deviceUniqueIdentifier) public view 
 
 Whether a device identifier has purchases recorded against it here
 
-_The ordinary deployment route asks this before it takes an identifier, because a device
-     wallet created under one that a fiat user's eSIMs are already bound to strands every one
-     of them: this contract then refuses to deploy, refuses to copy the history, and refuses
-     to move the eSIMs to another device, all because the identifier reads as deployed.
+_The ordinary deployment route asks this before taking an identifier, since a wallet
+     created under a reserved one strands every eSIM bound to it: the deploy, the history
+     copy and the device switch all refuse an identifier that has a wallet.
 
-     Stays true after the lazy deployment finishes. That costs nothing, since the registry's
-     own identifier check refuses the second claim by then, and clearing it would need a walk
-     over the whole list._
+     Stays true once the lazy deployment finishes. Harmless, since the registry's own
+     identifier check refuses the second claim by then, and clearing it would mean walking
+     the whole list._
 
 #### Parameters
 

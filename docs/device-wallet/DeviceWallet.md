@@ -187,8 +187,7 @@ Deploys an eSIM wallet for this device and binds it
 _The new wallet has no eSIM identifier yet. That arrives through
      `setESIMUniqueIdentifierForAnESIMWallet` once the eSIM itself has been created.
 
-     Must be called with `_hasAccessToETH` false. The owner grants ETH access afterwards
-     with `toggleAccessToETH`, which is the only way it is ever granted._
+     ETH access is granted only afterwards, by the owner, with `toggleAccessToETH`._
 
 #### Parameters
 
@@ -344,10 +343,9 @@ Binds an eSIM wallet to this device wallet and records it with the registry
 _Refuses a wallet this device wallet does not already own, so binding cannot run ahead
      of the ownership handover.
 
-     A bind never carries ETH access. `toggleAccessToETH` is the only writer of a `true`,
-     and it is `onlySelf`, so the owner's revocation cannot be undone by anyone binding
-     another wallet. Asking for access here reverts rather than being quietly downgraded,
-     so a caller that believes it granted access finds out at the call._
+     A bind never carries ETH access. `toggleAccessToETH` is `onlySelf` and the only writer
+     of a `true`, so no bind can undo the owner's revocation. Asking for access here reverts
+     rather than being downgraded in silence._
 
 #### Parameters
 
