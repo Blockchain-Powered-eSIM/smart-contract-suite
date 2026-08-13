@@ -390,6 +390,13 @@ contract Registry is
     ) external onlyDeviceWallet {
         if(_deviceWalletAddress == address(0)) revert Errors.ZeroAddress("_deviceWalletAddress");
 
+        // The two checks below ask the eSIM wallet about itself, and any contract can answer them
+        // with whatever a caller needs. The factory is the one party that can state this, and
+        // without it a device wallet registers an address of its choosing as protocol eSIM wallet.
+        if(!eSIMWalletFactory.isESIMWalletDeployed(_eSIMWalletAddress)) {
+            revert Errors.NotAProtocolESIMWallet(_eSIMWalletAddress);
+        }
+
         if(ESIMWallet(payable(_eSIMWalletAddress)).owner() != msg.sender) {
             revert Errors.NotTheESIMWalletOwnerOrItsDeviceWallet(_eSIMWalletAddress);
         }

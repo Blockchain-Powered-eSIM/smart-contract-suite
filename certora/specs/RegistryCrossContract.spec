@@ -121,6 +121,10 @@ methods {
     function _.depositTo(address account) external => NONDET;
     function _.withdrawTo(address withdrawAddress, uint256 amount) external => NONDET;
     function _.deployESIMWallet(address deviceWalletAddress, uint256 salt) external => NONDET;
+    /// `bindESIMWallet` asks the factory whether it deployed the wallet. NONDET is the conservative
+    /// direction: a rule here is about who ends up holding the wallet, and an arbitrary answer
+    /// leaves both the accepting and the refusing path open.
+    function _.isESIMWalletDeployed(address eSIMWalletAddress) external => NONDET;
     function _.deployDeviceWalletForUsers(
         string[] deviceUniqueIdentifiers,
         bytes32[2][] ownerKeys,

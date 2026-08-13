@@ -14,9 +14,10 @@ import "test/utils/DeployerBase.sol";
 import "test/utils/mocks/MockRegistry.sol";
 
 /// @notice Covers the initialiser checks and the caller gates on `Registry`.
-/// @dev The admin rotation, pause and price cap behaviour is covered in `Registry.t.sol`, and the
-///      two factory address checks in `RegistryInitialize.t.sol`. What is left is the four
-///      remaining initialiser arguments and every gate that refuses a caller.
+/// @dev The admin rotation is covered in `AdminRotation.t.sol`, the pause and price cap in
+///      `Registry.t.sol`, and the two factory address checks in `RegistryInitialize.t.sol`. What is
+///      left is the four remaining initialiser arguments, every gate that refuses a caller, and the
+///      binding checks that refuse an argument.
 contract RegistryGuardsTest is DeployerBase {
 
     /// @notice Calls initialize with the given arguments, expecting a ZeroAddress revert
@@ -217,5 +218,120 @@ contract RegistryGuardsTest is DeployerBase {
             existing,
             "A refused deployment must leave the first wallet bound"
         );
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // eSIM wallet binding
+    // ---------------------------------------------------------------------------------------------
+
+    /// @notice Deploys one device wallet and returns it
+    /// @param _identifier Device identifier to deploy under
+    /// @param _ownerKey P256 key owning the wallet
+    /// @param _salt CREATE2 salt
+    /// @return The device wallet deployed
+    function _deployDeviceWallet(
+        string memory _identifier,
+        bytes32[2] memory _ownerKey,
+        uint256 _salt
+    ) internal returns (DeviceWallet) {
+        string[] memory identifiers = new string[](1);
+        bytes32[2][] memory keys = new bytes32[2][](1);
+        uint256[] memory salts = new uint256[](1);
+
+        identifiers[0] = _identifier;
+        keys[0] = _ownerKey;
+        salts[0] = _salt;
+
+        vm.prank(eSIMWalletAdmin);
+        Wallets memory wallet = deviceWalletFactory.deployDeviceWalletForUsers(
+            identifiers, keys, salts, new uint256[](1)
+        )[0];
+
+        return DeviceWallet(payable(wallet.deviceWallet));
+    }
+
+    /// @notice An address the factory never deployed cannot be registered as an eSIM wallet
+    /// @dev Both other checks here ask the eSIM wallet about itself, and any contract can answer
+    /// them however its author wants. Without the factory check a device wallet writes an address
+    /// of its choosing into the registration mapping the whole protocol reads.
+    function test_bindESIMWallet_rejectsAnAddressTheFactoryNeverDeployed() public {
+        DeviceWallet device = _deployDeviceWallet(customDeviceUniqueIdentifiers[1], pubKey2, 8001);
+        ImpostorESIMWallet impostor = new ImpostorESIMWallet(address(device));
+
+        assertFalse(
+            eSIMWalletFactory.isESIMWalletDeployed(address(impostor)),
+            "The factory must not have deployed the impostor"
+        );
+
+        vm.prank(address(device));
+        vm.expectRevert(abi.encodeWithSelector(Errors.NotAProtocolESIMWallet.selector, address(impostor)));
+        device.addESIMWallet(address(impostor), true);
+
+        assertEq(
+            registry.isESIMWalletValid(address(impostor)),
+            address(0),
+            "A refused bind must leave the registration empty"
+        );
+        assertFalse(
+            device.isValidESIMWallet(address(impostor)),
+            "A refused bind must roll back the device wallet's own record"
+        );
+    }
+
+    /// @notice A device wallet cannot be aimed at an impostor through the identifier setter
+    /// @dev setESIMUniqueIdentifierForAnESIMWallet checks that the registry knows the target rather
+    /// than that this device wallet holds it, so a non-zero entry left by an unrelated device wallet
+    /// used to let the admin make any device wallet call into an attacker's contract. Closing the
+    /// bind closes this, because only a real eSIM wallet can reach the mapping at all.
+    function test_setESIMUniqueIdentifierForAnESIMWallet_cannotReachAnImpostor() public {
+        DeviceWallet attacker = _deployDeviceWallet(customDeviceUniqueIdentifiers[1], pubKey2, 8002);
+        DeviceWallet victim = _deployDeviceWallet(customDeviceUniqueIdentifiers[2], pubKey3, 8003);
+        ImpostorESIMWallet impostor = new ImpostorESIMWallet(address(attacker));
+
+        vm.prank(address(attacker));
+        vm.expectRevert(abi.encodeWithSelector(Errors.NotAProtocolESIMWallet.selector, address(impostor)));
+        attacker.addESIMWallet(address(impostor), true);
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(abi.encodeWithSelector(Errors.UnknownESIMWallet.selector, address(impostor)));
+        victim.setESIMUniqueIdentifierForAnESIMWallet(address(impostor), "anything");
+
+        assertFalse(impostor.wasCalled(), "No device wallet may be made to call the impostor");
+    }
+
+    /// @notice A wallet the factory did deploy still binds
+    /// @dev The check has to admit the ordinary route untouched, which is the whole protocol's
+    /// deployment path.
+    function test_bindESIMWallet_acceptsAWalletTheFactoryDeployed() public {
+        DeviceWallet device = _deployDeviceWallet(customDeviceUniqueIdentifiers[1], pubKey2, 8004);
+
+        vm.prank(eSIMWalletAdmin);
+        address eSIMWallet = device.deployESIMWallet(true, 8005);
+
+        assertTrue(eSIMWalletFactory.isESIMWalletDeployed(eSIMWallet), "The factory must record its own deployment");
+        assertEq(
+            registry.isESIMWalletValid(eSIMWallet),
+            address(device),
+            "A factory deployed wallet must still register"
+        );
+    }
+}
+
+/// @notice Answers `owner()` and `newRequestedOwner()` with whatever gets a bind past the checks
+/// @dev Stands in for any contract an attacker writes. It is not a beacon proxy and the factory
+///      never deployed it, which is the one fact the registry cannot be lied to about.
+contract ImpostorESIMWallet {
+    address public owner;
+    address public newRequestedOwner;
+    string public eSIMUniqueIdentifier;
+    bool public wasCalled;
+
+    constructor(address _owner) {
+        owner = _owner;
+    }
+
+    function setESIMUniqueIdentifier(string calldata _identifier) external {
+        wasCalled = true;
+        eSIMUniqueIdentifier = _identifier;
     }
 }
