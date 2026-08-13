@@ -48,7 +48,11 @@ methods {
     function uniqueIdentifierToDeviceWallet(string) external returns (address) envfree;
 
     function vault() external returns (address) envfree;
+    /// Derived, but from storage alone and never from the environment, so it passes the envfree
+    /// static check. `adminOfRecord` is the address itself and this is whether it may act.
     function eSIMWalletAdmin() external returns (address) envfree;
+    function adminOfRecord() external returns (address) envfree;
+    function adminDisabled() external returns (bool) envfree;
     function newRequestedAdmin() external returns (address) envfree;
     function entryPoint() external returns (address) envfree;
     function deviceWalletFactory() external returns (address) envfree;
@@ -257,23 +261,54 @@ rule theVaultIsNeverSetToZero(address newVault) {
 /// R-06, second half. The admin is not write-once, and stating it as such would have proved
 /// nothing. It moves through a two-step handover, and the property worth having is that the
 /// handover is the only route and that it lands on the address that was nominated.
+///
+/// Stated over `adminOfRecord` rather than the accessor. The two are different facts now: the
+/// address on the books moves only by acceptance, while the power attached to it also goes away
+/// on a suspension and on a nomination. Reading the accessor here would make the rule fail on
+/// `disableAdmin` for a reason that has nothing to do with the address moving.
 rule theAdminMovesOnlyToTheNominatedAddress(method f) filtered {
     f -> f.selector != sig:initialize(address, address, address, address, address, address, uint256).selector
 } {
-    address adminBefore = eSIMWalletAdmin();
+    address adminBefore = adminOfRecord();
     address nominated = newRequestedAdmin();
 
     env callEnv;
     calldataarg args;
     f(callEnv, args);
 
-    address adminAfter = eSIMWalletAdmin();
+    address adminAfter = adminOfRecord();
 
     assert adminAfter != adminBefore => f.selector == sig:acceptAdminUpdate().selector,
         "the admin moved through something other than acceptAdminUpdate";
 
     assert adminAfter != adminBefore => adminAfter == nominated,
         "the admin moved to an address that was never nominated";
+}
+
+/// The power and the address are separate facts, and the power never lands anywhere the address
+/// is not. Without this, a suspension or a handover could in principle be read as handing the role
+/// to some third address rather than to nobody.
+rule onlyTheRecordedAdminEverHoldsThePower(method f) {
+    env callEnv;
+    calldataarg args;
+    f(callEnv, args);
+
+    address acting = eSIMWalletAdmin();
+
+    assert acting == 0 || acting == adminOfRecord(),
+        "an address that is not on the books can act as admin";
+}
+
+/// A suspended admin and one with a handover outstanding are both powerless, whatever else is
+/// true. This is what every gate in the protocol relies on: they compare `msg.sender` against the
+/// accessor, and no transaction arrives from the zero address, so a zero here closes all of them.
+rule aSuspendedOrHandedOverAdminCannotAct(method f) {
+    env callEnv;
+    calldataarg args;
+    f(callEnv, args);
+
+    assert (adminDisabled() || newRequestedAdmin() != 0) => eSIMWalletAdmin() == 0,
+        "a suspended or handed-over admin can still act";
 }
 
 /// R-06, third half. Accepting the handover clears the nomination, so one nomination cannot be
