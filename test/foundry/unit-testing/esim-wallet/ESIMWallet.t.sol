@@ -22,7 +22,7 @@ contract ESIMWalletTest is DeployerBase {
         deployWallets();
         address retiredAdmin = registry.eSIMWalletAdmin();
 
-        vm.prank(retiredAdmin);
+        vm.prank(registry.owner());
         registry.requestAdminUpdate(user3);
         vm.prank(user3);
         registry.acceptAdminUpdate();

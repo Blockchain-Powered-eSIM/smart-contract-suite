@@ -347,23 +347,6 @@ contract AdminHandler is HandlerBase {
         }
     }
 
-    /// @notice The admin nominates its successor, or withdraws an outstanding nomination
-    /// @dev The nomination alternates between the two admin addresses rather than picking a fresh
-    ///      one, so the role can travel and come back. A one-way rotation onto an address that
-    ///      never hands it back would leave every admin path unreachable for the rest of the run.
-    /// @param revoke Whether to nominate the sitting admin, which withdraws any outstanding request
-    function requestAdminUpdate(bool revoke) external counted {
-        address current = _currentAdmin();
-        address nominee = revoke ? current : (current == admin ? adminSuccessor : admin);
-
-        vm.prank(current);
-        try registry.requestAdminUpdate(nominee) {
-            state.recordCall("requestAdminUpdate");
-        } catch {
-            state.recordRevert("requestAdminUpdate");
-        }
-    }
-
     /// @notice The nominated successor takes the admin role
     function acceptAdminUpdate() external counted {
         address nominee = registry.newRequestedAdmin();

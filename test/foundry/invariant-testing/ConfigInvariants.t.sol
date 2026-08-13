@@ -38,18 +38,39 @@ contract ConfigInvariantsTest is CampaignBase {
         }
     }
 
-    /// @notice The admin role always sits with exactly one address, and never with nobody
-    /// @dev An outstanding nomination naming the sitting admin is the state the rotation is
-    ///      supposed to collapse into a withdrawal. Leaving one there would mean the admin could
-    ///      hand the role to itself, which reads as a rotation in the logs and moves nothing.
+    /// @notice The role is always on somebody's books, and at most that one address may act
+    /// @dev The address and the power are separate facts now: a suspension and an outstanding
+    ///      handover both leave the role dormant, with nobody able to act, while the address stays
+    ///      recorded. What must never happen is the address itself going missing, because both
+    ///      routes back go through it. A withdrawal names the incumbent and a suspension is lifted
+    ///      on the incumbent, so a zero there would leave the role unreachable for good.
+    ///
+    ///      An outstanding nomination naming the incumbent is the state the rotation is supposed to
+    ///      collapse into a withdrawal. Leaving one there would mean the admin could hand the role
+    ///      to itself, which reads as a rotation in the logs and moves nothing. Compared against
+    ///      the recorded address rather than the accessor, which answers zero in exactly the state
+    ///      this is checking and would make the assertion vacuous there.
     function invariant_adminRoleHasOneHolder() public view {
-        address current = registry.eSIMWalletAdmin();
+        address onRecord = registry.adminOfRecord();
 
-        assertTrue(current != address(0), "The admin role has no holder");
+        assertTrue(onRecord != address(0), "The admin role has no holder");
         assertTrue(
-            registry.newRequestedAdmin() != current,
+            registry.newRequestedAdmin() != onRecord,
             "The sitting admin is also the nominee for its own role"
         );
+
+        // Nobody but the recorded address ever holds the power, so a dormant role cannot be picked
+        // up by a third address while it is down.
+        address acting = registry.eSIMWalletAdmin();
+        assertTrue(
+            acting == address(0) || acting == onRecord,
+            "An address that is not on the books can act as admin"
+        );
+
+        // And dormant means dormant either way round, so neither state can be read as live.
+        if(registry.adminDisabled() || registry.newRequestedAdmin() != address(0)) {
+            assertEq(acting, address(0), "A suspended or handed-over admin can still act");
+        }
     }
 
     /// @notice The campaign never moves the clock

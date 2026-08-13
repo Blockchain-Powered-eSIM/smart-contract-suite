@@ -110,14 +110,22 @@ contract RegistryHelper {
         address indexed _eSIMWalletFactory
     );
 
-    /// @notice Emitted when the current admin requests to transfer the admin role to a new address
+    /// @notice Emitted when the owner nominates a new address for the admin role
+    /// @dev The incumbent is powerless from here until the nominee accepts, so a reader following
+    ///      the admin has to treat this as the moment the role went dormant.
     event AdminUpdateRequested(address indexed eSIMWalletAdmin, address indexed _newAdmin);
 
     /// @notice Emitted when the newly requested admin accepts the role
     event AdminUpdated(address indexed _newAdmin);
 
-    /// @notice Emitted when the current admin revokes the transfer of the admin role
-    event AdminUpdateRevoked(address indexed _currentAdmin, address indexed _revokedAddress);
+    /// @notice Emitted when the owner withdraws an outstanding nomination
+    event AdminUpdateRevoked(address indexed _caller, address indexed _revokedAddress);
+
+    /// @notice Emitted when the admin's powers are suspended, naming the address left on the books
+    event AdminDisabled(address indexed _adminOfRecord, address indexed _caller);
+
+    /// @notice Emitted when a suspended admin is given its powers back
+    event AdminEnabled(address indexed _adminOfRecord, address indexed _caller);
 
     /// @notice Emitted when the owner points data bundle payments at a different vault
     event VaultAddressUpdated(address indexed _updatedVaultAddress);

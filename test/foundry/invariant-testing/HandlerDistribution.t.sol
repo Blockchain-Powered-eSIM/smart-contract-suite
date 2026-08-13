@@ -89,10 +89,16 @@ contract HandlerDistributionTest is CampaignBase {
             // would put every admin call in the next round through an address holding a different
             // budget, which is a case the campaign covers but would make this drive's deposits
             // depend on which round they landed in
-            adminHandler.requestAdminUpdate(false);
+            upgradeManagerHandler.requestAdminUpdate(false);
             adminHandler.acceptAdminUpdate();
-            adminHandler.requestAdminUpdate(false);
+            upgradeManagerHandler.requestAdminUpdate(false);
             adminHandler.acceptAdminUpdate();
+
+            // The suspension is lifted inside the round for the same reason. A run that left the
+            // admin suspended would have every admin call after it refused, and each would reach a
+            // revert count rather than the call count this drive is checking
+            upgradeManagerHandler.disableAdmin();
+            upgradeManagerHandler.enableAdmin();
 
             // Both beacons go to the second implementation and back inside the round. Leaving
             // either on the alternative would have the next round's deploys run against a
@@ -130,6 +136,8 @@ contract HandlerDistributionTest is CampaignBase {
         _assertExercised("acceptOwnershipTransfer");
         _assertExercised("requestAdminUpdate");
         _assertExercised("acceptAdminUpdate");
+        _assertExercised("disableAdmin");
+        _assertExercised("enableAdmin");
         _assertExercised("pauseProtocol");
         _assertExercised("unpauseProtocol");
         _assertExercised("setDefaultPriceCap");

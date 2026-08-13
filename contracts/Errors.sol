@@ -23,6 +23,8 @@ interface Errors {
     error NotTheESIMWalletOwnerOrItsDeviceWallet(address eSIMWallet);
     error ESIMWalletOwnershipTransferPending(address eSIMWallet, address newRequestedOwner);
     error NotTheAssociatedDeviceWallet(address eSIMWallet, address associatedDeviceWallet);
+    error AdminAlreadyDisabled();
+    error AdminNotDisabled();
 
     // Registry, DeviceWallet and ESIMWallet
     error ProtocolPaused();

@@ -4,6 +4,7 @@ pragma solidity 0.8.36;
 // Interfaces
 import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 import {IPausable} from "./interfaces/IPausable.sol";
+import {IRegistryAdmin} from "./interfaces/IRegistryAdmin.sol";
 
 // Contracts
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
@@ -22,21 +23,34 @@ import {Errors} from "./Errors.sol";
 ///      list, so there is no way to write a value into each of them: one write here is how a change
 ///      reaches all of them in the same transaction.
 ///
-///      `IPausable` is declared so the compiler checks the one signature `ProtocolAdmin` calls
-///      through it. A guardian releases a pause with no delay, so the two drifting apart would only
-///      show as a revert during an incident. `pause()` stays outside the interface deliberately: it
-///      is the hot admin key's lever, while releasing it is the timelock's.
-contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, RegistryHelper, IPausable {
+///      `IPausable` and `IRegistryAdmin` are declared so the compiler checks the signatures
+///      `ProtocolAdmin` calls through them. A guardian acts with no delay, so a drift between the
+///      two would only show as a revert during an incident. What each interface leaves out is
+///      deliberate: `pause()` is the hot admin key's lever while releasing it is the timelock's,
+///      and `enableAdmin()` is absent for the same reason in reverse, so nothing invites a fast
+///      path for handing a suspended key its powers back.
+contract Registry is
+    Initializable,
+    UUPSUpgradeable,
+    Ownable2StepUpgradeable,
+    RegistryHelper,
+    IPausable,
+    IRegistryAdmin
+{
 
     /// @notice Entry point contract address (one entryPoint per chain)
     IEntryPoint public entryPoint;
 
-    /// @notice Admin address of the eSIM wallet project
+    /// @notice Address holding the admin role, whether or not its powers are currently live
     /// @dev The only copy in the protocol. `DeviceWalletFactory`, `DeviceWallet`, `ESIMWallet` and
     ///      `LazyWalletRegistry` all read it from here, so rotating it below reaches every one of
     ///      them in the same transaction. Holding it in more than one place is what previously let
     ///      a rotation update some readers and leave the rest authorising the retired key.
-    address public eSIMWalletAdmin;
+    ///
+    ///      Read `eSIMWalletAdmin()` rather than this to find out who may act: this is the address
+    ///      on the books, and it keeps naming a suspended admin so the suspension can be lifted
+    ///      without anyone having to remember who it was.
+    address public adminOfRecord;
 
     /// @notice Address of the vault that receives payments for the eSIM data bundles
     address public vault;
@@ -52,8 +66,9 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
     address private _retiredUpgradeManager;
 
     /// @notice Address of the admin to be appointed
-    /// @dev Only the current admin can request the transfer. The nominated address has to accept
-    ///      it, and this resets once they do.
+    /// @dev Only the owner can request the transfer. The nominated address has to accept it, and
+    ///      this resets once they do. While it is set the incumbent has no powers, so a handover
+    ///      that is never accepted leaves the role dormant rather than shared.
     address public newRequestedAdmin;
 
     /// @notice True while the ETH-moving paths are stopped protocol-wide
@@ -62,6 +77,13 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
     ///      write a flag into each of them. Both already read this contract on their guarded paths,
     ///      so one write here reaches every wallet in the same transaction.
     bool public paused;
+
+    /// @notice True while the admin's powers are suspended, leaving the address on the books
+    /// @dev Packs into the spare bytes beside `paused`, so it costs no slot of its own. Suspension
+    ///      is the lever against a compromised admin key: it is instant through a guardian, while
+    ///      lifting it is an owner action and therefore waits. A key that could restore itself as
+    ///      fast as it was suspended would leave the two sides trading transactions forever.
+    bool public adminDisabled;
 
     /// @notice Most an eSIM wallet may be charged for one data bundle unless it sets its own limit
     /// @dev Held here rather than only on each wallet because a wallet deployed before this existed
@@ -84,9 +106,11 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
 
     /// @notice Restricts a call to the current eSIM wallet admin
     /// @dev The hot key the backend signs with, not the owner. It can trip the pause but not
-    ///      release it, and cannot upgrade anything.
+    ///      release it, and cannot upgrade anything. Reads the accessor rather than the stored
+    ///      address, so a suspended admin is refused here for the same reason it is refused
+    ///      everywhere else.
     modifier onlyESIMWalletAdmin() {
-        if(msg.sender != eSIMWalletAdmin) revert Errors.OnlyAdmin();
+        if(msg.sender != eSIMWalletAdmin()) revert Errors.OnlyAdmin();
         _;
     }
 
@@ -132,7 +156,7 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
         if(_eSIMWalletFactory == address(0)) revert Errors.ZeroAddress("_eSIMWalletFactory");
         if(_defaultDataBundlePriceCap == 0) revert Errors.ZeroDataBundlePriceCap();
 
-        eSIMWalletAdmin = _eSIMWalletAdmin;
+        adminOfRecord = _eSIMWalletAdmin;
         entryPoint = _entryPoint;
         vault = _vault;
         defaultDataBundlePriceCap = _defaultDataBundlePriceCap;
@@ -158,36 +182,93 @@ contract Registry is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, Re
     // ---------------------------------------------------------------------------------------------
 
     /// @notice Nominates the next eSIM wallet admin, who then has to accept
-    /// @dev Deliberately does not check for an existing request. If the current admin nominates an
-    ///      unintended address, calling this again overrides it. Nominating the current admin
-    ///      revokes any outstanding request.
+    /// @dev Owner and not the admin, deliberately. An admin that had to nominate its own
+    ///      replacement could not be removed once its key was in someone else's hands, and the
+    ///      pause is the admin's own lever, so a compromised key could hold the protocol stopped
+    ///      for as long as it liked and no other key could end it.
+    ///
+    ///      Nominating strips the incumbent at once, through the accessor rather than through a
+    ///      write: a handover in flight leaves the role dormant until the nominee accepts, so the
+    ///      two never hold it at the same time. A rotation therefore has a gap in it, and the
+    ///      nomination and the acceptance belong close together.
+    ///
+    ///      Deliberately does not check for an existing request, so an unintended nomination is
+    ///      overridden by calling this again. Naming the incumbent withdraws the request and hands
+    ///      the powers back, which also lifts a suspension, so one call undoes either mistake.
     /// @param _newAdmin Address of the recipient to receive the admin role
-    function requestAdminUpdate(address _newAdmin) external onlyESIMWalletAdmin {
+    function requestAdminUpdate(address _newAdmin) external onlyOwner {
         if(_newAdmin == address(0)) revert Errors.ZeroAddress("_newAdmin");
 
-        if(_newAdmin == eSIMWalletAdmin) {
+        if(_newAdmin == adminOfRecord) {
             address revokedAddress = newRequestedAdmin;
             newRequestedAdmin = address(0);
+            adminDisabled = false;
             emit AdminUpdateRevoked(msg.sender, revokedAddress);
         }
         else {
             newRequestedAdmin = _newAdmin;
-            emit AdminUpdateRequested(eSIMWalletAdmin, _newAdmin);
+            emit AdminUpdateRequested(adminOfRecord, _newAdmin);
         }
     }
 
     /// @notice Takes up the admin role, callable only by the nominated address
+    /// @dev Clears the suspension as well as the request. The suspension names a key, not the
+    ///      role, so a fresh key accepting is the end of the incident rather than something that
+    ///      has to be lifted separately afterwards.
     /// @return Address of the new admin
     function acceptAdminUpdate() external returns (address) {
         if(msg.sender != newRequestedAdmin) revert Errors.OnlyRequestedAdmin(newRequestedAdmin);
 
-        eSIMWalletAdmin = msg.sender;
-        emit AdminUpdated(msg.sender);
+        adminOfRecord = msg.sender;
 
         // Reset the requested admin to address(0) for further role transfer
         newRequestedAdmin = address(0);
+        adminDisabled = false;
 
-        return eSIMWalletAdmin;
+        emit AdminUpdated(msg.sender);
+
+        return msg.sender;
+    }
+
+    /// @notice Suspends the admin's powers protocol-wide, leaving its address on the books
+    /// @dev Every gate in the protocol reads `eSIMWalletAdmin()`, which answers zero from here on,
+    ///      and no transaction can arrive from the zero address, so one write closes all of them
+    ///      in the same transaction. The address itself is kept so the suspension can be lifted
+    ///      without anyone having to supply it again.
+    ///
+    ///      Owner gated, which is what lets `ProtocolAdmin` offer a guardian an instant route to
+    ///      it. Refuses a repeat rather than passing quietly: a guardian doing this during an
+    ///      incident should not be left believing it acted when it did not.
+    function disableAdmin() external onlyOwner {
+        if(adminDisabled) revert Errors.AdminAlreadyDisabled();
+
+        adminDisabled = true;
+        emit AdminDisabled(adminOfRecord, msg.sender);
+    }
+
+    /// @notice Hands a suspended admin its powers back
+    /// @dev Owner only, with no instant route for anyone. Suspending is instant and restoring
+    ///      waits, so a compromised key cannot undo its own suspension as fast as it is applied.
+    ///      Reversing that would recreate the deadlock the suspension exists to break.
+    ///
+    ///      Does nothing for an outstanding handover, which keeps the incumbent powerless on its
+    ///      own. Withdraw that with `requestAdminUpdate` naming the incumbent.
+    function enableAdmin() external onlyOwner {
+        if(!adminDisabled) revert Errors.AdminNotDisabled();
+
+        adminDisabled = false;
+        emit AdminEnabled(adminOfRecord, msg.sender);
+    }
+
+    /// @notice Admin address every gated call in the protocol is checked against
+    /// @dev Zero while the admin is suspended or while a handover is outstanding, which is how
+    ///      both states close every gate at once: `msg.sender` is never zero, so no caller matches.
+    ///      `adminOfRecord` holds the address itself either way.
+    /// @return The address that may act as admin right now, or zero if nobody may
+    function eSIMWalletAdmin() public view returns (address) {
+        if(adminDisabled || newRequestedAdmin != address(0)) return address(0);
+
+        return adminOfRecord;
     }
 
     // ---------------------------------------------------------------------------------------------

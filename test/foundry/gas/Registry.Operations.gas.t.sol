@@ -47,7 +47,7 @@ contract RegistryOperationsGasTest is GasBase {
 
     /// @notice The two halves of an admin key rotation
     function test_adminRotation() public {
-        vm.prank(eSIMWalletAdmin);
+        vm.prank(registry.owner());
         registry.requestAdminUpdate(user3);
         vm.snapshotGasLastCall(NAMESPACE, "requestAdminUpdate");
 
