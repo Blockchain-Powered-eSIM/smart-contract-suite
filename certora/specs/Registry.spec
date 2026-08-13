@@ -46,6 +46,9 @@ methods {
     function isESIMWalletOnStandby(address) external returns (bool) envfree;
     function registeredP256Keys(bytes32) external returns (address) envfree;
     function uniqueIdentifierToDeviceWallet(string) external returns (address) envfree;
+    /// Keyed by hash rather than by the string, so a rule can quantify over the key without the
+    /// string hashing bound the header records applying to it.
+    function claimedESIMIdentifiers(bytes32) external returns (address) envfree;
 
     function vault() external returns (address) envfree;
     /// Derived, but from storage alone and never from the environment, so it passes the envfree
@@ -318,4 +321,44 @@ rule acceptingTheAdminHandoverClearsTheNomination() {
     acceptAdminUpdate(callEnv);
 
     assert newRequestedAdmin() == 0, "the nomination survived being accepted";
+}
+
+/// An eSIM identifier is claimed once and never moves.
+///
+/// The whole point of the record is that an identifier answers with one wallet. A second write
+/// would put it back where it was before the record existed, where two wallets could carry the same
+/// identifier and nothing could say which held the eSIM. The claim deliberately survives an
+/// ownership transfer, since the eSIM belongs to the wallet rather than to whichever device holds
+/// it, which is why this is stated over every method rather than left to the one entry point.
+rule theESIMIdentifierClaimIsWriteOnce(method f, bytes32 identifierHash) {
+    address holderBefore = claimedESIMIdentifiers(identifierHash);
+    require holderBefore != 0;
+
+    env callEnv;
+    calldataarg args;
+    f(callEnv, args);
+
+    assert claimedESIMIdentifiers(identifierHash) == holderBefore,
+        "an eSIM identifier changed hands after it was claimed";
+}
+
+/// Only a device wallet claims an eSIM identifier, and only through the one entry point.
+///
+/// Parametric for the same reason as R-04. The claim is reachable directly, not only through
+/// `DeviceWallet`, so its own gate is the whole of the access control and a second writer added
+/// anywhere later fails here.
+rule onlyADeviceWalletClaimsAnESIMIdentifier(method f, bytes32 identifierHash) {
+    require claimedESIMIdentifiers(identifierHash) == 0;
+
+    env callEnv;
+    calldataarg args;
+    f(callEnv, args);
+
+    assert claimedESIMIdentifiers(identifierHash) != 0 =>
+        f.selector == sig:claimESIMIdentifier(string, address).selector,
+        "an eSIM identifier was claimed through something other than claimESIMIdentifier";
+
+    assert claimedESIMIdentifiers(identifierHash) != 0 =>
+        isDeviceWalletValid(callEnv.msg.sender),
+        "an eSIM identifier was claimed by a caller the registry does not consider a device wallet";
 }

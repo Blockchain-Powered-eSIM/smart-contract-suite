@@ -100,6 +100,9 @@ methods {
     function _.addESIMWallet(address walletAddress, bool hasAccessToETH) external => DISPATCHER(true);
     function _.setESIMUniqueIdentifierForAnESIMWallet(address walletAddress, string identifier)
         external => DISPATCHER(true);
+    /// The registry reads this off `msg.sender` while a device wallet is claiming an eSIM
+    /// identifier, so the callee is the scene's device wallet whenever that wallet is the caller.
+    function _.deviceUniqueIdentifier() external => DISPATCHER(true);
     function _.populateHistory(ESIMWallet.DataBundleDetails[] bundles) external => DISPATCHER(true);
 
     /// Every call that leaves the three contracts, named one signature at a time.
@@ -131,6 +134,13 @@ methods {
         uint256[] salts,
         uint256[] depositAmounts
     ) external => NONDET;
+    /// The two reservation reads the registry makes on the lazy wallet registry, whose address it
+    /// holds in a storage field. Out of the scene, so the same trap applies as to the four above: a
+    /// selector the prover knows with a callee it does not, which the `unresolved external` line
+    /// never reaches. NONDET leaves both the reserved and the free answer open, which is the
+    /// conservative direction for a rule about who holds an eSIM wallet.
+    function _.isDeviceIdentifierReserved(string deviceUniqueIdentifier) external => NONDET;
+    function _.eSIMIdentifierToDeviceIdentifier(string eSIMUniqueIdentifier) external => NONDET;
 
     unresolved external in _._ => DISPATCH [] default NONDET;
 
