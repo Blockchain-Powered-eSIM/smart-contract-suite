@@ -161,7 +161,7 @@ methods {
 definition isInitialiser(method f) returns bool =
     f.selector == sig:DeviceWallet.init(address, bytes32[2], string, address).selector
  || f.selector == sig:ESIMWallet.initialize(address, address).selector
- || f.selector == sig:Registry.initialize(address, address, address, address, address, address).selector;
+ || f.selector == sig:Registry.initialize(address, address, address, address, address, address, uint256).selector;
 
 /// The three instances in the scene are wired to each other.
 ///
