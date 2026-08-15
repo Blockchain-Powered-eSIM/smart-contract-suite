@@ -142,7 +142,23 @@ methods {
     function _.isDeviceIdentifierReserved(string deviceUniqueIdentifier) external => NONDET;
     function _.eSIMIdentifierToDeviceIdentifier(string eSIMUniqueIdentifier) external => NONDET;
 
-    unresolved external in _._ => DISPATCH [] default NONDET;
+    /// The calls on the ownership path, and only those.
+    ///
+    /// The default case runs no code, so a state-changing call left out becomes a no-op that
+    /// reports success. `removeESIMWallet` was missing and the removal wrote nothing, which read as
+    /// a device wallet still holding a wallet it had just let go.
+    ///
+    /// The list stops here rather than covering every call between the three contracts. A complete
+    /// list of twenty-five signatures turned every call inside `execute`, whose target and calldata
+    /// are both arbitrary, into a case split over all of them: the run went from twenty-five minutes
+    /// to a hundred and three and died on a segfault with no report.
+    unresolved external in _._ => DISPATCH [
+        DeviceWallet.registry(),
+        DeviceWallet.isValidESIMWallet(address),
+        DeviceWallet.addESIMWallet(address, bool),
+        DeviceWallet.removeESIMWallet(address, bool),
+        Registry.isDeviceWalletValid(address)
+    ] default NONDET;
 
     function FCL_Elliptic_ZZ.ecAff_isOnCurve(uint256 x, uint256 y) internal returns (bool) => NONDET;
 }
@@ -172,6 +188,11 @@ definition isInitialiser(method f) returns bool =
 /// that reached the protocol at all.
 function requireLinkedScene() {
     require deviceWallet.registry() == currentContract;
+    /// The conf links this field, which binds the address but does not stop the prover summarising
+    /// a call made through it. Without this the eSIM wallet's own device wallet is free to be some
+    /// other address, so `requestTransferOwnership` removes the wallet from a contract no rule
+    /// reads while the scene's device wallet keeps holding it.
+    require eSIMWallet.deviceWallet() == deviceWallet;
     require isDeviceWalletValid(deviceWallet);
     require deviceWallet != eSIMWallet;
     require deviceWallet != currentContract;
