@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.18;
+pragma solidity 0.8.36;
 
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
@@ -62,6 +62,7 @@ contract DeployerBase is Test {
     address eSIMWalletAdmin = address(0x4B20993Bc481177ec7E8f571ceCaE8A9e22C02db);
     address upgradeManager = address(0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2);
     address vault = address(0x78731D3Ca6b7E34aC0F824c42a7cC18A495cabaB);
+    uint256 defaultDataBundlePriceCap = 1 ether;
 
     MockEntryPoint entryPoint;
     IEntryPoint typeCastEntryPoint;
@@ -74,7 +75,7 @@ contract DeployerBase is Test {
     MockDeviceWallet deviceWalletImpl;
     MockESIMWallet eSIMWalletImpl;
 
-    function setUp() public {
+    function setUp() public virtual {
         // 1.a. Deploy Mock Entry Point
         entryPoint = new MockEntryPoint();
         // 1.b. Typecast for further use
@@ -85,35 +86,14 @@ contract DeployerBase is Test {
         p256Verifier = new P256Verifier();
         console.log("p256Verifier: ", address(p256Verifier));
 
-        // 3. Deploy Device Wallet implementation
-        deviceWalletImpl = new MockDeviceWallet(
-            typeCastEntryPoint,
-            p256Verifier
-        );
-        console.log("deviceWalletImpl: ", address(deviceWalletImpl));
-
-        // 4.a. Deploy Device Wallet Factory Implementation (Logic) contract
-        DeviceWalletFactory deviceWalletFactoryImpl = new DeviceWalletFactory();
-        console.log("deviceWalletFactoryImpl: ", address(deviceWalletFactoryImpl));
-        // 4.b. Deploy Device Wallet Factory Proxy contract
-        ERC1967Proxy deviceWalletFactoryProxy = new ERC1967Proxy(
-            address(deviceWalletFactoryImpl),
-            abi.encodeCall(
-                deviceWalletFactoryImpl.initialize,
-                (address(deviceWalletImpl), eSIMWalletAdmin, vault, upgradeManager, typeCastEntryPoint, p256Verifier)
-            )
-        );
-        deviceWalletFactory = DeviceWalletFactory(address(deviceWalletFactoryProxy));
-        console.log("deviceWalletFactory: ", address(deviceWalletFactory));
-
-        // 5. Deploy ESIM Wallet implementation
+        // 3. Deploy ESIM Wallet implementation
         eSIMWalletImpl = new MockESIMWallet();
         console.log("eSIMWalletImpl: ", address(eSIMWalletImpl));
 
-        // 6.a. Deploy ESIM Wallet Factory Implementation (Logic) contract
+        // 4.a. Deploy ESIM Wallet Factory Implementation (Logic) contract
         ESIMWalletFactory eSIMWalletFactoryImpl = new ESIMWalletFactory();
         console.log("eSIMWalletFactoryImpl: ", address(eSIMWalletFactoryImpl));
-        // 6.b. Deploy ESIM Wallet Factory Proxy contract
+        // 4.b. Deploy ESIM Wallet Factory Proxy contract
         ERC1967Proxy eSIMWalletFactoryProxy = new ERC1967Proxy(
             address(eSIMWalletFactoryImpl),
             abi.encodeCall(
@@ -124,6 +104,27 @@ contract DeployerBase is Test {
         eSIMWalletFactory = ESIMWalletFactory(address(eSIMWalletFactoryProxy));
         console.log("eSIMWalletFactory: ", address(eSIMWalletFactory));
 
+        // 5. Deploy Device Wallet implementation
+        deviceWalletImpl = new MockDeviceWallet(
+            typeCastEntryPoint,
+            p256Verifier
+        );
+        console.log("deviceWalletImpl: ", address(deviceWalletImpl));
+
+        // 6.a. Deploy Device Wallet Factory Implementation (Logic) contract
+        DeviceWalletFactory deviceWalletFactoryImpl = new DeviceWalletFactory();
+        console.log("deviceWalletFactoryImpl: ", address(deviceWalletFactoryImpl));
+        // 6.b. Deploy Device Wallet Factory Proxy contract
+        ERC1967Proxy deviceWalletFactoryProxy = new ERC1967Proxy(
+            address(deviceWalletFactoryImpl),
+            abi.encodeCall(
+                deviceWalletFactoryImpl.initialize,
+                (address(deviceWalletImpl), upgradeManager, address(eSIMWalletFactoryProxy), typeCastEntryPoint, p256Verifier)
+            )
+        );
+        deviceWalletFactory = DeviceWalletFactory(address(deviceWalletFactoryProxy));
+        console.log("deviceWalletFactory: ", address(deviceWalletFactory));
+
         // 7.a. Deploy Registry Implementation (Logic) contract
         MockRegistry registryImpl = new MockRegistry();
         console.log("registryImpl: ", address(registryImpl));
@@ -132,7 +133,7 @@ contract DeployerBase is Test {
             address(registryImpl),
             abi.encodeCall(
                 registryImpl.initialize,
-                (eSIMWalletAdmin, vault, upgradeManager, address(deviceWalletFactory), address(eSIMWalletFactory), typeCastEntryPoint, p256Verifier)
+                (eSIMWalletAdmin, vault, upgradeManager, address(deviceWalletFactory), address(eSIMWalletFactory), typeCastEntryPoint, defaultDataBundlePriceCap)
             )
         );
         registry = MockRegistry(address(registryProxy));
@@ -157,11 +158,8 @@ contract DeployerBase is Test {
         registry.addOrUpdateLazyWalletRegistryAddress(address(lazyWalletRegistry));
         vm.stopPrank();
 
-        vm.startPrank(eSIMWalletAdmin);
-        deviceWalletFactory.addRegistryAddress(address(registry));
-        vm.stopPrank();
-
         vm.startPrank(upgradeManager);
+        deviceWalletFactory.addRegistryAddress(address(registry));
         eSIMWalletFactory.addRegistryAddress(address(registry));
         vm.stopPrank();
 

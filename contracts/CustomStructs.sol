@@ -1,6 +1,5 @@
-pragma solidity 0.8.25;
-
 // SPDX-License-Identifier: MIT
+pragma solidity 0.8.36;
 
 /// @notice Data Bundle related details stored in the eSIM wallet
 struct DataBundleDetails {
@@ -14,6 +13,9 @@ struct Wallets {
     address eSIMWallet;
 }
 
+/// @notice One WebAuthn assertion, as the authenticator produced it
+/// @dev Decoded from calldata by `WebAuthn.tryDecodeSignature`, which zeroes the whole struct on a
+///      malformed body rather than reverting. A zeroed struct fails verification.
 struct WebAuthnSignature {
     bytes authenticatorData;    // The WebAuthn authenticator data.
                                 // See https://www.w3.org/TR/webauthn-2/#dom-authenticatorassertionresponse-authenticatordata.
@@ -25,6 +27,7 @@ struct WebAuthnSignature {
     uint256 s;                  // The s value of secp256r1 signature
 }
 
+/// @notice One call an account makes on its owner's behalf
 struct Call {
     address dest;
     uint256 value;

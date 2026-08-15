@@ -1,0 +1,26 @@
+{
+  "contract": "contracts/admin/ProtocolAdmin.sol:ProtocolAdmin",
+  "storage": [
+    {
+      "slot": "0",
+      "offset": 0,
+      "bytes": "32",
+      "label": "_roles",
+      "type": "t_mapping(t_bytes32,t_struct(RoleData)_storage)"
+    },
+    {
+      "slot": "1",
+      "offset": 0,
+      "bytes": "32",
+      "label": "_timestamps",
+      "type": "t_mapping(t_bytes32,t_uint256)"
+    },
+    {
+      "slot": "2",
+      "offset": 0,
+      "bytes": "32",
+      "label": "_minDelay",
+      "type": "t_uint256"
+    }
+  ]
+}

@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [main, test-and-security]
+  pull_request:
+  workflow_dispatch:
+
+# A new push to the same branch makes the run in flight pointless. Cancelling it frees a runner and
+# stops two results racing to report on the same branch.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    strategy:
+      fail-fast: true
+
+    name: Build, test and baselines
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.7.1
+
+      # The signature tests shell out to test/utils/ffi/webauthn-signer.js, which imports ethers
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install node dependencies
+        run: npm ci
+
+      - name: Run Forge build
+        run: |
+          forge --version
+          forge build --via-ir --sizes
+        id: build
+
+      - name: Run Forge tests
+        run: |
+          forge test --via-ir -vvv
+        id: test
+
+      # Fuzz and invariant runs draw a fresh seed each time, and the malleable twin case verifies a
+      # signature generated offchain per run, so all three report a different figure every time.
+      # They are left out of the baseline rather than given a tolerance, so what remains is checked
+      # exactly. test/foundry/gas is out because it keeps its own baseline under snapshots/, one
+      # figure per operation, and sweeping it in here would record the test bodies instead.
+      - name: Check gas snapshot
+        run: |
+          forge snapshot --check --via-ir \
+            --no-match-path "test/foundry/{fuzz-testing,invariant-testing,fork,gas}/*" \
+            --no-match-test "test_verifySignature_rejectsTheMalleableTwinOfARealAssertion"
+        id: snapshot
+
+      # The per-operation baseline. forge test rewrites snapshots/ on every run, so a difference
+      # here means an operation moved rather than a test body moving around it.
+      - name: Check per-operation gas snapshots
+        run: |
+          git diff --exit-code -- snapshots/
+        id: operation-snapshot
+
+      # Four UUPS singletons and every wallet behind two beacons, so a slot that moves reaches
+      # live state. The generator strips ast ids, which renumber on edits that touch no storage,
+      # so a difference here is a real layout change.
+      - name: Check storage layouts
+        run: |
+          python3 scripts/checks/storage-layouts.py
+          git diff --exit-code -- storage-layouts/
+        id: storage-layout

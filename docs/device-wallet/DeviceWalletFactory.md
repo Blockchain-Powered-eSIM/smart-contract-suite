@@ -1,46 +1,24 @@
 # Solidity API
 
-## OnlyAdmin
-
-```solidity
-error OnlyAdmin()
-```
-
 ## DeviceWalletFactory
 
-Contract for deploying a new eSIM wallet
+Deploys device wallets at deterministic addresses and owns the beacon they all point at
 
-### DeviceWalletFactoryDeployed
+_A UUPS singleton with two deployment routes. The admin batch route deploys a wallet, its
+     first eSIM wallet and the registry records together. The EntryPoint route, `createAccount`,
+     writes no external storage at all, so a wallet created that way is registered afterwards
+     through `postCreateAccount`. Both land on the same CREATE2 address for the same inputs._
 
-```solidity
-event DeviceWalletFactoryDeployed(address _admin, address _vault, address _upgradeManager, address _deviceWalletImplementation, address _beacon)
-```
-
-Emitted when factory is deployed and admin is set
-
-### VaultAddressUpdated
+### beacon
 
 ```solidity
-event VaultAddressUpdated(address _updatedVaultAddress)
+contract UpgradeableBeacon beacon
 ```
 
-Emitted when the Vault address is updated
+Upgradeable beacon that points to correct Device wallet implementation
 
-### DeviceWalletDeployed
-
-```solidity
-event DeviceWalletDeployed(address _deviceWalletAddress, address _eSIMWalletAddress, bytes32[2] _deviceWalletOwnerKey)
-```
-
-Emitted when a new device wallet is deployed
-
-### AdminUpdated
-
-```solidity
-event AdminUpdated(address _newAdmin)
-```
-
-Emitted when the admin address is updated
+_Every device wallet is a beacon proxy reading its implementation from here, so one
+     update moves all of them at once and none can decline it._
 
 ### entryPoint
 
@@ -48,43 +26,15 @@ Emitted when the admin address is updated
 contract IEntryPoint entryPoint
 ```
 
+ERC-4337 EntryPoint singleton passed into every device wallet implementation
+
 ### verifier
 
 ```solidity
 contract P256Verifier verifier
 ```
 
-### eSIMWalletAdmin
-
-```solidity
-address eSIMWalletAdmin
-```
-
-Admin address of the eSIM wallet project
-
-### vault
-
-```solidity
-address vault
-```
-
-Vault address that receives payments for eSIM data bundles
-
-### deviceWalletImplementation
-
-```solidity
-contract DeviceWallet deviceWalletImplementation
-```
-
-Implementation (logic) contract address of the device wallet
-
-### beacon
-
-```solidity
-address beacon
-```
-
-Beacon contract address for this contract
+Contract the device wallets verify WebAuthn assertions through
 
 ### registry
 
@@ -94,78 +44,152 @@ contract Registry registry
 
 Registry contract instance
 
-### onlyAdmin
+### eSIMWalletFactory
 
 ```solidity
-modifier onlyAdmin()
+contract ESIMWalletFactory eSIMWalletFactory
 ```
+
+eSIM wallet factory contract instance
+
+### deviceWalletInfoAdded
+
+```solidity
+mapping(address => bool) deviceWalletInfoAdded
+```
+
+Tracks all the device wallets that have their data added into the registry upon deployment
+
+### DeviceWalletFactoryDeployed
+
+```solidity
+event DeviceWalletFactoryDeployed(address _upgradeManager, address _deviceWalletImplementation, address _beacon)
+```
+
+Emitted when factory is deployed
+
+### DeviceWalletDeployed
+
+```solidity
+event DeviceWalletDeployed(address _deviceWalletAddress, address _eSIMWalletAddress, bytes32[2] _deviceWalletOwnerKey)
+```
+
+Emitted when a new device wallet is deployed
+
+### DeviceWalletImplementationUpdated
+
+```solidity
+event DeviceWalletImplementationUpdated(address _newDeviceImplementation)
+```
+
+Emitted when the device wallet implementation is updated
+
+### AddedRegistry
+
+```solidity
+event AddedRegistry(address registry)
+```
+
+Emitted when the registry is added to the factory contract
+
+### onlyAdminOrRegistry
+
+```solidity
+modifier onlyAdminOrRegistry()
+```
+
+Restricts a call to the eSIM wallet admin or the registry
 
 ### constructor
 
 ```solidity
-constructor(contract IEntryPoint _entryPoint, contract P256Verifier _verifier) public
+constructor() public
 ```
 
-### _authorizeUpgrade
-
-```solidity
-function _authorizeUpgrade(address newImplementation) internal
-```
-
-_Owner based upgrades_
+_Locks the implementation contract itself. Without this, anyone can call initialize
+     directly on the implementation, own it, and make it deploy a beacon it controls. The
+     proxy is unaffected either way, but an owned implementation is a trap for any later
+     upgrade that adds an outward call._
 
 ### initialize
 
 ```solidity
-function initialize(address _registryContractAddress, address _eSIMWalletAdmin, address _vault, address _upgradeManager) external
+function initialize(address _deviceWalletImplementation, address _upgradeManager, address _eSIMWalletFactoryAddress, contract IEntryPoint _entryPoint, contract P256Verifier _verifier) external
 ```
+
+Deploys the beacon and hands ownership of this factory to the upgrade manager
+
+_Neither the admin nor the vault is taken here. Both come from the registry, which is
+     added afterwards through addRegistryAddress, so admin functions stay closed until that
+     is done and every payment reads one address._
 
 #### Parameters
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| _registryContractAddress | address |  |
-| _eSIMWalletAdmin | address | Admin address of the eSIM wallet project |
-| _vault | address | Address of the vault that receives payments for the data bundles |
+| _deviceWalletImplementation | address | First device wallet logic contract the beacon points at |
 | _upgradeManager | address | Admin address responsible for upgrading contracts |
+| _eSIMWalletFactoryAddress | address | Factory the device wallets deploy their eSIM wallets through |
+| _entryPoint | contract IEntryPoint | ERC-4337 EntryPoint singleton for this chain |
+| _verifier | contract P256Verifier | Contract the device wallets verify WebAuthn assertions through |
 
-### updateVaultAddress
+### addRegistryAddress
 
 ```solidity
-function updateVaultAddress(address _newVaultAddress) public returns (address)
+function addRegistryAddress(address _registryContractAddress) external returns (address)
 ```
 
-Function to update vault address.
+Allow the owner to add the registry contract after it has been deployed
 
-_Can only be called by the admin_
+_Write-once, and the owner rather than the admin, because the admin is read from the
+     registry and there is no admin to check against until this call lands. Matches
+     ESIMWalletFactory, which has always gated its own version on the owner._
 
 #### Parameters
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| _newVaultAddress | address | New vault address |
+| _registryContractAddress | address | Address of the registry |
 
-### updateAdmin
+#### Return Values
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| [0] | address | The registry address now in force |
+
+### updateDeviceWalletImplementation
 
 ```solidity
-function updateAdmin(address _newAdmin) public returns (address)
+function updateDeviceWalletImplementation(address _newDeviceImpl) external returns (address)
 ```
 
-Function to update admin address
+Function to update the device wallet implementation
+
+_Moves every device wallet in the protocol at once. Treat any change here as a
+     protocol-wide upgrade, since no wallet can decline it._
 
 #### Parameters
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| _newAdmin | address | New admin address |
+| _newDeviceImpl | address | Address of the new device implementation contract |
+
+#### Return Values
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| [0] | address | The implementation now in force |
 
 ### deployDeviceWalletForUsers
 
 ```solidity
-function deployDeviceWalletForUsers(string[] _deviceUniqueIdentifiers, bytes32[2][] _deviceWalletOwnersKey, uint256[] _salts) public returns (address[])
+function deployDeviceWalletForUsers(string[] _deviceUniqueIdentifiers, bytes32[2][] _deviceWalletOwnersKey, uint256[] _salts, uint256[] _depositAmounts) external payable returns (struct Wallets[])
 ```
 
 To deploy multiple device wallets at once
+
+_Each entry deploys a device wallet, its first eSIM wallet and the registry records in
+     one go. ETH left over once the batch has been funded is returned to the caller._
 
 #### Parameters
 
@@ -173,74 +197,214 @@ To deploy multiple device wallets at once
 | ---- | ---- | ----------- |
 | _deviceUniqueIdentifiers | string[] | Array of unique device identifiers for each device wallet |
 | _deviceWalletOwnersKey | bytes32[2][] | Array of P256 public keys of owners of the respective device wallets |
-| _salts | uint256[] |  |
+| _salts | uint256[] | Array of CREATE2 salts, one per device wallet |
+| _depositAmounts | uint256[] | Array of all the ETH to be deposited into each of the device wallets |
 
 #### Return Values
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| [0] | address[] | Array of deployed device wallet address |
+| [0] | struct Wallets[] | Array of deployed device wallet address |
 
-### deployDeviceWalletAsAdmin
+### postCreateAccount
 
 ```solidity
-function deployDeviceWalletAsAdmin(string _deviceUniqueIdentifier, bytes32[2] _deviceWalletOwnerKey, uint256 _salt) public returns (address)
+function postCreateAccount(address _deviceWallet, string _deviceUniqueIdentifier, bytes32[2] _deviceWalletOwnerKey, uint256 _salt) external
 ```
 
-_Allow admin to deploy a device wallet (and an eSIM wallet) for given unique device identifiers_
+Records a wallet the EntryPoint deployed through createAccount
+
+_Not needed on the admin batch route, which writes the registry itself. Callable by the
+     admin directly and by the registry on the lazy deployment path.
+
+     The wallet was not deployed in this call, so nothing binds the arguments to it. The
+     re-derivation does: the key and the identifier are proxy constructor arguments, so an
+     address matching the derivation and holding code was deployed here with exactly those._
 
 #### Parameters
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| _deviceUniqueIdentifier | string | Unique device identifier for the device wallet |
-| _deviceWalletOwnerKey | bytes32[2] | User's P256 public key (owner of the device wallet and respective eSIM wallets) |
-| _salt | uint256 |  |
-
-#### Return Values
-
-| Name | Type | Description |
-| ---- | ---- | ----------- |
-| [0] | address | Deployed device wallet address |
-
-### deployDeviceWallet
-
-```solidity
-function deployDeviceWallet(string _deviceUniqueIdentifier, bytes32[2] _deviceWalletOwnerKey, uint256 _salt) public returns (address)
-```
-
-_Allow admin to deploy a device wallet (and an eSIM wallet) for given unique device identifiers_
-
-#### Parameters
-
-| Name | Type | Description |
-| ---- | ---- | ----------- |
-| _deviceUniqueIdentifier | string | Unique device identifier for the device wallet |
-| _deviceWalletOwnerKey | bytes32[2] | User's P256 public key (owner of the device wallet and respective eSIM wallets) |
-| _salt | uint256 |  |
-
-#### Return Values
-
-| Name | Type | Description |
-| ---- | ---- | ----------- |
-| [0] | address | Deployed device wallet address |
+| _deviceWallet | address | Wallet that was deployed |
+| _deviceUniqueIdentifier | string | Identifier the device is reached by |
+| _deviceWalletOwnerKey | bytes32[2] | X,Y co-ordinates of the P256 key owning the wallet |
+| _salt | uint256 | CREATE2 salt the wallet was deployed with |
 
 ### createAccount
 
 ```solidity
-function createAccount(address _registry, bytes32[2] _deviceWalletOwnerKey, string _deviceUniqueIdentifier, uint256 _salt) public payable returns (contract DeviceWallet ret)
+function createAccount(string _deviceUniqueIdentifier, bytes32[2] _deviceWalletOwnerKey, uint256 _salt) public payable returns (contract DeviceWallet deviceWallet)
 ```
 
-create an account, and return its address.
-returns the address even if the account is already deployed.
-Note that during UserOperation execution, this method is called only if the account is not deployed.
-This method returns an existing account address so that entryPoint.getSenderAddress() would work even after account creation
+Deploys a device wallet, returning the existing one if that address already holds it
 
-### getAddress
+_Called by the EntryPoint during a user operation, so it must not read or write any
+     other contract's storage: that is barred by the ERC-4337 validation rules. The registry
+     is therefore not consulted here and not written, and `postCreateAccount` records the
+     wallet afterwards. Validation the registry would have done happens offchain, through
+     `preCreateAccountValidation`.
+
+     Returning an existing address rather than reverting is what makes
+     `entryPoint.getSenderAddress()` keep working once the account has been created._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _deviceUniqueIdentifier | string | Identifier the device is reached by |
+| _deviceWalletOwnerKey | bytes32[2] | X,Y co-ordinates of the P256 key owning the wallet |
+| _salt | uint256 | CREATE2 salt for the wallet |
+
+#### Return Values
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| deviceWallet | contract DeviceWallet | The wallet at the computed address, new or already deployed |
+
+### renounceOwnership
 
 ```solidity
-function getAddress(address _registry, bytes32[2] _deviceWalletOwnerKey, string _deviceUniqueIdentifier, uint256 _salt) public view returns (address)
+function renounceOwnership() public pure
 ```
 
-calculate the counterfactual address of this account as it would be returned by createAccount()
+Ownership of this contract is never renounced
+
+_The owner is the only caller _authorizeUpgrade accepts, and this contract owns the
+     beacon, so it is also the only route to updateDeviceWalletImplementation. Renouncing
+     would freeze every device wallet on its current logic permanently._
+
+### _authorizeUpgrade
+
+```solidity
+function _authorizeUpgrade(address newImplementation) internal
+```
+
+Restricts UUPS upgrades of this factory to the owner
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| newImplementation | address | Address of the implementation being moved to |
+
+### _deployDeviceWallet
+
+```solidity
+function _deployDeviceWallet(string _deviceUniqueIdentifier, bytes32[2] _deviceWalletOwnerKey, uint256 _salt, uint256 _depositAmount) internal returns (struct Wallets, uint256)
+```
+
+Deploys one device wallet, its first eSIM wallet and the binding between them
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _deviceUniqueIdentifier | string | Unique device identifier for the device wallet |
+| _deviceWalletOwnerKey | bytes32[2] | User's P256 public key (owner of the device wallet and respective eSIM wallets) |
+| _salt | uint256 | CREATE2 salt for both wallets |
+| _depositAmount | uint256 | Amount of ETH to be deposited into the device wallet |
+
+#### Return Values
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| [0] | struct Wallets | Deployed device wallet address |
+| [1] | uint256 | ETH actually forwarded to the wallet, zero if an existing wallet was returned |
+
+### _createAccountForUser
+
+```solidity
+function _createAccountForUser(string _deviceUniqueIdentifier, bytes32[2] _deviceWalletOwnerKey, uint256 _salt, uint256 _depositAmount) internal returns (contract DeviceWallet deviceWallet, uint256 spentETH)
+```
+
+Deploys a device wallet and writes its registry records, or adopts one that already exists
+
+_Returns the ETH actually forwarded to the wallet, which is zero whenever an existing
+     wallet is returned instead of a new one being deployed. Callers holding a budget must
+     decrement by this value, not by the requested deposit._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _deviceUniqueIdentifier | string | Identifier the device is reached by |
+| _deviceWalletOwnerKey | bytes32[2] | X,Y co-ordinates of the P256 key owning the wallet |
+| _salt | uint256 | CREATE2 salt for the wallet |
+| _depositAmount | uint256 | ETH the caller asked to be deposited |
+
+#### Return Values
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| deviceWallet | contract DeviceWallet | The wallet at the computed address |
+| spentETH | uint256 | ETH actually forwarded to it |
+
+### eSIMWalletAdmin
+
+```solidity
+function eSIMWalletAdmin() public view returns (address)
+```
+
+Admin address of the eSIM wallet project
+
+_Held by the registry, which is where it is rotated, so this contract cannot fall
+     behind the rest of the protocol after a rotation. Answers address(0) before the
+     registry is wired up, which no caller can match, so admin functions stay closed until
+     then rather than reverting on a call into address(0)._
+
+### preCreateAccountValidation
+
+```solidity
+function preCreateAccountValidation(string _deviceUniqueIdentifier, bytes32[2] _deviceWalletOwnerKey) public view returns (address wallet)
+```
+
+Checks that all the input params needed for deploying a fresh device wallet are valid
+
+_This is needed when deploying the device wallet via the EntryPoint using userops_
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _deviceUniqueIdentifier | string | Unique device identifier for the device wallet |
+| _deviceWalletOwnerKey | bytes32[2] | User's P256 public key (owner of the device wallet and respective eSIM wallets) |
+
+#### Return Values
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| wallet | address | address(0) if valid. device wallet address for any existing wallet |
+
+### getCounterFactualAddress
+
+```solidity
+function getCounterFactualAddress(bytes32[2] _deviceWalletOwnerKey, string _deviceUniqueIdentifier, uint256 _salt) public view returns (address)
+```
+
+The address createAccount would deploy to for these inputs
+
+_The owner key and the device identifier are part of the proxy's constructor arguments,
+     so they are folded into the address alongside the salt. Changing any of them moves it._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _deviceWalletOwnerKey | bytes32[2] | X,Y co-ordinates of the P256 key owning the wallet |
+| _deviceUniqueIdentifier | string | Identifier the device is reached by |
+| _salt | uint256 | CREATE2 salt |
+
+#### Return Values
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| [0] | address | The predicted device wallet address |
+
+### getCurrentDeviceWalletImplementation
+
+```solidity
+function getCurrentDeviceWalletImplementation() public view returns (address)
+```
+
+The device wallet logic contract every device wallet currently runs
 
