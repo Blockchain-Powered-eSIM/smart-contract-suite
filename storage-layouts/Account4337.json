@@ -1,0 +1,12 @@
+{
+  "contract": "contracts/aa-helper/Account4337.sol:Account4337",
+  "storage": [
+    {
+      "slot": "0",
+      "offset": 0,
+      "bytes": "64",
+      "label": "owner",
+      "type": "t_array(t_bytes32)2_storage"
+    }
+  ]
+}

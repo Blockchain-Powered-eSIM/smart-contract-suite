@@ -1,5 +1,6 @@
 {
   "name": "smart-contract-suite",
+  "private": true,
   "scripts": {
     "forge-build": "forge build --via-ir --sizes",
     "test": "forge test --via-ir -v",
@@ -7,20 +8,18 @@
     "coverage": "forge coverage",
     "coverage-with-report": "forge coverage --report lcov",
     "html-coverage-report": "forge coverage --report lcov && genhtml lcov.info -o report",
-    "generate-doc": "hardhat docgen"
+    "generate-doc": "hardhat docgen",
+    "bytecode-parity": "hardhat compile && forge build --via-ir"
   },
   "dependencies": {
-    "dotenv": "^16.4.5",
-    "lcov-filter": "^0.1.1",
-    "userop": "^0.4.0-beta.5"
+    "dotenv": "17.4.2",
+    "ethers": "6.17.0"
   },
   "devDependencies": {
-    "@nomicfoundation/hardhat-ethers": "^3.0.8",
-    "@nomicfoundation/hardhat-foundry": "^1.1.3",
-    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
-    "@openzeppelin/hardhat-upgrades": "^3.9.0",
-    "ethers": "^6.13.5",
-    "hardhat": "^2.22.19",
-    "solidity-docgen": "^0.6.0-beta.36"
+    "@nomicfoundation/hardhat-ethers": "3.1.3",
+    "@nomicfoundation/hardhat-foundry": "1.2.1",
+    "@openzeppelin/hardhat-upgrades": "3.9.1",
+    "hardhat": "2.29.0",
+    "solidity-docgen": "0.6.0-beta.36"
   }
 }

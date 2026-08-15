@@ -8,6 +8,44 @@ A library for verifying WebAuthn Authentication Assertions, built off the work
 _Attempts to use the RIP-7212 precompile for signature verification.
      If precompile verification fails, it falls back to FreshCryptoLib._
 
+### tryDecodeSignature
+
+```solidity
+function tryDecodeSignature(bytes encodedSignature) internal pure returns (struct WebAuthnSignature decoded)
+```
+
+Decodes an encoded `WebAuthnSignature` without reverting on a malformed encoding.
+
+_The decoder solc generates reverts when the bytes are not a well formed encoding, and a
+     revert is not a rejection anywhere this is reached from. Inside ERC-4337 validation it
+     fails the whole bundle rather than the one operation, and behind `isValidSignature` it
+     reaches an integrating contract as an error rather than as an invalid signature.
+     Everything below this point in this library was already written to return false instead
+     of reverting; the decode one level above it was not, so anything too malformed to decode
+     never reached the hardening.
+
+     An encoding failing any bound leaves `decoded` as solc allocated it, with both dynamic
+     members pointing at the zero slot. `verifySignature` then returns false, because an
+     empty `clientDataJSON` cannot contain the index it is handed.
+
+     Assembly, and a copy of solady's `WebAuthn.tryDecodeAuth` rather than a fresh
+     implementation: `WebAuthnAuth` and `WebAuthnSignature` have identical layouts, and
+     rewriting an audited ABI bounds check by hand only adds somewhere for a mistake to
+     live. Memory-safe: every read is inside `encodedSignature`, and the only writes are to
+     the six words solc already reserved for the return value._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| encodedSignature | bytes | `abi.encode` of a `WebAuthnSignature`, as supplied by the caller. |
+
+#### Return Values
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| decoded | struct WebAuthnSignature | The signature, or a zeroed struct when the encoding is malformed. |
+
 ### verifySignature
 
 ```solidity

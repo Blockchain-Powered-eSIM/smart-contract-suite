@@ -4,6 +4,14 @@ artifacts/
 cache/
 out/
 forge-cache/
+
+# Written by every `forge script --broadcast` run. The deployment record kept on purpose is
+# deployments/address.json, which the scripts write and later scripts read.
+broadcast/
 lcov.info
 .env
-lib/
+.DS_Store
+
+# Editor settings are per developer. The remappings inside are generated from remappings.txt
+# anyway, so a stale copy here is worse than no copy.
+.vscode/

@@ -1,17 +1,51 @@
 [profile.default]
 src = 'contracts'
 out = 'out'
-solc = "0.8.25"
-evm_version = "paris"
-fs_permissions = [{ access = "read", path = "out" }]
+solc = "0.8.36"
+evm_version = "osaka"
+fs_permissions = [
+    { access = "read", path = "out" },
+    # The deployment scripts read the record to find what they are acting on, and write it back.
+    # Scoped to the one directory: a script that can write anywhere can rewrite the tests that
+    # would have caught it.
+    { access = "read-write", path = "deployments" },
+]
 libs = ['node_modules', 'lib', 'test/utils']
 test = 'test/foundry'
+script = 'scripts'
 cache_path  = 'forge-cache'
+via_ir = true
 optimizer = true
 optimizer-runs = 10_000_000
 ffi = true
 ast = true
 build_info = true
 extra_output = ["storageLayout"]
+
+# The metadata hash covers source unit names, which differ between forge's remappings and
+# hardhat's import paths. Dropping it makes both toolchains emit byte-identical bytecode.
+# The CBOR trailer is kept, so the compiler version is still recorded onchain.
+bytecode_hash = "none"
+
+# Every campaign runs at these settings. fail_on_revert is false because the protocol is covered in
+# access control modifiers, so a handler call from the wrong sender reverting is the expected case
+# rather than a failure. HandlerDistribution.t.sol is what stops that hiding a starved entry point.
+#
+# These have to be the only place the settings are written. An inline
+# `/// forge-config: default.invariant.runs = N` comment wins over the active profile whatever that
+# profile is named, so one left on a test would pin it here and the campaign profile below would
+# silently not reach it. Measured: with the comments present, a profile asking for 3 runs still ran
+# 256.
+[profile.default.invariant]
+runs = 256
+depth = 500
+fail_on_revert = false
+
+# The long campaign, run before an audit or a release rather than on every change.
+# FOUNDRY_PROFILE=campaign forge test --via-ir --match-path "test/foundry/invariant-testing/*"
+[profile.campaign.invariant]
+runs = 5000
+depth = 100
+fail_on_revert = false
 
 # See more config options https://book.getfoundry.sh/reference/config.html

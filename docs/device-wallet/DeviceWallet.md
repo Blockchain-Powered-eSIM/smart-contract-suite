@@ -1,82 +1,13 @@
 # Solidity API
 
-## OnlyRegistryOrDeviceWalletFactoryOrOwner
-
-```solidity
-error OnlyRegistryOrDeviceWalletFactoryOrOwner()
-```
-
-## OnlyDeviceWalletOrOwner
-
-```solidity
-error OnlyDeviceWalletOrOwner()
-```
-
-## OnlyESIMWalletAdminOrLazyWallet
-
-```solidity
-error OnlyESIMWalletAdminOrLazyWallet()
-```
-
-## OnlyESIMWalletAdminOrDeviceWalletOwner
-
-```solidity
-error OnlyESIMWalletAdminOrDeviceWalletOwner()
-```
-
-## OnlyESIMWalletAdminOrDeviceWalletFactory
-
-```solidity
-error OnlyESIMWalletAdminOrDeviceWalletFactory()
-```
-
-## OnlyAssociatedESIMWallets
-
-```solidity
-error OnlyAssociatedESIMWallets()
-```
-
-## FailedToTransfer
-
-```solidity
-error FailedToTransfer()
-```
-
 ## DeviceWallet
 
-### ETHPaidForDataBundle
+A user's device: an ERC-4337 account that owns the eSIM wallets bought for that device
 
-```solidity
-event ETHPaidForDataBundle(address _vault, address _eSIMWallet, uint256 _amount)
-```
-
-Emitted when the contract pays ETH for data bundle
-
-### ETHAccessUpdated
-
-```solidity
-event ETHAccessUpdated(address _eSIMWalletAddress, bool _hasAccessToETH)
-```
-
-Emitted when ower updates ETH access to a particular eSIM wallet
-
-### ETHSent
-
-```solidity
-event ETHSent(address _eSIMWalletAddress, uint256 _amount)
-```
-
-Emitted when ETH is sent out from the contract
-
-_mostly when an eSIM wallet pulls ETH from this contract_
-
-### ESIMWalletDeployed
-
-```solidity
-event ESIMWalletDeployed(address _eSIMWalletAddress, bool _hasAccessToETH)
-```
-
-Emitted when eSIM wallet is deployed
+_A beacon proxy deployed by `DeviceWalletFactory`, owned by a P256 key the user holds. It
+     funds its eSIM wallets, decides which of them may pull ETH, and is the only party that can
+     move one to another device. Its own owner key rotates through `transferOwnership`, which
+     also tells the registry so the two records cannot drift apart._
 
 ### registry
 
@@ -86,6 +17,14 @@ contract Registry registry
 
 Registry contract instance
 
+### eSIMWalletFactory
+
+```solidity
+contract ESIMWalletFactory eSIMWalletFactory
+```
+
+eSIM wallet factory address
+
 ### deviceUniqueIdentifier
 
 ```solidity
@@ -93,14 +32,6 @@ string deviceUniqueIdentifier
 ```
 
 String identifier to uniquely identify user's device
-
-### uniqueIdentifierToESIMWallet
-
-```solidity
-mapping(string => address) uniqueIdentifierToESIMWallet
-```
-
-Mapping from eSIMUniqueIdentifier to the respective eSIM wallet address
 
 ### isValidESIMWallet
 
@@ -116,25 +47,82 @@ Set to true if the eSIM wallet belongs to this device wallet
 mapping(address => bool) canPullETH
 ```
 
-Mapping that tracks if an associated eSIM wallet can pull ETH or not
+Tracks if an associated eSIM wallet can pull ETH or not
+
+### ETHAccessUpdated
+
+```solidity
+event ETHAccessUpdated(address _eSIMWalletAddress, bool _hasAccessToETH)
+```
+
+Emitted when owner updates ETH access to a particular eSIM wallet
+
+### ETHSent
+
+```solidity
+event ETHSent(address _eSIMWalletAddress, uint256 _amount)
+```
+
+Emitted when ETH is sent out from the contract
+
+_mostly when an eSIM wallet pulls ETH from this contract_
+
+### ESIMWalletAdded
+
+```solidity
+event ESIMWalletAdded(address _eSIMWalletAddress, bool _hasAccessToETH, address _caller)
+```
+
+Emitted when eSIM wallet is added to this Device Wallet
+
+### ESIMWalletRemoved
+
+```solidity
+event ESIMWalletRemoved(address _eSIMWalletAddress, address _deviceWalletAddress, address _caller)
+```
+
+Emitted when the eSIM wallet is removed from this Device Wallet
+
+### NoETHToCallback
+
+```solidity
+event NoETHToCallback()
+```
+
+Emitted when the eSIM wallet being removed has no ETH to call back
+
+### ETHCalledBack
+
+```solidity
+event ETHCalledBack(uint256 _amount)
+```
+
+Emitted when the eSIM being removed sends back ETH to this device wallet
 
 ### onlyRegistryOrDeviceWalletFactoryOrOwner
 
 ```solidity
-modifier onlyRegistryOrDeviceWalletFactoryOrOwner()
+modifier onlyRegistryOrDeviceWalletFactoryOrOwner(address _eSIMWalletAddress)
 ```
 
-### onlyDeviceWalletFactoryOrOwner
+Restricts a call to the registry, the device wallet factory, this wallet itself, or
+        the named eSIM wallet re-adding itself
+
+### onlySelfOrESIMWalletBeingRemoved
 
 ```solidity
-modifier onlyDeviceWalletFactoryOrOwner()
+modifier onlySelfOrESIMWalletBeingRemoved(address _eSIMWalletAddress)
 ```
 
-### onlyESIMWalletAdminOrLazyWallet
+Restricts a call to this wallet itself or to the eSIM wallet being removed
+
+### onlyESIMWalletAdminOrRegistry
 
 ```solidity
-modifier onlyESIMWalletAdminOrLazyWallet()
+modifier onlyESIMWalletAdminOrRegistry()
 ```
+
+Restricts a call to the registry or the eSIM wallet admin
 
 ### onlyAssociatedESIMWallets
 
@@ -142,19 +130,51 @@ modifier onlyESIMWalletAdminOrLazyWallet()
 modifier onlyAssociatedESIMWallets()
 ```
 
+Restricts a call to an eSIM wallet this device wallet holds
+
+### onlyESIMWalletAdmin
+
+```solidity
+modifier onlyESIMWalletAdmin()
+```
+
+Restricts a call to the eSIM wallet admin
+
+_Read from the registry on every call, so a rotation there takes effect immediately._
+
 ### constructor
 
 ```solidity
 constructor(contract IEntryPoint anEntryPoint, contract P256Verifier _verifier) public
 ```
 
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| anEntryPoint | contract IEntryPoint | EntryPoint singleton this wallet validates against |
+| _verifier | contract P256Verifier | Contract used to verify WebAuthn assertions |
+
 ### init
 
 ```solidity
-function init(address _registry, bytes32[2] _deviceWalletOwnerKey, string _deviceUniqueIdentifier) external
+function init(address _registry, bytes32[2] _deviceWalletOwnerKey, string _deviceUniqueIdentifier, address _eSIMWalletFactory) external
 ```
 
-Initialises the device wallet and deploys eSIM wallets for any already existing eSIMs
+Wires the wallet to the registry and the factory, and sets its owner key
+
+_Called as the beacon proxy's constructor argument, so it always runs in the same
+     transaction as the deployment. `Account4337.initialize` is internal, and this is the
+     only path to it._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _registry | address | Registry contract this wallet reads the admin, vault and pause flag from |
+| _deviceWalletOwnerKey | bytes32[2] | X,Y co-ordinates of the P256 key owning this wallet |
+| _deviceUniqueIdentifier | string | Identifier the device is reached by |
+| _eSIMWalletFactory | address | Factory this wallet deploys its eSIM wallets through |
 
 ### deployESIMWallet
 
@@ -162,54 +182,25 @@ Initialises the device wallet and deploys eSIM wallets for any already existing 
 function deployESIMWallet(bool _hasAccessToETH, uint256 _salt) external returns (address)
 ```
 
-Allow device wallet owner to deploy new eSIM wallet
+Deploys an eSIM wallet for this device and binds it
+
+_The new wallet has no eSIM identifier yet. That arrives through
+     `setESIMUniqueIdentifierForAnESIMWallet` once the eSIM itself has been created.
+
+     ETH access is granted only afterwards, by the owner, with `toggleAccessToETH`._
 
 #### Parameters
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| _hasAccessToETH | bool | Set to true if the eSIM wallet is allowed to pull ETH from this wallet. |
-| _salt | uint256 |  |
+| _hasAccessToETH | bool | Must be false |
+| _salt | uint256 | CREATE2 salt for the new eSIM wallet |
 
 #### Return Values
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
 | [0] | address | eSIM wallet address |
-
-### setESIMUniqueIdentifierForAnESIMWallet
-
-```solidity
-function setESIMUniqueIdentifierForAnESIMWallet(address _eSIMWalletAddress, string _eSIMUniqueIdentifier) public returns (string)
-```
-
-Allow wallet owner or admin to set unique identifier for their eSIM wallet
-
-_Allow lazy wallet registry to call the function for fiat users who later decided to get a smart wallet_
-
-#### Parameters
-
-| Name | Type | Description |
-| ---- | ---- | ----------- |
-| _eSIMWalletAddress | address | Address of the eSIM wallet smart contract |
-| _eSIMUniqueIdentifier | string | String unique identifier for the eSIM wallet |
-
-### payETHForDataBundles
-
-```solidity
-function payETHForDataBundles(uint256 _amount) external returns (uint256)
-```
-
-Allow the eSIM wallets associated with this device wallet to pay ETH for data bundles
-
-_Instead of pulling the ETH into the eSIM wallet and then sending to the vault,
-     the eSIM wallet can directly request the device wallet to pay ETH for the data bundles_
-
-#### Parameters
-
-| Name | Type | Description |
-| ---- | ---- | ----------- |
-| _amount | uint256 | Amount of ETH to pull |
 
 ### pullETH
 
@@ -219,29 +210,90 @@ function pullETH(uint256 _amount) external returns (uint256)
 
 Allow the eSIM wallets associated with this device wallet to pull ETH (for data bundles)
 
+_Refused while the protocol is paused, and refused for a wallet whose ETH access the
+     owner has revoked._
+
 #### Parameters
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
 | _amount | uint256 | Amount of ETH to pull |
 
-### getVaultAddress
+#### Return Values
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| [0] | uint256 | The amount pulled |
+
+### transferOwnership
 
 ```solidity
-function getVaultAddress() public view returns (address)
+function transferOwnership(bytes32[2] newOwner) public returns (bytes32[2])
 ```
 
-Fetches the vault address (that receives payment for data bundles) from the device wallet factory
+Replaces the P256 key that owns this account
 
-_Mostly used by the associated eSIM wallets for reference_
+_The registry holds its own record of which key owns this wallet, and the deploy paths
+     keep one key to one wallet. Rotating without telling it leaves the retired key named
+     as the owner and leaves the key taking over unregistered, free for a second wallet to
+     claim. `super` runs after the key check because it carries the `onlySelf` guard and
+     because the registry call is an external one, so the local write has to land before it.
+
+     A key that cannot verify a signature bricks the wallet for good: this function is
+     reachable only through `execute`, which needs a signature, so there is no rotating
+     back and no reaching the balance. The deploy paths reject such a key and this path
+     writes the same storage, so it has to reject it too._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| newOwner | bytes32[2] | X,Y co-ordinates of the P256 key taking over |
+
+#### Return Values
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| [0] | bytes32[2] | The owner key now in force |
+
+### setESIMUniqueIdentifierForAnESIMWallet
+
+```solidity
+function setESIMUniqueIdentifierForAnESIMWallet(address _eSIMWalletAddress, string _eSIMUniqueIdentifier) public returns (string)
+```
+
+Allow wallet owner or admin to set unique identifier for their eSIM wallet
+
+_The registry is also a caller, which is how a wallet deployed on the lazy path gets its
+     identifier in the same transaction as its deployment.
+
+     The claim goes in before the wallet is written, and the order matters: the wallet's own
+     slot is set once and for good, so a claim that failed afterwards would leave a wallet
+     holding an identifier the registry does not record._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _eSIMWalletAddress | address | Address of the eSIM wallet smart contract |
+| _eSIMUniqueIdentifier | string | String unique identifier for the eSIM wallet |
+
+#### Return Values
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| [0] | string | The identifier now written on the eSIM wallet |
 
 ### toggleAccessToETH
 
 ```solidity
-function toggleAccessToETH(address _eSIMWalletAddress, bool _hasAccessToETH) external
+function toggleAccessToETH(address _eSIMWalletAddress, bool _hasAccessToETH) public
 ```
 
 Allow owner to revoke or give access to any associated eSIM wallet for pulling ETH
+
+_The only way ETH access is ever granted. Binding a wallet never carries it, so a
+     revocation stands until the owner signs a grant._
 
 #### Parameters
 
@@ -250,33 +302,89 @@ Allow owner to revoke or give access to any associated eSIM wallet for pulling E
 | _eSIMWalletAddress | address | Address of the eSIM wallet to toggle ETH access for |
 | _hasAccessToETH | bool | Set to true to give access, false to revoke access |
 
+### addESIMWallet
+
+```solidity
+function addESIMWallet(address _eSIMWalletAddress, bool _hasAccessToETH) public
+```
+
+Allow the device wallet factory or the wallet owner to add new eSIM wallet to this device wallet
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _eSIMWalletAddress | address | Address of the eSIM wallet to be added |
+| _hasAccessToETH | bool | Must be false. ETH access is granted only through `toggleAccessToETH` |
+
+### removeESIMWallet
+
+```solidity
+function removeESIMWallet(address _eSIMWalletAddress, bool _callBackETH) public
+```
+
+Allow the device wallet owner or the eSIM wallet to remove any eSIM wallet bound with this device wallet
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _eSIMWalletAddress | address | Address of the eSIM wallet to be removed |
+| _callBackETH | bool | `true` if any remaining ETH needs to be called back from the ESIM wallet to this device wallet, `false` otherwise |
+
+### _addESIMWallet
+
+```solidity
+function _addESIMWallet(address _eSIMWalletAddress, bool _hasAccessToETH) internal
+```
+
+Binds an eSIM wallet to this device wallet and records it with the registry
+
+_Refuses a wallet this device wallet does not already own, so binding cannot run ahead
+     of the ownership handover.
+
+     A bind never carries ETH access. `toggleAccessToETH` is `onlySelf` and the only writer
+     of a `true`, so no bind can undo the owner's revocation. Asking for access here reverts
+     rather than being downgraded in silence._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _eSIMWalletAddress | address | Address of the eSIM wallet to bind |
+| _hasAccessToETH | bool | Must be false |
+
 ### _transferETH
 
 ```solidity
 function _transferETH(address _recipient, uint256 _amount) internal virtual
 ```
 
-### updateESIMInfo
+Sends ETH out of this wallet, reverting if the call fails
+
+_A zero amount is a no-op rather than a revert._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _recipient | address | Address receiving the ETH |
+| _amount | uint256 | Amount in wei |
+
+### getVaultAddress
 
 ```solidity
-function updateESIMInfo(address _eSIMWalletAddress, bool _isESIMWalletValid, bool _hasAccessToETH) external
+function getVaultAddress() public view returns (address)
 ```
 
-### _updateESIMInfo
+Fetches the vault address that receives payment for data bundles
 
-```solidity
-function _updateESIMInfo(address _eSIMWalletAddress, bool _isESIMWalletValid, bool _hasAccessToETH) internal
-```
+_Read through to the registry rather than cached, so a vault change reaches every
+     wallet at once. The associated eSIM wallets call this before paying._
 
-### updateDeviceWalletAssociatedWithESIMWallet
+#### Return Values
 
-```solidity
-function updateDeviceWalletAssociatedWithESIMWallet(address _eSIMWalletAddress, address _deviceWalletAddress) external
-```
-
-### _updateDeviceWalletAssociatedWithESIMWallet
-
-```solidity
-function _updateDeviceWalletAssociatedWithESIMWallet(address _eSIMWalletAddress, address _deviceWalletAddress) internal
-```
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| [0] | address | The vault address |
 

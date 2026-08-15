@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.18;
+pragma solidity 0.8.36;
 
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
@@ -13,6 +13,7 @@ contract Deployer is DeployerBase {
         assertEq(registry.owner(), upgradeManager);
         assertEq(address(registry.entryPoint()), address(entryPoint));
         assertEq(registry.eSIMWalletAdmin(), eSIMWalletAdmin);
+        assertEq(registry.newRequestedAdmin(), address(0));
         assertEq(registry.vault(), vault);
         assertEq(registry.upgradeManager(), upgradeManager);
         assertEq(registry.lazyWalletRegistry(), address(lazyWalletRegistry));
@@ -73,9 +74,7 @@ contract Deployer is DeployerBase {
         assertEq(address(deviceWalletFactory.entryPoint()), address(entryPoint));
         assertEq(address(deviceWalletFactory.verifier()), address(p256Verifier));
         assertEq(address(deviceWalletFactory.eSIMWalletAdmin()), eSIMWalletAdmin);
-        assertEq(address(deviceWalletFactory.vault()), vault);
         assertEq(address(deviceWalletFactory.registry()), address(registry));
-        assertEq(address(deviceWalletFactory.newRequestedAdmin()), address(0));
         assertNotEq(address(deviceWalletFactory.beacon()), address(0));
 
         assertEq(deviceWalletFactory.getCurrentDeviceWalletImplementation(), address(deviceWalletImpl));
