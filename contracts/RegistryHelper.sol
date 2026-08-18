@@ -12,6 +12,7 @@ import {DeviceWalletFactory} from "./device-wallet/DeviceWalletFactory.sol";
 import {ESIMWalletFactory} from "./esim-wallet/ESIMWalletFactory.sol";
 import {DeviceWallet} from "./device-wallet/DeviceWallet.sol";
 import {ESIMWallet} from "./esim-wallet/ESIMWallet.sol";
+import {LazyWalletRegistry} from "./LazyWalletRegistry.sol";
 
 /// @notice Storage and the lazy deployment paths that `Registry` inherits
 /// @dev Split out so `Registry` holds the admin and pause logic while the mappings and the calls
@@ -233,7 +234,7 @@ contract RegistryHelper {
         // 1st eSIM wallet will already be deployed by the deployDeviceWalletForUsers function
         eSIMWallets[i] = firstESIMWallet;
         // deployDeviceWalletForUsers doesn't set the eSIM identifer, hence updating it here for the 1st eSIM wallet
-        DeviceWallet(payable(deviceWallet)).setESIMUniqueIdentifierForAnESIMWallet(firstESIMWallet, _eSIMUniqueIdentifiers[i]);
+        _assignESIMIdentifier(firstESIMWallet, _eSIMUniqueIdentifiers[i]);
         // Increase the index to deploy and set the identifier for the remaining _eSIMUniqueIdentifiers
         i++;
 
@@ -339,11 +340,95 @@ contract RegistryHelper {
         // only the owner grants that, with a signed `toggleAccessToETH`.
         DeviceWallet(payable(_deviceWallet)).addESIMWallet(eSIMWallet, false);
 
-        DeviceWallet(payable(_deviceWallet)).setESIMUniqueIdentifierForAnESIMWallet(eSIMWallet, _eSIMUniqueIdentifier);
+        _assignESIMIdentifier(eSIMWallet, _eSIMUniqueIdentifier);
 
         emit LazyWalletDeployed(_deviceWallet, _deviceUniqueIdentifier, eSIMWallet, _eSIMUniqueIdentifier);
 
         return eSIMWallet;
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // eSIM identifiers
+    // ---------------------------------------------------------------------------------------------
+
+    /// @notice Records an eSIM identifier against a wallet and writes it onto the wallet
+    /// @dev Internal on purpose. Only the admin knows which identifier a wallet is owed, and a
+    ///      device wallet can call anything through `execute`, so an external claim let any owner
+    ///      take a string bought by someone else. `Registry.assignESIMIdentifier` is the way in.
+    ///
+    ///      Both slots are written here so they cannot disagree. Claim first: the wallet's slot is
+    ///      set once, so a claim failing after it would strand an identifier the registry never saw.
+    /// @param _eSIMWalletAddress Wallet receiving the identifier
+    /// @param _eSIMUniqueIdentifier Identifier being assigned
+    /// @return The identifier now on the wallet
+    function _assignESIMIdentifier(
+        address _eSIMWalletAddress,
+        string calldata _eSIMUniqueIdentifier
+    ) internal returns (string memory) {
+        if(isESIMWalletValid[_eSIMWalletAddress] == address(0)) {
+            revert Errors.UnknownESIMWallet(_eSIMWalletAddress);
+        }
+
+        ESIMWallet eSIMWallet = ESIMWallet(payable(_eSIMWalletAddress));
+
+        // Read off the wallet rather than passed in, so no caller names a device it does not own.
+        // Needed because a reservation is checked against the device it was made for.
+        address deviceWallet = address(eSIMWallet.deviceWallet());
+        if(!isDeviceWalletValid[deviceWallet]) revert Errors.NotADeviceWallet(deviceWallet);
+
+        _claimESIMIdentifier(_eSIMUniqueIdentifier, _eSIMWalletAddress, deviceWallet);
+
+        eSIMWallet.setESIMUniqueIdentifier(_eSIMUniqueIdentifier);
+
+        return eSIMWallet.eSIMUniqueIdentifier();
+    }
+
+    /// @notice Records the wallet holding an eSIM identifier, refusing a second holder
+    /// @dev A reservation is compared against the device wallet's own identifier rather than
+    ///      refused outright, since the lazy route claims against its own reservation.
+    /// @param _eSIMUniqueIdentifier Identifier being claimed
+    /// @param _eSIMWalletAddress Wallet claiming it
+    /// @param _deviceWallet Device wallet holding that eSIM wallet
+    function _claimESIMIdentifier(
+        string calldata _eSIMUniqueIdentifier,
+        address _eSIMWalletAddress,
+        address _deviceWallet
+    ) internal {
+        if(bytes(_eSIMUniqueIdentifier).length == 0) revert Errors.EmptyESIMIdentifier();
+
+        bytes32 identifierHash = keccak256(bytes(_eSIMUniqueIdentifier));
+        address holder = claimedESIMIdentifiers[identifierHash];
+        if(holder != address(0)) {
+            revert Errors.ESIMIdentifierAlreadyClaimed(_eSIMUniqueIdentifier, holder);
+        }
+
+        _requireESIMIdentifierNotReservedElsewhere(_eSIMUniqueIdentifier, _deviceWallet);
+
+        claimedESIMIdentifiers[identifierHash] = _eSIMWalletAddress;
+
+        emit ESIMIdentifierClaimed(identifierHash, _eSIMUniqueIdentifier, _eSIMWalletAddress);
+    }
+
+    /// @notice Refuses an identifier a fiat user reserved against a different device
+    /// @dev The device identifier is read only once the string turns out to be reserved, so an
+    ///      ordinary claim pays for one call returning empty. Passes while `lazyWalletRegistry` is
+    ///      unset, since nothing can be reserved before that contract exists.
+    /// @param _eSIMUniqueIdentifier Identifier about to be claimed
+    /// @param _deviceWallet Device wallet the identifier is being claimed under
+    function _requireESIMIdentifierNotReservedElsewhere(
+        string calldata _eSIMUniqueIdentifier,
+        address _deviceWallet
+    ) private view {
+        if(lazyWalletRegistry == address(0)) return;
+
+        string memory reservedFor =
+            LazyWalletRegistry(lazyWalletRegistry).eSIMIdentifierToDeviceIdentifier(_eSIMUniqueIdentifier);
+        if(bytes(reservedFor).length == 0) return;
+
+        string memory claimant = DeviceWallet(payable(_deviceWallet)).deviceUniqueIdentifier();
+        if(keccak256(bytes(reservedFor)) != keccak256(bytes(claimant))) {
+            revert Errors.ESIMIdentifierReservedForLazyWallet(_eSIMUniqueIdentifier);
+        }
     }
 
     // ---------------------------------------------------------------------------------------------

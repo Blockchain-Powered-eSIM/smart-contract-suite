@@ -123,7 +123,7 @@ contract AdminHandler is HandlerBase {
     /// @param seed Drives the identifier
     /// @param contest Whether to draw the identifier from the pool the lazy route also uses
     function setESIMIdentifier(uint256 eSIMIndex, uint256 seed, bool contest) external counted {
-        (address wallet, address device) = _pickUnnamedESIMWallet(eSIMIndex);
+        (address wallet,) = _pickUnnamedESIMWallet(eSIMIndex);
         if (wallet == address(0)) {
             state.recordRevert("setESIMIdentifier");
             return;
@@ -134,7 +134,7 @@ contract AdminHandler is HandlerBase {
             : _ordinaryESIMIdentifier(seed);
 
         vm.prank(_currentAdmin());
-        try DeviceWallet(payable(device)).setESIMUniqueIdentifierForAnESIMWallet(wallet, identifier) returns (
+        try registry.assignESIMIdentifier(wallet, identifier) returns (
             string memory
         ) {
             state.recordCall("setESIMIdentifier");

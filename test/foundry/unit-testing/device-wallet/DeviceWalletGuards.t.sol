@@ -105,15 +105,16 @@ contract DeviceWalletGuardsTest is DeployerBase {
         wallet.deployESIMWallet(false, 8002);
     }
 
-    /// @notice An eSIM identifier cannot be written onto a wallet this device does not hold
-    /// @dev The check reads the registry rather than this wallet's own map, which is what stops the
-    ///      admin naming an eSIM wallet belonging to another device.
-    function test_setESIMUniqueIdentifierForAnESIMWallet_rejectsAnUnknownESIMWallet() public {
+    /// @notice An eSIM identifier cannot be written onto a wallet the protocol does not know
+    /// @dev The registration read sits on the registry, which is where the assign lives now. It is
+    ///      what stops the admin naming a contract of its own choosing as the address the registry
+    ///      resolves a device wallet from and then calls.
+    function test_assignESIMIdentifier_rejectsAnUnknownESIMWallet() public {
         _deployWallet(customDeviceUniqueIdentifiers[0], pubKey1, 8003);
 
         vm.prank(eSIMWalletAdmin);
         vm.expectRevert(abi.encodeWithSelector(Errors.UnknownESIMWallet.selector, user1));
-        wallet.setESIMUniqueIdentifierForAnESIMWallet(user1, "eSIM_unknown");
+        registry.assignESIMIdentifier(user1, "eSIM_unknown");
     }
 
     // ---------------------------------------------------------------------------------------------

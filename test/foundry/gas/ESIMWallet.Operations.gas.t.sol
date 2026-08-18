@@ -63,7 +63,7 @@ contract ESIMWalletOperationsGasTest is GasBase {
         vm.prank(eSIMWalletAdmin);
         address fresh = wallet.deployESIMWallet(false, 8602);
 
-        vm.prank(address(wallet));
+        vm.prank(address(registry));
         MockESIMWallet(payable(fresh)).setESIMUniqueIdentifier("eSIM_gas_identifier");
         vm.snapshotGasLastCall(NAMESPACE, "setESIMUniqueIdentifier: first time");
     }
