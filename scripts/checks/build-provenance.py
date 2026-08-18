@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Emit a JSON object describing the tree a deployment was built from.
 
-The deploy script calls this through `vm.ffi` and nests the result under `build` in
-`deployments/address.json`. Everything here answers the same question: given only that file,
-can somebody rebuild byte-identical bytecode and check it against what is onchain?
+The deploy script calls this through `vm.ffi` and nests the result under `build` in that
+deployment's record, `deployments/<recordKey>.json`. Everything here answers the same question:
+given only that file, can somebody rebuild byte-identical bytecode and check it against what is
+onchain?
 
 That needs three things, and a commit hash alone is none of them. It needs the commit, the
 seven submodule commits (a `lib/` bump changes the output without changing this repo's

@@ -1,7 +1,6 @@
 const hre = require("hardhat");
 const {ethers, network} = hre;
 const dotenv = require("dotenv");
-const ADDRESS = require("../../deployments/address.json");
 
 dotenv.config();
 
@@ -20,11 +19,15 @@ const CHAIN_LABELS = {
     31337: "anvil",
 };
 
+// The full record for one deployment lives in its own file, named after the key. The flat
+// deployments/address.json is the address book and carries no `contracts` section.
 function recordFor(chainId) {
     const key = `${CHAIN_LABELS[chainId] ?? "chain"}-${chainId}-${ENTRY_POINT_TAG}`;
-    const entry = ADDRESS[key];
-    if (!entry) throw new Error(`No deployment recorded under ${key}`);
-    return entry;
+    try {
+        return require(`../../deployments/${key}.json`);
+    } catch {
+        throw new Error(`No deployment record at deployments/${key}.json`);
+    }
 }
 
 async function main () {
