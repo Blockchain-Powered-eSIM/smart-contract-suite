@@ -76,7 +76,7 @@ contract ESIMWalletTest is DeployerBase {
 
         vm.startPrank(admin);
         // eSIMWallet1 -> has access to ETH, has eSIM identifier set
-        deviceWallet.setESIMUniqueIdentifierForAnESIMWallet(address(eSIMWallet1), "ESIM_0_1");
+        registry.assignESIMIdentifier(address(eSIMWallet1), "ESIM_0_1");
         vm.stopPrank();
 
         // A bind never carries ETH access, so the owner grants it here
@@ -156,7 +156,17 @@ contract ESIMWalletTest is DeployerBase {
         deployWallets();
 
         vm.startPrank(user1);
-        vm.expectRevert(bytes4(keccak256("OnlyDeviceWallet()")));
+        vm.expectRevert(Errors.OnlyRegistry.selector);
+        eSIMWallet2.setESIMUniqueIdentifier("ESIM_0_2");
+        vm.stopPrank();
+    }
+
+    /// @notice The owning device wallet is refused too, so the claim cannot be skipped
+    function test_setESIMUniqueIdentifier_rejectsTheOwningDeviceWallet() public {
+        deployWallets();
+
+        vm.startPrank(address(deviceWallet));
+        vm.expectRevert(Errors.OnlyRegistry.selector);
         eSIMWallet2.setESIMUniqueIdentifier("ESIM_0_2");
         vm.stopPrank();
     }
@@ -164,7 +174,7 @@ contract ESIMWalletTest is DeployerBase {
     function test_setESIMUniqueIdentifier_callTwiceFail() public {
         deployWallets();
 
-        vm.startPrank(address(deviceWallet));
+        vm.startPrank(address(registry));
         vm.expectRevert(abi.encodeWithSelector(Errors.ESIMIdentifierAlreadySet.selector, eSIMWallet1.eSIMUniqueIdentifier()));
         eSIMWallet1.setESIMUniqueIdentifier("ESIM_0_2");
         vm.stopPrank();
@@ -173,7 +183,7 @@ contract ESIMWalletTest is DeployerBase {
     function test_setESIMUniqueIdentifier() public {
         deployWallets();
 
-        vm.startPrank(address(deviceWallet));
+        vm.startPrank(address(registry));
         eSIMWallet2.setESIMUniqueIdentifier("ESIM_0_2");
         vm.stopPrank();
 

@@ -35,10 +35,26 @@
 /// reachable, which is the outcome wanted. The inverse, a `rule_not_vacuous` record reading
 /// verified, is the one that says the rule proved nothing for that method.
 ///
-/// `renounceOwnership()` is the only method that reads verified there, and it is right to: it is
-/// overridden to revert unconditionally, so no rule body can complete on it. Every other method
-/// reaches the body. The headline count adds the reachability records to the assert failures and so
-/// reports a clean run as mostly violated. Count the records without a sanity suffix instead.
+/// `renounceOwnership()` is overridden to revert unconditionally, so no rule body can complete on
+/// it. It is filtered out of every parametric rule and pinned by `theRenouncePathAlwaysReverts`
+/// instead, which keeps the protection while leaving no vacuity record to explain away. Every other
+/// method reaches the body. The headline count adds the reachability records to the assert failures
+/// and so reports a clean run as mostly violated. Count the records without a sanity suffix instead.
+///
+/// One rule is not run from this conf. `acceptingTheAdminHandoverClearsTheNomination` reasons over a
+/// storage slot packing `newRequestedAdmin`, `paused` and `adminDisabled` together, and clearing two
+/// of them compiles to one masked `AND`. Default integer theory over-approximates that mask and
+/// hands back a nomination reading `0x1` after acceptance, which no call produces.
+/// `certora/conf/scoped/Registry-bv.conf` runs the rule alone under `-smt_bitVectorTheory true`, where it
+/// verifies, and that job is its record. Treat a violation of it under any other conf as the
+/// imprecision rather than as a result.
+///
+/// The rest of the rules are split across `scoped/Registry-association.conf`,
+/// `scoped/Registry-validity.conf`, `scoped/Registry-admin.conf` and
+/// `scoped/Registry-identifier.conf`. `full/Registry.conf` still names the whole file
+/// and is correct, but the parametric rules enumerate `deployLazyWallet`, which splits into roughly
+/// ninety subproblems, so one job carrying all of them exhausts the two-hour budget having settled
+/// three rules. The split confs are what gets run.
 
 methods {
     function isDeviceWalletValid(address) external returns (bool) envfree;
@@ -59,10 +75,34 @@ methods {
     function newRequestedAdmin() external returns (address) envfree;
     function entryPoint() external returns (address) envfree;
     function deviceWalletFactory() external returns (address) envfree;
+    /// The only caller the three lazy entry points accept, and the second claimant of an eSIM
+    /// identifier alongside the admin.
+    function lazyWalletRegistry() external returns (address) envfree;
 
     /// Nothing outside this contract is in the scene. Without this every external call would havoc
     /// the registry's own storage and every rule below would be unprovable for the wrong reason.
     unresolved external in _._ => DISPATCH [] default NONDET;
+}
+
+/// The one method no rule body can complete on.
+///
+/// `renounceOwnership` is overridden to revert on every input, so a parametric rule that leaves it
+/// in buys a vacuity record per rule and proves nothing. Filtered out everywhere below and pinned by
+/// the rule underneath instead, so removing the override fails a check rather than quietly turning
+/// fourteen vacuity records into real ones nobody reads.
+definition alwaysReverts(method f) returns bool =
+    f.selector == sig:renounceOwnership().selector;
+
+/// The renounce path is closed.
+///
+/// What the filter above gives up, stated directly. The owner is the only caller
+/// `_authorizeUpgrade` accepts, so renouncing would freeze the registry on its current
+/// implementation with no way back.
+rule theRenouncePathAlwaysReverts() {
+    env callEnv;
+    renounceOwnership@withrevert(callEnv);
+
+    assert lastReverted, "the registry owner was able to renounce ownership";
 }
 
 /// R-02, first part. A registration is never withdrawn.
@@ -75,7 +115,7 @@ methods {
 ///
 /// This is the property everything else leans on. Zero is how the registry spells an address it
 /// never heard of, so a wallet that has been registered must never read it again.
-rule aRegistrationIsNeverWithdrawn(method f, address e) {
+rule aRegistrationIsNeverWithdrawn(method f, address e) filtered { f -> !alwaysReverts(f) } {
     require isESIMWalletValid(e) != 0;
 
     env callEnv;
@@ -89,7 +129,7 @@ rule aRegistrationIsNeverWithdrawn(method f, address e) {
 ///
 /// Parametric, so an entry point added later has to satisfy it without anyone remembering to
 /// extend a test.
-rule theAssociationMovesOnlyThroughBind(method f, address e) {
+rule theAssociationMovesOnlyThroughBind(method f, address e) filtered { f -> !alwaysReverts(f) } {
     address heldBefore = isESIMWalletValid(e);
 
     env callEnv;
@@ -110,7 +150,7 @@ rule theAssociationMovesOnlyThroughBind(method f, address e) {
 ///
 /// Two writers rather than one, which is why this is stated as a rule over every method instead of
 /// left to the access control on either.
-rule theStandbyMarkerHasExactlyTwoWriters(method f, address e) {
+rule theStandbyMarkerHasExactlyTwoWriters(method f, address e) filtered { f -> !alwaysReverts(f) } {
     bool markedBefore = isESIMWalletOnStandby(e);
 
     env callEnv;
@@ -133,7 +173,7 @@ rule theStandbyMarkerHasExactlyTwoWriters(method f, address e) {
 ///
 /// `bindESIMWallet` is the one exception and it is named here rather than hidden: taking a wallet
 /// on is the single moment both change, which is the whole reason it is one call and not two.
-rule nothingButBindMovesBothFacts(method f, address e) {
+rule nothingButBindMovesBothFacts(method f, address e) filtered { f -> !alwaysReverts(f) } {
     address heldBefore = isESIMWalletValid(e);
     bool markedBefore = isESIMWalletOnStandby(e);
 
@@ -152,7 +192,7 @@ rule nothingButBindMovesBothFacts(method f, address e) {
 /// nothing had to reach, so it said the association was consistent without ever watching one move.
 /// The rule form asserts against the value the call actually wrote, which is the statement worth
 /// having and is what the induction step was standing in for.
-rule everyAssociationNamesAValidDeviceWallet(method f, address e) {
+rule everyAssociationNamesAValidDeviceWallet(method f, address e) filtered { f -> !alwaysReverts(f) } {
     address heldBefore = isESIMWalletValid(e);
 
     env callEnv;
@@ -168,7 +208,7 @@ rule everyAssociationNamesAValidDeviceWallet(method f, address e) {
 /// R-03. A registered P256 key only ever names a device wallet the registry considers valid.
 ///
 /// Same reformulation as R-01, for the same reason.
-rule everyRegisteredKeyNamesAValidDeviceWallet(method f, bytes32 keyHash) {
+rule everyRegisteredKeyNamesAValidDeviceWallet(method f, bytes32 keyHash) filtered { f -> !alwaysReverts(f) } {
     address namedBefore = registeredP256Keys(keyHash);
 
     env callEnv;
@@ -186,7 +226,7 @@ rule everyRegisteredKeyNamesAValidDeviceWallet(method f, bytes32 keyHash) {
 /// Parametric, so it covers entry points added later as well as the ones there today. That is worth
 /// more than the specific fact: the check is `onlyDeviceWalletFactory` today, and a second write
 /// added anywhere later fails here without anyone remembering to extend a test.
-rule aDeviceWalletBecomesValidOnlyThroughTheFactory(method f, address d) {
+rule aDeviceWalletBecomesValidOnlyThroughTheFactory(method f, address d) filtered { f -> !alwaysReverts(f) } {
     require !isDeviceWalletValid(d);
 
     env callEnv;
@@ -203,7 +243,7 @@ rule aDeviceWalletBecomesValidOnlyThroughTheFactory(method f, address d) {
 
 /// R-05. Validity is one-way. Nothing revokes a device wallet, which is why every other rule here
 /// can lean on `isDeviceWalletValid` without asking when it was set.
-rule aValidDeviceWalletNeverBecomesInvalid(method f, address d) {
+rule aValidDeviceWalletNeverBecomesInvalid(method f, address d) filtered { f -> !alwaysReverts(f) } {
     require isDeviceWalletValid(d);
 
     env callEnv;
@@ -218,7 +258,8 @@ rule aValidDeviceWalletNeverBecomesInvalid(method f, address d) {
 /// Split from the admin below because the plan states all three as initialize-only and that is
 /// wrong for two of them. This one is genuinely write-once.
 rule theEntryPointMovesOnlyAtInitialization(method f) filtered {
-    f -> f.selector != sig:initialize(address, address, address, address, address, address, uint256).selector
+    f -> !alwaysReverts(f)
+      && f.selector != sig:initialize(address, address, address, address, address, address, uint256).selector
 } {
     address entryPointBefore = entryPoint();
 
@@ -236,7 +277,8 @@ rule theEntryPointMovesOnlyAtInitialization(method f) filtered {
 /// factory as well, where nothing on the payment path read it, which left the only rotatable copy
 /// pointing somewhere the money never went.
 rule theVaultMovesOnlyThroughItsSetter(method f) filtered {
-    f -> f.selector != sig:initialize(address, address, address, address, address, address, uint256).selector
+    f -> !alwaysReverts(f)
+      && f.selector != sig:initialize(address, address, address, address, address, address, uint256).selector
 } {
     address vaultBefore = vault();
 
@@ -270,7 +312,8 @@ rule theVaultIsNeverSetToZero(address newVault) {
 /// on a suspension and on a nomination. Reading the accessor here would make the rule fail on
 /// `disableAdmin` for a reason that has nothing to do with the address moving.
 rule theAdminMovesOnlyToTheNominatedAddress(method f) filtered {
-    f -> f.selector != sig:initialize(address, address, address, address, address, address, uint256).selector
+    f -> !alwaysReverts(f)
+      && f.selector != sig:initialize(address, address, address, address, address, address, uint256).selector
 } {
     address adminBefore = adminOfRecord();
     address nominated = newRequestedAdmin();
@@ -291,7 +334,7 @@ rule theAdminMovesOnlyToTheNominatedAddress(method f) filtered {
 /// The power and the address are separate facts, and the power never lands anywhere the address
 /// is not. Without this, a suspension or a handover could in principle be read as handing the role
 /// to some third address rather than to nobody.
-rule onlyTheRecordedAdminEverHoldsThePower(method f) {
+rule onlyTheRecordedAdminEverHoldsThePower(method f) filtered { f -> !alwaysReverts(f) } {
     env callEnv;
     calldataarg args;
     f(callEnv, args);
@@ -305,7 +348,7 @@ rule onlyTheRecordedAdminEverHoldsThePower(method f) {
 /// A suspended admin and one with a handover outstanding are both powerless, whatever else is
 /// true. This is what every gate in the protocol relies on: they compare `msg.sender` against the
 /// accessor, and no transaction arrives from the zero address, so a zero here closes all of them.
-rule aSuspendedOrHandedOverAdminCannotAct(method f) {
+rule aSuspendedOrHandedOverAdminCannotAct(method f) filtered { f -> !alwaysReverts(f) } {
     env callEnv;
     calldataarg args;
     f(callEnv, args);
@@ -329,7 +372,7 @@ rule acceptingTheAdminHandoverClearsTheNomination() {
 /// it back where two could carry the same one. The claim survives an ownership transfer, since the
 /// eSIM belongs to the wallet rather than to whichever device holds it, which is why this is stated
 /// over every method rather than left to the one entry point.
-rule theESIMIdentifierClaimIsWriteOnce(method f, bytes32 identifierHash) {
+rule theESIMIdentifierClaimIsWriteOnce(method f, bytes32 identifierHash) filtered { f -> !alwaysReverts(f) } {
     address holderBefore = claimedESIMIdentifiers(identifierHash);
     require holderBefore != 0;
 
@@ -341,23 +384,45 @@ rule theESIMIdentifierClaimIsWriteOnce(method f, bytes32 identifierHash) {
         "an eSIM identifier changed hands after it was claimed";
 }
 
-/// Only a device wallet claims an eSIM identifier, and only through the one entry point.
+/// An eSIM identifier is claimed through three entry points, each by the one caller it admits.
 ///
-/// Parametric for the same reason as R-04. The claim is reachable directly, not only through
-/// `DeviceWallet`, so its own gate is the whole of the access control and a second writer added
-/// anywhere later fails here.
-rule onlyADeviceWalletClaimsAnESIMIdentifier(method f, bytes32 identifierHash) {
+/// Parametric so a second writer added anywhere later fails here. This used to say "only a device
+/// wallet", which is what let any onboarded owner take an identifier bought by someone else: a
+/// device wallet calls anything through `execute`, and it knows nothing about who an identifier
+/// belongs to.
+///
+/// It then said "only the admin, only through `assignESIMIdentifier`", and the prover was right to
+/// refuse that too. The lazy route claims identifiers as well: `deployLazyWallet` reaches the shared
+/// `_assignESIMIdentifier` for the first wallet and again for each one after it, and
+/// `deployMoreLazyESIMWallets` does the same for a later batch. Both are `onlyLazyWalletRegistry`,
+/// and the lazy wallet registry only reaches them from a function of its own that is admin gated, so
+/// the claim is still the admin's, one contract further out. The rule names the caller each path
+/// admits rather than collapsing all three onto the admin, since collapsing them is what would make
+/// it wrong again the next time a route is added.
+///
+/// Three assertions, because any one failing alone is the bug: the first fixes the set of writers,
+/// the second and third fix who each writer answers to.
+rule onlyTheAdminClaimsAnESIMIdentifier(method f, bytes32 identifierHash) filtered {
+    f -> !alwaysReverts(f)
+} {
     require claimedESIMIdentifiers(identifierHash) == 0;
 
     env callEnv;
     calldataarg args;
     f(callEnv, args);
 
-    assert claimedESIMIdentifiers(identifierHash) != 0 =>
-        f.selector == sig:claimESIMIdentifier(string, address).selector,
-        "an eSIM identifier was claimed through something other than claimESIMIdentifier";
+    bool claimed = claimedESIMIdentifiers(identifierHash) != 0;
+    bool throughTheAdminPath = f.selector == sig:assignESIMIdentifier(address, string).selector;
 
-    assert claimedESIMIdentifiers(identifierHash) != 0 =>
-        isDeviceWalletValid(callEnv.msg.sender),
-        "an eSIM identifier was claimed by a caller the registry does not consider a device wallet";
+    assert claimed => (
+        throughTheAdminPath
+     || f.selector == sig:deployLazyWallet(bytes32[2], string, uint256, string[], uint256).selector
+     || f.selector == sig:deployMoreLazyESIMWallets(address, string, uint256, uint256, string[]).selector
+    ), "an eSIM identifier was claimed through something other than the three claim paths";
+
+    assert (claimed && throughTheAdminPath) => callEnv.msg.sender == eSIMWalletAdmin(),
+        "the direct claim path accepted a caller other than the admin";
+
+    assert (claimed && !throughTheAdminPath) => callEnv.msg.sender == lazyWalletRegistry(),
+        "a lazy claim path accepted a caller other than the lazy wallet registry";
 }

@@ -278,14 +278,14 @@ contract RegistryGuardsTest is DeployerBase {
         );
     }
 
-    /// @notice A device wallet cannot be aimed at an impostor through the identifier setter
-    /// @dev setESIMUniqueIdentifierForAnESIMWallet checks that the registry knows the target rather
-    /// than that this device wallet holds it, so a non-zero entry left by an unrelated device wallet
-    /// used to let the admin make any device wallet call into an attacker's contract. Closing the
-    /// bind closes this, because only a real eSIM wallet can reach the mapping at all.
-    function test_setESIMUniqueIdentifierForAnESIMWallet_cannotReachAnImpostor() public {
+    /// @notice An impostor eSIM wallet cannot be reached through the identifier assign
+    /// @dev Two guards stand between the admin and an attacker's contract. The bind refuses a wallet
+    /// the factory never deployed, so nothing an attacker writes reaches `isESIMWalletValid`, and
+    /// the assign reads that mapping before it touches the address at all. The device wallet is
+    /// resolved from the eSIM wallet rather than named by the caller, so aiming an unrelated device
+    /// wallet at the impostor is not expressible either.
+    function test_assignESIMIdentifier_cannotReachAnImpostor() public {
         DeviceWallet attacker = _deployDeviceWallet(customDeviceUniqueIdentifiers[1], pubKey2, 8002);
-        DeviceWallet victim = _deployDeviceWallet(customDeviceUniqueIdentifiers[2], pubKey3, 8003);
         ImpostorESIMWallet impostor = new ImpostorESIMWallet(address(attacker));
 
         vm.prank(address(attacker));
@@ -294,7 +294,7 @@ contract RegistryGuardsTest is DeployerBase {
 
         vm.prank(eSIMWalletAdmin);
         vm.expectRevert(abi.encodeWithSelector(Errors.UnknownESIMWallet.selector, address(impostor)));
-        victim.setESIMUniqueIdentifierForAnESIMWallet(address(impostor), "anything");
+        registry.assignESIMIdentifier(address(impostor), "anything");
 
         assertFalse(impostor.wasCalled(), "No device wallet may be made to call the impostor");
     }

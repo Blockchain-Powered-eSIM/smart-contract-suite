@@ -39,13 +39,27 @@
 /// the contract more expensive, and the return on it is one confirmation, so it is left where it is.
 ///
 /// `postCreateAccount` joined that list when it started re-deriving the address it is being asked to
-/// record, which is what binds the identifier and the owner key to the wallet. The consequence for
-/// the rule below is specific: `reportingAWalletTwiceAlwaysReverts` still passes, but it now passes
-/// because every call reverts rather than because the flag is checked, so it has stopped being
-/// evidence of anything. The guard itself is carried by
-/// `test_postCreateAccount_rejectsAWalletAlreadyRecorded` instead.
+/// record, which is what binds the identifier and the owner key to the wallet. That made
+/// `reportingAWalletTwiceAlwaysReverts` pass because every call reverts rather than because the flag
+/// is checked, which is not evidence of anything.
 ///
-/// `renounceOwnership` also reads unreachable, and correctly: it is overridden to revert.
+/// `certora/conf/scoped/DeviceWalletFactory-hash.conf` runs the two deployment record rules alone at a
+/// 1600 byte bound, which covers the creation code hash. That buys back `createAccount` and
+/// `getCounterFactualAddress`, both reachable there and vacuous under the default bound. The bound is
+/// raised on a scoped conf rather than on `full/DeviceWalletFactory.conf` because this contract hashes
+/// in several other places and the bound is global, so raising it for everything makes every rule in
+/// the file more expensive for the sake of two.
+///
+/// It does not buy back `postCreateAccount`, and the hash bound was never the reason. That function
+/// requires the address it is handed to carry code, and the prover gives code only to contracts in
+/// the scene, so a wallet address chosen from calldata never has any and the call reverts on every
+/// input. `reportingAWalletTwiceAlwaysReverts` therefore still passes on the revert rather than on
+/// the flag check, at either bound. The rule is kept because its intent is right and it will start
+/// meaning something the moment the scene grows a deployed wallet, but read it as unproved for now.
+/// The duplicate report guard is covered by the unit tests instead.
+///
+/// `renounceOwnership` is overridden to revert unconditionally, so no rule body can complete on it.
+/// It is filtered out of the parametric rules and pinned by `theRenouncePathAlwaysReverts` instead.
 ///
 /// Reading the result, which the headline count gets backwards. `rule_sanity` appends `assert false`
 /// to each rule and the log carries the verdict of that modified rule, not a verdict on the check.
@@ -67,12 +81,31 @@ methods {
     function FCL_Elliptic_ZZ.ecAff_isOnCurve(uint256 x, uint256 y) internal returns (bool) => NONDET;
 }
 
+/// The one method no rule body can complete on.
+///
+/// `renounceOwnership` is overridden to revert on every input, so a parametric rule that leaves it
+/// in buys a vacuity record per rule and proves nothing. Filtered out everywhere below and pinned by
+/// the rule underneath instead.
+definition alwaysReverts(method f) returns bool =
+    f.selector == sig:renounceOwnership().selector;
+
+/// The renounce path is closed.
+///
+/// What the filter above gives up, stated directly. This contract owns the beacon, so an owner of
+/// zero freezes every wallet under it on its current logic with no way back.
+rule theRenouncePathAlwaysReverts() {
+    env callEnv;
+    renounceOwnership@withrevert(callEnv);
+
+    assert lastReverted, "the factory owner was able to renounce ownership";
+}
+
 /// R-21. The registry is written once.
 ///
 /// The registry answers who the admin is, so every admin-gated function here resolves through it. A
 /// second write would let the whole admin surface be pointed at a contract that names a different
 /// admin, and the guard on that write is `onlyOwner`, which is one key.
-rule theRegistryIsWriteOnce(method f) {
+rule theRegistryIsWriteOnce(method f) filtered { f -> !alwaysReverts(f) } {
     address registryBefore = registry();
     require registryBefore != 0;
 
@@ -102,7 +135,7 @@ rule settingTheRegistryTwiceAlwaysReverts(address newRegistry) {
 /// `deviceWalletInfoAdded` says this factory has already told the registry about a wallet.
 /// `postCreateAccount` refuses a wallet carrying the flag, so clearing it would let the same wallet
 /// be reported twice under a different identifier or a different owner key.
-rule aDeploymentRecordIsNeverWithdrawn(method f, address deviceWallet) {
+rule aDeploymentRecordIsNeverWithdrawn(method f, address deviceWallet) filtered { f -> !alwaysReverts(f) } {
     require deviceWalletInfoAdded(deviceWallet);
 
     env callEnv;
@@ -137,7 +170,8 @@ rule reportingAWalletTwiceAlwaysReverts(address deviceWallet) {
 /// would leave every deployed wallet pointing at an object this factory no longer controls, and the
 /// upgrade path that is supposed to be used goes through the beacon, not around it.
 rule theBeaconAndTheWiringAreWriteOnce(method f) filtered {
-    f -> f.selector != sig:initialize(address, address, address, address, address).selector
+    f -> !alwaysReverts(f)
+      && f.selector != sig:initialize(address, address, address, address, address).selector
 } {
     address beaconBefore = beacon();
     address entryPointBefore = entryPoint();
@@ -162,7 +196,8 @@ rule theBeaconAndTheWiringAreWriteOnce(method f) filtered {
 /// overridden to revert. Stated parametrically so a method added later that clears the owner without
 /// going through the two-step handover fails here.
 rule ownershipIsNeverGivenUp(method f) filtered {
-    f -> f.selector != sig:initialize(address, address, address, address, address).selector
+    f -> !alwaysReverts(f)
+      && f.selector != sig:initialize(address, address, address, address, address).selector
 } {
     require owner() != 0;
 
@@ -187,7 +222,8 @@ rule ownershipIsNeverGivenUp(method f) filtered {
 /// `Ownable2Step` is used deliberately here: a one-step transfer to a wrong address would hand away
 /// the only key that can move the beacon, with nobody able to accept it back.
 rule theOwnerMovesOnlyThroughTheHandover(method f) filtered {
-    f -> f.selector != sig:initialize(address, address, address, address, address).selector
+    f -> !alwaysReverts(f)
+      && f.selector != sig:initialize(address, address, address, address, address).selector
 } {
     address ownerBefore = owner();
 

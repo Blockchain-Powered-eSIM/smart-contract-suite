@@ -185,18 +185,17 @@ contract IdentifierCollisionTest is DeployerBase {
     /// @notice An ordinary wallet cannot be given an eSIM identifier a fiat user is waiting on
     /// @dev The device identifier guard does not cover this. The claiming device is deployed under
     ///      an identifier of its own that nobody reserved, and only the eSIM identifier collides.
-    function test_setESIMUniqueIdentifier_cannotClaimAnIdentifierReservedForALazyUser() public {
+    function test_assignESIMIdentifier_cannotClaimAnIdentifierReservedForALazyUser() public {
         string memory reservedESIM = customESIMUniqueIdentifiers[0][0];
         _populate(customDeviceUniqueIdentifiers[0], _one(reservedESIM));
 
-        (DeviceWallet device, address eSIMWallet) =
-            _deployOrdinary(customDeviceUniqueIdentifiers[1], pubKey2, 9401);
+        (, address eSIMWallet) = _deployOrdinary(customDeviceUniqueIdentifiers[1], pubKey2, 9401);
 
         vm.prank(eSIMWalletAdmin);
         vm.expectRevert(
             abi.encodeWithSelector(Errors.ESIMIdentifierReservedForLazyWallet.selector, reservedESIM)
         );
-        device.setESIMUniqueIdentifierForAnESIMWallet(eSIMWallet, reservedESIM);
+        registry.assignESIMIdentifier(eSIMWallet, reservedESIM);
 
         assertEq(
             registry.eSIMWalletForIdentifier(reservedESIM),
@@ -216,10 +215,9 @@ contract IdentifierCollisionTest is DeployerBase {
     function test_populateHistory_refusesAnESIMIdentifierAlreadyLiveOnchain() public {
         string memory eSIMIdentifier = customESIMUniqueIdentifiers[0][0];
 
-        (DeviceWallet device, address eSIMWallet) =
-            _deployOrdinary(customDeviceUniqueIdentifiers[1], pubKey2, 9501);
+        (, address eSIMWallet) = _deployOrdinary(customDeviceUniqueIdentifiers[1], pubKey2, 9501);
         vm.prank(eSIMWalletAdmin);
-        device.setESIMUniqueIdentifierForAnESIMWallet(eSIMWallet, eSIMIdentifier);
+        registry.assignESIMIdentifier(eSIMWallet, eSIMIdentifier);
 
         string[] memory devices = new string[](1);
         devices[0] = customDeviceUniqueIdentifiers[0];
@@ -248,19 +246,17 @@ contract IdentifierCollisionTest is DeployerBase {
     function test_twoWalletsCannotCarryTheSameESIMIdentifier() public {
         string memory eSIMIdentifier = customESIMUniqueIdentifiers[0][0];
 
-        (DeviceWallet first, address firstESIM) =
-            _deployOrdinary(customDeviceUniqueIdentifiers[0], pubKey1, 9601);
-        (DeviceWallet second, address secondESIM) =
-            _deployOrdinary(customDeviceUniqueIdentifiers[1], pubKey2, 9602);
+        (, address firstESIM) = _deployOrdinary(customDeviceUniqueIdentifiers[0], pubKey1, 9601);
+        (, address secondESIM) = _deployOrdinary(customDeviceUniqueIdentifiers[1], pubKey2, 9602);
 
         vm.prank(eSIMWalletAdmin);
-        first.setESIMUniqueIdentifierForAnESIMWallet(firstESIM, eSIMIdentifier);
+        registry.assignESIMIdentifier(firstESIM, eSIMIdentifier);
 
         vm.prank(eSIMWalletAdmin);
         vm.expectRevert(
             abi.encodeWithSelector(Errors.ESIMIdentifierAlreadyClaimed.selector, eSIMIdentifier, firstESIM)
         );
-        second.setESIMUniqueIdentifierForAnESIMWallet(secondESIM, eSIMIdentifier);
+        registry.assignESIMIdentifier(secondESIM, eSIMIdentifier);
 
         assertEq(
             registry.eSIMWalletForIdentifier(eSIMIdentifier),
@@ -301,35 +297,79 @@ contract IdentifierCollisionTest is DeployerBase {
     // Who may claim
     // ---------------------------------------------------------------------------------------------
 
-    /// @notice Only a device wallet may claim an eSIM identifier
-    /// @dev The claim lives on the registry rather than only on the device wallet, so its own gate
-    ///      is what stops anybody else reaching it.
-    function test_claimESIMIdentifier_isRefusedFromANonDeviceWallet() public {
-        (, address eSIMWallet) = _deployOrdinary(customDeviceUniqueIdentifiers[0], pubKey1, 9801);
-
-        vm.prank(eSIMWalletAdmin);
-        vm.expectRevert(Errors.OnlyDeviceWallet.selector);
-        registry.claimESIMIdentifier(customESIMUniqueIdentifiers[0][0], eSIMWallet);
-    }
-
-    /// @notice A device wallet cannot claim an identifier for a wallet it does not own
-    /// @dev A device wallet can reach the registry directly through `execute`, so the claim cannot
-    ///      rely on `DeviceWallet` having checked anything first. Without the owner check here, one
-    ///      device wallet could burn identifiers against another's wallets.
-    function test_claimESIMIdentifier_isRefusedForAWalletTheCallerDoesNotOwn() public {
+    /// @notice A device wallet cannot reach the claim, which is the whole point of the assign
+    /// @dev The claim has no external form any more. A device wallet reaches any external function
+    ///      through `execute`, and every fact it could be asked to present about its own wallets is
+    ///      one it writes itself, so an identifier it has no claim to would pass any check offered.
+    ///      The identifier a wallet is entitled to is known offchain, which is why the admin is the
+    ///      caller and not the owner.
+    function test_assignESIMIdentifier_isRefusedFromADeviceWallet() public {
         (DeviceWallet attacker,) = _deployOrdinary(customDeviceUniqueIdentifiers[0], pubKey1, 9901);
         (, address victimESIM) = _deployOrdinary(customDeviceUniqueIdentifiers[1], pubKey2, 9902);
 
         vm.prank(address(attacker));
-        vm.expectRevert(
-            abi.encodeWithSelector(Errors.NotTheESIMWalletOwnerOrItsDeviceWallet.selector, victimESIM)
-        );
-        registry.claimESIMIdentifier(customESIMUniqueIdentifiers[0][0], victimESIM);
+        vm.expectRevert(Errors.OnlyAdmin.selector);
+        registry.assignESIMIdentifier(victimESIM, customESIMUniqueIdentifiers[0][0]);
+
+        // Its own wallet is refused on the same line, so there is no identifier a device wallet can
+        // take by front-running the admin's transaction out of the public mempool.
+        (DeviceWallet owner, address ownESIM) = _deployOrdinary(customDeviceUniqueIdentifiers[2], pubKey3, 9903);
+
+        vm.prank(address(owner));
+        vm.expectRevert(Errors.OnlyAdmin.selector);
+        registry.assignESIMIdentifier(ownESIM, customESIMUniqueIdentifiers[0][0]);
 
         assertEq(
             registry.eSIMWalletForIdentifier(customESIMUniqueIdentifiers[0][0]),
             address(0),
             "A refused claim must leave the identifier unheld"
+        );
+    }
+
+    /// @notice Nobody outside the admin role reaches the assign either
+    function test_assignESIMIdentifier_isRefusedFromAnUnrelatedCaller() public {
+        (, address eSIMWallet) = _deployOrdinary(customDeviceUniqueIdentifiers[0], pubKey1, 9801);
+
+        vm.prank(makeAddr("outsider"));
+        vm.expectRevert(Errors.OnlyAdmin.selector);
+        registry.assignESIMIdentifier(eSIMWallet, customESIMUniqueIdentifiers[0][0]);
+
+        // The owner of the registry holds the upgrade path, not the assign
+        vm.prank(upgradeManager);
+        vm.expectRevert(Errors.OnlyAdmin.selector);
+        registry.assignESIMIdentifier(eSIMWallet, customESIMUniqueIdentifiers[0][0]);
+    }
+
+    /// @notice The assign refuses a wallet the protocol never deployed
+    /// @dev The registration read is what stops the admin lending a device wallet's identifier slot
+    ///      to a contract the registry does not know, which would put an arbitrary address on the
+    ///      end of the call the registry makes next.
+    function test_assignESIMIdentifier_rejectsAWalletTheProtocolDoesNotKnow() public {
+        address stranger = makeAddr("stranger");
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(abi.encodeWithSelector(Errors.UnknownESIMWallet.selector, stranger));
+        registry.assignESIMIdentifier(stranger, customESIMUniqueIdentifiers[0][0]);
+    }
+
+    /// @notice The admin route writes both the claim and the wallet's own slot
+    function test_assignESIMIdentifier_recordsTheClaimAndWritesTheWallet() public {
+        (, address eSIMWallet) = _deployOrdinary(customDeviceUniqueIdentifiers[0], pubKey1, 9804);
+        string memory identifier = customESIMUniqueIdentifiers[0][0];
+
+        vm.prank(eSIMWalletAdmin);
+        string memory written = registry.assignESIMIdentifier(eSIMWallet, identifier);
+
+        assertEq(written, identifier, "The call returns what the wallet now holds");
+        assertEq(
+            registry.eSIMWalletForIdentifier(identifier),
+            eSIMWallet,
+            "The registry records the wallet holding the identifier"
+        );
+        assertEq(
+            MockESIMWallet(payable(eSIMWallet)).eSIMUniqueIdentifier(),
+            identifier,
+            "The wallet carries the identifier it was assigned"
         );
     }
 }

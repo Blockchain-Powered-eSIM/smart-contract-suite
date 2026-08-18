@@ -149,9 +149,11 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
 
     /// @notice Since buying the eSIM (along with data bundle) happens before the identifier is generated,
     ///         the identifier is to be set separately after the wallet is deployed and eSIM is created
-    /// @dev This function can only be called once
+    /// @dev Set once, and only by the registry, which records the claim in the same call. The
+    ///      owning device wallet used to be the caller, which let an owner write a string the
+    ///      registry has no record of.
     /// @param _eSIMUniqueIdentifier String that uniquely identifies eSIM wallet
-    function setESIMUniqueIdentifier(string calldata _eSIMUniqueIdentifier) external onlyDeviceWallet {
+    function setESIMUniqueIdentifier(string calldata _eSIMUniqueIdentifier) external onlyRegistry {
         // Read the identifier itself only on the failing branch, so setting one for the first time
         // pays for the length slot alone
         if(bytes(eSIMUniqueIdentifier).length != 0) revert Errors.ESIMIdentifierAlreadySet(eSIMUniqueIdentifier);

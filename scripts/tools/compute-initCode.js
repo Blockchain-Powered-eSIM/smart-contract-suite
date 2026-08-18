@@ -5,8 +5,11 @@ const ADDRESS = require("../../deployments/address.json");
 
 dotenv.config();
 
-// The deployment record is keyed by chain name and chain id together, so that a mainnet entry can
-// never sit where a testnet one was. Built the same way DeployConfig.recordKey does it.
+// The deployment record is keyed by chain name, chain id and EntryPoint version together, so that
+// a mainnet entry can never sit where a testnet one was and a v0.8 deployment can never sit where
+// a v0.7 one still in use was. Built the same way DeployConfig.recordKey does it.
+const ENTRY_POINT_TAG = "entrypoint-v8";
+
 const CHAIN_LABELS = {
     1: "mainnet",
     10: "optimism",
@@ -18,7 +21,7 @@ const CHAIN_LABELS = {
 };
 
 function recordFor(chainId) {
-    const key = `${CHAIN_LABELS[chainId] ?? "chain"}-${chainId}`;
+    const key = `${CHAIN_LABELS[chainId] ?? "chain"}-${chainId}-${ENTRY_POINT_TAG}`;
     const entry = ADDRESS[key];
     if (!entry) throw new Error(`No deployment recorded under ${key}`);
     return entry;

@@ -19,7 +19,7 @@
     "RegistryProxy": "0x96dA9cE92D2C09f7b3ADE01260608e9079f16d12",
     "LazyWalletRegistryProxy": "0x3F14D060074B174B0784056bDe5e0f8970D25ff1"
   },
-  "base-sepolia-84532": {
+  "base-sepolia-84532-entrypoint-v7": {
     "EntryPoint": "0x0000000071727De22E5E9d8BAf0edAc6f37da032",
     "P256Verifier": "0xF04f3b3935aD461D17d4a8a78E7ea21d4a61AEb1",
     "DeviceWalletImpl": "0xde0dC03eF67317D4702e1d6Ef3f8cE246517e84e",

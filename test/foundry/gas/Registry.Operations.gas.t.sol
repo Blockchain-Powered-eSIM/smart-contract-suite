@@ -31,6 +31,31 @@ contract RegistryOperationsGasTest is GasBase {
         vm.snapshotGasLastCall(NAMESPACE, "updateDeviceWalletInfo: second device, warm storage");
     }
 
+    /// @notice Naming an eSIM, the admin's most frequent write
+    /// @dev One call per eSIM sold. It records the claim and writes the wallet's own slot, so the
+    ///      figure covers both and there is no second transaction behind it.
+    function test_assignESIMIdentifier() public {
+        string[] memory identifiers = new string[](1);
+        bytes32[2][] memory keys = new bytes32[2][](1);
+        uint256[] memory salts = new uint256[](1);
+
+        identifiers[0] = customDeviceUniqueIdentifiers[0];
+        keys[0] = pubKey1;
+        salts[0] = 8701;
+
+        vm.prank(eSIMWalletAdmin);
+        Wallets[] memory wallets = deviceWalletFactory.deployDeviceWalletForUsers(
+            identifiers,
+            keys,
+            salts,
+            new uint256[](1)
+        );
+
+        vm.prank(eSIMWalletAdmin);
+        registry.assignESIMIdentifier(wallets[0].eSIMWallet, "eSIM_gas_assign");
+        vm.snapshotGasLastCall(NAMESPACE, "assignESIMIdentifier: first time");
+    }
+
     /// @notice Tripping the pause and releasing it
     /// @dev Separate labels because they are separate keys. The admin trips it from a backend that
     ///      is already signing batches; the release is the owner's, and after the admin contract

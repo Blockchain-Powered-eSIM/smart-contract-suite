@@ -241,7 +241,7 @@ contract ESIMWalletFactoryTest is DeployerBase {
 
         // Set eSIM unique identifier
         vm.startPrank(eSIMWalletAdmin);
-        deviceWallet.setESIMUniqueIdentifierForAnESIMWallet(eSIMWalletAddress, "ESIM_0_0");
+        registry.assignESIMIdentifier(eSIMWalletAddress, "ESIM_0_0");
         vm.stopPrank();
 
         MockESIMWallet eSIMWallet = MockESIMWallet(payable(eSIMWalletAddress));

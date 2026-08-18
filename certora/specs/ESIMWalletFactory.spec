@@ -40,7 +40,8 @@
 /// uncovered rather than raised, and correctly, since that contract hashes in several other places
 /// and the bound is global.
 ///
-/// `renounceOwnership` reads unreachable, and correctly: it is overridden to revert.
+/// `renounceOwnership` is overridden to revert unconditionally, so no rule body can complete on it.
+/// It is filtered out of the parametric rules and pinned by `theRenouncePathAlwaysReverts` instead.
 ///
 /// Reading the result, which the headline count gets backwards. `rule_sanity` appends `assert false`
 /// to each rule and the log carries the verdict of that modified rule, not a verdict on the check.
@@ -63,13 +64,35 @@ methods {
     function _.upgradeTo(address) external => NONDET;
 }
 
+/// The one method no rule body can complete on.
+///
+/// `renounceOwnership` is overridden to revert on every input, so a parametric rule that leaves it
+/// in buys a vacuity record per rule and proves nothing. Filtered out everywhere below and pinned by
+/// the rule underneath instead.
+definition alwaysReverts(method f) returns bool =
+    f.selector == sig:renounceOwnership().selector;
+
+/// The renounce path is closed.
+///
+/// What the filter above gives up, stated directly. This contract owns the beacon, so an owner of
+/// zero freezes every wallet under it on its current logic with no way back.
+rule theRenouncePathAlwaysReverts() {
+    env callEnv;
+    renounceOwnership@withrevert(callEnv);
+
+    assert lastReverted, "the factory owner was able to renounce ownership";
+}
+
 /// The registry is written once.
 ///
 /// Every caller check in this contract resolves through the registry, three reads of it in the one
 /// modifier. A second write would point all of them at a contract naming a different device wallet
 /// factory and a different set of valid device wallets, and the guard on that write is `onlyOwner`,
 /// which is one key.
-rule theRegistryIsWriteOnce(method f) {
+/// `addRegistryAddress` reads vacuous under this rule and that is the expected answer, not a gap. The
+/// rule requires a registry already set and the setter refuses exactly that state, so the pair has no
+/// reachable case. `settingTheRegistryTwiceAlwaysReverts` below is where that refusal is proved.
+rule theRegistryIsWriteOnce(method f) filtered { f -> !alwaysReverts(f) } {
     address registryBefore = registry();
     require registryBefore != 0;
 
@@ -113,7 +136,8 @@ rule theRegistryIsNeverSetToZero(address newRegistry) {
 /// deployed wallet reading its logic from an object this factory no longer owns, and would strand the
 /// upgrade path, which goes through the beacon rather than around it.
 rule theBeaconIsWriteOnce(method f) filtered {
-    f -> f.selector != sig:initialize(address, address).selector
+    f -> !alwaysReverts(f)
+      && f.selector != sig:initialize(address, address).selector
 } {
     address beaconBefore = beacon();
 
@@ -130,7 +154,7 @@ rule theBeaconIsWriteOnce(method f) filtered {
 /// from an address that merely claims to be one. The registry reads it before binding a wallet to a
 /// device wallet, so clearing it would strand a live wallet outside the protocol with no way back:
 /// the flag is only ever set by a deployment, and the address is already taken.
-rule aDeploymentRecordIsNeverWithdrawn(method f, address eSIMWallet) {
+rule aDeploymentRecordIsNeverWithdrawn(method f, address eSIMWallet) filtered { f -> !alwaysReverts(f) } {
     require isESIMWalletDeployed(eSIMWallet);
 
     env callEnv;
@@ -146,7 +170,7 @@ rule aDeploymentRecordIsNeverWithdrawn(method f, address eSIMWallet) {
 /// the method that actually creates the wallet, so no method can vouch for an address that was never
 /// deployed here. Stated parametrically so a method added later that writes the map directly fails
 /// here rather than in review.
-rule onlyADeploymentAddsARecord(method f, address eSIMWallet) {
+rule onlyADeploymentAddsARecord(method f, address eSIMWallet) filtered { f -> !alwaysReverts(f) } {
     require !isESIMWalletDeployed(eSIMWallet);
 
     env callEnv;
@@ -180,7 +204,8 @@ rule onlyTheOwnerCanMoveTheImplementation(address newImplementation) {
 /// overridden to revert. Stated parametrically so a method added later that clears the owner without
 /// going through the two-step handover fails here.
 rule ownershipIsNeverGivenUp(method f) filtered {
-    f -> f.selector != sig:initialize(address, address).selector
+    f -> !alwaysReverts(f)
+      && f.selector != sig:initialize(address, address).selector
 } {
     require owner() != 0;
 
@@ -205,7 +230,8 @@ rule ownershipIsNeverGivenUp(method f) filtered {
 /// `Ownable2Step` is used deliberately here: a one-step transfer to a wrong address would hand away
 /// the only key that can move the beacon, with nobody able to accept it back.
 rule theOwnerMovesOnlyThroughTheHandover(method f) filtered {
-    f -> f.selector != sig:initialize(address, address).selector
+    f -> !alwaysReverts(f)
+      && f.selector != sig:initialize(address, address).selector
 } {
     address ownerBefore = owner();
 

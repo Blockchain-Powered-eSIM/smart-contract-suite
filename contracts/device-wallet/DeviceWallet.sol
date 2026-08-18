@@ -108,26 +108,6 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         _;
     }
 
-    /// @notice Reverts unless the caller is the registry or the eSIM wallet admin
-    /// @dev The registry is checked first because its address is already in a warm slot, while
-    ///      reading the admin off it costs a cold proxy hop. The registry is also the caller that
-    ///      reaches here most, through the lazy wallet deployment path, so short-circuiting on it
-    ///      skips the hop entirely on the common case.
-    function _onlyESIMWalletAdminOrRegistry() private view {
-        if (
-            msg.sender != address(registry) &&
-            msg.sender != registry.eSIMWalletAdmin()
-        ) {
-            revert Errors.OnlyESIMWalletAdminOrRegistry();
-        }
-    }
-
-    /// @notice Restricts a call to the registry or the eSIM wallet admin
-    modifier onlyESIMWalletAdminOrRegistry() {
-        _onlyESIMWalletAdminOrRegistry();
-        _;
-    }
-
     /// @notice Reverts unless the caller is an eSIM wallet this device wallet holds
     function _onlyAssociatedESIMWallets() private view {
         if (!isValidESIMWallet[msg.sender]) revert Errors.OnlyAssociatedESIMWallets();
@@ -257,32 +237,6 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     // ---------------------------------------------------------------------------------------------
     // eSIM wallet management
     // ---------------------------------------------------------------------------------------------
-
-    /// @notice Allow wallet owner or admin to set unique identifier for their eSIM wallet
-    /// @dev The registry is also a caller, which is how a wallet deployed on the lazy path gets its
-    ///      identifier in the same transaction as its deployment.
-    ///
-    ///      The claim goes in before the wallet is written, and the order matters: the wallet's own
-    ///      slot is set once and for good, so a claim that failed afterwards would leave a wallet
-    ///      holding an identifier the registry does not record.
-    /// @param _eSIMWalletAddress Address of the eSIM wallet smart contract
-    /// @param _eSIMUniqueIdentifier String unique identifier for the eSIM wallet
-    /// @return The identifier now written on the eSIM wallet
-    function setESIMUniqueIdentifierForAnESIMWallet(
-        address _eSIMWalletAddress,
-        string calldata _eSIMUniqueIdentifier
-    ) public onlyESIMWalletAdminOrRegistry returns (string memory) {
-        if(registry.isESIMWalletValid(_eSIMWalletAddress) == address(0)) {
-            revert Errors.UnknownESIMWallet(_eSIMWalletAddress);
-        }
-
-        registry.claimESIMIdentifier(_eSIMUniqueIdentifier, _eSIMWalletAddress);
-
-        ESIMWallet eSIMWallet = ESIMWallet(payable(_eSIMWalletAddress));
-        eSIMWallet.setESIMUniqueIdentifier(_eSIMUniqueIdentifier);
-
-        return eSIMWallet.eSIMUniqueIdentifier();
-    }
 
     /// @notice Allow owner to revoke or give access to any associated eSIM wallet for pulling ETH
     /// @dev The only way ETH access is ever granted. Binding a wallet never carries it, so a

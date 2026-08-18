@@ -23,22 +23,7 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
 
         vm.startPrank(eSIMWalletAdmin);
         vm.expectRevert(Errors.EmptyESIMIdentifier.selector);
-        deviceWallet.setESIMUniqueIdentifierForAnESIMWallet(
-            address(eSIMWallet2),
-            ""
-        );
-        vm.stopPrank();
-    }
-
-    function test_setESIMUniqueIdentifierForAnESIMWallet_deviceWallet() public {
-        deployWallets();
-
-        vm.startPrank(address(deviceWallet));
-        vm.expectRevert(bytes4(keccak256("OnlyESIMWalletAdminOrRegistry()")));
-        deviceWallet.setESIMUniqueIdentifierForAnESIMWallet(
-            address(eSIMWallet2),
-            "ESIM_0_2"
-        );
+        registry.assignESIMIdentifier(address(eSIMWallet2), "");
         vm.stopPrank();
     }
 
@@ -46,10 +31,7 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
         deployWallets();
 
         vm.startPrank(eSIMWalletAdmin);
-        deviceWallet.setESIMUniqueIdentifierForAnESIMWallet(
-            address(eSIMWallet2),
-            "ESIM_0_2"
-        );
+        registry.assignESIMIdentifier(address(eSIMWallet2), "ESIM_0_2");
         vm.stopPrank();
 
         assertEq(eSIMWallet2.eSIMUniqueIdentifier(), "ESIM_0_2", "ESIM unique identifier should have been initialised");

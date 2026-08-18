@@ -29,7 +29,7 @@ contract ETHAmountsTest is FuzzBase {
         _deployFuzzWallets();
 
         vm.prank(eSIMWalletAdmin);
-        fuzzDeviceWallet.setESIMUniqueIdentifierForAnESIMWallet(address(fuzzESIMWallet), "ESIM_FUZZ");
+        registry.assignESIMIdentifier(address(fuzzESIMWallet), "ESIM_FUZZ");
     }
 
     /// @notice Buying a bundle moves exactly its price to the vault and leaves nothing behind

@@ -68,7 +68,7 @@ abstract contract DeviceWalletFixture is DeployerBase {
         userESIMWallet = MockESIMWallet(payable(wallets[0].eSIMWallet));
 
         vm.startPrank(admin);
-        userDeviceWallet.setESIMUniqueIdentifierForAnESIMWallet(address(userESIMWallet), "ESIM_0_0");
+        registry.assignESIMIdentifier(address(userESIMWallet), "ESIM_0_0");
         vm.stopPrank();
 
         // A bind never carries ETH access, so the owner grants it here
@@ -150,8 +150,8 @@ abstract contract DeviceWalletFixture is DeployerBase {
 
         vm.startPrank(admin);
         // eSIMWallet1 -> has access to ETH, has eSIM identifier set
-        deviceWallet.setESIMUniqueIdentifierForAnESIMWallet(address(eSIMWallet1), "ESIM_0_1");
-        deviceWallet2.setESIMUniqueIdentifierForAnESIMWallet(address(eSIMWallet3), "ESIM_1_1");
+        registry.assignESIMIdentifier(address(eSIMWallet1), "ESIM_0_1");
+        registry.assignESIMIdentifier(address(eSIMWallet3), "ESIM_1_1");
         vm.stopPrank();
 
         // A bind never carries ETH access, so the two wallets that need it are granted it here

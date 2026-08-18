@@ -8,6 +8,7 @@ import "contracts/CustomStructs.sol";
 import {Errors} from "contracts/Errors.sol";
 
 import {FuzzBase} from "test/foundry/fuzz-testing/base/FuzzBase.sol";
+import {MockESIMWallet} from "test/utils/mocks/MockESIMWallet.sol";
 
 /// @notice The identifier lengths and array shapes the lazy registry accepts.
 /// @dev Two guards sit on the same call and neither implies the other. Identifiers are bounded at
@@ -285,5 +286,101 @@ contract IdentifiersAndArraysTest is FuzzBase {
 
         vm.prank(eSIMWalletAdmin);
         lazyWalletRegistry.batchPopulateHistory(devices, eSIMs, details);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Who may name an eSIM
+    // ---------------------------------------------------------------------------------------------
+
+    /// @notice No caller but the admin reaches the assign, whatever address it comes from
+    /// @dev Swept over the whole address space rather than a handful of named roles. The claim is
+    ///      permanent and the admin's transactions sit in the public mempool, so anyone able to
+    ///      call this could take an identifier by sending first.
+    /// forge-config: default.fuzz.runs = 2000
+    function testFuzz_assignESIMIdentifier_refusesEveryCallerButTheAdmin(address _caller) public {
+        vm.assume(_caller != eSIMWalletAdmin);
+        (, address eSIMWallet) = _deployPair(customDeviceUniqueIdentifiers[3], 7777);
+
+        vm.prank(_caller);
+        vm.expectRevert(Errors.OnlyAdmin.selector);
+        registry.assignESIMIdentifier(eSIMWallet, "eSIM_fuzz_assign");
+
+        assertEq(
+            registry.eSIMWalletForIdentifier("eSIM_fuzz_assign"),
+            address(0),
+            "A refused call must leave the identifier unheld"
+        );
+    }
+
+    /// @notice No caller but the registry writes an eSIM wallet's own identifier slot
+    /// @dev The owning device wallet is included in the sweep. It used to be the one caller, which
+    ///      let an owner fill the slot with a string the registry has no record of.
+    /// forge-config: default.fuzz.runs = 2000
+    function testFuzz_setESIMUniqueIdentifier_refusesEveryCallerButTheRegistry(address _caller) public {
+        vm.assume(_caller != address(registry));
+        (, address eSIMWallet) = _deployPair(customDeviceUniqueIdentifiers[3], 7778);
+
+        vm.prank(_caller);
+        vm.expectRevert(Errors.OnlyRegistry.selector);
+        MockESIMWallet(payable(eSIMWallet)).setESIMUniqueIdentifier("eSIM_fuzz_direct");
+
+        assertEq(
+            MockESIMWallet(payable(eSIMWallet)).eSIMUniqueIdentifier(),
+            "",
+            "A refused call must leave the wallet's own slot empty"
+        );
+    }
+
+    /// @notice One identifier answers with one wallet, for any identifier the admin picks
+    /// forge-config: default.fuzz.runs = 1000
+    function testFuzz_assignESIMIdentifier_holdsOneWalletPerIdentifier(uint256 _length) public {
+        string memory identifier = _stringOfLength(bound(_length, 1, MAX_IDENTIFIER_LENGTH));
+
+        (, address firstESIM) = _deployPair(customDeviceUniqueIdentifiers[3], 7779);
+        (, address secondESIM) = _deployPair(customDeviceUniqueIdentifiers[4], 7780);
+
+        vm.prank(eSIMWalletAdmin);
+        registry.assignESIMIdentifier(firstESIM, identifier);
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(
+            abi.encodeWithSelector(Errors.ESIMIdentifierAlreadyClaimed.selector, identifier, firstESIM)
+        );
+        registry.assignESIMIdentifier(secondESIM, identifier);
+
+        assertEq(
+            registry.eSIMWalletForIdentifier(identifier),
+            firstESIM,
+            "The identifier must still resolve to the wallet that claimed it"
+        );
+        assertEq(
+            MockESIMWallet(payable(secondESIM)).eSIMUniqueIdentifier(),
+            "",
+            "A refused claim must leave the second wallet's slot empty"
+        );
+    }
+
+    /// @notice Deploys one device wallet and its first eSIM wallet
+    function _deployPair(
+        string memory _deviceIdentifier,
+        uint256 _salt
+    ) private returns (address deviceWallet, address eSIMWallet) {
+        string[] memory identifiers = new string[](1);
+        bytes32[2][] memory keys = new bytes32[2][](1);
+        uint256[] memory salts = new uint256[](1);
+
+        identifiers[0] = _deviceIdentifier;
+        keys[0] = listOfOwnerKeys[_salt % 5];
+        salts[0] = _salt;
+
+        vm.prank(eSIMWalletAdmin);
+        Wallets[] memory wallets = deviceWalletFactory.deployDeviceWalletForUsers(
+            identifiers,
+            keys,
+            salts,
+            new uint256[](1)
+        );
+
+        return (wallets[0].deviceWallet, wallets[0].eSIMWallet);
     }
 }
