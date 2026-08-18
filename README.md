@@ -147,7 +147,7 @@ The full list, including the Ethereum Sepolia deployment, is in
 [deployments/address.json](./deployments/address.json). That file is addresses only. What the v0.8
 deploy captured beyond them, build provenance, every transaction, gas, constructor arguments and
 verification status, is in
-[deployments/base-sepolia-entrypoint-v0.8.json](./deployments/base-sepolia-entrypoint-v0.8.json).
+[deployments/base-sepolia-84532-entrypoint-v8.json](./deployments/base-sepolia-84532-entrypoint-v8.json).
 
 The two chains are not symmetric in one way that file does not record. The owner EOA carries an
 EIP-7702 delegation on Base Sepolia and none on OP Sepolia, so the same address is a smart account
