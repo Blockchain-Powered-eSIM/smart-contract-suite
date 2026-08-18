@@ -124,7 +124,7 @@ transactions go into the public mempool on all three, with no private relay in f
 
 ## Deployments
 
-Testnet only. The v0.8 column is the current deployment, from commit `8e49dd9`, tagged
+Testnet only. The v0.8 column is the current deployment, from commit [`8e49dd9`](https://github.com/Blockchain-Powered-eSIM/smart-contract-suite/tree/8e49dd96eb8dfd09b95d584079e423b5ed350a7b), tagged
 `deploy/base-sepolia-entrypoint-v8`. The two older columns bind the v0.7 EntryPoint and were built
 from an earlier commit. They were redeployed rather than upgraded, because the EntryPoint address is
 immutable in the wallets.
