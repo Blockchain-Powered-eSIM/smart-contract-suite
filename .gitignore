@@ -9,8 +9,12 @@ forge-cache/
 # deployments/address.json, which the scripts write and later scripts read.
 broadcast/
 lcov.info
-.env
 .DS_Store
+
+# Secrets. The suffix form covers the backups that pile up around a rotation, .env.old and
+# .env.local and whatever else, any one of which holds a live key.
+.env
+.env.*
 
 # Editor settings are per developer. The remappings inside are generated from remappings.txt
 # anyway, so a stale copy here is worse than no copy.
