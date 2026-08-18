@@ -28,6 +28,15 @@ library DeployConfig {
     ///      `userOpHash` to an EIP-712 domain separated form.
     address internal constant ENTRY_POINT_V08 = 0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108;
 
+    /// @notice EntryPoint version this build binds to, as it appears in the record key
+    /// @dev Part of the key rather than only a field inside the entry, for the same reason the
+    ///      chain id is. One chain can carry a v0.7 deployment and a v0.8 deployment at once, and
+    ///      they are different protocols to every offchain caller: a signature made for one is
+    ///      rejected by the other. Sharing a key would mean the newer record overwrites a
+    ///      deployment that is still being used, which is exactly what happened to `base-sepolia`
+    ///      before the chain id was added.
+    string internal constant ENTRY_POINT_TAG = "entrypoint-v8";
+
     /// @notice Delay every scheduled admin operation waits before it can be executed
     uint256 internal constant TIMELOCK_DELAY = 2 days;
 
@@ -131,9 +140,20 @@ library DeployConfig {
     ///      This does not tell a local fork apart from the chain it forked, because a fork keeps
     ///      the original chain id unless it is overridden. `Deploy.s.sol` refusing to write over an
     ///      existing entry is what covers that case; pass `--chain-id 31337` to anvil to be sure.
-    /// @return key Key for this chain in the deployment record, for example `base-sepolia-84532`
+    ///
+    ///      The EntryPoint tag comes last. It means the four records written before this build
+    ///      exists are no longer reachable by any script here, which is correct: they bind to the
+    ///      v0.7 singleton and nothing in this tree can talk to one.
+    /// @return key Key for this chain in the deployment record, for example
+    ///         `base-sepolia-84532-entrypoint-v8`
     function recordKey() internal view returns (string memory key) {
-        key = string.concat(chainLabel(), "-", vm.toString(block.chainid));
+        key = string.concat(
+            chainLabel(),
+            "-",
+            vm.toString(block.chainid),
+            "-",
+            ENTRY_POINT_TAG
+        );
     }
 
     /// @notice Readable name for this chain, for logs and for the record's own `chain` section
