@@ -16,7 +16,8 @@
 # domain, since v0.8 folds the chain id into userOpHash; EntryPointValidation.t.sol covers that at
 # the real chain id and this does not try to.
 #
-# The anvil-31337-entrypoint-v8 record this writes is a rehearsal artifact. It is removed on exit.
+# The anvil-31337-entrypoint-v8 record this writes is a rehearsal artifact, both the address book
+# entry and the record file of the same name. Both are removed on exit.
 
 set -euo pipefail
 
@@ -27,6 +28,7 @@ CHAIN_ID=31337
 RPC="http://127.0.0.1:8545"
 RECORD="deployments/address.json"
 RECORD_KEY="anvil-${CHAIN_ID}-entrypoint-v8"
+RECORD_FILE="deployments/${RECORD_KEY}.json"
 LOG_DIR="$(mktemp -d)"
 ANVIL_PID=""
 
@@ -37,8 +39,10 @@ cleanup() {
     local status=$?
     [[ -n "$ANVIL_PID" ]] && kill "$ANVIL_PID" 2>/dev/null || true
 
-    # Drop the rehearsal's record entry however the run ended. Leaving it behind is how a fork
-    # address gets mistaken for a deployed one later.
+    # Drop the rehearsal's record however the run ended. Leaving it behind is how a fork address
+    # gets mistaken for a deployed one later.
+    rm -f "$RECORD_FILE"
+
     if [[ -f "$RECORD" ]]; then
         python3 - "$RECORD" "$RECORD_KEY" <<'PY' || true
 import collections, json, pathlib, sys
@@ -135,7 +139,12 @@ probe_p256() {
 probe_p256 "$RPC" "the fork"
 probe_p256 "$ALCHEMY_BASE_SEPOLIA_HTTPS" "Base Sepolia itself"
 
-# Refuse to start on a record that already holds this key, the same way Deploy.s.sol does.
+# Refuse to start on a record that already exists, the same way Deploy.s.sol does. Either file
+# alone is enough: the deploy checks both.
+if [[ -f "$RECORD_FILE" ]]; then
+    fail "$RECORD_FILE exists. Remove it before rehearsing again."
+fi
+
 if python3 -c "import json,sys; sys.exit(0 if '$RECORD_KEY' in json.load(open('$RECORD')) else 1)" 2>/dev/null; then
     fail "$RECORD already holds $RECORD_KEY. Remove it before rehearsing again."
 fi
@@ -167,10 +176,18 @@ run_script configure scripts/deploy/Configure.s.sol:Configure
 run_script handover scripts/deploy/TransferOwnership.s.sol:TransferOwnership
 run_script rehearsal scripts/fork/ForkRehearsal.s.sol:ForkRehearsal
 
-log "Deployment record written by the rehearsal"
+log "Addresses written by the rehearsal"
 python3 -c "
 import json
 print(json.dumps(json.load(open('$RECORD'))['$RECORD_KEY'], indent=2))
+"
+
+log "Deployment record written by the rehearsal"
+python3 -c "
+import json
+r = json.load(open('$RECORD_FILE'))
+print(json.dumps({k: r[k] for k in ('chain', 'external', 'admin', 'status') if k in r}, indent=2))
+print('contracts:', ', '.join(r.get('contracts', {})))
 "
 
 log "Rehearsal passed"

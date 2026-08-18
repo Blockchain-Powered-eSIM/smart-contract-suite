@@ -76,9 +76,7 @@ contract Deploy is Script {
 
         // Refuse to write over a chain that already has a deployment. Overwriting the record is
         // how a live proxy stops being reachable by any script, since nothing else remembers it.
-        if(DeploymentRecord.has("contracts.RegistryProxy")) {
-            revert AlreadyDeployed(DeployConfig.recordKey());
-        }
+        if(DeploymentRecord.isRecorded()) revert AlreadyDeployed(DeployConfig.recordKey());
 
         _logPlan(config);
 
@@ -207,9 +205,11 @@ contract Deploy is Script {
     }
 
     /// @notice Writes the deployment record for this chain
+    /// @dev Two files. The full record goes to its own file named after the record key, and the
+    ///      flat name to address map goes into the shared address book under the same key. The
+    ///      address book is what the README, the SDK and anyone reading by hand actually want; the
+    ///      record file is what the configuration, handover and upgrade scripts read.
     function _record(DeployConfig.Config memory config, Deployed memory deployed) private {
-        string memory network = DeployConfig.recordKey();
-
         string memory record = vm.serializeString("record", "build", _buildProvenance());
         record = vm.serializeString("record", "chain", _chainSection(config));
         record = vm.serializeString("record", "external", _externalSection(config));
@@ -218,8 +218,42 @@ contract Deploy is Script {
         record = vm.serializeString("record", "contracts", _contractsSection(deployed));
         record = vm.serializeString("record", "status", _statusSection());
 
-        vm.writeJson(record, DeploymentRecord.PATH, string.concat(".", network));
-        console.log("Record written to", DeploymentRecord.PATH, "under", network);
+        DeploymentRecord.writeRecord(record);
+        DeploymentRecord.writeAddressBook(_addressBook(config, deployed));
+
+        console.log("Record written to", DeploymentRecord.recordPath());
+        console.log("Addresses written to", DeploymentRecord.ADDRESS_BOOK);
+    }
+
+    /// @notice The flat name to address map for this deployment
+    /// @dev Names match the entries already in the address book, so one chain's entry reads the
+    ///      same as the next. Forge sorts the keys on the way out, so the order here is for reading
+    ///      rather than for the file. The EntryPoint is in the map despite not being deployed by
+    ///      this script, because an address book that omits it cannot answer which EntryPoint these
+    ///      wallets are bound to, and that is the one thing the key promises.
+    function _addressBook(DeployConfig.Config memory config, Deployed memory deployed)
+        private
+        returns (string memory entry)
+    {
+        vm.serializeAddress("book", "EntryPoint", address(config.entryPoint));
+        vm.serializeAddress("book", "P256Verifier", deployed.p256Verifier);
+        vm.serializeAddress("book", "DeviceWalletImpl", deployed.deviceWalletImplementation);
+        vm.serializeAddress("book", "ESIMWalletImpl", deployed.eSIMWalletImplementation);
+        vm.serializeAddress("book", "DeviceWalletFactoryProxy", deployed.deviceWalletFactory);
+        vm.serializeAddress("book", "ESIMWalletFactoryProxy", deployed.eSIMWalletFactory);
+        vm.serializeAddress("book", "RegistryProxy", deployed.registry);
+        vm.serializeAddress("book", "LazyWalletRegistryProxy", deployed.lazyWalletRegistry);
+        vm.serializeAddress(
+            "book",
+            "DeviceWalletBeacon",
+            address(DeviceWalletFactory(deployed.deviceWalletFactory).beacon())
+        );
+        vm.serializeAddress(
+            "book",
+            "ESIMWalletBeacon",
+            address(ESIMWalletFactory(deployed.eSIMWalletFactory).beacon())
+        );
+        entry = vm.serializeAddress("book", "ProtocolAdmin", deployed.protocolAdmin);
     }
 
     /// @notice Everything needed to rebuild this bytecode later, collected offchain
