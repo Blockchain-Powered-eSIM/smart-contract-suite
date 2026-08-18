@@ -98,10 +98,8 @@ methods {
     function _.sendETHToDeviceWallet(uint256 amount) external => DISPATCHER(true);
     function _.setESIMUniqueIdentifier(string identifier) external => DISPATCHER(true);
     function _.addESIMWallet(address walletAddress, bool hasAccessToETH) external => DISPATCHER(true);
-    function _.setESIMUniqueIdentifierForAnESIMWallet(address walletAddress, string identifier)
-        external => DISPATCHER(true);
-    /// The registry reads this off `msg.sender` while a device wallet is claiming an eSIM
-    /// identifier, so the callee is the scene's device wallet whenever that wallet is the caller.
+    /// The registry reads this off the device wallet holding the eSIM wallet being named, while
+    /// checking the identifier against any lazy reservation.
     function _.deviceUniqueIdentifier() external => DISPATCHER(true);
     function _.populateHistory(ESIMWallet.DataBundleDetails[] bundles) external => DISPATCHER(true);
 
@@ -179,6 +177,20 @@ definition isInitialiser(method f) returns bool =
  || f.selector == sig:ESIMWallet.initialize(address, address).selector
  || f.selector == sig:Registry.initialize(address, address, address, address, address, address, uint256).selector;
 
+/// The methods in this scene that revert on every input, filtered out of every rule below.
+///
+/// No rule body can complete on one, so each buys a vacuity record per rule and proves nothing: nine
+/// of them across the three parametric rules, which is most of what the first runs of this spec
+/// reported. Their own specs pin the reverts, `Registry.spec` for the registry and `ESIMWallet.spec`
+/// for the wallet, so nothing is given up by dropping them here.
+///
+/// `renounceOwnership` is matched by selector alone because every `Ownable` contract in this scene
+/// overrides it to revert. `transferOwnership` is not: the registry's is the ordinary
+/// `Ownable2Step` one and has to stay covered, so only the eSIM wallet's is named.
+definition alwaysReverts(method f) returns bool =
+    f.selector == sig:Registry.renounceOwnership().selector
+ || (f.contract == eSIMWallet && f.selector == sig:ESIMWallet.transferOwnership(address).selector);
+
 /// The three instances in the scene are wired to each other.
 ///
 /// Without this the prover is free to hand back a device wallet pointing at some other registry, or
@@ -212,7 +224,7 @@ function requireLinkedScene() {
 /// skipped branch and finds the flag down from the first request. The revoke path writes zero and
 /// touches no mapping, and the re-add path runs after acceptance has cleared the request, so
 /// neither reopens the gap.
-rule aTransferRequestMeansTheHolderHasAlreadyLetGo(method f) filtered { f -> !isInitialiser(f) } {
+rule aTransferRequestMeansTheHolderHasAlreadyLetGo(method f) filtered { f -> !isInitialiser(f) && !alwaysReverts(f) } {
     requireLinkedScene();
     require eSIMWallet.newRequestedOwner() != 0 => !deviceWallet.isValidESIMWallet(eSIMWallet);
 
@@ -236,7 +248,7 @@ rule aTransferRequestMeansTheHolderHasAlreadyLetGo(method f) filtered { f -> !is
 /// this directory: these contracts sit behind beacon proxies and are set up in an initialiser rather
 /// than a constructor, so an invariant's base case would be arguing about a state the proxy never
 /// occupies.
-rule aHeldESIMWalletIsOwnedByTheDeviceWalletHoldingIt(method f) filtered { f -> !isInitialiser(f) } {
+rule aHeldESIMWalletIsOwnedByTheDeviceWalletHoldingIt(method f) filtered { f -> !isInitialiser(f) && !alwaysReverts(f) } {
     requireLinkedScene();
     require deviceWallet.isValidESIMWallet(eSIMWallet) => eSIMWallet.owner() == deviceWallet;
 
@@ -285,7 +297,7 @@ rule aHeldESIMWalletIsOwnedByTheDeviceWalletHoldingIt(method f) filtered { f -> 
 /// so the guard itself is exercised; what is missing is any statement about that second wallet's own
 /// mapping. Covering it needs two device wallet instances, which doubles the parametric instances
 /// for a fact the first rule already fixes on each of them separately.
-rule theRegistryNamesTheDeviceWalletThatHoldsTheESIMWallet(method f) filtered { f -> !isInitialiser(f) } {
+rule theRegistryNamesTheDeviceWalletThatHoldsTheESIMWallet(method f) filtered { f -> !isInitialiser(f) && !alwaysReverts(f) } {
     requireLinkedScene();
     require deviceWallet.isValidESIMWallet(eSIMWallet) => eSIMWallet.owner() == deviceWallet;
     require deviceWallet.isValidESIMWallet(eSIMWallet) =>

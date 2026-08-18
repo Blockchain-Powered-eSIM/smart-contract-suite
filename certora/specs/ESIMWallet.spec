@@ -22,12 +22,16 @@
 /// Reading the result, which the headline count gets backwards. `rule_sanity` appends `assert false`
 /// to each rule and the log carries the verdict of that modified rule, not a verdict on the check.
 /// A record reading `Violated: <rule>-<method>-rule_not_vacuous` means the body was reachable, which
-/// is the outcome wanted. A `rule_not_vacuous` record reading verified is the failure. The methods
-/// that read verified here are `renounceOwnership()` and `transferOwnership(address)` on every rule,
-/// both overridden to revert unconditionally so that no rule body can complete on them, plus
-/// `setESIMUniqueIdentifier(string)` on `noMethodReopensTheIdentifier` alone, where the rule has
-/// already issued an identifier and the setter is meant to refuse a second one. Count the records
-/// carrying no sanity suffix and ignore the fraction.
+/// is the outcome wanted. A `rule_not_vacuous` record reading verified is the failure.
+///
+/// Three methods used to read verified on every run and none of them does now. `renounceOwnership()`
+/// and `transferOwnership(address)` are both overridden to revert unconditionally, so no rule body
+/// could complete on them; they are filtered out of the parametric rules and pinned by
+/// `theOverriddenOwnershipEntryPointsAlwaysRevert` instead. `setESIMUniqueIdentifier(string)` read
+/// verified on `noMethodReopensTheIdentifier` alone, since that rule issues an identifier before it
+/// runs the method and the setter is meant to refuse a second one; it is filtered out there and
+/// covered by `theIdentifierIsIssuedAtMostOnce` directly above. Count the records carrying no sanity
+/// suffix and ignore the fraction.
 
 methods {
     function owner() external returns (address) envfree;
@@ -40,6 +44,32 @@ methods {
     /// calls would havoc this wallet's own storage and every rule below would fail for the wrong
     /// reason.
     unresolved external in _._ => DISPATCH [] default NONDET;
+}
+
+/// The two methods no rule body can complete on.
+///
+/// Both are overridden to revert on every input, so a parametric rule that leaves them in buys two
+/// vacuity records per rule and proves nothing. Filtered out everywhere below and pinned by the rule
+/// underneath instead, so removing an override fails a check rather than quietly turning a pile of
+/// vacuity records into real ones nobody reads.
+definition alwaysReverts(method f) returns bool =
+    f.selector == sig:renounceOwnership().selector
+ || f.selector == sig:transferOwnership(address).selector;
+
+/// Neither OpenZeppelin ownership entry point is reachable.
+///
+/// What the filter above gives up, stated directly. `transferOwnership` would move the owner in one
+/// step past the offer this contract's whole state machine is built on, and `renounceOwnership`
+/// would leave the wallet owned by nobody while `deviceWallet` still named the old holder, stranding
+/// its ETH.
+rule theOverriddenOwnershipEntryPointsAlwaysRevert(address candidate) {
+    env callEnv;
+
+    renounceOwnership@withrevert(callEnv);
+    assert lastReverted, "an eSIM wallet owner was able to renounce ownership";
+
+    transferOwnership@withrevert(callEnv, candidate);
+    assert lastReverted, "ownership moved through the one-step OpenZeppelin entry point";
 }
 
 /// The identifier is issued once and never reissued.
@@ -66,7 +96,14 @@ rule theIdentifierIsIssuedAtMostOnce() {
 /// string to compare it. Driving the setter is the stronger statement in any case: it is the only
 /// writer, so a method that cleared the identifier would show up here as the setter succeeding
 /// twice, whatever it wrote.
-rule noMethodReopensTheIdentifier(method f) {
+///
+/// The setter is filtered out of the middle call only. It is driven either side regardless, and as
+/// the middle call it can never run, since the rule has just issued an identifier. Leaving it in
+/// bought one vacuity record; the case it stands for is `theIdentifierIsIssuedAtMostOnce` above.
+rule noMethodReopensTheIdentifier(method f) filtered {
+    f -> !alwaysReverts(f)
+      && f.selector != sig:setESIMUniqueIdentifier(string).selector
+} {
     env issuing;
     string identifier;
     setESIMUniqueIdentifier(issuing, identifier);
@@ -86,12 +123,13 @@ rule noMethodReopensTheIdentifier(method f) {
 ///
 /// The original plan expected this to fail, catching the renounce path that leaves `owner()` at zero
 /// while `deviceWallet` still names the old holder, stranding the wallet's ETH. `renounceOwnership`
-/// has since been overridden to revert, so this rule now confirms that fix rather than finding it.
-/// It is kept parametric so a future method that clears the owner fails here.
+/// has since been overridden to revert, which is pinned by
+/// `theOverriddenOwnershipEntryPointsAlwaysRevert` rather than here. This stays parametric so a
+/// future method that clears the owner some other way fails here.
 ///
 /// A transition rule rather than an invariant on purpose: the owner is set in `initialize` rather
 /// than a constructor, so an invariant would have to fail its base case before saying anything.
-rule anOwnedWalletNeverBecomesUnowned(method f) {
+rule anOwnedWalletNeverBecomesUnowned(method f) filtered { f -> !alwaysReverts(f) } {
     require owner() != 0;
 
     env callEnv;
@@ -119,7 +157,8 @@ rule anOwnedWalletNeverBecomesUnowned(method f) {
 /// only by `requestTransferOwnership`, which admits only the device wallet, and the device wallet is
 /// named by this very function.
 rule anOutstandingOfferNeverNamesTheCurrentOwner(method f) filtered {
-    f -> f.selector != sig:initialize(address, address).selector
+    f -> !alwaysReverts(f)
+      && f.selector != sig:initialize(address, address).selector
 } {
     require newRequestedOwner() == 0 || newRequestedOwner() != owner();
 
@@ -151,7 +190,8 @@ rule acceptingAnOfferConsumesItAndMovesTheWallet() {
 /// including the two OpenZeppelin entry points this contract overrides to revert, has to leave the
 /// owner alone or go through the offer.
 rule theOwnerMovesOnlyToTheOfferedAddress(method f) filtered {
-    f -> f.selector != sig:initialize(address, address).selector
+    f -> !alwaysReverts(f)
+      && f.selector != sig:initialize(address, address).selector
 } {
     address ownerBefore = owner();
     address offered = newRequestedOwner();
@@ -177,7 +217,8 @@ rule theOwnerMovesOnlyToTheOfferedAddress(method f) filtered {
 /// protocol. `sendETHToDeviceWallet` pays out to `owner()` while `onlyDeviceWallet` admits
 /// `deviceWallet`, so a drift is directly a misdirected payment.
 rule theOwnerIsAlwaysTheDeviceWallet(method f) filtered {
-    f -> f.selector != sig:initialize(address, address).selector
+    f -> !alwaysReverts(f)
+      && f.selector != sig:initialize(address, address).selector
 } {
     require owner() == deviceWallet();
 
@@ -216,7 +257,7 @@ rule theOwnerIsAlwaysTheDeviceWallet(method f) filtered {
 /// The second assert is what makes the handover exception safe. A handover may only take the
 /// ceiling to zero, which hands the wallet to the registry default rather than to a figure the
 /// outgoing owner chose. Anything else on that path would be a second, unguarded writer.
-rule thePriceCeilingIsSetOnlyByItsSetter(method f) {
+rule thePriceCeilingIsSetOnlyByItsSetter(method f) filtered { f -> !alwaysReverts(f) } {
     uint256 capBefore = dataBundlePriceCap();
 
     env callEnv;
@@ -237,7 +278,8 @@ rule thePriceCeilingIsSetOnlyByItsSetter(method f) {
 
 /// The factory that deployed this wallet is write-once.
 rule theFactoryIsWriteOnce(method f) filtered {
-    f -> f.selector != sig:initialize(address, address).selector
+    f -> !alwaysReverts(f)
+      && f.selector != sig:initialize(address, address).selector
 } {
     address factoryBefore = eSIMWalletFactory();
 

@@ -41,8 +41,9 @@
 /// `initialize`, and OpenZeppelin lets a nested initialiser through on
 /// `initialized == 1 && address(this).code.length == 0`, the branch that recognises a constructor.
 /// The prover models this contract as carrying code, so that branch is false and `init` always
-/// reverts. It shows up as a `rule_not_vacuous` record reading verified on the one rule that does
-/// not filter `init` out. The long note on R-17 has the rest of it.
+/// reverts. Every parametric rule below filters it out for that reason, not only the two that filter
+/// it because it is the writer they are about, since leaving it in buys a `rule_not_vacuous` record
+/// reading verified and no proof. The long note on R-17 has the rest of it.
 ///
 /// Reading the result, which the headline count gets backwards. `rule_sanity` appends `assert false`
 /// to each rule and the log carries the verdict of that modified rule, not a verdict on the check.
@@ -76,7 +77,9 @@ methods {
 /// A transition rule rather than an invariant because these wallets live behind a beacon proxy and
 /// are set up in `init` rather than a constructor, so an invariant's base case would be arguing
 /// about a state the proxy never occupies.
-rule theRightToPullETHNeverOutlivesMembership(method f, address eSIMWallet) {
+rule theRightToPullETHNeverOutlivesMembership(method f, address eSIMWallet) filtered {
+    f -> f.selector != sig:init(address, bytes32[2], string, address).selector
+} {
     require canPullETH(eSIMWallet) => isValidESIMWallet(eSIMWallet);
 
     env callEnv;
@@ -202,7 +205,9 @@ rule togglingETHAccessOnAnUnknownWalletAlwaysReverts(address eSIMWallet, bool ha
 /// The admin used to undo one by deploying a second eSIM wallet with the flag set.
 ///
 /// Stated over the whole method set, so a later function that writes the flag has to answer it too.
-rule onlyToggleAccessToETHGrantsETHAccess(method f, address eSIMWallet) {
+rule onlyToggleAccessToETHGrantsETHAccess(method f, address eSIMWallet) filtered {
+    f -> f.selector != sig:init(address, bytes32[2], string, address).selector
+} {
     require !canPullETH(eSIMWallet);
 
     env callEnv;
