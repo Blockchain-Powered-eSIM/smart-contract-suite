@@ -25,7 +25,7 @@ upgrade one at a time. Every wallet is a beacon proxy, so one beacon call moves 
 | `Account4337` | The ERC-4337 `IAccount` and `IERC1271` base that `DeviceWallet` builds on | Inherited by `DeviceWallet` |
 | `WebAuthn` | Verifies WebAuthn authentication assertions. Tries the RIP-7212 precompile first and falls back to FreshCryptoLib | Library |
 | `P256Verifier` | One immutable address for accounts to verify through, wrapping the WebAuthn library | Plain contract |
-| `ProtocolAdmin` | Timelock meant to own the four singletons. Adds a delay floor that `updateDelay` cannot go under, and a guardian role with exactly two powers. **Written, not deployed** | Plain contract |
+| `ProtocolAdmin` | Timelock owning the four singletons. Adds a delay floor that `updateDelay` cannot go under, and a guardian role with exactly two powers | Plain contract |
 | `Errors` | Every custom error in the suite | Library |
 | `CustomStructs` | Structs shared across contracts | Types |
 | `interfaces/` | `IPausable` and `IOwnable2Step`, the two calls `ProtocolAdmin` makes back into the protocol | Interfaces |
@@ -115,27 +115,33 @@ slither . --filter-paths "test/,script/,lib/,node_modules/"
 aderyn .
 ```
 
-**Trust model, as it stands.** One EOA owns all four UUPS proxies and both factories that own the
-beacons, on both chains. A single key compromise reaches every wallet in one transaction, and admin
-transactions go into the public mempool with no private relay in front of them. `ProtocolAdmin`
-exists to replace that with a two day timelock and it is not deployed yet. Read the testnet
-deployment below with that in mind.
+**Trust model, as it stands.** On the v0.8 Base Sepolia deployment, `ProtocolAdmin` owns all four
+UUPS proxies and both factories that own the beacons. Every owner gated call now waits out a two day
+delay, proposing is 2-of-3 or a cold key, and a 3-of-3 guardian executes. The older deployments are
+not on that footing: one EOA still owns everything on the v0.7 Base Sepolia and OP Sepolia
+deployments, so a single key compromise reaches every wallet there in one transaction. Admin
+transactions go into the public mempool on all three, with no private relay in front of them.
 
 ## Deployments
 
-Testnet only. These were deployed from an earlier commit and bind the v0.7 EntryPoint, while the
-current branch builds against v0.8, so the suite gets redeployed rather than upgraded.
+Testnet only. The v0.8 column is the current deployment, from commit `8e49dd9`, tagged
+`deploy/base-sepolia-entrypoint-v8`. The two older columns bind the v0.7 EntryPoint and were built
+from an earlier commit. They were redeployed rather than upgraded, because the EntryPoint address is
+immutable in the wallets.
 
-| Contract | Base Sepolia (EP v0.7) | OP Sepolia |
-|---|---|---|
-| `RegistryProxy` | `0xCa447f5C75C57f6C59027304A5Fb5A09F0E005c9` | `0x96dA9cE92D2C09f7b3ADE01260608e9079f16d12` |
-| `LazyWalletRegistryProxy` | `0x8a1E53b903efcc6b252CE4bD3b255202318505Ef` | `0x3F14D060074B174B0784056bDe5e0f8970D25ff1` |
-| `DeviceWalletFactoryProxy` | `0xB4473979ff8cE4e09161B08f74EEb66BD7718076` | `0x243cCdE6a56b0Ba740E067f39896772748E20fFD` |
-| `ESIMWalletFactoryProxy` | `0x63005d8214533fC7209678Aa39F7b9b0b51a7bcB` | `0x8444bF9C39F01e4B092e42DC11695C61f8B93957` |
-| `DeviceWalletImpl` | `0xde0dC03eF67317D4702e1d6Ef3f8cE246517e84e` | `0x22FCFa80868dc9F423873F9332817eDAe4483974` |
-| `ESIMWalletImpl` | `0x59A78Cbb73e94a3fD6ada0136C89AE658BA16Dd9` | `0xf86FE9253b6ea9454abda657f47aE508B00c15C1` |
-| `P256Verifier` | `0xF04f3b3935aD461D17d4a8a78E7ea21d4a61AEb1` | `0x3c15a78046838481788613A9F111F972B562623C` |
-| `EntryPoint` (v0.7) | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` |
+| Contract | Base Sepolia (EP v0.8) | Base Sepolia (EP v0.7) | OP Sepolia |
+|---|---|---|---|
+| `RegistryProxy` | `0x89e386E3251692F21a2E9048A46518AdC2A5Cb4A` | `0xCa447f5C75C57f6C59027304A5Fb5A09F0E005c9` | `0x96dA9cE92D2C09f7b3ADE01260608e9079f16d12` |
+| `LazyWalletRegistryProxy` | `0x394177c5cc4762b897c37de1820259B75993e033` | `0x8a1E53b903efcc6b252CE4bD3b255202318505Ef` | `0x3F14D060074B174B0784056bDe5e0f8970D25ff1` |
+| `DeviceWalletFactoryProxy` | `0xB006c7066C89a5d7Bfc229e9fb0bADf96c8F979f` | `0xB4473979ff8cE4e09161B08f74EEb66BD7718076` | `0x243cCdE6a56b0Ba740E067f39896772748E20fFD` |
+| `ESIMWalletFactoryProxy` | `0x13998C0bb7433c51cE5101922B12EE69F459699A` | `0x63005d8214533fC7209678Aa39F7b9b0b51a7bcB` | `0x8444bF9C39F01e4B092e42DC11695C61f8B93957` |
+| `DeviceWalletImpl` | `0x8076aD3AdaeFb5A35a1ADFdE850F44A06C379DC8` | `0xde0dC03eF67317D4702e1d6Ef3f8cE246517e84e` | `0x22FCFa80868dc9F423873F9332817eDAe4483974` |
+| `ESIMWalletImpl` | `0xF77FE1da39501Bb1963f08e8778242F25Bc668C2` | `0x59A78Cbb73e94a3fD6ada0136C89AE658BA16Dd9` | `0xf86FE9253b6ea9454abda657f47aE508B00c15C1` |
+| `DeviceWalletBeacon` | `0x985519b60b39C630d9575911d62635A993383900` | not recorded | not recorded |
+| `ESIMWalletBeacon` | `0x7D0515286Ad92953665B6ED02D4e3b3901479c19` | not recorded | not recorded |
+| `P256Verifier` | `0x625561429bD99d647956ccBCA4eBf762aaA142c5` | `0xF04f3b3935aD461D17d4a8a78E7ea21d4a61AEb1` | `0x3c15a78046838481788613A9F111F972B562623C` |
+| `ProtocolAdmin` | `0x77A1D6f27462c34BF038832d9Cff6b3E94a9Fe6F` | not deployed | not deployed |
+| `EntryPoint` | `0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108` | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` |
 
 The full list, including the Ethereum Sepolia deployment, is in
 [deployments/address.json](./deployments/address.json).
