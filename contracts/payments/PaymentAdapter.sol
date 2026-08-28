@@ -2,12 +2,18 @@
 pragma solidity 0.8.36;
 
 // Libraries
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Errors} from "../Errors.sol";
+
+// Interfaces
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IPaymentRegistry} from "../interfaces/IPaymentRegistry.sol";
 
 // Contracts
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 
 /// @notice One currency the protocol will price a data bundle in
 /// @dev 23 bytes, so it fits one slot with nine to spare. New fields have to stay inside those
@@ -20,13 +26,17 @@ struct Asset {
     address token;       // ERC-20 address, or zero for fiat and non-EVM assets
 }
 
-/// @notice Holds the accepted currencies, converts prices, and spends payment references
+/// @notice Holds the accepted currencies, converts prices, moves tokens to the vault, and spends
+///         payment references
 /// @dev Prices cross contract boundaries in USD cents only, and this is the one place a cent
 ///      figure becomes a token amount, so a decimals mismatch cannot happen rather than having to
 ///      be checked for. There are no price feeds, so a currency not already in dollars has no
 ///      conversion here. UUPS and not swappable: `usedReferences` is replay protection, and a
 ///      fresh copy would re-open every reference already spent.
-contract PaymentAdapter is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable {
+///
+///      Tokens pass through in one call and never rest here.
+contract PaymentAdapter is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, ReentrancyGuardUpgradeable {
+    using SafeERC20 for IERC20;
 
     /// @notice Cents per dollar, the divisor that takes a cent price down to whole units
     uint256 private constant CENTS_PER_DOLLAR = 100;
@@ -70,9 +80,31 @@ contract PaymentAdapter is Initializable, UUPSUpgradeable, Ownable2StepUpgradeab
     /// @notice Emitted when a payment reference is spent
     event PaymentReferenceConsumed(bytes32 indexed _paymentReference);
 
+    /// @notice Emitted when a data bundle is paid for in tokens through this contract
+    /// @dev One address for an indexer to watch instead of every eSIM wallet. The vault is
+    ///      recorded because it can be rotated, and reconciliation needs the one that was paid.
+    event PaymentSettled(
+        bytes32 indexed _symbol,
+        address indexed _eSIMWallet,
+        address indexed _vault,
+        uint64 _priceUSDCents,
+        uint256 _spent,
+        uint256 _refunded
+    );
+
     /// @notice Restricts a call to the registry
     modifier onlyRegistry() {
         if(msg.sender != registry) revert Errors.OnlyRegistry();
+        _;
+    }
+
+    /// @notice Restricts a call to an eSIM wallet the registry has a record of
+    /// @dev Read from the registry on every call rather than held here, so a wallet the registry
+    ///      has let go cannot keep paying through this contract.
+    modifier onlyProtocolESIMWallet() {
+        if(IPaymentRegistry(registry).isESIMWalletValid(msg.sender) == address(0)) {
+            revert Errors.NotAProtocolESIMWallet(msg.sender);
+        }
         _;
     }
 
@@ -104,6 +136,7 @@ contract PaymentAdapter is Initializable, UUPSUpgradeable, Ownable2StepUpgradeab
 
         __Ownable2Step_init();
         __Ownable_init(_upgradeManager);
+        __ReentrancyGuard_init();
 
         emit PaymentAdapterInitialized(_registry, _settlementToken);
     }
@@ -146,12 +179,7 @@ contract PaymentAdapter is Initializable, UUPSUpgradeable, Ownable2StepUpgradeab
     /// @param _priceUSDCents Price in USD cents
     /// @return amountIn Amount in that currency's own smallest unit
     function quote(bytes32 _symbol, uint64 _priceUSDCents) external view returns (uint256 amountIn) {
-        Asset memory asset = assets[_symbol];
-
-        if(!asset.allowed) revert Errors.AssetNotAllowed(_symbol);
-        if(!asset.isDollarUnit) revert Errors.AssetNeedsSwap(_symbol);
-
-        return (uint256(_priceUSDCents) * 10 ** asset.decimals) / CENTS_PER_DOLLAR;
+        return _quote(_symbol, assets[_symbol], _priceUSDCents);
     }
 
     /// @notice Reads back a currency entry, reverting if it is not allowed
@@ -164,6 +192,51 @@ contract PaymentAdapter is Initializable, UUPSUpgradeable, Ownable2StepUpgradeab
         if(!asset.allowed) revert Errors.AssetNotAllowed(_symbol);
 
         return asset;
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Settlement
+    // ---------------------------------------------------------------------------------------------
+
+    /// @notice Pays the vault for one data bundle out of tokens the caller has already sent here
+    /// @dev The caller funds this contract and calls settle in the same transaction, which leaves
+    ///      the tokens here for a swap to be added later without changing this signature.
+    ///
+    ///      The refund is bounded by what the caller funded rather than by the balance, so a token
+    ///      sent here by mistake is not swept out by the next purchase. A fee-on-transfer token
+    ///      delivers less than declared and fails the funding check.
+    /// @param _symbol Currency being paid in
+    /// @param _priceUSDCents Price of the data bundle, in USD cents
+    /// @param _amountIn Amount the caller has funded, and the most it is willing to spend
+    /// @param _refundTo Address anything unspent goes back to
+    /// @return spent Amount that reached the vault
+    /// @return refunded Amount returned to `_refundTo`, always zero until a swap can overshoot
+    function settle(
+        bytes32 _symbol,
+        uint64 _priceUSDCents,
+        uint256 _amountIn,
+        address _refundTo
+    ) external onlyProtocolESIMWallet nonReentrant returns (uint256 spent, uint256 refunded) {
+        if(_priceUSDCents == 0) revert Errors.ZeroDataBundlePrice();
+        if(_refundTo == address(0)) revert Errors.ZeroAddress("_refundTo");
+
+        Asset memory asset = assets[_symbol];
+        if(asset.token == address(0)) revert Errors.AssetNotTransferable(_symbol);
+
+        spent = _quote(_symbol, asset, _priceUSDCents);
+        if(spent > _amountIn) revert Errors.SettlementAboveMax(spent, _amountIn);
+
+        IERC20 token = IERC20(asset.token);
+        uint256 held = token.balanceOf(address(this));
+        if(held < _amountIn) revert Errors.SettlementNotFunded(_amountIn, held);
+
+        refunded = _amountIn - spent;
+        address vault = IPaymentRegistry(registry).vault();
+
+        emit PaymentSettled(_symbol, msg.sender, vault, _priceUSDCents, spent, refunded);
+
+        token.safeTransfer(vault, spent);
+        if(refunded != 0) token.safeTransfer(_refundTo, refunded);
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -210,6 +283,22 @@ contract PaymentAdapter is Initializable, UUPSUpgradeable, Ownable2StepUpgradeab
     // ---------------------------------------------------------------------------------------------
     // Internals
     // ---------------------------------------------------------------------------------------------
+
+    /// @notice The cents to smallest-unit conversion `quote` and `settle` both go through
+    /// @dev One copy, so a settled amount can never disagree with the quoted one.
+    /// @param _symbol Currency the price is being expressed in, carried only for the revert
+    /// @param _asset The entry already read from storage
+    /// @param _priceUSDCents Price in USD cents
+    function _quote(bytes32 _symbol, Asset memory _asset, uint64 _priceUSDCents)
+        private
+        pure
+        returns (uint256)
+    {
+        if(!_asset.allowed) revert Errors.AssetNotAllowed(_symbol);
+        if(!_asset.isDollarUnit) revert Errors.AssetNeedsSwap(_symbol);
+
+        return (uint256(_priceUSDCents) * 10 ** _asset.decimals) / CENTS_PER_DOLLAR;
+    }
 
     /// @notice Validates and stores one currency entry
     /// @dev A non-zero `decimals` is what marks a symbol as registered, so withdrawing a currency
