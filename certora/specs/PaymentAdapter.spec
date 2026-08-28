@@ -6,16 +6,19 @@
 /// because a reference is one offchain payment and the backend retries the whole onchain step on
 /// any failure, so a reference that could be spent again is a user charged once and billed twice.
 ///
-/// Scope. This contract calls nothing out, so there is no cross-contract statement to make here.
-/// The dispatch list is empty, which leaves the one delegate call, `upgradeToAndCall` reaching
-/// `Address.functionDelegateCall`, on the NONDET default. Nothing below says anything about what a
-/// new implementation does to this storage on the way through an upgrade. That is deliberate, since
-/// the implementation is not known here, but it means the write-once rules cover every caller
-/// except the one that replaces the code.
+/// Scope. `settle` calls the registry and a token, and both live outside the scene, so each of
+/// those four signatures is summarised NONDET by name. Naming them matters: a call whose selector
+/// is known and whose callee is not never reaches the `unresolved external` line, so leaving them
+/// out hands the prover an AUTO havoc instead. The dispatch list is empty, which leaves the one
+/// delegate call, `upgradeToAndCall` reaching `Address.functionDelegateCall`, on the NONDET
+/// default. Nothing below says anything about what a new implementation does to this storage on the
+/// way through an upgrade, which is deliberate since the implementation is not known here.
 ///
-/// The reference rules are the release 1 form of the property section 9 states over `settle`. There
-/// is no `settle` yet, so what is provable now is the half that does not depend on it: a reference
-/// is marked by one entry point, only for the registry, and never goes back.
+/// What is not stated here. Whether the vault actually received the tokens is a fact about the
+/// token, which is not in the scene and is chosen by the owner when a currency is registered. The
+/// rules below cover the half that is this contract's own: the amount it decides to move is the
+/// amount it quoted, and settling changes neither the currency table nor the reference mapping.
+/// The transfer itself is carried by the unit and invariant tests.
 ///
 /// `renounceOwnership()` is overridden to revert unconditionally, so no rule body can complete on
 /// it. It is filtered out of every parametric rule and pinned by `theRenouncePathAlwaysReverts`
@@ -38,7 +41,13 @@ methods {
     function settlementToken() external returns (address) envfree;
     function owner() external returns (address) envfree;
 
-    /// Nothing outside this contract is in the scene.
+    /// The four calls `settle` makes out of the scene, named one signature at a time.
+    function _.vault() external => NONDET;
+    function _.isESIMWalletValid(address) external => NONDET;
+    function _.balanceOf(address) external => NONDET;
+    function _.transfer(address, uint256) external => NONDET;
+
+    /// Nothing else outside this contract is in the scene.
     unresolved external in _._ => DISPATCH [] default NONDET;
 }
 
@@ -241,6 +250,50 @@ rule spendingAReferenceTouchesNoOther(method f, bytes32 spent, bytes32 other)
     consumePaymentReference(callEnv, spent);
 
     assert !usedReferences(other), "spending one payment reference marked another";
+}
+
+// ---------------------------------------------------------------------------------------------
+// Settlement
+// ---------------------------------------------------------------------------------------------
+
+/// A settlement spends what the quote said and no more.
+///
+/// The two figures are worked out by the same code, and this is what says so. If they could differ,
+/// the wallet would be told one price and the vault paid another, with nothing else in the protocol
+/// holding a second copy to catch it.
+rule aSettlementSpendsTheQuotedAmount(bytes32 symbol, uint64 priceUSDCents, uint256 amountIn, address refundTo) {
+    env callEnv;
+    uint256 spent;
+    uint256 refunded;
+    spent, refunded = settle(callEnv, symbol, priceUSDCents, amountIn, refundTo);
+
+    assert spent == quote(symbol, priceUSDCents), "a settlement spent something other than the quote";
+}
+
+/// A settlement never moves more than the caller funded.
+///
+/// The refund is bounded by what came in rather than by the balance, which is what keeps a token
+/// sent here by mistake from leaving with the next purchase.
+rule aSettlementNeverMovesMoreThanWasFunded(bytes32 symbol, uint64 priceUSDCents, uint256 amountIn, address refundTo) {
+    env callEnv;
+    uint256 spent;
+    uint256 refunded;
+    spent, refunded = settle(callEnv, symbol, priceUSDCents, amountIn, refundTo);
+
+    assert spent + refunded == to_mathint(amountIn), "a settlement moved a different amount than was funded";
+}
+
+/// A settlement in a currency the table has withdrawn is refused.
+///
+/// The withdrawal has to close the money path as well as the pricing one, or a currency the
+/// protocol no longer accepts could still be paid in.
+rule aWithdrawnCurrencyNeverSettles(bytes32 symbol, uint64 priceUSDCents, uint256 amountIn, address refundTo) {
+    require !currencyIsAllowed(symbol);
+
+    env callEnv;
+    settle@withrevert(callEnv, symbol, priceUSDCents, amountIn, refundTo);
+
+    assert lastReverted, "a currency the table does not allow was settled in";
 }
 
 // ---------------------------------------------------------------------------------------------

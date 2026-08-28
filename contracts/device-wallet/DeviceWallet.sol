@@ -227,8 +227,8 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     /// @return The amount pulled
     function pullToken(address _token, uint256 _amount)
         external
-        onlyAssociatedESIMWallets
         nonReentrant
+        onlyAssociatedESIMWallets
         returns (uint256)
     {
         registry.requireNotPaused();

@@ -216,7 +216,7 @@ contract PaymentAdapter is Initializable, UUPSUpgradeable, Ownable2StepUpgradeab
         uint64 _priceUSDCents,
         uint256 _amountIn,
         address _refundTo
-    ) external onlyProtocolESIMWallet nonReentrant returns (uint256 spent, uint256 refunded) {
+    ) external nonReentrant onlyProtocolESIMWallet returns (uint256 spent, uint256 refunded) {
         if(_priceUSDCents == 0) revert Errors.ZeroDataBundlePrice();
         if(_refundTo == address(0)) revert Errors.ZeroAddress("_refundTo");
 

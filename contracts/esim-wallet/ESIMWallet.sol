@@ -374,7 +374,7 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         bytes32 _asset,
         uint256 _maxAmountIn,
         bytes32 _paymentReference
-    ) public onlyDeviceWalletOrESIMWalletAdmin nonReentrant returns (bool) {
+    ) external nonReentrant onlyDeviceWalletOrESIMWalletAdmin returns (bool) {
         Registry registry = deviceWallet.registry();
         registry.requireNotPaused();
         if(_dataBundleDetail.id == bytes32(0)) revert Errors.EmptyDataBundleID();
@@ -396,24 +396,26 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         uint256 amountIn = adapter.quote(_asset, _dataBundleDetail.priceUSDCents);
         if(amountIn > _maxAmountIn) revert Errors.SettlementAboveMax(amountIn, _maxAmountIn);
 
+        // Recorded before any token moves, so nothing downstream reads a history missing this
+        transactionHistory.push(_dataBundleDetail);
+
         IERC20 token = IERC20(asset.token);
         uint256 held = token.balanceOf(address(this));
         if(held < amountIn) deviceWallet.pullToken(asset.token, amountIn - held);
 
-        // Recorded before the money leaves, so nothing downstream reads a history missing this
-        transactionHistory.push(_dataBundleDetail);
-
         // Funded first, then told to settle. That is what lets a swap be added there later
         // without changing anything here.
         token.safeTransfer(adapterAddress, amountIn);
-        adapter.settle(_asset, _dataBundleDetail.priceUSDCents, amountIn, address(this));
+        (uint256 spent,) = adapter.settle(_asset, _dataBundleDetail.priceUSDCents, amountIn, address(this));
 
+        // What the adapter reports spending, not what this wallet sent it. Anything it did not
+        // need comes back here, and the event should say which of the two happened.
         emit DataBundleBoughtWithToken(
             _dataBundleDetail.id,
             _dataBundleDetail.priceUSDCents,
             _asset,
             asset.token,
-            amountIn,
+            spent,
             _paymentReference
         );
 
