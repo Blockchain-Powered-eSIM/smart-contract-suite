@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.36;
 
+// Interfaces
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+
 // Contracts
 import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
 import {Registry} from "../../contracts/Registry.sol";
 import {DeviceWalletFactory} from "../../contracts/device-wallet/DeviceWalletFactory.sol";
 import {ESIMWalletFactory} from "../../contracts/esim-wallet/ESIMWalletFactory.sol";
+import {PaymentAdapter, Asset} from "../../contracts/payments/PaymentAdapter.sol";
 
 // Config
 import {DeployConfig} from "./config/DeployConfig.sol";
@@ -27,11 +31,31 @@ import {DeploymentRecord} from "./config/DeploymentRecord.sol";
 ///      transaction would leave this script unable to finish the run it started.
 contract Configure is Script {
 
+    /// @notice Symbol the protocol prices fiat payments in
+    /// @dev No token address, so nothing can be transferred in it. It exists so a purchase settled
+    ///      in cash or on a card has a currency to be recorded against.
+    bytes32 private constant ASSET_USD = bytes32("USD");
+
+    /// @notice Symbol the settlement token is registered under
+    bytes32 private constant ASSET_USDC = bytes32("USDC");
+
+    /// @notice Decimals a fiat dollar is expressed in, which is cents
+    uint8 private constant USD_DECIMALS = 2;
+
     /// @notice A wiring call did not take effect
     error NotWired(string what, address expected, address actual);
 
     /// @notice The registry is already bound to a different address than the one recorded
     error BoundElsewhere(string what, address recorded, address bound);
+
+    /// @notice A currency is registered against a different token than the one configured
+    error AssetBoundElsewhere(bytes32 symbol, address expected, address actual);
+
+    /// @notice The settlement token address holds no code on this chain
+    error SettlementTokenNotDeployed(address token, uint256 chainId);
+
+    /// @notice The settlement token did not answer `decimals()`
+    error SettlementTokenNotTokenLike(address token);
 
     /// @notice Wires the protocol together and records that it is configured
     /// @dev Broadcasts as the deployer, which is still the owner of all four singletons.
@@ -42,6 +66,12 @@ contract Configure is Script {
         address lazyWalletRegistry = DeploymentRecord.readAddress("LazyWalletRegistryProxy");
         address deviceWalletFactory = DeploymentRecord.readAddress("DeviceWalletFactoryProxy");
         address eSIMWalletFactory = DeploymentRecord.readAddress("ESIMWalletFactoryProxy");
+        address paymentAdapter = DeploymentRecord.readAddress("PaymentAdapterProxy");
+
+        // Read before anything is broadcast. The settlement token address is per chain, and the
+        // one for the wrong chain can still hold code, so asking it for its decimals is what tells
+        // the two apart.
+        uint8 settlementDecimals = _settlementTokenDecimals(config.settlementToken);
 
         vm.startBroadcast(config.deployerPrivateKey);
 
@@ -49,10 +79,12 @@ contract Configure is Script {
         _bindRegistryToFactory("ESIMWalletFactory", eSIMWalletFactory, registryAddress);
         _bindLazyWalletRegistry(registryAddress, lazyWalletRegistry);
         _setPriceCap(registryAddress, config.priceCapUSDCents);
+        _registerCurrencies(paymentAdapter, config.settlementToken, settlementDecimals);
 
         vm.stopBroadcast();
 
         _verify(registryAddress, lazyWalletRegistry, deviceWalletFactory, eSIMWalletFactory);
+        _verifyCurrencies(paymentAdapter, config.settlementToken);
         DeploymentRecord.writeStatus("configured", true);
 
         console.log("");
@@ -104,6 +136,87 @@ contract Configure is Script {
 
         Registry(registryAddress).setDefaultPriceCapUSDCents(cap);
         console.log("Registry: price cap set to", cap);
+    }
+
+    /// @notice The settlement token's own decimals, checked to be a token at all
+    /// @dev Read from the token rather than assumed to be six. USDC is at a different address on
+    ///      every chain and the address for the wrong one can still hold code, so a copied value
+    ///      has to fail here rather than register a currency nothing can be paid in. Runs before
+    ///      the broadcast, since a revert inside one leaves the earlier calls of the run sent.
+    function _settlementTokenDecimals(address token) private view returns (uint8) {
+        if(token.code.length == 0) revert SettlementTokenNotDeployed(token, block.chainid);
+
+        try IERC20Metadata(token).decimals() returns (uint8 decimals) {
+            return decimals;
+        } catch {
+            revert SettlementTokenNotTokenLike(token);
+        }
+    }
+
+    /// @notice Puts the two currencies the protocol prices in into the adapter's table
+    /// @dev An adapter with an empty table prices nothing, so every purchase on both paths reverts
+    ///      until this has run. USD carries no token address: a fiat payment happens somewhere the
+    ///      contracts cannot see, and the entry exists only to record what it was priced in.
+    function _registerCurrencies(address paymentAdapter, address settlementToken, uint8 settlementDecimals)
+        private
+    {
+        _registerCurrency(paymentAdapter, ASSET_USD, Asset({
+            allowed: true,
+            isDollarUnit: true,
+            decimals: USD_DECIMALS,
+            token: address(0)
+        }));
+
+        _registerCurrency(paymentAdapter, ASSET_USDC, Asset({
+            allowed: true,
+            isDollarUnit: true,
+            decimals: settlementDecimals,
+            token: settlementToken
+        }));
+    }
+
+    /// @notice Adds one currency, unless it is already there
+    /// @dev `registerAsset` refuses a symbol already in the table, so a re-run after a partial one
+    ///      has to skip rather than call it again. A symbol registered against a different token is
+    ///      a mismatch this script must not paper over: `updateAsset` would change the address
+    ///      every future payment is recorded into.
+    function _registerCurrency(address paymentAdapter, bytes32 symbol, Asset memory asset) private {
+        (bool allowed,, uint8 decimals, address token) = PaymentAdapter(paymentAdapter).assets(symbol);
+
+        if(decimals != 0) {
+            if(token != asset.token) revert AssetBoundElsewhere(symbol, asset.token, token);
+
+            console.log(string.concat("PaymentAdapter: ", _symbolName(symbol), " already registered, skipping"));
+            if(!allowed) console.log("  warning: it is registered but withdrawn");
+            return;
+        }
+
+        PaymentAdapter(paymentAdapter).registerAsset(symbol, asset);
+        console.log(string.concat("PaymentAdapter: ", _symbolName(symbol), " registered"), asset.decimals);
+    }
+
+    /// @notice Reads the currency table back out of the adapter
+    function _verifyCurrencies(address paymentAdapter, address settlementToken) private view {
+        (bool usdAllowed,,, address usdToken) = PaymentAdapter(paymentAdapter).assets(ASSET_USD);
+        if(!usdAllowed || usdToken != address(0)) {
+            revert NotWired("PaymentAdapter.assets(USD)", address(0), usdToken);
+        }
+
+        (bool usdcAllowed,,, address usdcToken) = PaymentAdapter(paymentAdapter).assets(ASSET_USDC);
+        if(!usdcAllowed || usdcToken != settlementToken) {
+            revert NotWired("PaymentAdapter.assets(USDC)", settlementToken, usdcToken);
+        }
+    }
+
+    /// @notice The trailing zero bytes trimmed off a symbol, so it prints readably
+    function _symbolName(bytes32 symbol) private pure returns (string memory) {
+        uint256 length;
+        while(length < 32 && symbol[length] != 0) ++length;
+
+        bytes memory trimmed = new bytes(length);
+        for(uint256 i = 0; i < length; ++i) trimmed[i] = symbol[i];
+
+        return string(trimmed);
     }
 
     /// @notice Reads every wiring back out of the contracts that hold it
