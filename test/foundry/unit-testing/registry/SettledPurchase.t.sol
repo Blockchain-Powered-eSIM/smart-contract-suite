@@ -42,7 +42,7 @@ contract SettledPurchaseTest is DeployerBase {
 
         vm.deal(address(deviceWallet), 10 ether);
         vm.prank(address(deviceWallet));
-        deviceWallet.toggleAccessToETH(address(eSIMWallet), true);
+        deviceWallet.toggleAccessToFunds(address(eSIMWallet), true);
     }
 
     /// @notice Records a purchase the admin says was paid for offchain

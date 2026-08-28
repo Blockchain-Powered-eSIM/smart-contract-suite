@@ -73,7 +73,7 @@ abstract contract DeviceWalletFixture is DeployerBase {
 
         // A bind never carries ETH access, so the owner grants it here
         vm.prank(address(userDeviceWallet));
-        userDeviceWallet.toggleAccessToETH(address(userESIMWallet), true);
+        userDeviceWallet.toggleAccessToFunds(address(userESIMWallet), true);
 
         assertNotEq(address(userDeviceWallet), address(0), "deviceWallet address cannot be address(0)");
 
@@ -92,7 +92,7 @@ abstract contract DeviceWalletFixture is DeployerBase {
         assertEq(address(userDeviceWallet.registry()), address(registry), "Registry should have been correct for userDeviceWallet");
         assertEq(address(userDeviceWallet.eSIMWalletFactory()), address(eSIMWalletFactory), "eSIMWalletFactory address in userDeviceWallet should have matched");
         assertEq(userDeviceWallet.isValidESIMWallet(address(userESIMWallet)), true, "userESIMWallet should have been set to valid");
-        assertEq(userDeviceWallet.canPullETH(address(userESIMWallet)), true, "userESIMWallet should be able to pull ETH");
+        assertEq(userDeviceWallet.canPullFunds(address(userESIMWallet)), true, "userESIMWallet should be able to pull ETH");
         assertEq(address(userDeviceWallet.entryPoint()), address(entryPoint), "Entry point address should have been initialised in userDeviceWallet");
         assertEq(address(userDeviceWallet.verifier()), address(p256Verifier), "P256Verifier address should have been initialised in userDeviceWallet");
 
@@ -156,9 +156,9 @@ abstract contract DeviceWalletFixture is DeployerBase {
 
         // A bind never carries ETH access, so the two wallets that need it are granted it here
         vm.prank(address(deviceWallet));
-        deviceWallet.toggleAccessToETH(address(eSIMWallet1), true);
+        deviceWallet.toggleAccessToFunds(address(eSIMWallet1), true);
         vm.prank(address(deviceWallet2));
-        deviceWallet2.toggleAccessToETH(address(eSIMWallet3), true);
+        deviceWallet2.toggleAccessToFunds(address(eSIMWallet3), true);
 
         vm.startPrank(admin);
         // eSIMWallet2 -> no access to ETH, no eSIM identifier set
@@ -204,9 +204,9 @@ abstract contract DeviceWalletFixture is DeployerBase {
         assertEq(deviceWallet.isValidESIMWallet(address(eSIMWallet1)), true, "ESIMWallet1 should have been set to valid");
         assertEq(deviceWallet.isValidESIMWallet(address(eSIMWallet2)), true, "ESIMWallet2 should have been set to valid");
         assertEq(deviceWallet2.isValidESIMWallet(address(eSIMWallet3)), true, "ESIMWallet3 should have been set to valid");
-        assertEq(deviceWallet.canPullETH(address(eSIMWallet1)), true, "ESIMWallet1 should be able to pull ETH");
-        assertEq(deviceWallet.canPullETH(address(eSIMWallet2)), false, "ESIMWallet2 should not be able to pull ETH");
-        assertEq(deviceWallet2.canPullETH(address(eSIMWallet3)), true, "ESIMWallet3 should be able to pull ETH");
+        assertEq(deviceWallet.canPullFunds(address(eSIMWallet1)), true, "ESIMWallet1 should be able to pull ETH");
+        assertEq(deviceWallet.canPullFunds(address(eSIMWallet2)), false, "ESIMWallet2 should not be able to pull ETH");
+        assertEq(deviceWallet2.canPullFunds(address(eSIMWallet3)), true, "ESIMWallet3 should be able to pull ETH");
         assertEq(address(deviceWallet.entryPoint()), address(entryPoint), "Entry point address should have been initialised in deviceWallet");
         assertEq(address(deviceWallet2.entryPoint()), address(entryPoint), "Entry point address should have been initialised in deviceWallet2");
         assertEq(address(deviceWallet.verifier()), address(p256Verifier), "P256Verifier address should have been initialised in deviceWallet");
@@ -251,12 +251,12 @@ abstract contract DeviceWalletFixture is DeployerBase {
         MockESIMWallet _eSIMWallet,
         bool _onStandby,
         address _associatedDeviceWallet,
-        bool _canPullETH,
+        bool _canPullFunds,
         bool _isValidForDeviceWallet
     ) internal view {
         assertEq(registry.isESIMWalletOnStandby(address(_eSIMWallet)), _onStandby, "Unexpected standby status for the eSIM wallet");
         assertEq(registry.isESIMWalletValid(address(_eSIMWallet)), _associatedDeviceWallet, "Unexpected device wallet associated with the eSIM wallet");
-        assertEq(_deviceWallet.canPullETH(address(_eSIMWallet)), _canPullETH, "Unexpected ETH pull access for the eSIM wallet");
+        assertEq(_deviceWallet.canPullFunds(address(_eSIMWallet)), _canPullFunds, "Unexpected ETH pull access for the eSIM wallet");
         assertEq(_deviceWallet.isValidESIMWallet(address(_eSIMWallet)), _isValidForDeviceWallet, "Unexpected eSIM wallet validity for the device wallet");
     }
 }

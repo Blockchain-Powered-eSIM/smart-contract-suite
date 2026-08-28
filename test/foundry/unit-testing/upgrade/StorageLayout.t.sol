@@ -13,7 +13,7 @@ import "test/utils/DeployerBase.sol";
 ///      The way that happens by accident is a variable added to a base contract, because base
 ///      storage comes first. `Account4337` declares `owner` and `DeviceWallet` picks up at slot
 ///      2, so a single new variable in `Account4337` pushes `registry`, `eSIMWalletFactory`,
-///      `deviceUniqueIdentifier`, `isValidESIMWallet` and `canPullETH` down on every device
+///      `deviceUniqueIdentifier`, `isValidESIMWallet` and `canPullFunds` down on every device
 ///      wallet that exists. `RegistryHelper` sits under `Registry` the same way, which is what
 ///      the 50 slot gap at `RegistryHelper.sol:81` is holding open and why `Registry`'s own
 ///      state starts at slot 60 rather than slot 10.
@@ -81,7 +81,7 @@ contract StorageLayoutTest is DeployerBase {
         assertTrue(_wallet.isValidESIMWallet(SENTINEL), "DeviceWallet.isValidESIMWallet must read slot 5");
 
         vm.store(_target, _entry(SENTINEL, 6), bytes32(uint256(1)));
-        assertTrue(_wallet.canPullETH(SENTINEL), "DeviceWallet.canPullETH must read slot 6");
+        assertTrue(_wallet.canPullFunds(SENTINEL), "DeviceWallet.canPullFunds must read slot 6");
     }
 
     function test_layout_eSIMWalletSlotsAreUnchanged() public {

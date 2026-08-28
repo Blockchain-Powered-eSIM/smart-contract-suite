@@ -51,7 +51,7 @@ contract ESIMWalletGuardsTest is DeployerBase {
 
         // A bind never carries ETH access, and the purchases below are funded from the device wallet
         vm.prank(address(deviceWallet));
-        deviceWallet.toggleAccessToETH(address(eSIMWallet), true);
+        deviceWallet.toggleAccessToFunds(address(eSIMWallet), true);
     }
 
     /// @notice Deploys an eSIM wallet proxy straight against the beacon, so the initialiser

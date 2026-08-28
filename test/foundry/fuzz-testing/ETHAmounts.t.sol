@@ -240,7 +240,7 @@ contract ETHAmountsTest is FuzzBase {
         } catch {}
 
         assertFalse(
-            fuzzDeviceWallet.canPullETH(wallet),
+            fuzzDeviceWallet.canPullFunds(wallet),
             "A refused bind must leave the wallet without the right to pull ETH"
         );
     }

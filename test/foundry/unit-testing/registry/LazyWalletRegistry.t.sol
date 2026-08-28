@@ -299,7 +299,7 @@ contract LazyWalletRegistryTest is DeployerBase {
 
             // Check storage variables in device wallet
             assertEq(deviceWallet.isValidESIMWallet(address(eSIMWallet)), true, "ESIMWallet should have been set to valid");
-            assertEq(deviceWallet.canPullETH(address(eSIMWallet)), false, "A lazy deploy must not hand out ETH access");
+            assertEq(deviceWallet.canPullFunds(address(eSIMWallet)), false, "A lazy deploy must not hand out ETH access");
 
             // Check storage variables in eSIM wallet
             assertEq(eSIMWallet.owner(), address(deviceWallet), "ESIMWallet owner should have been device wallet");
@@ -690,7 +690,7 @@ contract LazyWalletRegistryTest is DeployerBase {
 
             assertEq(registry.isESIMWalletValid(eSIMWallets[i]), deviceWalletAddress, "Each wallet must be bound");
             assertEq(deviceWallet.isValidESIMWallet(eSIMWallets[i]), true, "Each wallet must be valid on the device");
-            assertEq(deviceWallet.canPullETH(eSIMWallets[i]), false, "No wallet may arrive with ETH access");
+            assertEq(deviceWallet.canPullFunds(eSIMWallets[i]), false, "No wallet may arrive with ETH access");
             assertEq(
                 eSIMWallet.eSIMUniqueIdentifier(),
                 string.concat("partial_", vm.toString(i)),

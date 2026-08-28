@@ -90,6 +90,9 @@ interface Errors {
     // ESIMWallet and DeviceWallet
     error FailedToTransfer();
     error InsufficientBalance(uint256 balance, uint256 amount);
+    error ZeroAmount();
+    // A currency with no token address, so nothing can be transferred in it
+    error AssetNotTransferable(bytes32 asset);
 
     // ESIMWallet
     error OnlyRegistry();
@@ -105,9 +108,8 @@ interface Errors {
 
     // DeviceWallet
     error UnknownESIMWallet(address eSIMWallet);
-    error ZeroAmount();
-    error ETHAccessRevoked(address eSIMWallet);
-    error ETHAccessNotGrantableAtBind(address eSIMWallet);
+    error FundsAccessRevoked(address eSIMWallet);
+    error FundsAccessNotGrantableAtBind(address eSIMWallet);
     error ESIMWalletAlreadyAdded(address eSIMWallet);
     error ESIMWalletNotOwnedByThisDeviceWallet(address eSIMWallet, address eSIMWalletOwner);
     error OnlyRegistryOrDeviceWalletFactoryOrOwner();
@@ -137,4 +139,8 @@ interface Errors {
     // No price feeds, so only a currency already in dollars can be converted from cents
     error AssetNeedsSwap(bytes32 asset);
     error PaymentReferenceAlreadyUsed(bytes32 paymentReference);
+    // The price costs more of the currency than the buyer was willing to spend
+    error SettlementAboveMax(uint256 required, uint256 maxAmountIn);
+    // The caller has to send the tokens before calling settle, and sent less than it declared
+    error SettlementNotFunded(uint256 amountIn, uint256 balance);
 }

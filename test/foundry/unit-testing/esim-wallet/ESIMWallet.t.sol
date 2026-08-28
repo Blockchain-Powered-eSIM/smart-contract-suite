@@ -81,7 +81,7 @@ contract ESIMWalletTest is DeployerBase {
 
         // A bind never carries ETH access, so the owner grants it here
         vm.prank(address(deviceWallet));
-        deviceWallet.toggleAccessToETH(address(eSIMWallet1), true);
+        deviceWallet.toggleAccessToFunds(address(eSIMWallet1), true);
 
         vm.startPrank(admin);
         // eSIMWallet2 -> no access to ETH, no eSIM identifier set
@@ -113,8 +113,8 @@ contract ESIMWalletTest is DeployerBase {
         assertEq(address(deviceWallet.eSIMWalletFactory()), address(eSIMWalletFactory), "eSIMWalletFactory address in device wallet should have matched");
         assertEq(deviceWallet.isValidESIMWallet(address(eSIMWallet1)), true, "ESIMWallet1 should have been set to valid");
         assertEq(deviceWallet.isValidESIMWallet(address(eSIMWallet2)), true, "ESIMWallet2 should have been set to valid");
-        assertEq(deviceWallet.canPullETH(address(eSIMWallet1)), true, "ESIMWallet1 should be able to pull ETH");
-        assertEq(deviceWallet.canPullETH(address(eSIMWallet2)), false, "ESIMWallet2 should not be able to pull ETH");
+        assertEq(deviceWallet.canPullFunds(address(eSIMWallet1)), true, "ESIMWallet1 should be able to pull ETH");
+        assertEq(deviceWallet.canPullFunds(address(eSIMWallet2)), false, "ESIMWallet2 should not be able to pull ETH");
 
         // Check storage variables in eSIM wallet
         assertEq(address(eSIMWallet1.eSIMWalletFactory()), address(eSIMWalletFactory), "eSIMWalletFactory address in eSIM wallet1 should have matched");
@@ -377,7 +377,7 @@ contract ESIMWalletTest is DeployerBase {
 
         assertEq(eSIMWallet1.newRequestedOwner(), address(0), "the pending request must be cleared");
         assertEq(deviceWallet.isValidESIMWallet(address(eSIMWallet1)), true, "the binding must be restored");
-        assertEq(deviceWallet.canPullETH(address(eSIMWallet1)), false, "ETH access is not restored");
+        assertEq(deviceWallet.canPullFunds(address(eSIMWallet1)), false, "ETH access is not restored");
         assertEq(registry.isESIMWalletOnStandby(address(eSIMWallet1)), false, "standby must be cleared");
         assertEq(registry.isESIMWalletValid(address(eSIMWallet1)), currentOwner, "the association is unchanged");
     }
@@ -508,13 +508,13 @@ contract ESIMWalletTest is DeployerBase {
         // The bind carries no ETH access, so the new owner grants it separately.
         vm.startPrank(address(deviceWallet2));
         deviceWallet2.addESIMWallet(address(eSIMWallet1), false);
-        deviceWallet2.toggleAccessToETH(address(eSIMWallet1), true);
+        deviceWallet2.toggleAccessToFunds(address(eSIMWallet1), true);
         vm.stopPrank();
 
         assertEq(address(deviceWallet).balance, 11 ether, "Device wallet balance should have increased to 11 ETH");
         assertEq(address(eSIMWallet1).balance, 0 ether, "eSIM wallet balance should have decreased to 0 ETH");
         assertEq(deviceWallet2.isValidESIMWallet(address(eSIMWallet1)), true, "eSIM wallet added should have been set to valid");
-        assertEq(deviceWallet2.canPullETH(address(eSIMWallet1)), true, "eSIM wallet should have ability to pull ETH");
+        assertEq(deviceWallet2.canPullFunds(address(eSIMWallet1)), true, "eSIM wallet should have ability to pull ETH");
         assertEq(registry.isESIMWalletOnStandby(address(eSIMWallet1)), false, "ESIMWallet1 should not have been on standBy");
         assertEq(registry.isESIMWalletValid(address(eSIMWallet1)), address(deviceWallet2), "Registry should have updated the eSIM wallet to the new device wallet");
     }

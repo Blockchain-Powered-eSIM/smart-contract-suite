@@ -226,10 +226,10 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
 
         // 5. deviceWallet2 grants access to eSIMWallet1 to pull ETH (This could also be done in a single step during addESIMWallet function call)
         vm.startPrank(address(deviceWallet2));
-        deviceWallet2.toggleAccessToETH(address(eSIMWallet1), true);
+        deviceWallet2.toggleAccessToFunds(address(eSIMWallet1), true);
         vm.stopPrank();
 
-        assertEq(deviceWallet2.canPullETH(address(eSIMWallet1)), true, "ESIMWallet1 should have access to ETH for deviceWallet2");
+        assertEq(deviceWallet2.canPullFunds(address(eSIMWallet1)), true, "ESIMWallet1 should have access to ETH for deviceWallet2");
         assertEq(address(eSIMWallet1).balance, 0, "eSIMWallet1 balance should have been 0 ETH");
 
         // 6. Add ETH to deviceWallet2, and buy data bundle for eSIMWallet1
@@ -355,7 +355,7 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
     /// @dev Pinned rather than prevented. It stays the associated device wallet until the new one
     ///      binds, and it is still the eSIM wallet's owner through this window, so this is the
     ///      party reversing its own release rather than a third one interfering. It buys back no
-    ///      authority: the device wallet cleared `isValidESIMWallet` and `canPullETH` on itself
+    ///      authority: the device wallet cleared `isValidESIMWallet` and `canPullFunds` on itself
     ///      when it released, and the pending owner still refuses a rebind.
     function test_toggleESIMWalletStandbyStatus_letsTheOutgoingDeviceWalletLowerTheMarker() public {
         deployWallets();
@@ -449,10 +449,10 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
 
         // 6. deviceWallet2 grants access to eSIMWallet1 to pull ETH (This could also be done in a single step during addESIMWallet function call)
         vm.startPrank(address(deviceWallet2));
-        deviceWallet2.toggleAccessToETH(address(eSIMWallet1), true);
+        deviceWallet2.toggleAccessToFunds(address(eSIMWallet1), true);
         vm.stopPrank();
 
-        assertEq(deviceWallet2.canPullETH(address(eSIMWallet1)), true, "ESIMWallet1 should have access to ETH for deviceWallet2");
+        assertEq(deviceWallet2.canPullFunds(address(eSIMWallet1)), true, "ESIMWallet1 should have access to ETH for deviceWallet2");
         assertEq(address(eSIMWallet1).balance, 0, "eSIMWallet1 balance should have been 0 ETH");
 
         // 7. Add ETH to deviceWallet2, and buy data bundle for eSIMWallet1

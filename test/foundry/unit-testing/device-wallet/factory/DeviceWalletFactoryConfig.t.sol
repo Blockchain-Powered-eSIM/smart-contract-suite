@@ -74,7 +74,7 @@ contract DeviceWalletFactoryConfigTest is DeviceWalletFactoryFixture {
 
         // Granted before the upgrade, so the assertion below checks a true survives the move
         vm.prank(wallet.deviceWallet);
-        MockDeviceWallet(payable(wallet.deviceWallet)).toggleAccessToETH(wallet.eSIMWallet, true);
+        MockDeviceWallet(payable(wallet.deviceWallet)).toggleAccessToFunds(wallet.eSIMWallet, true);
 
         // Now upgrade the Device Wallet implementation contract
         address owner = deviceWalletFactory.owner();
@@ -103,6 +103,6 @@ contract DeviceWalletFactoryConfigTest is DeviceWalletFactoryFixture {
         assertEq(address(upgradedDeviceWallet.registry()), address(registry), "Registry should have been correct");
         assertEq(address(upgradedDeviceWallet.eSIMWalletFactory()), address(eSIMWalletFactory), "eSIMWalletFactory address in device wallet should have matched");
         assertEq(upgradedDeviceWallet.isValidESIMWallet(wallet.eSIMWallet), true, "ESIMWallet should have been set to valid");
-        assertEq(upgradedDeviceWallet.canPullETH(wallet.eSIMWallet), true, "ESIMWallet should be able to pull ETH");
+        assertEq(upgradedDeviceWallet.canPullFunds(wallet.eSIMWallet), true, "ESIMWallet should be able to pull ETH");
     }
 }

@@ -401,7 +401,8 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         address deviceWalletAddress = address(deviceWallet);
 
         address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(deviceWalletAddress, _salt);
-        // No ETH access: only the owner grants that, with a signed `toggleAccessToETH`.
+        // No access to the device wallet's money: only the owner grants that, with a signed
+        // `toggleAccessToFunds`.
         DeviceWallet(payable(deviceWalletAddress)).addESIMWallet(
             eSIMWalletAddress,
             false

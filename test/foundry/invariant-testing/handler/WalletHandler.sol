@@ -76,7 +76,7 @@ contract WalletHandler is HandlerBase {
                 "A removed eSIM wallet is still claimed by its device wallet"
             );
             assertFalse(
-                DeviceWallet(payable(device)).canPullETH(wallet),
+                DeviceWallet(payable(device)).canPullFunds(wallet),
                 "A removed eSIM wallet kept its right to pull ETH"
             );
             assertEq(
@@ -179,7 +179,7 @@ contract WalletHandler is HandlerBase {
                 "An added eSIM wallet is not claimed by the device wallet that added it"
             );
             assertFalse(
-                DeviceWallet(payable(device)).canPullETH(wallet),
+                DeviceWallet(payable(device)).canPullFunds(wallet),
                 "An added eSIM wallet arrived with the right to pull ETH"
             );
             assertEq(
@@ -199,20 +199,20 @@ contract WalletHandler is HandlerBase {
     /// @notice The wallet owner revokes or restores an eSIM wallet's right to pull ETH
     /// @param eSIMIndex Which eSIM wallet to toggle
     /// @param hasAccessToETH The access it should end up with
-    function toggleAccessToETH(uint256 eSIMIndex, bool hasAccessToETH) external counted {
+    function toggleAccessToFunds(uint256 eSIMIndex, bool hasAccessToETH) external counted {
         address wallet = _pickESIMWallet(eSIMIndex);
         if (wallet == address(0)) {
-            state.recordRevert("toggleAccessToETH");
+            state.recordRevert("toggleAccessToFunds");
             return;
         }
         address device = registry.isESIMWalletValid(wallet);
         if (device == address(0)) {
-            state.recordRevert("toggleAccessToETH");
+            state.recordRevert("toggleAccessToFunds");
             return;
         }
 
         vm.prank(device);
-        try DeviceWallet(payable(device)).toggleAccessToETH(wallet, hasAccessToETH) {
+        try DeviceWallet(payable(device)).toggleAccessToFunds(wallet, hasAccessToETH) {
             // Recorded in ghost state rather than asserted here: an assertion that trips inside a
             // handler reverts the call and the campaign reads it as a skipped action
             if (hasAccessToETH) {
@@ -220,9 +220,9 @@ contract WalletHandler is HandlerBase {
             } else {
                 state.clearETHAccessGrant(device, wallet);
             }
-            state.recordCall("toggleAccessToETH");
+            state.recordCall("toggleAccessToFunds");
         } catch {
-            state.recordRevert("toggleAccessToETH");
+            state.recordRevert("toggleAccessToFunds");
         }
     }
 

@@ -54,7 +54,7 @@ contract ETHInvariantsTest is CampaignBase {
     /// @notice Fails if a pair may pull ETH without the owner having granted it
     function _assertGranted(address device, address wallet) private view {
         if (device == address(0)) return;
-        if (!MockDeviceWallet(payable(device)).canPullETH(wallet)) return;
+        if (!MockDeviceWallet(payable(device)).canPullFunds(wallet)) return;
 
         assertTrue(
             state.ghost_ethAccessGranted(device, wallet),

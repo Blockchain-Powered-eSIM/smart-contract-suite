@@ -1,8 +1,8 @@
 /// DeviceWallet: the rights it hands to eSIM wallets, and the key that owns it.
 ///
 /// A device wallet holds user ETH and decides which eSIM wallets may reach it. Two mappings carry
-/// that decision, `isValidESIMWallet` for membership and `canPullETH` for the spending right, and
-/// the second is meaningless without the first: `pullETH` checks `canPullETH` on its own, so a
+/// that decision, `isValidESIMWallet` for membership and `canPullFunds` for the spending right, and
+/// the second is meaningless without the first: `pullETH` checks `canPullFunds` on its own, so a
 /// wallet that kept the right after being let go would still be able to spend. The rules below fix
 /// the relation between the two, fix the one ETH path against the balance, and fix the P256 key
 /// that authorises everything this wallet does.
@@ -22,7 +22,7 @@
 /// no rule here states who may call what. The one guard that survives untouched is `onlySelf`, which
 /// compares against `address(this)` and reads no storage.
 ///
-/// `transferOwnership` and `toggleAccessToETH` are both `onlySelf`, so on chain they are reachable
+/// `transferOwnership` and `toggleAccessToFunds` are both `onlySelf`, so on chain they are reachable
 /// only through `execute` with this wallet as the target, which needs a signature from the current
 /// owner key. The rules drive them directly instead. That is the stronger statement about which
 /// storage they write, and it says nothing about who could get there, which the paragraph above
@@ -53,7 +53,7 @@
 
 methods {
     function isValidESIMWallet(address) external returns (bool) envfree;
-    function canPullETH(address) external returns (bool) envfree;
+    function canPullFunds(address) external returns (bool) envfree;
     function registry() external returns (address) envfree;
     function eSIMWalletFactory() external returns (address) envfree;
 
@@ -70,7 +70,7 @@ methods {
 
 /// R-13. A wallet that may pull ETH is a wallet this device wallet still recognises.
 ///
-/// `canPullETH` is checked on its own in both spending paths, without a membership check beside it,
+/// `canPullFunds` is checked on its own in both spending paths, without a membership check beside it,
 /// so this relation is the whole of what keeps a released wallet away from the balance.
 /// `removeESIMWallet` clears both, and this says nothing anywhere leaves them apart.
 ///
@@ -80,13 +80,13 @@ methods {
 rule theRightToPullETHNeverOutlivesMembership(method f, address eSIMWallet) filtered {
     f -> f.selector != sig:init(address, bytes32[2], string, address).selector
 } {
-    require canPullETH(eSIMWallet) => isValidESIMWallet(eSIMWallet);
+    require canPullFunds(eSIMWallet) => isValidESIMWallet(eSIMWallet);
 
     env callEnv;
     calldataarg args;
     f(callEnv, args);
 
-    assert canPullETH(eSIMWallet) => isValidESIMWallet(eSIMWallet),
+    assert canPullFunds(eSIMWallet) => isValidESIMWallet(eSIMWallet),
         "an eSIM wallet kept the right to pull ETH without being recognised";
 }
 
@@ -133,7 +133,7 @@ rule removalWithdrawsMembershipAndTheRightToPullTogether(address eSIMWallet, boo
     removeESIMWallet(callEnv, eSIMWallet, callBackETH);
 
     assert !isValidESIMWallet(eSIMWallet), "a removed eSIM wallet was still recognised";
-    assert !canPullETH(eSIMWallet), "a removed eSIM wallet kept the right to pull ETH";
+    assert !canPullFunds(eSIMWallet), "a removed eSIM wallet kept the right to pull ETH";
 }
 
 /// R-17. The owner key moves only through `transferOwnership`.
@@ -174,7 +174,7 @@ rule theOwnerKeyMovesOnlyThroughItsOwnEntryPoint(method f) filtered {
 /// Membership is never granted twice over.
 ///
 /// The add path refuses a wallet it already holds. That refusal is what stops a second grant quietly
-/// resetting `canPullETH` on a wallet whose access the owner had already revoked, which would be a
+/// resetting `canPullFunds` on a wallet whose access the owner had already revoked, which would be a
 /// revocation undone by a call that looks like it is only adding.
 rule addingAWalletTwiceAlwaysReverts(address eSIMWallet, bool hasAccessToETH) {
     require isValidESIMWallet(eSIMWallet);
@@ -194,26 +194,26 @@ rule togglingETHAccessOnAnUnknownWalletAlwaysReverts(address eSIMWallet, bool ha
     require !isValidESIMWallet(eSIMWallet);
 
     env callEnv;
-    toggleAccessToETH@withrevert(callEnv, eSIMWallet, hasAccessToETH);
+    toggleAccessToFunds@withrevert(callEnv, eSIMWallet, hasAccessToETH);
 
     assert lastReverted, "ETH access was toggled on a wallet this device wallet does not recognise";
 }
 
 /// The right to pull ETH is only ever granted by the owner.
 ///
-/// `toggleAccessToETH` is `onlySelf` and every bind path refuses the flag, so a revocation stands.
+/// `toggleAccessToFunds` is `onlySelf` and every bind path refuses the flag, so a revocation stands.
 /// The admin used to undo one by deploying a second eSIM wallet with the flag set.
 ///
 /// Stated over the whole method set, so a later function that writes the flag has to answer it too.
 rule onlyToggleAccessToETHGrantsETHAccess(method f, address eSIMWallet) filtered {
     f -> f.selector != sig:init(address, bytes32[2], string, address).selector
 } {
-    require !canPullETH(eSIMWallet);
+    require !canPullFunds(eSIMWallet);
 
     env callEnv;
     calldataarg args;
     f(callEnv, args);
 
-    assert canPullETH(eSIMWallet) => f.selector == sig:toggleAccessToETH(address, bool).selector,
-        "the right to pull ETH was granted by something other than toggleAccessToETH";
+    assert canPullFunds(eSIMWallet) => f.selector == sig:toggleAccessToFunds(address, bool).selector,
+        "the right to pull ETH was granted by something other than toggleAccessToFunds";
 }

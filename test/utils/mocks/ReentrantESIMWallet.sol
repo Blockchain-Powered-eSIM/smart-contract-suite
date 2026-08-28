@@ -34,7 +34,7 @@ contract ReentrantESIMWallet {
         // These are etched over an existing eSIM wallet, so the slots hold that wallet's leftover
         // storage until each one is written. All three have to be set, not just the observed ones.
         wasStillValidDuringRemoval = deviceWallet.isValidESIMWallet(address(this));
-        couldStillPullETHDuringRemoval = deviceWallet.canPullETH(address(this));
+        couldStillPullETHDuringRemoval = deviceWallet.canPullFunds(address(this));
         pullETHSucceededDuringRemoval = false;
 
         try deviceWallet.pullETH(1 ether) returns (uint256) {

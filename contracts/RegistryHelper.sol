@@ -354,7 +354,7 @@ contract RegistryHelper {
         address eSIMWallet = eSIMWalletFactory.deployESIMWallet(_deviceWallet, salt);
 
         // Updates the Device wallet storage variables as well as for the registry. No ETH access:
-        // only the owner grants that, with a signed `toggleAccessToETH`.
+        // only the owner grants that, with a signed `toggleAccessToFunds`.
         DeviceWallet(payable(_deviceWallet)).addESIMWallet(eSIMWallet, false);
 
         _assignESIMIdentifier(eSIMWallet, _eSIMUniqueIdentifier);

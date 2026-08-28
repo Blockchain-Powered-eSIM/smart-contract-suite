@@ -82,7 +82,7 @@ contract WalletInvariantsTest is CampaignBase {
             address device = state.ghost_lastDevice(wallet);
             if (device == address(0)) continue;
 
-            if (MockDeviceWallet(payable(device)).canPullETH(wallet)) {
+            if (MockDeviceWallet(payable(device)).canPullFunds(wallet)) {
                 assertTrue(
                     MockDeviceWallet(payable(device)).isValidESIMWallet(wallet),
                     "An eSIM wallet may pull ETH from a device wallet that does not hold it"

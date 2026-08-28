@@ -53,7 +53,7 @@ contract PriceCapSlotMigrationTest is DeployerBase {
 
         vm.deal(address(deviceWallet), 100 ether);
         vm.prank(address(deviceWallet));
-        deviceWallet.toggleAccessToETH(address(eSIMWallet), true);
+        deviceWallet.toggleAccessToFunds(address(eSIMWallet), true);
     }
 
     /// @notice Clears the eight ceiling bytes and leaves the rest of the slot alone

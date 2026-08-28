@@ -74,7 +74,7 @@ contract HandlerDistributionTest is CampaignBase {
             adminHandler.deployESIMWalletForDevice(round, seed + 2000);
             // Follows the deploy so there is always a wallet still waiting for an identifier
             adminHandler.setESIMIdentifier(round, seed + 3000, false);
-            walletHandler.toggleAccessToETH(round, true);
+            walletHandler.toggleAccessToFunds(round, true);
             walletHandler.setESIMWalletPriceCap(round, round);
             adminHandler.buyDataBundle(round, 100, 1 gwei);
             // Each payment path is given its own block of reference seeds. Two calls presenting
@@ -143,7 +143,7 @@ contract HandlerDistributionTest is CampaignBase {
         _assertExercised("donateToSingleton");
         _assertExercised("deployESIMWalletForDevice");
         _assertExercised("setESIMIdentifier");
-        _assertExercised("toggleAccessToETH");
+        _assertExercised("toggleAccessToFunds");
         _assertExercised("buyDataBundle");
         _assertExercised("recordSettledPurchase");
         _assertExercised("quote");

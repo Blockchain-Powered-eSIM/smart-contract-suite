@@ -29,7 +29,7 @@ contract DeviceWalletETHTest is DeviceWalletFixture {
 
         vm.deal(address(deviceWallet), 2 ether);
         vm.startPrank(address(eSIMWallet2));
-        vm.expectRevert(abi.encodeWithSelector(Errors.ETHAccessRevoked.selector, address(eSIMWallet2)));
+        vm.expectRevert(abi.encodeWithSelector(Errors.FundsAccessRevoked.selector, address(eSIMWallet2)));
         deviceWallet.pullETH(1000000000000000000);  // 1 ETH
         vm.stopPrank();
     }
@@ -74,57 +74,57 @@ contract DeviceWalletETHTest is DeviceWalletFixture {
         assertEq(deviceWallet2.getVaultAddress(), user5, "Every wallet must follow, not just one");
     }
 
-    function test_toggleAccessToETH_unauthorised() public {
+    function test_toggleAccessToFunds_unauthorised() public {
         deployWallets();
 
-        assertEq(deviceWallet.canPullETH(address(eSIMWallet1)), true, "eSIMWallet1 should be able to pull ETH");
+        assertEq(deviceWallet.canPullFunds(address(eSIMWallet1)), true, "eSIMWallet1 should be able to pull ETH");
 
         vm.startPrank(user1);
         vm.expectRevert(Errors.OnlySelf.selector);
-        deviceWallet.toggleAccessToETH(
+        deviceWallet.toggleAccessToFunds(
             address(eSIMWallet1),
             false
         );
         vm.stopPrank();
     }
 
-    function test_toggleAccessToETH_revoke_deviceWalletHasETH() public {
+    function test_toggleAccessToFunds_revoke_deviceWalletHasETH() public {
         deployWallets();
 
-        assertEq(deviceWallet.canPullETH(address(eSIMWallet1)), true, "eSIMWallet1 should be able to pull ETH");
+        assertEq(deviceWallet.canPullFunds(address(eSIMWallet1)), true, "eSIMWallet1 should be able to pull ETH");
 
         vm.startPrank(address(deviceWallet));
-        deviceWallet.toggleAccessToETH(
+        deviceWallet.toggleAccessToFunds(
             address(eSIMWallet1),
             false
         );
         vm.stopPrank();
 
-        assertEq(deviceWallet.canPullETH(address(eSIMWallet1)), false, "eSIMWallet1 should not be able to pull ETH");
+        assertEq(deviceWallet.canPullFunds(address(eSIMWallet1)), false, "eSIMWallet1 should not be able to pull ETH");
 
         DataBundleDetails memory _dataBundleDetail = bundle("DB_ID_0", TEST_PRICE_CENTS);
         uint256 _priceWei = 0.1 ether;
 
         vm.deal(address(deviceWallet), 1 ether);
         vm.startPrank(eSIMWalletAdmin);
-        vm.expectRevert(abi.encodeWithSelector(Errors.ETHAccessRevoked.selector, address(eSIMWallet1)));
+        vm.expectRevert(abi.encodeWithSelector(Errors.FundsAccessRevoked.selector, address(eSIMWallet1)));
         eSIMWallet1.buyDataBundle(_dataBundleDetail, _priceWei, nextRef());
         vm.stopPrank();
     }
 
-    function test_toggleAccessToETH_revoke_eSIMWalletHasETH() public {
+    function test_toggleAccessToFunds_revoke_eSIMWalletHasETH() public {
         deployWallets();
 
-        assertEq(deviceWallet.canPullETH(address(eSIMWallet1)), true, "eSIMWallet1 should be able to pull ETH");
+        assertEq(deviceWallet.canPullFunds(address(eSIMWallet1)), true, "eSIMWallet1 should be able to pull ETH");
 
         vm.startPrank(address(deviceWallet));
-        deviceWallet.toggleAccessToETH(
+        deviceWallet.toggleAccessToFunds(
             address(eSIMWallet1),
             false
         );
         vm.stopPrank();
 
-        assertEq(deviceWallet.canPullETH(address(eSIMWallet1)), false, "eSIMWallet1 should not be able to pull ETH");
+        assertEq(deviceWallet.canPullFunds(address(eSIMWallet1)), false, "eSIMWallet1 should not be able to pull ETH");
 
         DataBundleDetails memory _dataBundleDetail = bundle("DB_ID_0", TEST_PRICE_CENTS);
         uint256 _priceWei = 0.1 ether;
@@ -143,19 +143,19 @@ contract DeviceWalletETHTest is DeviceWalletFixture {
         assertEq(history[0].priceUSDCents, TEST_PRICE_CENTS, "Data bundle price should have been correct");
     }
 
-    function test_toggleAccessToETH_revoke_userHasETH() public {
+    function test_toggleAccessToFunds_revoke_userHasETH() public {
         deployWallets();
 
-        assertEq(deviceWallet.canPullETH(address(eSIMWallet1)), true, "eSIMWallet1 should be able to pull ETH");
+        assertEq(deviceWallet.canPullFunds(address(eSIMWallet1)), true, "eSIMWallet1 should be able to pull ETH");
 
         vm.startPrank(address(deviceWallet));
-        deviceWallet.toggleAccessToETH(
+        deviceWallet.toggleAccessToFunds(
             address(eSIMWallet1),
             false
         );
         vm.stopPrank();
 
-        assertEq(deviceWallet.canPullETH(address(eSIMWallet1)), false, "eSIMWallet1 should not be able to pull ETH");
+        assertEq(deviceWallet.canPullFunds(address(eSIMWallet1)), false, "eSIMWallet1 should not be able to pull ETH");
 
         DataBundleDetails memory _dataBundleDetail = bundle("DB_ID_0", TEST_PRICE_CENTS);
         uint256 _priceWei = 0.1 ether;
@@ -175,19 +175,19 @@ contract DeviceWalletETHTest is DeviceWalletFixture {
         assertEq(history[0].priceUSDCents, TEST_PRICE_CENTS, "Data bundle price should have been correct");
     }
 
-    function test_toggleAccessToETH_grant_deviceWalletHasETH() public {
+    function test_toggleAccessToFunds_grant_deviceWalletHasETH() public {
         deployWallets();
 
-        assertEq(deviceWallet.canPullETH(address(eSIMWallet2)), false, "eSIMWallet2 should not be able to pull ETH");
+        assertEq(deviceWallet.canPullFunds(address(eSIMWallet2)), false, "eSIMWallet2 should not be able to pull ETH");
 
         vm.startPrank(address(deviceWallet));
-        deviceWallet.toggleAccessToETH(
+        deviceWallet.toggleAccessToFunds(
             address(eSIMWallet2),
             true
         );
         vm.stopPrank();
 
-        assertEq(deviceWallet.canPullETH(address(eSIMWallet2)), true, "eSIMWallet2 should be able to pull ETH");
+        assertEq(deviceWallet.canPullFunds(address(eSIMWallet2)), true, "eSIMWallet2 should be able to pull ETH");
 
         DataBundleDetails memory _dataBundleDetail = bundle("DB_ID_0", TEST_PRICE_CENTS);
         uint256 _priceWei = 0.1 ether;
@@ -206,19 +206,19 @@ contract DeviceWalletETHTest is DeviceWalletFixture {
         assertEq(history[0].priceUSDCents, TEST_PRICE_CENTS, "Data bundle price should have been correct");
     }
 
-    function test_toggleAccessToETH_grant_userHasETH() public {
+    function test_toggleAccessToFunds_grant_userHasETH() public {
         deployWallets();
 
-        assertEq(deviceWallet.canPullETH(address(eSIMWallet2)), false, "eSIMWallet2 should not be able to pull ETH");
+        assertEq(deviceWallet.canPullFunds(address(eSIMWallet2)), false, "eSIMWallet2 should not be able to pull ETH");
 
         vm.startPrank(address(deviceWallet));
-        deviceWallet.toggleAccessToETH(
+        deviceWallet.toggleAccessToFunds(
             address(eSIMWallet2),
             true
         );
         vm.stopPrank();
 
-        assertEq(deviceWallet.canPullETH(address(eSIMWallet2)), true, "eSIMWallet2 should be able to pull ETH");
+        assertEq(deviceWallet.canPullFunds(address(eSIMWallet2)), true, "eSIMWallet2 should be able to pull ETH");
 
         DataBundleDetails memory _dataBundleDetail = bundle("DB_ID_0", TEST_PRICE_CENTS);
         uint256 _priceWei = 0.1 ether;
@@ -249,18 +249,18 @@ contract DeviceWalletETHTest is DeviceWalletFixture {
         deployWallets();
 
         vm.prank(eSIMWalletAdmin);
-        vm.expectPartialRevert(Errors.ETHAccessNotGrantableAtBind.selector);
+        vm.expectPartialRevert(Errors.FundsAccessNotGrantableAtBind.selector);
         deviceWallet.deployESIMWallet(true, 4242);
     }
 
     /// @notice Not even the device wallet itself may grant access at bind time
-    /// @dev Pins `toggleAccessToETH` as the single grant path, not merely the non-admin one.
+    /// @dev Pins `toggleAccessToFunds` as the single grant path, not merely the non-admin one.
     function test_addESIMWallet_cannotGrantETHAccessEvenFromTheWalletItself() public {
         deployWallets();
 
         vm.prank(address(deviceWallet));
         vm.expectRevert(abi.encodeWithSelector(
-            Errors.ETHAccessNotGrantableAtBind.selector, address(eSIMWallet3)
+            Errors.FundsAccessNotGrantableAtBind.selector, address(eSIMWallet3)
         ));
         deviceWallet.addESIMWallet(address(eSIMWallet3), true);
     }
@@ -273,19 +273,19 @@ contract DeviceWalletETHTest is DeviceWalletFixture {
         vm.deal(address(deviceWallet), 10 ether);
 
         vm.prank(address(deviceWallet));
-        deviceWallet.toggleAccessToETH(address(eSIMWallet1), false);
+        deviceWallet.toggleAccessToFunds(address(eSIMWallet1), false);
 
         vm.prank(eSIMWalletAdmin);
-        vm.expectPartialRevert(Errors.ETHAccessNotGrantableAtBind.selector);
+        vm.expectPartialRevert(Errors.FundsAccessNotGrantableAtBind.selector);
         deviceWallet.deployESIMWallet(true, 4243);
 
         vm.prank(eSIMWalletAdmin);
         address fresh = deviceWallet.deployESIMWallet(false, 4243);
 
-        assertFalse(deviceWallet.canPullETH(fresh), "The fresh wallet must arrive with no ETH access");
+        assertFalse(deviceWallet.canPullFunds(fresh), "The fresh wallet must arrive with no ETH access");
 
         vm.prank(eSIMWalletAdmin);
-        vm.expectRevert(abi.encodeWithSelector(Errors.ETHAccessRevoked.selector, fresh));
+        vm.expectRevert(abi.encodeWithSelector(Errors.FundsAccessRevoked.selector, fresh));
         MockESIMWallet(payable(fresh)).buyDataBundle(bundle("DB_ID_0", TEST_PRICE_CENTS), 1 ether, nextRef());
 
         assertEq(address(deviceWallet).balance, 10 ether, "No ETH may leave through a wallet the user never granted");
@@ -316,13 +316,13 @@ contract DeviceWalletETHTest is DeviceWalletFixture {
 
         MockDeviceWallet fresh = MockDeviceWallet(payable(batch.deviceWallet));
         assertFalse(
-            fresh.canPullETH(batch.eSIMWallet),
+            fresh.canPullFunds(batch.eSIMWallet),
             "The batch deployed wallet must arrive with no ETH access"
         );
 
         vm.prank(eSIMWalletAdmin);
         address second = fresh.deployESIMWallet(false, 4245);
-        assertFalse(fresh.canPullETH(second), "The admin deployed wallet must arrive with no ETH access");
+        assertFalse(fresh.canPullFunds(second), "The admin deployed wallet must arrive with no ETH access");
     }
 
     /// @notice The owner grants after the bind, and the purchase then goes through
@@ -336,8 +336,8 @@ contract DeviceWalletETHTest is DeviceWalletFixture {
         address fresh = deviceWallet.deployESIMWallet(false, 4245);
 
         vm.prank(address(deviceWallet));
-        deviceWallet.toggleAccessToETH(fresh, true);
-        assertTrue(deviceWallet.canPullETH(fresh), "The grant must land");
+        deviceWallet.toggleAccessToFunds(fresh, true);
+        assertTrue(deviceWallet.canPullFunds(fresh), "The grant must land");
 
         vm.prank(eSIMWalletAdmin);
         MockESIMWallet(payable(fresh)).buyDataBundle(bundle("DB_ID_0", TEST_PRICE_CENTS), 1 ether, nextRef());

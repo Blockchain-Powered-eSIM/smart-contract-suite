@@ -26,7 +26,7 @@ contract ESIMWalletOperationsGasTest is GasBase {
         vm.deal(address(wallet), 100 ether);
 
         vm.prank(address(wallet));
-        wallet.toggleAccessToETH(address(eSIMWallet), true);
+        wallet.toggleAccessToFunds(address(eSIMWallet), true);
     }
 
     /// @notice Deploying an eSIM wallet through the factory

@@ -1,8 +1,8 @@
 {
-  "consumePaymentReference: a reference not yet spent": "30821",
-  "quote: 2 decimals": "3242",
-  "quote: 6 decimals": "7742",
+  "consumePaymentReference: a reference not yet spent": "30843",
+  "quote: 2 decimals": "3342",
+  "quote: 6 decimals": "7842",
   "registerAsset: a currency not in the table": "32911",
-  "resolveAsset": "7969",
-  "updateAsset: withdrawing a currency": "16122"
+  "resolveAsset": "7991",
+  "updateAsset: withdrawing a currency": "16144"
 }
