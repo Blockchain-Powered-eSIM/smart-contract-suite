@@ -34,6 +34,11 @@ contract PaymentAdapter is Initializable, UUPSUpgradeable, Ownable2StepUpgradeab
     /// @notice Fewest decimals a currency may have. `quote` divides by 100, so fewer loses the cents.
     uint8 private constant MIN_ASSET_DECIMALS = 2;
 
+    /// @notice Most decimals a currency may have
+    /// @dev Above this, the largest price the protocol can express overflows `quote` and the
+    ///      currency can never be priced at all. Well past the 18 any real token uses.
+    uint8 private constant MAX_ASSET_DECIMALS = 36;
+
     /// @notice Registry contract address, the only caller allowed to spend a payment reference
     address public registry;
 
@@ -213,6 +218,9 @@ contract PaymentAdapter is Initializable, UUPSUpgradeable, Ownable2StepUpgradeab
         if(_symbol == bytes32(0)) revert Errors.EmptyAssetSymbol();
         if(_asset.decimals < MIN_ASSET_DECIMALS) {
             revert Errors.AssetDecimalsTooLow(_symbol, _asset.decimals);
+        }
+        if(_asset.decimals > MAX_ASSET_DECIMALS) {
+            revert Errors.AssetDecimalsTooHigh(_symbol, _asset.decimals);
         }
 
         assets[_symbol] = _asset;

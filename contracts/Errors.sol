@@ -132,6 +132,8 @@ interface Errors {
     error AssetNotRegistered(bytes32 asset);
     // quote divides by 100, so fewer than two decimals loses the cents
     error AssetDecimalsTooLow(bytes32 asset, uint8 decimals);
+    // Past the ceiling, quote overflows and the currency can never be priced
+    error AssetDecimalsTooHigh(bytes32 asset, uint8 decimals);
     // No price feeds, so only a currency already in dollars can be converted from cents
     error AssetNeedsSwap(bytes32 asset);
     // Fiat and non-EVM currencies have no token address, so nothing can be transferred
