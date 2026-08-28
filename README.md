@@ -21,11 +21,12 @@ upgrade one at a time. Every wallet is a beacon proxy, so one beacon call moves 
 | `DeviceWalletFactory` | Deploys device wallets at deterministic CREATE2 addresses and owns their beacon | UUPS proxy |
 | `DeviceWallet` | One per phone. Holds ETH, owns the eSIM wallets on that device, verifies the passkey | Beacon proxy |
 | `ESIMWalletFactory` | Deploys eSIM wallets and owns their beacon | UUPS proxy |
-| `ESIMWallet` | One per eSIM. Buys data bundles, keeps purchase history, pulls ETH from its device wallet | Beacon proxy |
+| `ESIMWallet` | One per eSIM. Buys data bundles, keeps purchase history, pulls ETH and tokens from its device wallet | Beacon proxy |
+| `PaymentAdapter` | The currencies the protocol accepts, the one conversion from USD cents into a token amount, and the payment references each spendable once. Moves tokens to the vault | UUPS proxy |
 | `Account4337` | The ERC-4337 `IAccount` and `IERC1271` base that `DeviceWallet` builds on | Inherited by `DeviceWallet` |
 | `WebAuthn` | Verifies WebAuthn authentication assertions. Tries the RIP-7212 precompile first and falls back to FreshCryptoLib | Library |
 | `P256Verifier` | One immutable address for accounts to verify through, wrapping the WebAuthn library | Plain contract |
-| `ProtocolAdmin` | Timelock meant to own the four singletons. Adds a delay floor that `updateDelay` cannot go under, and a guardian role with exactly two powers. **Written, not deployed** | Plain contract |
+| `ProtocolAdmin` | Timelock meant to own the five singletons. Adds a delay floor that `updateDelay` cannot go under, and a guardian role with exactly two powers. **Written, not deployed** | Plain contract |
 | `Errors` | Every custom error in the suite | Library |
 | `CustomStructs` | Structs shared across contracts | Types |
 | `interfaces/` | `IPausable` and `IOwnable2Step`, the two calls `ProtocolAdmin` makes back into the protocol | Interfaces |
@@ -115,7 +116,7 @@ slither . --filter-paths "test/,script/,lib/,node_modules/"
 aderyn .
 ```
 
-**Trust model, as it stands.** One EOA owns all four UUPS proxies and both factories that own the
+**Trust model, as it stands.** One EOA owns every UUPS proxy and both factories that own the
 beacons, on both chains. A single key compromise reaches every wallet in one transaction, and admin
 transactions go into the public mempool with no private relay in front of them. `ProtocolAdmin`
 exists to replace that with a two day timelock and it is not deployed yet. Read the testnet
@@ -170,9 +171,9 @@ on one chain and a plain EOA on the other.
    never leaves it.
 2. **Deploy the wallets.** For a new device, the app asks the registry for a device wallet and one
    eSIM wallet, linked at deployment.
-3. **Pick and buy a data bundle.** Paying in crypto deploys both wallets immediately. Paying in fiat
-   records the purchase in the lazy wallet registry, and the wallets are deployed later if the user
-   asks for them.
+3. **Pick and buy a data bundle.** Paying in crypto deploys both wallets immediately, in ETH or in
+   an ERC-20 the payment adapter has been given a price for. Paying in fiat records the purchase in
+   the lazy wallet registry, and the wallets are deployed later if the user asks for them.
 4. **Provision the eSIM.** The server generates the eSIM identifier, writes it into the eSIM wallet
    through the device wallet, and returns a QR code for activation.
 5. **Use the device wallet.** It holds ETH and ERC-20 tokens and can be used as an ordinary wallet.
