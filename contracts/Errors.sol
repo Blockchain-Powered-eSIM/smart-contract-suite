@@ -136,8 +136,5 @@ interface Errors {
     error AssetDecimalsTooHigh(bytes32 asset, uint8 decimals);
     // No price feeds, so only a currency already in dollars can be converted from cents
     error AssetNeedsSwap(bytes32 asset);
-    // Fiat and non-EVM currencies have no token address, so nothing can be transferred
-    error AssetNotSettleable(bytes32 asset);
     error PaymentReferenceAlreadyUsed(bytes32 paymentReference);
-    error SettlementNotAvailable();
 }

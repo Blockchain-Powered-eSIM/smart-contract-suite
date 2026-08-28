@@ -145,7 +145,7 @@ contract PaymentAdapter is Initializable, UUPSUpgradeable, Ownable2StepUpgradeab
     /// @param _symbol Currency the price is being expressed in
     /// @param _priceUSDCents Price in USD cents
     /// @return amountIn Amount in that currency's own smallest unit
-    function quote(bytes32 _symbol, uint64 _priceUSDCents) public view returns (uint256 amountIn) {
+    function quote(bytes32 _symbol, uint64 _priceUSDCents) external view returns (uint256 amountIn) {
         Asset memory asset = assets[_symbol];
 
         if(!asset.allowed) revert Errors.AssetNotAllowed(_symbol);

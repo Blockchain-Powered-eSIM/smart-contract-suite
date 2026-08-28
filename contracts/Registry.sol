@@ -13,7 +13,6 @@ import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/acces
 import {RegistryHelper} from "./RegistryHelper.sol";
 import {LazyWalletRegistry} from "./LazyWalletRegistry.sol";
 import {DeviceWalletFactory} from "./device-wallet/DeviceWalletFactory.sol";
-import {DeviceWallet} from "./device-wallet/DeviceWallet.sol";
 import {ESIMWalletFactory} from "./esim-wallet/ESIMWalletFactory.sol";
 import {ESIMWallet} from "./esim-wallet/ESIMWallet.sol";
 import {PaymentAdapter, Asset} from "./payments/PaymentAdapter.sol";
