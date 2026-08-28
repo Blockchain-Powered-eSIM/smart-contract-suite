@@ -159,8 +159,10 @@ contract Registry is
     /// @param _deviceWalletFactory Factory that deploys device wallets
     /// @param _eSIMWalletFactory Factory that deploys eSIM wallets
     /// @param _entryPoint ERC-4337 EntryPoint singleton for this chain
-    /// @param _defaultDataBundlePriceCap Starting price ceiling. Must be non-zero: a zero cap, here
-    ///        or on a wallet's own, reads as "no ceiling" in `ESIMWallet._requirePriceWithinCap`.
+    /// @param _defaultDataBundlePriceCap Starting wei price ceiling. Must be non-zero: a zero cap,
+    ///        here or on a wallet's own, reads as "no ceiling" in `ESIMWallet._requirePriceWithinCap`.
+    /// @param _defaultPriceCapUSDCents Starting cents price ceiling. Non-zero for the same reason,
+    ///        and this is the one that bounds every price the protocol records.
     function initialize(
         address _eSIMWalletAdmin,
         address _vault,
@@ -168,7 +170,8 @@ contract Registry is
         address _deviceWalletFactory,
         address _eSIMWalletFactory,
         IEntryPoint _entryPoint,
-        uint256 _defaultDataBundlePriceCap
+        uint256 _defaultDataBundlePriceCap,
+        uint64 _defaultPriceCapUSDCents
     ) external initializer {
         if(_eSIMWalletAdmin == address(0)) revert Errors.ZeroAddress("_eSIMWalletAdmin");
         if(_vault == address(0)) revert Errors.ZeroAddress("_vault");
@@ -181,11 +184,13 @@ contract Registry is
         if(_deviceWalletFactory == address(0)) revert Errors.ZeroAddress("_deviceWalletFactory");
         if(_eSIMWalletFactory == address(0)) revert Errors.ZeroAddress("_eSIMWalletFactory");
         if(_defaultDataBundlePriceCap == 0) revert Errors.ZeroDataBundlePriceCap();
+        if(_defaultPriceCapUSDCents == 0) revert Errors.ZeroDataBundlePriceCents();
 
         adminOfRecord = _eSIMWalletAdmin;
         entryPoint = _entryPoint;
         vault = _vault;
         defaultDataBundlePriceCap = _defaultDataBundlePriceCap;
+        defaultPriceCapUSDCents = _defaultPriceCapUSDCents;
 
         deviceWalletFactory = DeviceWalletFactory(_deviceWalletFactory);
         eSIMWalletFactory = ESIMWalletFactory(_eSIMWalletFactory);
@@ -201,6 +206,7 @@ contract Registry is
             address(eSIMWalletFactory)
         );
         emit DefaultDataBundlePriceCapUpdated(_defaultDataBundlePriceCap);
+        emit DefaultPriceCapUSDCentsUpdated(_defaultPriceCapUSDCents);
     }
 
     // ---------------------------------------------------------------------------------------------
