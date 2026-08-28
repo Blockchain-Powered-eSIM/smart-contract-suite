@@ -35,6 +35,9 @@ contract HandlerDistributionTest is CampaignBase {
     /// @notice Offset placing switch destinations outside the identifiers the lazy path populates
     uint256 internal constant SWITCH_SEEDS = 100_000;
 
+    /// @notice Offset separating the settled path's payment references from the ETH path's
+    uint256 internal constant PAYMENT_REFERENCE_SEEDS = 64;
+
     /// @notice Every entry point can reach the protocol and change its state
     function test_handlersReachEveryEntryPoint() public {
         // A batch consumes up to three consecutive seeds and each seed becomes an identifier, so
@@ -74,6 +77,16 @@ contract HandlerDistributionTest is CampaignBase {
             walletHandler.toggleAccessToETH(round, true);
             walletHandler.setESIMWalletPriceCap(round, round);
             adminHandler.buyDataBundle(round, 100, 1 gwei);
+            // Each payment path is given its own block of reference seeds. Two calls presenting
+            // the same reference is a case the campaign covers, and the second one is refused,
+            // which is a revert rather than the count this drive is checking
+            paymentHandler.buyDataBundle(round, 100, 1 gwei, round);
+            paymentHandler.recordSettledPurchase(round, 100, round + PAYMENT_REFERENCE_SEEDS, 0, false);
+            paymentHandler.quote(0, 100);
+            // Withdrawn and put back inside the round, so the next round starts from the same
+            // currency table this one did
+            paymentHandler.updateAsset(1, false, true);
+            paymentHandler.updateAsset(1, true, true);
             walletHandler.pullETH(round, 1 gwei);
             // Removal comes before the transfer pair on purpose. Requesting a transfer detaches
             // the wallet on its way through, so a removal after it has nothing left to remove.
@@ -132,6 +145,9 @@ contract HandlerDistributionTest is CampaignBase {
         _assertExercised("setESIMIdentifier");
         _assertExercised("toggleAccessToETH");
         _assertExercised("buyDataBundle");
+        _assertExercised("recordSettledPurchase");
+        _assertExercised("quote");
+        _assertExercised("updateAsset");
         _assertExercised("pullETH");
         _assertExercised("removeESIMWallet");
         _assertExercised("addESIMWallet");

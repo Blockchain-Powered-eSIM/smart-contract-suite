@@ -134,11 +134,25 @@ contract InvariantBase is Test {
         registry.addOrUpdateLazyWalletRegistryAddress(address(lazyWalletRegistry));
         registry.setPaymentAdapter(address(paymentAdapter));
         // Every purchase spends a payment reference through the adapter, so with no currencies
-        // registered a campaign would see all of them revert before reaching anything else.
+        // registered a campaign would see all of them revert before reaching anything else. ETH is
+        // the entry that needs a rate, so it is the one `quote` refuses on its own terms rather
+        // than because a run withdrew it.
         paymentAdapter.registerAsset("USD", Asset({
             allowed: true,
             isDollarUnit: true,
             decimals: 2,
+            token: address(0)
+        }));
+        paymentAdapter.registerAsset("USDC", Asset({
+            allowed: true,
+            isDollarUnit: true,
+            decimals: 6,
+            token: SETTLEMENT_TOKEN
+        }));
+        paymentAdapter.registerAsset("ETH", Asset({
+            allowed: true,
+            isDollarUnit: false,
+            decimals: 18,
             token: address(0)
         }));
         deviceWalletFactory.addRegistryAddress(address(registry));
