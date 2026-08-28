@@ -19,6 +19,7 @@ import "test/utils/mocks/MockLazyWalletRegistry.sol";
 import "test/utils/mocks/MockRegistry.sol";
 import "test/utils/mocks/MockDeviceWallet.sol";
 import "test/utils/mocks/MockESIMWallet.sol";
+import {MockERC20} from "test/utils/mocks/tokens/MockERC20.sol";
 
 contract DeployerBase is Test {
 
@@ -65,8 +66,10 @@ contract DeployerBase is Test {
     address vault = address(0x78731D3Ca6b7E34aC0F824c42a7cC18A495cabaB);
     uint64 defaultPriceCapUSDCents = 100_000;   // $1000
 
-    // A stand-in for USDC. Nothing settles onchain yet, so the entry only has to be resolvable.
-    address settlementToken = address(0x036CbD53842c5426634e7929541eC2318f3dCF7e);
+    // A stand-in for USDC, deployed in setUp so the settlement path has real balances to move.
+    MockERC20 settlementERC20;
+    address settlementToken;
+    uint8 constant SETTLEMENT_DECIMALS = 6;
     bytes32 constant ASSET_USDC = bytes32("USDC");
     bytes32 constant ASSET_USD = bytes32("USD");
     bytes32 constant ASSET_ETH = bytes32("ETH");
@@ -169,6 +172,10 @@ contract DeployerBase is Test {
 
         // 9. Populate addresses deployed during the process
         // 8.c. Deploy the payment adapter and give it the currencies the tests price in
+        settlementERC20 = new MockERC20("USD Coin", "USDC", SETTLEMENT_DECIMALS);
+        settlementToken = address(settlementERC20);
+        console.log("settlementToken: ", settlementToken);
+
         PaymentAdapter paymentAdapterImpl = new PaymentAdapter();
         ERC1967Proxy paymentAdapterProxy = new ERC1967Proxy(
             address(paymentAdapterImpl),
@@ -221,7 +228,7 @@ contract DeployerBase is Test {
         paymentAdapter.registerAsset(ASSET_USDC, Asset({
             allowed: true,
             isDollarUnit: true,
-            decimals: 6,
+            decimals: SETTLEMENT_DECIMALS,
             token: settlementToken
         }));
         paymentAdapter.registerAsset(ASSET_USD, Asset({
@@ -246,6 +253,18 @@ contract DeployerBase is Test {
             priceUSDCents: _priceUSDCents,
             settlement: Settlement.Fiat
         });
+    }
+
+    /// @notice What a price in cents costs in the settlement token's own units
+    /// @dev Worked out here rather than read from `quote`, so a test comparing the two is comparing
+    ///      the adapter against a second calculation instead of against itself.
+    function settlementAmount(uint64 _priceUSDCents) internal pure returns (uint256) {
+        return (uint256(_priceUSDCents) * 10 ** SETTLEMENT_DECIMALS) / 100;
+    }
+
+    /// @notice Gives an address a settlement token balance
+    function fundSettlementToken(address _account, uint256 _amount) internal {
+        settlementERC20.mint(_account, _amount);
     }
 
     /// @notice A payment reference derived from a label, so two purchases in one test never collide
