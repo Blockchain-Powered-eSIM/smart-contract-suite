@@ -84,6 +84,25 @@ contract DeviceWalletOperationsGasTest is GasBase {
         vm.snapshotGasLastCall(NAMESPACE, "pullETH: 1 ether to the eSIM wallet");
     }
 
+    /// @notice An eSIM wallet pulling an ERC-20 from the device wallet that owns it
+    /// @dev Two cases because the eSIM wallet's balance slot is cold on its first purchase and warm
+    ///      after, and the difference is what a wallet buying more than once actually pays.
+    function test_pullToken() public {
+        _deploy();
+        fundSettlementToken(address(wallet), 1_000e6);
+
+        vm.prank(address(wallet));
+        wallet.toggleAccessToFunds(address(firstESIMWallet), true);
+
+        vm.prank(address(firstESIMWallet));
+        wallet.pullToken(settlementToken, 100e6);
+        vm.snapshotGasLastCall(NAMESPACE, "pullToken: first pull, the wallet holds none of it");
+
+        vm.prank(address(firstESIMWallet));
+        wallet.pullToken(settlementToken, 100e6);
+        vm.snapshotGasLastCall(NAMESPACE, "pullToken: the wallet already holds some");
+    }
+
     /// @notice Funding the wallet's entry point deposit
     function test_addDeposit() public {
         _deploy();

@@ -4,5 +4,8 @@
   "quote: 6 decimals": "7842",
   "registerAsset: a currency not in the table": "32911",
   "resolveAsset": "7991",
+  "settle: funded above the price, with a refund": "40529",
+  "settle: funded to the exact price": "15314",
+  "settle: the vault's first payment in this currency": "49714",
   "updateAsset: withdrawing a currency": "16144"
 }

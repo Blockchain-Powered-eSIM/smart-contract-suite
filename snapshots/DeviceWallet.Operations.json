@@ -4,6 +4,8 @@
   "execute: ETH transfer to an EOA": "36317",
   "executeBatch: 3 ETH transfers": "79993",
   "pullETH: 1 ether to the eSIM wallet": "13418",
+  "pullToken: first pull, the wallet holds none of it": "30862",
+  "pullToken: the wallet already holds some": "8962",
   "toggleAccessToFunds: grant": "23507",
   "toggleAccessToFunds: revoke": "3607"
 }

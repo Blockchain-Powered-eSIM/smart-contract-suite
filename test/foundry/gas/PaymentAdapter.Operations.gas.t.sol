@@ -6,6 +6,7 @@ import "contracts/CustomStructs.sol";
 import {Asset} from "contracts/payments/PaymentAdapter.sol";
 
 import {GasBase} from "test/foundry/gas/base/GasBase.sol";
+import {MockESIMWallet} from "test/utils/mocks/MockESIMWallet.sol";
 
 /// @notice Gas for the currency table and the payment references.
 /// @dev Every purchase on both paths spends a reference and reads a currency, so what is measured
@@ -63,6 +64,30 @@ contract PaymentAdapterOperationsGasTest is GasBase {
     function test_resolveAsset() public {
         paymentAdapter.resolveAsset(ASSET_USDC);
         vm.snapshotGasLastCall(NAMESPACE, "resolveAsset");
+    }
+
+    /// @notice Paying the vault out of tokens already sent to the adapter
+    /// @dev A first settlement writes the vault a balance it did not have, which costs more than
+    ///      every one after it and would swamp the difference the two cases are here to show. So
+    ///      the vault is paid once before either measurement and all three are recorded.
+    function test_settle() public {
+        (, MockESIMWallet eSIMWallet) = _deployDeviceWallet("Device_Settle", 0, 4_001);
+        uint256 needed = settlementAmount(TEST_PRICE_CENTS);
+
+        fundSettlementToken(address(paymentAdapter), needed);
+        vm.prank(address(eSIMWallet));
+        paymentAdapter.settle(ASSET_USDC, TEST_PRICE_CENTS, needed, address(eSIMWallet));
+        vm.snapshotGasLastCall(NAMESPACE, "settle: the vault's first payment in this currency");
+
+        fundSettlementToken(address(paymentAdapter), needed);
+        vm.prank(address(eSIMWallet));
+        paymentAdapter.settle(ASSET_USDC, TEST_PRICE_CENTS, needed, address(eSIMWallet));
+        vm.snapshotGasLastCall(NAMESPACE, "settle: funded to the exact price");
+
+        fundSettlementToken(address(paymentAdapter), needed * 2);
+        vm.prank(address(eSIMWallet));
+        paymentAdapter.settle(ASSET_USDC, TEST_PRICE_CENTS, needed * 2, address(eSIMWallet));
+        vm.snapshotGasLastCall(NAMESPACE, "settle: funded above the price, with a refund");
     }
 
     /// @notice Spending a payment reference
