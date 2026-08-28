@@ -38,7 +38,7 @@ methods {
     function newRequestedOwner() external returns (address) envfree;
     function deviceWallet() external returns (address) envfree;
     function eSIMWalletFactory() external returns (address) envfree;
-    function priceCapUSDCents() external returns (uint256) envfree;
+    function priceCapUSDCents() external returns (uint64) envfree;
 
     /// Nothing outside this contract is in the scene. Without this the device wallet and registry
     /// calls would havoc this wallet's own storage and every rule below would fail for the wrong
@@ -258,16 +258,16 @@ rule theOwnerIsAlwaysTheDeviceWallet(method f) filtered {
 /// ceiling to zero, which hands the wallet to the registry default rather than to a figure the
 /// outgoing owner chose. Anything else on that path would be a second, unguarded writer.
 rule thePriceCeilingIsSetOnlyByItsSetter(method f) filtered { f -> !alwaysReverts(f) } {
-    uint256 capBefore = priceCapUSDCents();
+    uint64 capBefore = priceCapUSDCents();
 
     env callEnv;
     calldataarg args;
     f(callEnv, args);
 
-    uint256 capAfter = priceCapUSDCents();
+    uint64 capAfter = priceCapUSDCents();
 
     assert capAfter != capBefore =>
-        (f.selector == sig:setPriceCapUSDCents(uint256).selector ||
+        (f.selector == sig:setPriceCapUSDCents(uint64).selector ||
          f.selector == sig:acceptOwnershipTransfer().selector),
         "the price ceiling moved through something other than its setter or a handover";
 
