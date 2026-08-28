@@ -38,6 +38,7 @@ CONTRACTS = (
     "ESIMWallet",
     "Account4337",
     "ProtocolAdmin",
+    "PaymentAdapter",
     "P256Verifier",
 )
 

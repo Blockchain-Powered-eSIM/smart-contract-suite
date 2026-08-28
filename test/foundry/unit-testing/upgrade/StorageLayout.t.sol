@@ -111,8 +111,19 @@ contract StorageLayoutTest is DeployerBase {
         (, uint64 price,) = _wallet.transactionHistory(0);
         assertEq(price, 0xB1, "ESIMWallet.transactionHistory must read slot 3");
 
-        vm.store(_target, bytes32(uint256(4)), bytes32(uint256(uint160(SENTINEL))));
+        // Slot 4 carries both, the address in the low 20 bytes and the ceiling in the 8 above it.
+        // Written as one word with a different value in each field, so a getter reading the wrong
+        // one cannot come back with the value the other was given.
+        vm.store(_target, bytes32(uint256(4)), _walletSlotFour(SENTINEL, 4242));
         assertEq(_wallet.newRequestedOwner(), SENTINEL, "ESIMWallet.newRequestedOwner must read slot 4");
+        assertEq(_wallet.priceCapUSDCents(), 4242, "ESIMWallet.priceCapUSDCents must read slot 4 byte 20");
+    }
+
+    /// @notice Slot 4 of an eSIM wallet, with both packed fields set
+    /// @dev The offsets in the baseline count from the low end of the word, so the address sits in
+    ///      the low 160 bits and the ceiling starts where it ends.
+    function _walletSlotFour(address _newOwner, uint64 _cap) private pure returns (bytes32) {
+        return bytes32(uint256(uint160(_newOwner)) | (uint256(_cap) << 160));
     }
 
     function test_layout_registrySlotsAreUnchanged() public {
@@ -200,8 +211,43 @@ contract StorageLayoutTest is DeployerBase {
         );
         assertEq(registry.upgradeManager(), registry.owner(), "Registry.upgradeManager must not read slot 63");
 
-        vm.store(_target, bytes32(uint256(64)), bytes32(uint256(uint160(SENTINEL))));
+        // Four fields share slot 64. One word with a distinct value in each, so a getter reading
+        // the wrong field cannot pass by picking up its neighbour's value.
+        vm.store(_target, bytes32(uint256(64)), _registrySlotSixtyFour(SENTINEL, true, false, 4242));
         assertEq(registry.newRequestedAdmin(), SENTINEL, "Registry.newRequestedAdmin must read slot 64");
+        assertEq(registry.paused(), true, "Registry.paused must read slot 64 byte 20");
+        assertEq(registry.adminDisabled(), false, "Registry.adminDisabled must read slot 64 byte 21");
+
+        _assertRegistryPackedTail(_target);
+    }
+
+    /// @dev Split out because the assertions are cumulative on the stack.
+    function _assertRegistryPackedTail(address _target) private {
+        assertEq(
+            registry.defaultPriceCapUSDCents(),
+            4242,
+            "Registry.defaultPriceCapUSDCents must read slot 64 byte 22"
+        );
+
+        vm.store(_target, bytes32(uint256(65)), bytes32(uint256(uint160(SENTINEL))));
+        assertEq(registry.paymentAdapter(), SENTINEL, "Registry.paymentAdapter must read slot 65");
+    }
+
+    /// @notice Slot 64 of the registry, with all four packed fields set
+    /// @dev Offsets count from the low end of the word: the address takes the low 160 bits, the two
+    ///      flags one byte each above it, then the ceiling.
+    function _registrySlotSixtyFour(
+        address _newAdmin,
+        bool _paused,
+        bool _adminDisabled,
+        uint64 _cap
+    ) private pure returns (bytes32) {
+        return bytes32(
+            uint256(uint160(_newAdmin))
+                | (uint256(_paused ? 1 : 0) << 160)
+                | (uint256(_adminDisabled ? 1 : 0) << 168)
+                | (uint256(_cap) << 176)
+        );
     }
 
     function test_layout_lazyWalletRegistrySlotsAreUnchanged() public {
@@ -324,6 +370,43 @@ contract StorageLayoutTest is DeployerBase {
         assertTrue(
             eSIMWalletFactory.isESIMWalletDeployed(SENTINEL),
             "ESIMWalletFactory.isESIMWalletDeployed must read slot 2"
+        );
+    }
+
+    /// @notice Slot holding `_key`'s entry in the bytes32-keyed mapping declared at `_slot`.
+    function _symbolEntry(bytes32 _key, uint256 _slot) private pure returns (bytes32) {
+        return keccak256(abi.encode(_key, _slot));
+    }
+
+    function test_layout_paymentAdapterSlotsAreUnchanged() public {
+        address target = address(paymentAdapter);
+
+        vm.store(target, bytes32(uint256(0)), bytes32(uint256(uint160(SENTINEL))));
+        assertEq(paymentAdapter.registry(), SENTINEL, "PaymentAdapter.registry must read slot 0");
+
+        vm.store(target, bytes32(uint256(1)), bytes32(uint256(uint160(SENTINEL))));
+        assertEq(paymentAdapter.settlementToken(), SENTINEL, "PaymentAdapter.settlementToken must read slot 1");
+
+        _assertPaymentAdapterMappings(target);
+    }
+
+    /// @dev Split out because the assertions are cumulative on the stack.
+    function _assertPaymentAdapterMappings(address _target) private {
+        // The whole entry is one slot, so the four fields are written as one word. Allowed and
+        // in dollars in the low two bytes, then the decimals, then the token address.
+        bytes32 entry = bytes32(
+            uint256(1) | (uint256(1) << 8) | (uint256(6) << 16) | (uint256(uint160(SENTINEL)) << 24)
+        );
+        vm.store(_target, _symbolEntry(ASSET_USD, 2), entry);
+        (bool allowed,, uint8 decimals, address token) = paymentAdapter.assets(ASSET_USD);
+        assertTrue(allowed, "PaymentAdapter.assets must read slot 2");
+        assertEq(decimals, 6, "PaymentAdapter.assets decimals must read slot 2");
+        assertEq(token, SENTINEL, "PaymentAdapter.assets token must read slot 2");
+
+        vm.store(_target, _symbolEntry(bytes32("pin"), 3), bytes32(uint256(1)));
+        assertTrue(
+            paymentAdapter.usedReferences(bytes32("pin")),
+            "PaymentAdapter.usedReferences must read slot 3"
         );
     }
 }

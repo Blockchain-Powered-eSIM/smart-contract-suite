@@ -37,11 +37,11 @@
       "type": "t_address"
     },
     {
-      "slot": "5",
-      "offset": 0,
-      "bytes": "32",
-      "label": "dataBundlePriceCap",
-      "type": "t_uint256"
+      "slot": "4",
+      "offset": 20,
+      "bytes": "8",
+      "label": "priceCapUSDCents",
+      "type": "t_uint64"
     }
   ]
 }

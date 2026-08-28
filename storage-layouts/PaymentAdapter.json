@@ -1,0 +1,33 @@
+{
+  "contract": "contracts/payments/PaymentAdapter.sol:PaymentAdapter",
+  "storage": [
+    {
+      "slot": "0",
+      "offset": 0,
+      "bytes": "20",
+      "label": "registry",
+      "type": "t_address"
+    },
+    {
+      "slot": "1",
+      "offset": 0,
+      "bytes": "20",
+      "label": "settlementToken",
+      "type": "t_address"
+    },
+    {
+      "slot": "2",
+      "offset": 0,
+      "bytes": "32",
+      "label": "assets",
+      "type": "t_mapping(t_bytes32,t_struct(Asset)_storage)"
+    },
+    {
+      "slot": "3",
+      "offset": 0,
+      "bytes": "32",
+      "label": "usedReferences",
+      "type": "t_mapping(t_bytes32,t_bool)"
+    }
+  ]
+}
