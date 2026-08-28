@@ -3,7 +3,11 @@ pragma solidity 0.8.36;
 
 // Libraries
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Errors} from "../Errors.sol";
+
+// Interfaces
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 // Types
 import {DataBundleDetails, Settlement} from "../CustomStructs.sol";
@@ -13,6 +17,7 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import {DeviceWallet} from "../device-wallet/DeviceWallet.sol";
+import {PaymentAdapter, Asset} from "../payments/PaymentAdapter.sol";
 import {Registry} from "../Registry.sol";
 
 /// @notice One eSIM, its purchase history and the ETH that pays for its data bundles
@@ -22,6 +27,7 @@ import {Registry} from "../Registry.sol";
 ///      for a data bundle but cannot raise the ceiling that limits what it may charge.
 contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable {
     using Address for address;
+    using SafeERC20 for IERC20;
 
     /// @notice Address of the eSIM wallet factory contract
     address public eSIMWalletFactory;
@@ -60,6 +66,20 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         uint256 _ethFromUser,
         bytes32 indexed _paymentReference
     );
+
+    /// @notice Emitted when a data bundle is paid for in an ERC-20
+    /// @dev The adapter emits the settlement. This one is for an indexer watching one wallet.
+    event DataBundleBoughtWithToken(
+        bytes32 _dataBundleID,
+        uint64 _priceUSDCents,
+        bytes32 indexed _asset,
+        address indexed _token,
+        uint256 _amountSpent,
+        bytes32 indexed _paymentReference
+    );
+
+    /// @notice Emitted when an ERC-20 is returned to the owning device wallet
+    event TokenSentToDeviceWallet(address indexed _token, address indexed _deviceWallet, uint256 _amount);
 
     /// @notice Emitted when a purchase paid for outside the protocol is recorded here
     /// @dev The registry emits the full record. This one is for an indexer watching one wallet.
@@ -338,6 +358,88 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         );
 
         return true;
+    }
+
+    /// @notice Pays the vault for one data bundle in an ERC-20 and records the purchase
+    /// @dev The adapter works the amount out from the price, so unlike the ETH path there is no
+    ///      second figure to take on trust. Any shortfall is pulled from the device wallet.
+    /// @param _dataBundleDetail Data bundle being bought. Its settlement field is overwritten here.
+    /// @param _asset Symbol of the currency to pay in
+    /// @param _maxAmountIn Most of that currency the buyer will spend, in its smallest unit
+    /// @param _paymentReference The offchain order id. Spent once, so a retry of a call that
+    ///        already landed cannot charge the user twice.
+    /// @return True if the transaction is successful
+    function buyDataBundleWithToken(
+        DataBundleDetails memory _dataBundleDetail,
+        bytes32 _asset,
+        uint256 _maxAmountIn,
+        bytes32 _paymentReference
+    ) public onlyDeviceWalletOrESIMWalletAdmin nonReentrant returns (bool) {
+        Registry registry = deviceWallet.registry();
+        registry.requireNotPaused();
+        if(_dataBundleDetail.id == bytes32(0)) revert Errors.EmptyDataBundleID();
+        if(_dataBundleDetail.priceUSDCents == 0) revert Errors.ZeroDataBundlePrice();
+        _requirePriceWithinCap(_dataBundleDetail.priceUSDCents, registry);
+
+        // The money moves through this contract, so this path can say the protocol saw it.
+        _dataBundleDetail.settlement = Settlement.DeviceWallet;
+
+        registry.consumePaymentReference(_paymentReference);
+
+        address adapterAddress = registry.paymentAdapter();
+        if(adapterAddress == address(0)) revert Errors.PaymentAdapterNotSet();
+
+        PaymentAdapter adapter = PaymentAdapter(adapterAddress);
+        Asset memory asset = adapter.resolveAsset(_asset);
+        if(asset.token == address(0)) revert Errors.AssetNotTransferable(_asset);
+
+        uint256 amountIn = adapter.quote(_asset, _dataBundleDetail.priceUSDCents);
+        if(amountIn > _maxAmountIn) revert Errors.SettlementAboveMax(amountIn, _maxAmountIn);
+
+        IERC20 token = IERC20(asset.token);
+        uint256 held = token.balanceOf(address(this));
+        if(held < amountIn) deviceWallet.pullToken(asset.token, amountIn - held);
+
+        // Recorded before the money leaves, so nothing downstream reads a history missing this
+        transactionHistory.push(_dataBundleDetail);
+
+        // Funded first, then told to settle. That is what lets a swap be added there later
+        // without changing anything here.
+        token.safeTransfer(adapterAddress, amountIn);
+        adapter.settle(_asset, _dataBundleDetail.priceUSDCents, amountIn, address(this));
+
+        emit DataBundleBoughtWithToken(
+            _dataBundleDetail.id,
+            _dataBundleDetail.priceUSDCents,
+            _asset,
+            asset.token,
+            amountIn,
+            _paymentReference
+        );
+
+        return true;
+    }
+
+    /// @notice Sends an ERC-20 held here back to the owning device wallet
+    /// @dev The callback on `removeESIMWallet` moves ETH only, so without this a token balance
+    ///      would be stranded when the wallet changes hands.
+    /// @param _token ERC-20 to send back
+    /// @param _amount Amount in that token's smallest unit
+    /// @return The amount sent
+    function sendTokenToDeviceWallet(
+        address _token,
+        uint256 _amount
+    ) external onlyDeviceWallet returns (uint256) {
+        if(_token == address(0)) revert Errors.ZeroAddress("_token");
+        if(_amount == 0) revert Errors.ZeroAmount();
+
+        address currentOwner = owner();
+        if(currentOwner == address(0)) revert Errors.ZeroAddress("owner");
+
+        IERC20(_token).safeTransfer(currentOwner, _amount);
+        emit TokenSentToDeviceWallet(_token, currentOwner, _amount);
+
+        return _amount;
     }
 
     /// @notice Appends a purchase paid for outside the protocol
