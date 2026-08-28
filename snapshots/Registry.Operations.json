@@ -2,6 +2,8 @@
   "acceptAdminUpdate": "4964",
   "assignESIMIdentifier: first time": "64764",
   "pause": "13963",
+  "recordSettledPurchase: first for the wallet": "124759",
+  "recordSettledPurchase: second for the same wallet": "87859",
   "requestAdminUpdate": "10494",
   "setDefaultPriceCapUSDCents": "13346",
   "toggleESIMWalletStandbyStatus: off standby": "5365",

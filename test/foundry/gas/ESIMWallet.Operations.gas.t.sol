@@ -73,7 +73,7 @@ contract ESIMWalletOperationsGasTest is GasBase {
         _deploy();
 
         vm.prank(address(wallet));
-        eSIMWallet.setPriceCapUSDCents(5 ether);
+        eSIMWallet.setPriceCapUSDCents(50_000);
         vm.snapshotGasLastCall(NAMESPACE, "setPriceCapUSDCents: set");
 
         vm.prank(address(wallet));
