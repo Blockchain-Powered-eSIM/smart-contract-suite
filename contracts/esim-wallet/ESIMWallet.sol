@@ -408,8 +408,8 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         token.safeTransfer(adapterAddress, amountIn);
         (uint256 spent,) = adapter.settle(_asset, _dataBundleDetail.priceUSDCents, amountIn, address(this));
 
-        // What the adapter reports spending, not what this wallet sent it. Anything it did not
-        // need comes back here, and the event should say which of the two happened.
+        // The adapter's figure, not what this wallet sent. The two match today, and will not once
+        // a swap can spend less than the ceiling it was funded to.
         emit DataBundleBoughtWithToken(
             _dataBundleDetail.id,
             _dataBundleDetail.priceUSDCents,

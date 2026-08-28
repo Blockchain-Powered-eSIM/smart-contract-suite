@@ -210,7 +210,7 @@ contract PaymentAdapter is Initializable, UUPSUpgradeable, Ownable2StepUpgradeab
     /// @param _amountIn Amount the caller has funded, and the most it is willing to spend
     /// @param _refundTo Address anything unspent goes back to
     /// @return spent Amount that reached the vault
-    /// @return refunded Amount returned to `_refundTo`, always zero until a swap can overshoot
+    /// @return refunded What `_amountIn` came to over the price, sent back to `_refundTo`
     function settle(
         bytes32 _symbol,
         uint64 _priceUSDCents,
