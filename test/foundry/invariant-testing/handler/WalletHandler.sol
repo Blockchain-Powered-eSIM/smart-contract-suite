@@ -198,8 +198,8 @@ contract WalletHandler is HandlerBase {
 
     /// @notice The wallet owner revokes or restores an eSIM wallet's right to pull ETH
     /// @param eSIMIndex Which eSIM wallet to toggle
-    /// @param hasAccessToETH The access it should end up with
-    function toggleAccessToFunds(uint256 eSIMIndex, bool hasAccessToETH) external counted {
+    /// @param hasAccessToFunds The access it should end up with
+    function toggleAccessToFunds(uint256 eSIMIndex, bool hasAccessToFunds) external counted {
         address wallet = _pickESIMWallet(eSIMIndex);
         if (wallet == address(0)) {
             state.recordRevert("toggleAccessToFunds");
@@ -212,10 +212,10 @@ contract WalletHandler is HandlerBase {
         }
 
         vm.prank(device);
-        try DeviceWallet(payable(device)).toggleAccessToFunds(wallet, hasAccessToETH) {
+        try DeviceWallet(payable(device)).toggleAccessToFunds(wallet, hasAccessToFunds) {
             // Recorded in ghost state rather than asserted here: an assertion that trips inside a
             // handler reverts the call and the campaign reads it as a skipped action
-            if (hasAccessToETH) {
+            if (hasAccessToFunds) {
                 state.recordETHAccessGrant(device, wallet);
             } else {
                 state.clearETHAccessGrant(device, wallet);
