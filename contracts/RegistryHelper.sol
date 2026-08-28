@@ -158,10 +158,7 @@ contract RegistryHelper {
     /// @notice Emitted when the owner releases the pause
     event Unpaused(address indexed _owner);
 
-    /// @notice Emitted when the owner changes the wei price ceiling eSIM wallets fall back to
-    event DefaultDataBundlePriceCapUpdated(uint256 _cap);
-
-    /// @notice Emitted when the owner changes the cents price ceiling eSIM wallets fall back to
+    /// @notice Emitted when the owner changes the price ceiling eSIM wallets fall back to
     event DefaultPriceCapUSDCentsUpdated(uint64 _cap);
 
     /// @notice Emitted when the owner points the registry at a payment adapter

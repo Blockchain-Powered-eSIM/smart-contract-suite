@@ -12,6 +12,7 @@ import "contracts/CustomStructs.sol";
 import "contracts/P256Verifier.sol";
 import "contracts/device-wallet/DeviceWalletFactory.sol";
 import "contracts/esim-wallet/ESIMWalletFactory.sol";
+import "contracts/payments/PaymentAdapter.sol";
 
 import "test/utils/mocks/MockEntryPoint.sol";
 import "test/utils/mocks/MockLazyWalletRegistry.sol";
@@ -62,7 +63,17 @@ contract DeployerBase is Test {
     address eSIMWalletAdmin = address(0x4B20993Bc481177ec7E8f571ceCaE8A9e22C02db);
     address upgradeManager = address(0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2);
     address vault = address(0x78731D3Ca6b7E34aC0F824c42a7cC18A495cabaB);
-    uint256 defaultDataBundlePriceCap = 1 ether;
+    uint64 defaultPriceCapUSDCents = 100_000;   // $1000
+
+    // A stand-in for USDC. Nothing settles onchain yet, so the entry only has to be resolvable.
+    address settlementToken = address(0x036CbD53842c5426634e7929541eC2318f3dCF7e);
+    bytes32 constant ASSET_USDC = bytes32("USDC");
+    bytes32 constant ASSET_USD = bytes32("USD");
+    bytes32 constant ASSET_ETH = bytes32("ETH");
+
+    // Stands in wherever a test is about something other than the recorded price. Well under
+    // the registry default, so it never trips the cents ceiling by accident.
+    uint64 constant TEST_PRICE_CENTS = 100;   // $1.00
 
     MockEntryPoint entryPoint;
     IEntryPoint typeCastEntryPoint;
@@ -74,6 +85,9 @@ contract DeployerBase is Test {
 
     MockDeviceWallet deviceWalletImpl;
     MockESIMWallet eSIMWalletImpl;
+    PaymentAdapter paymentAdapter;
+
+    uint256 private _refNonce;
 
     function setUp() public virtual {
         // 1.a. Deploy Mock Entry Point
@@ -133,7 +147,7 @@ contract DeployerBase is Test {
             address(registryImpl),
             abi.encodeCall(
                 registryImpl.initialize,
-                (eSIMWalletAdmin, vault, upgradeManager, address(deviceWalletFactory), address(eSIMWalletFactory), typeCastEntryPoint, defaultDataBundlePriceCap)
+                (eSIMWalletAdmin, vault, upgradeManager, address(deviceWalletFactory), address(eSIMWalletFactory), typeCastEntryPoint, defaultPriceCapUSDCents)
             )
         );
         registry = MockRegistry(address(registryProxy));
@@ -154,8 +168,22 @@ contract DeployerBase is Test {
         console.log("lazyWalletRegistry: ", address(lazyWalletRegistry));
 
         // 9. Populate addresses deployed during the process
+        // 8.c. Deploy the payment adapter and give it the currencies the tests price in
+        PaymentAdapter paymentAdapterImpl = new PaymentAdapter();
+        ERC1967Proxy paymentAdapterProxy = new ERC1967Proxy(
+            address(paymentAdapterImpl),
+            abi.encodeCall(
+                paymentAdapterImpl.initialize,
+                (address(registry), settlementToken, upgradeManager)
+            )
+        );
+        paymentAdapter = PaymentAdapter(address(paymentAdapterProxy));
+        console.log("paymentAdapter: ", address(paymentAdapter));
+
         vm.startPrank(upgradeManager);
         registry.addOrUpdateLazyWalletRegistryAddress(address(lazyWalletRegistry));
+        registry.setPaymentAdapter(address(paymentAdapter));
+        registerDefaultAssets();
         vm.stopPrank();
 
         vm.startPrank(upgradeManager);
@@ -186,44 +214,91 @@ contract DeployerBase is Test {
         duplicateESIMUniqueIdentifiers.push(["eSIM_5_1", "eSIM_5_2"]);
     }
 
+    /// @notice Registers the three currencies the suite prices in
+    /// @dev USD is the fiat entry, record-only with no token behind it. ETH is registered but not
+    ///      denominated in dollars, which is what makes it the case `quote` has to refuse.
+    function registerDefaultAssets() public {
+        paymentAdapter.registerAsset(ASSET_USDC, Asset({
+            allowed: true,
+            isDollarUnit: true,
+            decimals: 6,
+            token: settlementToken
+        }));
+        paymentAdapter.registerAsset(ASSET_USD, Asset({
+            allowed: true,
+            isDollarUnit: true,
+            decimals: 2,
+            token: address(0)
+        }));
+        paymentAdapter.registerAsset(ASSET_ETH, Asset({
+            allowed: true,
+            isDollarUnit: false,
+            decimals: 18,
+            token: address(0)
+        }));
+    }
+
+    /// @notice One purchase the admin asserts happened on a rail the contracts cannot see
+    /// @dev `buyDataBundle` overwrites the settlement with `DeviceWallet` itself, so this shape
+    ///      suits both paths and neither has to state it.
+    function bundle(bytes32 _id, uint64 _priceUSDCents) internal pure returns (DataBundleDetails memory) {
+        return DataBundleDetails({
+            id: _id,
+            priceUSDCents: _priceUSDCents,
+            settlement: Settlement.Fiat
+        });
+    }
+
+    /// @notice A payment reference derived from a label, so two purchases in one test never collide
+    function paymentRef(string memory _label) internal pure returns (bytes32) {
+        return keccak256(bytes(_label));
+    }
+
+    /// @notice A payment reference no earlier call in this test has spent
+    /// @dev A reference is spendable once protocol-wide, so any test buying more than one bundle
+    ///      needs a fresh one each time. Tests about replay pass the same reference deliberately.
+    function nextRef() internal returns (bytes32) {
+        return keccak256(abi.encode("ref", ++_refNonce));
+    }
+
     function initializeCustomDataBundleDetails() public {
         // Initialize the first sub-array
         customDataBundleDetails.push();
-        customDataBundleDetails[0].push(DataBundleDetails("DB_ID_1", 11));
-        customDataBundleDetails[0].push(DataBundleDetails("DB_ID_2", 21));
-        customDataBundleDetails[0].push(DataBundleDetails("DB_ID_3", 31));
-        customDataBundleDetails[0].push(DataBundleDetails("DB_ID_4", 41));
-        customDataBundleDetails[0].push(DataBundleDetails("DB_ID_5", 51));
+        customDataBundleDetails[0].push(bundle("DB_ID_1", 11));
+        customDataBundleDetails[0].push(bundle("DB_ID_2", 21));
+        customDataBundleDetails[0].push(bundle("DB_ID_3", 31));
+        customDataBundleDetails[0].push(bundle("DB_ID_4", 41));
+        customDataBundleDetails[0].push(bundle("DB_ID_5", 51));
 
         // Initialize the second sub-array
         customDataBundleDetails.push();
-        customDataBundleDetails[1].push(DataBundleDetails("DB_ID_1", 11));
-        customDataBundleDetails[1].push(DataBundleDetails("DB_ID_1", 11));
-        customDataBundleDetails[1].push(DataBundleDetails("DB_ID_2", 21));
-        customDataBundleDetails[1].push(DataBundleDetails("DB_ID_2", 21));
-        customDataBundleDetails[1].push(DataBundleDetails("DB_ID_3", 31));
-        customDataBundleDetails[1].push(DataBundleDetails("DB_ID_3", 31));
+        customDataBundleDetails[1].push(bundle("DB_ID_1", 11));
+        customDataBundleDetails[1].push(bundle("DB_ID_1", 11));
+        customDataBundleDetails[1].push(bundle("DB_ID_2", 21));
+        customDataBundleDetails[1].push(bundle("DB_ID_2", 21));
+        customDataBundleDetails[1].push(bundle("DB_ID_3", 31));
+        customDataBundleDetails[1].push(bundle("DB_ID_3", 31));
 
         // Initialize the third sub-array
         customDataBundleDetails.push();
-        customDataBundleDetails[2].push(DataBundleDetails("DB_ID_1", 11));
-        customDataBundleDetails[2].push(DataBundleDetails("DB_ID_1", 11));
-        customDataBundleDetails[2].push(DataBundleDetails("DB_ID_1", 11));
-        customDataBundleDetails[2].push(DataBundleDetails("DB_ID_1", 11));
+        customDataBundleDetails[2].push(bundle("DB_ID_1", 11));
+        customDataBundleDetails[2].push(bundle("DB_ID_1", 11));
+        customDataBundleDetails[2].push(bundle("DB_ID_1", 11));
+        customDataBundleDetails[2].push(bundle("DB_ID_1", 11));
 
         // Initialize the fourth sub-array
         customDataBundleDetails.push();
-        customDataBundleDetails[3].push(DataBundleDetails("DB_ID_5", 51));
-        customDataBundleDetails[3].push(DataBundleDetails("DB_ID_5", 51));
-        customDataBundleDetails[3].push(DataBundleDetails("DB_ID_5", 51));
-        customDataBundleDetails[3].push(DataBundleDetails("DB_ID_6", 61));
-        customDataBundleDetails[3].push(DataBundleDetails("DB_ID_6", 61));
-        customDataBundleDetails[3].push(DataBundleDetails("DB_ID_6", 61));
+        customDataBundleDetails[3].push(bundle("DB_ID_5", 51));
+        customDataBundleDetails[3].push(bundle("DB_ID_5", 51));
+        customDataBundleDetails[3].push(bundle("DB_ID_5", 51));
+        customDataBundleDetails[3].push(bundle("DB_ID_6", 61));
+        customDataBundleDetails[3].push(bundle("DB_ID_6", 61));
+        customDataBundleDetails[3].push(bundle("DB_ID_6", 61));
 
         // Initialize the fifth sub-array
         customDataBundleDetails.push();
-        customDataBundleDetails[4].push(DataBundleDetails("DB_ID_1", 11));
-        customDataBundleDetails[4].push(DataBundleDetails("DB_ID_1", 11));
+        customDataBundleDetails[4].push(bundle("DB_ID_1", 11));
+        customDataBundleDetails[4].push(bundle("DB_ID_1", 11));
     }
 
     function initializeIncorrectParams() public {
@@ -231,16 +306,16 @@ contract DeployerBase is Test {
         modifiedESIMUniqueIdentifiers.push(["eSIM_5_1", "eSIM_5_2"]);
 
         modifiedDataBundleDetails.push();
-        modifiedDataBundleDetails[0].push(DataBundleDetails("DB_ID_5", 51));
-        modifiedDataBundleDetails[0].push(DataBundleDetails("DB_ID_5", 51));
-        modifiedDataBundleDetails[0].push(DataBundleDetails("DB_ID_6", 61));
-        modifiedDataBundleDetails[0].push(DataBundleDetails("DB_ID_6", 61));
-        modifiedDataBundleDetails[0].push(DataBundleDetails("DB_ID_6", 61));
-        modifiedDataBundleDetails[0].push(DataBundleDetails("DB_ID_5", 51));
+        modifiedDataBundleDetails[0].push(bundle("DB_ID_5", 51));
+        modifiedDataBundleDetails[0].push(bundle("DB_ID_5", 51));
+        modifiedDataBundleDetails[0].push(bundle("DB_ID_6", 61));
+        modifiedDataBundleDetails[0].push(bundle("DB_ID_6", 61));
+        modifiedDataBundleDetails[0].push(bundle("DB_ID_6", 61));
+        modifiedDataBundleDetails[0].push(bundle("DB_ID_5", 51));
 
         modifiedDataBundleDetails.push();
-        modifiedDataBundleDetails[1].push(DataBundleDetails("DB_ID_1", 11));
-        modifiedDataBundleDetails[1].push(DataBundleDetails("DB_ID_1", 11));
+        modifiedDataBundleDetails[1].push(bundle("DB_ID_1", 11));
+        modifiedDataBundleDetails[1].push(bundle("DB_ID_1", 11));
     }
 
     function initializeDeviceOwnerKeys() public {

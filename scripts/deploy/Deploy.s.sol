@@ -148,7 +148,6 @@ contract Deploy is Script {
                     deployed.deviceWalletFactory,
                     deployed.eSIMWalletFactory,
                     config.entryPoint,
-                    config.dataBundlePriceCap,
                     config.priceCapUSDCents
                 )
             )
@@ -285,7 +284,6 @@ contract Deploy is Script {
     {
         vm.serializeAddress("params", "eSIMWalletAdmin", config.eSIMWalletAdmin);
         vm.serializeAddress("params", "vault", config.vault);
-        vm.serializeUint("params", "dataBundlePriceCap", config.dataBundlePriceCap);
         vm.serializeUint("params", "priceCapUSDCents", config.priceCapUSDCents);
         section = vm.serializeAddress("params", "settlementToken", config.settlementToken);
     }

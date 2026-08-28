@@ -55,7 +55,6 @@ library DeployConfig {
         IEntryPoint entryPoint;
         address eSIMWalletAdmin;
         address vault;
-        uint256 dataBundlePriceCap;
         uint64 priceCapUSDCents;
         address settlementToken;
         address[] proposers;
@@ -98,10 +97,6 @@ library DeployConfig {
 
         // Required, and never zero: `Registry.initialize` refuses a zero cap, since zero would
         // read as "no ceiling" for every wallet that never sets its own.
-        config.dataBundlePriceCap = vm.envUint("DATA_BUNDLE_PRICE_CAP");
-        if(config.dataBundlePriceCap == 0) revert MissingValue("DATA_BUNDLE_PRICE_CAP");
-
-        // Same rule for the cents ceiling, which is the one that bounds every recorded price.
         config.priceCapUSDCents = uint64(vm.envUint("PRICE_CAP_USD_CENTS"));
         if(config.priceCapUSDCents == 0) revert MissingValue("PRICE_CAP_USD_CENTS");
 

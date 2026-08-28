@@ -39,7 +39,7 @@ contract IdentifiersAndArraysTest is FuzzBase {
         string memory deviceIdentifier = _stringOfLength(deviceLength);
         string memory eSIMIdentifier = _stringOfLength(eSIMLength);
 
-        _populateOne(deviceIdentifier, eSIMIdentifier, 1 ether);
+        _populateOne(deviceIdentifier, eSIMIdentifier, TEST_PRICE_CENTS);
 
         assertEq(
             lazyWalletRegistry.eSIMIdentifierToDeviceIdentifier(eSIMIdentifier),
@@ -64,7 +64,7 @@ contract IdentifiersAndArraysTest is FuzzBase {
         vm.expectRevert(
             abi.encodeWithSelector(Errors.IdentifierTooLong.selector, deviceIdentifier, MAX_IDENTIFIER_LENGTH)
         );
-        _populateOne(deviceIdentifier, "ESIM_FUZZ", 1 ether);
+        _populateOne(deviceIdentifier, "ESIM_FUZZ", TEST_PRICE_CENTS);
 
         assertEq(
             lazyWalletRegistry.getESIMIdentifiersAssociatedWithDeviceIdentifier(deviceIdentifier).length,
@@ -84,7 +84,7 @@ contract IdentifiersAndArraysTest is FuzzBase {
         vm.expectRevert(
             abi.encodeWithSelector(Errors.IdentifierTooLong.selector, eSIMIdentifier, MAX_IDENTIFIER_LENGTH)
         );
-        _populateOne("DEVICE_FUZZ", eSIMIdentifier, 1 ether);
+        _populateOne("DEVICE_FUZZ", eSIMIdentifier, TEST_PRICE_CENTS);
 
         assertEq(
             lazyWalletRegistry.eSIMIdentifierToDeviceIdentifier(eSIMIdentifier),
@@ -98,10 +98,10 @@ contract IdentifiersAndArraysTest is FuzzBase {
     ///      every unbound eSIM identifier to the same entry.
     function test_populateHistory_refusesEmptyIdentifiers() public {
         vm.expectRevert(Errors.EmptyDeviceIdentifier.selector);
-        _populateOne("", "ESIM_FUZZ", 1 ether);
+        _populateOne("", "ESIM_FUZZ", TEST_PRICE_CENTS);
 
         vm.expectRevert(Errors.EmptyESIMIdentifier.selector);
-        _populateOne("DEVICE_FUZZ", "", 1 ether);
+        _populateOne("DEVICE_FUZZ", "", TEST_PRICE_CENTS);
     }
 
     /// @notice The three top-level arrays must agree in length
@@ -132,7 +132,7 @@ contract IdentifiersAndArraysTest is FuzzBase {
         DataBundleDetails[][] memory details = new DataBundleDetails[][](detailCount);
         for (uint256 i = 0; i < detailCount; ++i) {
             details[i] = new DataBundleDetails[](1);
-            details[i][0] = DataBundleDetails("DB_FUZZ", 1 ether);
+            details[i][0] = bundle("DB_FUZZ", TEST_PRICE_CENTS);
         }
 
         // The device count is checked against the eSIM lists first, so that pair is what the error
@@ -170,7 +170,7 @@ contract IdentifiersAndArraysTest is FuzzBase {
         DataBundleDetails[][] memory details = new DataBundleDetails[][](1);
         details[0] = new DataBundleDetails[](detailCount);
         for (uint256 i = 0; i < detailCount; ++i) {
-            details[0][i] = DataBundleDetails("DB_FUZZ", 1 ether);
+            details[0][i] = bundle("DB_FUZZ", TEST_PRICE_CENTS);
         }
 
         vm.prank(eSIMWalletAdmin);
@@ -235,7 +235,7 @@ contract IdentifiersAndArraysTest is FuzzBase {
 
         DataBundleDetails[][] memory details = new DataBundleDetails[][](1);
         details[0] = new DataBundleDetails[](1);
-        details[0][0] = DataBundleDetails("DB_FUZZ", 1 ether);
+        details[0][0] = bundle("DB_FUZZ", TEST_PRICE_CENTS);
 
         vm.prank(eSIMWalletAdmin);
         try lazyWalletRegistry.batchPopulateHistory(devices, eSIMs, details) {
@@ -271,7 +271,7 @@ contract IdentifiersAndArraysTest is FuzzBase {
     function _populateOne(
         string memory _deviceIdentifier,
         string memory _eSIMIdentifier,
-        uint256 _price
+        uint64 _priceUSDCents
     ) private {
         string[] memory devices = new string[](1);
         devices[0] = _deviceIdentifier;
@@ -282,7 +282,7 @@ contract IdentifiersAndArraysTest is FuzzBase {
 
         DataBundleDetails[][] memory details = new DataBundleDetails[][](1);
         details[0] = new DataBundleDetails[](1);
-        details[0][0] = DataBundleDetails("DB_FUZZ", _price);
+        details[0][0] = bundle("DB_FUZZ", _priceUSDCents);
 
         vm.prank(eSIMWalletAdmin);
         lazyWalletRegistry.batchPopulateHistory(devices, eSIMs, details);

@@ -94,7 +94,7 @@ interface Errors {
     // ESIMWallet
     error OnlyRegistry();
     error OnlyDeviceWalletOrESIMWalletAdmin();
-    error DataBundlePriceAboveCap(uint256 price, uint256 cap);
+    error DataBundlePriceAboveCap(uint64 priceUSDCents, uint64 cap);
     error ESIMIdentifierAlreadySet(string eSIMUniqueIdentifier);
     error EmptyDataBundleID();
     error ZeroDataBundlePrice();
@@ -102,8 +102,6 @@ interface Errors {
     error NotADeviceWallet(address account);
     error OnlyRequestedOwner(address newRequestedOwner);
     error UseAcceptOwnershipTransfer();
-    error ZeroDataBundlePriceCents();
-    error DataBundlePriceAboveCentsCap(uint64 priceUSDCents, uint64 cap);
 
     // DeviceWallet
     error UnknownESIMWallet(address eSIMWallet);

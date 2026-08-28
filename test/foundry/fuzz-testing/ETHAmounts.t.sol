@@ -15,14 +15,20 @@ import {FuzzBase} from "test/foundry/fuzz-testing/base/FuzzBase.sol";
 ///      price cap is honoured whichever of its two levels supplies it. And an amount larger than
 ///      the balance behind it fails rather than moving a partial amount.
 ///
+///      The ceiling is in cents and the ETH that moves is in wei, so the two are fuzzed
+///      independently. Nothing onchain relates them without a rate.
+///
 ///      The cap resolution is the part worth fuzzing rather than enumerating: the wallet's own cap
 ///      wins when set, and the registry default applies when it is not. Zero on the wallet still
 ///      means "follow the registry", but the registry itself can never hold zero: `initialize` and
-///      `setDefaultDataBundlePriceCap` both refuse it, so a real ceiling always applies somewhere.
+///      `setDefaultPriceCapUSDCents` both refuse it, so a real ceiling always applies somewhere.
 contract ETHAmountsTest is FuzzBase {
 
     /// @dev Keeps fuzzed amounts inside what vm.deal can fund without the totals overflowing
     uint256 private constant MAX_FUZZED_ETH = 1_000_000 ether;
+
+    /// @dev $10,000,000 in cents. Large enough to exercise the ceiling, small enough to read.
+    uint64 private constant MAX_FUZZED_CENTS = 1_000_000_000;
 
     function setUp() public override {
         super.setUp();
@@ -47,16 +53,16 @@ contract ETHAmountsTest is FuzzBase {
         uint256 deviceBalance = bound(_deviceBalance, price, MAX_FUZZED_ETH);
 
         // This test is about conservation of ETH on a successful purchase, not cap behaviour, so
-        // the wallet's own cap is raised above the fuzzed price range and out of the way.
+        // the wallet's own cap is raised out of the way.
         vm.prank(address(fuzzDeviceWallet));
-        fuzzESIMWallet.setDataBundlePriceCap(MAX_FUZZED_ETH);
+        fuzzESIMWallet.setPriceCapUSDCents(MAX_FUZZED_CENTS);
 
         vm.deal(address(fuzzESIMWallet), walletBalance);
         vm.deal(address(fuzzDeviceWallet), deviceBalance);
         uint256 vaultBefore = vault.balance;
 
         vm.prank(eSIMWalletAdmin);
-        fuzzESIMWallet.buyDataBundle(DataBundleDetails("DB_FUZZ", price));
+        fuzzESIMWallet.buyDataBundle(bundle("DB_FUZZ", TEST_PRICE_CENTS), price, nextRef());
 
         assertEq(vault.balance - vaultBefore, price, "The vault must receive exactly the price");
         assertEq(
@@ -70,19 +76,19 @@ contract ETHAmountsTest is FuzzBase {
     /// @dev The revert has to carry both numbers, because the caller cannot otherwise tell which of
     ///      the two levels refused it.
     /// forge-config: default.fuzz.runs = 5000
-    function testFuzz_buyDataBundle_refusesAPriceAboveTheWalletCap(uint256 _cap, uint256 _price) public {
-        uint256 cap = bound(_cap, 1, MAX_FUZZED_ETH - 1);
-        uint256 price = bound(_price, cap + 1, MAX_FUZZED_ETH);
+    function testFuzz_buyDataBundle_refusesAPriceAboveTheWalletCap(uint64 _cap, uint64 _price) public {
+        uint64 cap = uint64(bound(_cap, 1, MAX_FUZZED_CENTS - 1));
+        uint64 price = uint64(bound(_price, uint256(cap) + 1, MAX_FUZZED_CENTS));
 
         vm.prank(address(fuzzDeviceWallet));
-        fuzzESIMWallet.setDataBundlePriceCap(cap);
+        fuzzESIMWallet.setPriceCapUSDCents(cap);
 
         vm.deal(address(fuzzDeviceWallet), MAX_FUZZED_ETH);
         uint256 vaultBefore = vault.balance;
 
         vm.prank(eSIMWalletAdmin);
         vm.expectRevert(abi.encodeWithSelector(Errors.DataBundlePriceAboveCap.selector, price, cap));
-        fuzzESIMWallet.buyDataBundle(DataBundleDetails("DB_FUZZ", price));
+        fuzzESIMWallet.buyDataBundle(bundle("DB_FUZZ", price), 1 ether, nextRef());
 
         assertEq(vault.balance, vaultBefore, "A refused purchase must move no ETH");
     }
@@ -92,20 +98,20 @@ contract ETHAmountsTest is FuzzBase {
     ///      levels are read in the right order rather than the default being ignored once a wallet
     ///      exists.
     /// forge-config: default.fuzz.runs = 5000
-    function testFuzz_buyDataBundle_fallsBackToTheRegistryCap(uint256 _cap, uint256 _price) public {
-        uint256 cap = bound(_cap, 1, MAX_FUZZED_ETH - 1);
-        uint256 price = bound(_price, cap + 1, MAX_FUZZED_ETH);
+    function testFuzz_buyDataBundle_fallsBackToTheRegistryCap(uint64 _cap, uint64 _price) public {
+        uint64 cap = uint64(bound(_cap, 1, MAX_FUZZED_CENTS - 1));
+        uint64 price = uint64(bound(_price, uint256(cap) + 1, MAX_FUZZED_CENTS));
 
         vm.prank(registry.owner());
-        registry.setDefaultDataBundlePriceCap(cap);
+        registry.setDefaultPriceCapUSDCents(cap);
 
-        assertEq(fuzzESIMWallet.dataBundlePriceCap(), 0, "The wallet must have no cap of its own");
+        assertEq(fuzzESIMWallet.priceCapUSDCents(), 0, "The wallet must have no cap of its own");
 
         vm.deal(address(fuzzDeviceWallet), MAX_FUZZED_ETH);
 
         vm.prank(eSIMWalletAdmin);
         vm.expectRevert(abi.encodeWithSelector(Errors.DataBundlePriceAboveCap.selector, price, cap));
-        fuzzESIMWallet.buyDataBundle(DataBundleDetails("DB_FUZZ", price));
+        fuzzESIMWallet.buyDataBundle(bundle("DB_FUZZ", price), 1 ether, nextRef());
     }
 
     /// @notice The wallet's own cap wins over the registry default, in both directions
@@ -113,25 +119,25 @@ contract ETHAmountsTest is FuzzBase {
     ///      that took the minimum of the two would pass a test that only ever set the wallet
     ///      tighter, and would silently cap wallets the device owner meant to raise.
     /// forge-config: default.fuzz.runs = 5000
-    function testFuzz_buyDataBundle_theWalletCapOverridesTheDefault(uint256 _walletCap, uint256 _price) public {
-        uint256 walletCap = bound(_walletCap, 2, MAX_FUZZED_ETH);
-        uint256 price = bound(_price, 1, walletCap);
+    function testFuzz_buyDataBundle_theWalletCapOverridesTheDefault(uint64 _walletCap, uint64 _price) public {
+        uint64 walletCap = uint64(bound(_walletCap, 2, MAX_FUZZED_CENTS));
+        uint64 price = uint64(bound(_price, 1, walletCap));
 
         // The registry default is set tighter than the price, so a purchase that succeeds proves
         // the wallet's own cap is what was read
         vm.prank(registry.owner());
-        registry.setDefaultDataBundlePriceCap(1);
+        registry.setDefaultPriceCapUSDCents(1);
 
         vm.prank(address(fuzzDeviceWallet));
-        fuzzESIMWallet.setDataBundlePriceCap(walletCap);
+        fuzzESIMWallet.setPriceCapUSDCents(walletCap);
 
         vm.deal(address(fuzzDeviceWallet), MAX_FUZZED_ETH);
         uint256 vaultBefore = vault.balance;
 
         vm.prank(eSIMWalletAdmin);
-        fuzzESIMWallet.buyDataBundle(DataBundleDetails("DB_FUZZ", price));
+        fuzzESIMWallet.buyDataBundle(bundle("DB_FUZZ", price), 1 ether, nextRef());
 
-        assertEq(vault.balance - vaultBefore, price, "The wallet's own cap must be the one that applies");
+        assertEq(vault.balance - vaultBefore, 1 ether, "The wallet's own cap must be the one that applies");
     }
 
     /// @notice A price within the registry default set at deployment succeeds without either
@@ -139,13 +145,13 @@ contract ETHAmountsTest is FuzzBase {
     /// @dev The wallet-level zero still means "follow the registry", but the registry itself can
     /// never hold zero, so this is the uncapped-looking path that is actually always bounded.
     /// forge-config: default.fuzz.runs = 5000
-    function testFuzz_buyDataBundle_withinTheDeployTimeDefaultSucceeds(uint256 _price) public {
-        uint256 price = bound(_price, 1, defaultDataBundlePriceCap);
+    function testFuzz_buyDataBundle_withinTheDeployTimeDefaultSucceeds(uint64 _price) public {
+        uint64 price = uint64(bound(_price, 1, defaultPriceCapUSDCents));
 
-        assertEq(fuzzESIMWallet.dataBundlePriceCap(), 0, "The wallet must have no cap of its own");
+        assertEq(fuzzESIMWallet.priceCapUSDCents(), 0, "The wallet must have no cap of its own");
         assertEq(
-            registry.defaultDataBundlePriceCap(),
-            defaultDataBundlePriceCap,
+            registry.defaultPriceCapUSDCents(),
+            defaultPriceCapUSDCents,
             "The registry must hold the cap it was deployed with"
         );
 
@@ -153,9 +159,9 @@ contract ETHAmountsTest is FuzzBase {
         uint256 vaultBefore = vault.balance;
 
         vm.prank(eSIMWalletAdmin);
-        fuzzESIMWallet.buyDataBundle(DataBundleDetails("DB_FUZZ", price));
+        fuzzESIMWallet.buyDataBundle(bundle("DB_FUZZ", price), 1 ether, nextRef());
 
-        assertEq(vault.balance - vaultBefore, price, "A price within the default must not be refused");
+        assertEq(vault.balance - vaultBefore, 1 ether, "A price within the default must not be refused");
     }
 
     /// @notice Pulling more than the device wallet holds fails and moves nothing

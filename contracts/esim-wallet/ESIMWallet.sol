@@ -38,20 +38,15 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     /// @notice Address of the owner (device wallet) that becomes the new owner
     address public newRequestedOwner;
 
-    /// @notice Most this wallet may be charged for one data bundle in USD cents, or zero to follow
+    /// @notice Most this wallet may be charged for one data bundle, in USD cents, or zero to follow
     ///         the registry
     /// @dev Declared here so it packs into the 12 spare bytes beside `newRequestedOwner`. Both are
     ///      cleared together on a handover, which makes that one SSTORE instead of two. Solidity
     ///      packs in declaration order, so moving this line costs the slot.
+    ///
+    ///      Zero has to keep meaning "no limit of my own" rather than "no limit", which is why the
+    ///      fallback lives on the registry rather than here.
     uint64 public priceCapUSDCents;
-
-    /// @notice Most this wallet may be charged for one data bundle in wei, or zero to follow the
-    ///         registry
-    /// @dev The ETH path still names its price in wei and nothing onchain relates that to the cents
-    ///      figure recorded beside it, so this ceiling is what keeps the existing overcharge
-    ///      protection alive. It goes when the ETH path does. Zero has to keep meaning "no limit of
-    ///      my own", which is why the fallback lives on the registry rather than here.
-    uint256 public dataBundlePriceCap;
 
     /// @notice Emitted when the eSIM wallet is deployed
     event ESIMWalletDeployed(
@@ -95,10 +90,7 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     /// @notice Emitted when the current owner revoked the ownership transfer request
     event OwnershipTransferRevoked(address indexed _currentOwner, address indexed _revokedOwner);
 
-    /// @notice Emitted when the owner sets this wallet's own wei price ceiling
-    event DataBundlePriceCapUpdated(uint256 _cap);
-
-    /// @notice Emitted when the owner sets this wallet's own cents price ceiling
+    /// @notice Emitted when the owner sets this wallet's own price ceiling
     event PriceCapUSDCentsUpdated(uint64 _cap);
 
     /// @notice Restricts a call to the device wallet that owns this eSIM wallet
@@ -193,16 +185,6 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     ///      price on `buyDataBundle`, so it must not also be able to raise the ceiling on that
     ///      price. Setting zero hands the wallet back to the registry's ceiling. A handover clears
     ///      it, so an incoming owner starts on the registry ceiling.
-    /// @param _cap Maximum price in wei, or zero to follow the registry
-    function setDataBundlePriceCap(uint256 _cap) external onlyDeviceWallet {
-        dataBundlePriceCap = _cap;
-        emit DataBundlePriceCapUpdated(_cap);
-    }
-
-    /// @notice Sets the most this wallet may be charged for one data bundle, in USD cents
-    /// @dev Same trust model as the wei ceiling above: only the owning device wallet, which means a
-    ///      signature. This is the ceiling that applies to every price the protocol records, both
-    ///      the payments it witnesses and the ones the admin asserts.
     /// @param _cap Maximum price in USD cents, or zero to follow the registry
     function setPriceCapUSDCents(uint64 _cap) external onlyDeviceWallet {
         priceCapUSDCents = _cap;
@@ -311,9 +293,11 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     ///      knows the price. Any shortfall is pulled from the device wallet, which is why the price
     ///      is checked against a ceiling the admin cannot raise.
     ///
-    ///      The recorded price is in cents and the money that moves is in wei, and no contract here
-    ///      relates the two. `_priceWei` is therefore checked against its own ceiling rather than
-    ///      derived from the cents figure. Both it and that ceiling go when the ETH path does.
+    ///      The ceiling is in cents and the money that moves is in wei, and with no rate onchain
+    ///      nothing here relates the two. So the ceiling bounds what may be recorded, not what may
+    ///      be sent, and `_priceWei` is the admin's figure taken as given. That gap closes when the
+    ///      ETH path is replaced by the token path, where the amount is derived from the price
+    ///      rather than stated alongside it.
     /// @param _dataBundleDetail Data bundle being bought. Its settlement field is ignored: this
     ///        function is the only one that can prove the money moved, so it fills that in itself.
     /// @param _priceWei ETH actually being sent to the vault
@@ -330,8 +314,7 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         if(_dataBundleDetail.id == bytes32(0)) revert Errors.EmptyDataBundleID();
         if(_dataBundleDetail.priceUSDCents == 0) revert Errors.ZeroDataBundlePrice();
         if(_priceWei == 0) revert Errors.ZeroDataBundlePrice();
-        _requirePriceWithinCap(_priceWei, registry);
-        _requireCentsPriceWithinCap(_dataBundleDetail.priceUSDCents, registry);
+        _requirePriceWithinCap(_dataBundleDetail.priceUSDCents, registry);
 
         // The one path where the protocol sees the money reach the vault, so it is the one path
         // allowed to say so. Overwritten rather than validated: the caller has no say either way.
@@ -414,11 +397,6 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         deviceWallet = DeviceWallet(payable(newOwner));
 
         // Written only on a change, so a wallet that never set a ceiling emits nothing here
-        if(dataBundlePriceCap != 0) {
-            dataBundlePriceCap = 0;
-            emit DataBundlePriceCapUpdated(0);
-        }
-
         if(priceCapUSDCents != 0) {
             priceCapUSDCents = 0;
             emit PriceCapUSDCentsUpdated(0);
@@ -450,36 +428,21 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         }
     }
 
+
     /// @notice Rejects a price above whichever ceiling applies to this wallet
     /// @dev The wallet's own ceiling wins when it has one. Zero here means "follow the registry",
     ///      not "no ceiling": the registry default is guaranteed non-zero by `Registry.initialize`
-    ///      and `setDefaultDataBundlePriceCap`, so `cap` always resolves to a real ceiling.
-    /// @param _price Price being charged
-    /// @param _registry Registry holding the fallback ceiling
-    function _requirePriceWithinCap(uint256 _price, Registry _registry) private view {
-        uint256 cap = dataBundlePriceCap;
-        if (cap == 0) {
-            cap = _registry.defaultDataBundlePriceCap();
-        }
-
-        if (cap != 0 && _price > cap) {
-            revert Errors.DataBundlePriceAboveCap(_price, cap);
-        }
-    }
-
-    /// @notice Rejects a cents price above whichever ceiling applies to this wallet
-    /// @dev Same fallback rule as the wei check above. Zero on the wallet means "follow the
-    ///      registry", and the registry default is guaranteed non-zero by its own setters.
+    ///      and `setDefaultPriceCapUSDCents`, so `cap` always resolves to a real ceiling.
     /// @param _priceUSDCents Price being charged, in USD cents
     /// @param _registry Registry holding the fallback ceiling
-    function _requireCentsPriceWithinCap(uint64 _priceUSDCents, Registry _registry) private view {
+    function _requirePriceWithinCap(uint64 _priceUSDCents, Registry _registry) private view {
         uint64 cap = priceCapUSDCents;
         if (cap == 0) {
             cap = _registry.defaultPriceCapUSDCents();
         }
 
         if (cap != 0 && _priceUSDCents > cap) {
-            revert Errors.DataBundlePriceAboveCentsCap(_priceUSDCents, cap);
+            revert Errors.DataBundlePriceAboveCap(_priceUSDCents, cap);
         }
     }
 

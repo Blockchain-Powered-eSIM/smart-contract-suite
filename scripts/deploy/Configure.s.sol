@@ -48,7 +48,7 @@ contract Configure is Script {
         _bindRegistryToFactory("DeviceWalletFactory", deviceWalletFactory, registryAddress);
         _bindRegistryToFactory("ESIMWalletFactory", eSIMWalletFactory, registryAddress);
         _bindLazyWalletRegistry(registryAddress, lazyWalletRegistry);
-        _setPriceCap(registryAddress, config.dataBundlePriceCap);
+        _setPriceCap(registryAddress, config.priceCapUSDCents);
 
         vm.stopBroadcast();
 
@@ -95,14 +95,14 @@ contract Configure is Script {
     /// @notice Rotates the fallback ceiling on what an eSIM wallet may be charged for a data bundle
     /// @dev `Registry.initialize` already required a non-zero cap, so this only ever handles a
     ///      later change to it. Zero is not a legal configuration at any point after deployment
-    ///      either: `setDefaultDataBundlePriceCap` refuses it the same way `initialize` does.
-    function _setPriceCap(address registryAddress, uint256 cap) private {
-        if(Registry(registryAddress).defaultDataBundlePriceCap() == cap) {
+    ///      either: `setDefaultPriceCapUSDCents` refuses it the same way `initialize` does.
+    function _setPriceCap(address registryAddress, uint64 cap) private {
+        if(Registry(registryAddress).defaultPriceCapUSDCents() == cap) {
             console.log("Registry: price cap already set, skipping");
             return;
         }
 
-        Registry(registryAddress).setDefaultDataBundlePriceCap(cap);
+        Registry(registryAddress).setDefaultPriceCapUSDCents(cap);
         console.log("Registry: price cap set to", cap);
     }
 

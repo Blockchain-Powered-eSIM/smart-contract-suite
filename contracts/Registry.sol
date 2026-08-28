@@ -91,18 +91,13 @@ contract Registry is
     ///      fast as it was suspended would leave the two sides trading transactions forever.
     bool public adminDisabled;
 
-    /// @notice Most an eSIM wallet may be charged for one data bundle unless it sets its own limit
-    /// @dev Held here rather than only on each wallet because a wallet deployed before this existed
-    ///      reads zero, and there is no enumerable list to write a value into. Never zero: `initialize`
-    ///      and `setDefaultDataBundlePriceCap` both reject it, since a zero here or on a wallet's own
-    ///      cap reads as "no ceiling" in `ESIMWallet._requirePriceWithinCap`.
-    uint256 public defaultDataBundlePriceCap;
-
-    /// @notice Most an eSIM wallet may be charged for one data bundle in USD cents, unless it sets
+    /// @notice Most an eSIM wallet may be charged for one data bundle, in USD cents, unless it sets
     ///         its own limit
-    /// @dev The cents counterpart of the ceiling above, and the one that applies to every price the
-    ///      protocol records. Held here for the same reason: wallets are beacon proxies with no
-    ///      enumerable list, so one write here is how a change reaches all of them.
+    /// @dev Held here rather than only on each wallet because wallets are beacon proxies tracked by
+    ///      a mapping with no enumerable list, so one write here is how a change reaches all of
+    ///      them. Never zero: `initialize` and `setDefaultPriceCapUSDCents` both reject it, since a
+    ///      zero here or on a wallet's own cap reads as "no ceiling" in
+    ///      `ESIMWallet._requirePriceWithinCap`.
     uint64 public defaultPriceCapUSDCents;
 
     /// @notice The protocol's authority on how a data bundle was paid for
@@ -159,10 +154,9 @@ contract Registry is
     /// @param _deviceWalletFactory Factory that deploys device wallets
     /// @param _eSIMWalletFactory Factory that deploys eSIM wallets
     /// @param _entryPoint ERC-4337 EntryPoint singleton for this chain
-    /// @param _defaultDataBundlePriceCap Starting wei price ceiling. Must be non-zero: a zero cap,
-    ///        here or on a wallet's own, reads as "no ceiling" in `ESIMWallet._requirePriceWithinCap`.
-    /// @param _defaultPriceCapUSDCents Starting cents price ceiling. Non-zero for the same reason,
-    ///        and this is the one that bounds every price the protocol records.
+    /// @param _defaultPriceCapUSDCents Starting price ceiling in USD cents. Must be non-zero: a
+    ///        zero cap, here or on a wallet's own, reads as "no ceiling" in
+    ///        `ESIMWallet._requirePriceWithinCap`.
     function initialize(
         address _eSIMWalletAdmin,
         address _vault,
@@ -170,7 +164,6 @@ contract Registry is
         address _deviceWalletFactory,
         address _eSIMWalletFactory,
         IEntryPoint _entryPoint,
-        uint256 _defaultDataBundlePriceCap,
         uint64 _defaultPriceCapUSDCents
     ) external initializer {
         if(_eSIMWalletAdmin == address(0)) revert Errors.ZeroAddress("_eSIMWalletAdmin");
@@ -183,13 +176,11 @@ contract Registry is
         // ESIMWalletFactory's caller check dead, recoverable only by an upgrade.
         if(_deviceWalletFactory == address(0)) revert Errors.ZeroAddress("_deviceWalletFactory");
         if(_eSIMWalletFactory == address(0)) revert Errors.ZeroAddress("_eSIMWalletFactory");
-        if(_defaultDataBundlePriceCap == 0) revert Errors.ZeroDataBundlePriceCap();
-        if(_defaultPriceCapUSDCents == 0) revert Errors.ZeroDataBundlePriceCents();
+        if(_defaultPriceCapUSDCents == 0) revert Errors.ZeroDataBundlePriceCap();
 
         adminOfRecord = _eSIMWalletAdmin;
         entryPoint = _entryPoint;
         vault = _vault;
-        defaultDataBundlePriceCap = _defaultDataBundlePriceCap;
         defaultPriceCapUSDCents = _defaultPriceCapUSDCents;
 
         deviceWalletFactory = DeviceWalletFactory(_deviceWalletFactory);
@@ -205,7 +196,6 @@ contract Registry is
             address(deviceWalletFactory),
             address(eSIMWalletFactory)
         );
-        emit DefaultDataBundlePriceCapUpdated(_defaultDataBundlePriceCap);
         emit DefaultPriceCapUSDCentsUpdated(_defaultPriceCapUSDCents);
     }
 
@@ -361,21 +351,9 @@ contract Registry is
     ///      letting it raise its own limit would leave the ceiling meaningless. Zero is refused:
     ///      it would read as "no ceiling" in `ESIMWallet._requirePriceWithinCap` for every wallet
     ///      that has not set its own.
-    /// @param _cap Maximum price in wei, non-zero
-    function setDefaultDataBundlePriceCap(uint256 _cap) external onlyOwner {
-        if(_cap == 0) revert Errors.ZeroDataBundlePriceCap();
-
-        defaultDataBundlePriceCap = _cap;
-        emit DefaultDataBundlePriceCapUpdated(_cap);
-    }
-
-    /// @notice Sets the cents price ceiling eSIM wallets fall back to when they hold none of their
-    ///         own
-    /// @dev Owner and not admin, for the same reason as the wei ceiling above. Zero is refused: it
-    ///      reads as "no ceiling" on any wallet that has not set its own.
     /// @param _cap Maximum price in USD cents, non-zero
     function setDefaultPriceCapUSDCents(uint64 _cap) external onlyOwner {
-        if(_cap == 0) revert Errors.ZeroDataBundlePriceCents();
+        if(_cap == 0) revert Errors.ZeroDataBundlePriceCap();
 
         defaultPriceCapUSDCents = _cap;
         emit DefaultPriceCapUSDCentsUpdated(_cap);
