@@ -56,6 +56,8 @@ library DeployConfig {
         address eSIMWalletAdmin;
         address vault;
         uint256 dataBundlePriceCap;
+        uint64 priceCapUSDCents;
+        address settlementToken;
         address[] proposers;
         address[] cancellers;
         address[] guardians;
@@ -98,6 +100,15 @@ library DeployConfig {
         // read as "no ceiling" for every wallet that never sets its own.
         config.dataBundlePriceCap = vm.envUint("DATA_BUNDLE_PRICE_CAP");
         if(config.dataBundlePriceCap == 0) revert MissingValue("DATA_BUNDLE_PRICE_CAP");
+
+        // Same rule for the cents ceiling, which is the one that bounds every recorded price.
+        config.priceCapUSDCents = uint64(vm.envUint("PRICE_CAP_USD_CENTS"));
+        if(config.priceCapUSDCents == 0) revert MissingValue("PRICE_CAP_USD_CENTS");
+
+        // The currency the vault is meant to hold. Nothing reads it until swaps exist, but the
+        // adapter takes it at initialisation so adding them later needs no migration transaction.
+        config.settlementToken = vm.envAddress("SETTLEMENT_TOKEN");
+        if(config.settlementToken == address(0)) revert MissingAddress("SETTLEMENT_TOKEN");
 
         config.entryPoint = IEntryPoint(ENTRY_POINT_V08);
         if(ENTRY_POINT_V08.code.length == 0) {

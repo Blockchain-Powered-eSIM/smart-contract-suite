@@ -13,6 +13,7 @@ import {DeviceWallet} from "../../contracts/device-wallet/DeviceWallet.sol";
 import {DeviceWalletFactory} from "../../contracts/device-wallet/DeviceWalletFactory.sol";
 import {ESIMWallet} from "../../contracts/esim-wallet/ESIMWallet.sol";
 import {ESIMWalletFactory} from "../../contracts/esim-wallet/ESIMWalletFactory.sol";
+import {PaymentAdapter} from "../../contracts/payments/PaymentAdapter.sol";
 
 // Config
 import {DeployConfig} from "./config/DeployConfig.sol";
@@ -53,6 +54,7 @@ contract Deploy is Script {
         address deviceWalletFactory;
         address registry;
         address lazyWalletRegistry;
+        address paymentAdapter;
     }
 
     /// @notice ERC-1967 implementation slot, read back rather than assumed
@@ -146,7 +148,8 @@ contract Deploy is Script {
                     deployed.deviceWalletFactory,
                     deployed.eSIMWalletFactory,
                     config.entryPoint,
-                    config.dataBundlePriceCap
+                    config.dataBundlePriceCap,
+                    config.priceCapUSDCents
                 )
             )
         );
@@ -155,6 +158,18 @@ contract Deploy is Script {
             address(new LazyWalletRegistry()),
             abi.encodeCall(LazyWalletRegistry.initialize, (deployed.registry, config.deployer))
         );
+
+        deployed.paymentAdapter = _deployProxy(
+            address(new PaymentAdapter()),
+            abi.encodeCall(
+                PaymentAdapter.initialize,
+                (deployed.registry, config.settlementToken, config.deployer)
+            )
+        );
+
+        // The registry refuses to record a settled purchase until it has an adapter to resolve the
+        // currency through, so the pointer is part of the deployment rather than of configuration.
+        Registry(deployed.registry).setPaymentAdapter(deployed.paymentAdapter);
     }
 
     /// @notice Stands a UUPS implementation up behind a proxy and initializes it in one transaction
@@ -203,6 +218,16 @@ contract Deploy is Script {
         address boundRegistry = address(LazyWalletRegistry(deployed.lazyWalletRegistry).registry());
         if(boundRegistry != deployed.registry) {
             revert WiringMismatch("LazyWalletRegistry.registry", deployed.registry, boundRegistry);
+        }
+
+        address boundAdapter = registry.paymentAdapter();
+        if(boundAdapter != deployed.paymentAdapter) {
+            revert WiringMismatch("Registry.paymentAdapter", deployed.paymentAdapter, boundAdapter);
+        }
+
+        address adapterRegistry = PaymentAdapter(deployed.paymentAdapter).registry();
+        if(adapterRegistry != deployed.registry) {
+            revert WiringMismatch("PaymentAdapter.registry", deployed.registry, adapterRegistry);
         }
     }
 
@@ -260,7 +285,9 @@ contract Deploy is Script {
     {
         vm.serializeAddress("params", "eSIMWalletAdmin", config.eSIMWalletAdmin);
         vm.serializeAddress("params", "vault", config.vault);
-        section = vm.serializeUint("params", "dataBundlePriceCap", config.dataBundlePriceCap);
+        vm.serializeUint("params", "dataBundlePriceCap", config.dataBundlePriceCap);
+        vm.serializeUint("params", "priceCapUSDCents", config.priceCapUSDCents);
+        section = vm.serializeAddress("params", "settlementToken", config.settlementToken);
     }
 
     function _adminSection(DeployConfig.Config memory config, Deployed memory deployed)
@@ -312,10 +339,15 @@ contract Deploy is Script {
             )
         );
         vm.serializeString("contracts", "RegistryProxy", _proxy("registry", deployed.registry));
-        section = vm.serializeString(
+        vm.serializeString(
             "contracts",
             "LazyWalletRegistryProxy",
             _proxy("lazyRegistry", deployed.lazyWalletRegistry)
+        );
+        section = vm.serializeString(
+            "contracts",
+            "PaymentAdapterProxy",
+            _proxy("paymentAdapter", deployed.paymentAdapter)
         );
     }
 
