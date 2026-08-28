@@ -24,7 +24,7 @@ import {DeploymentRecord} from "./config/DeploymentRecord.sol";
 ///      because only the first is expensive to repeat: a configuration call that runs out of gas
 ///      should not mean redeploying eight contracts to try again.
 ///
-///      The deployer is passed as `_upgradeManager` to all four singletons rather than
+///      The deployer is passed as `_upgradeManager` to all five singletons rather than
 ///      `ProtocolAdmin`, and that is deliberate. Three configuration calls are owner gated and
 ///      structurally cannot be folded into any `initialize`, because both factories have to exist
 ///      before the registry and the registry has to exist before either factory can be told about

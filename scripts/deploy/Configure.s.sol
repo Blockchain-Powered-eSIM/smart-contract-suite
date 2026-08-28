@@ -58,7 +58,7 @@ contract Configure is Script {
     error SettlementTokenNotTokenLike(address token);
 
     /// @notice Wires the protocol together and records that it is configured
-    /// @dev Broadcasts as the deployer, which is still the owner of all four singletons.
+    /// @dev Broadcasts as the deployer, which is still the owner of all five singletons.
     function run() external {
         DeployConfig.Config memory config = DeployConfig.load();
 

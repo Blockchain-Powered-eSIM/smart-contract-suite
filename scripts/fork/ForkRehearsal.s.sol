@@ -141,7 +141,7 @@ contract ForkRehearsal is Script {
             revert CheckFailed("Timelock delay is not what the deploy configured");
         }
 
-        console.log("Ownership handover complete, all four singletons held by the timelock");
+        console.log("Ownership handover complete, all five singletons held by the timelock");
     }
 
     /// @notice Derives the wallet address offchain and checks the factory agrees

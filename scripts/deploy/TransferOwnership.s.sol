@@ -12,25 +12,26 @@ import {ProtocolAdmin} from "../../contracts/admin/ProtocolAdmin.sol";
 import {DeployConfig} from "./config/DeployConfig.sol";
 import {DeploymentRecord} from "./config/DeploymentRecord.sol";
 
-/// @notice Hands the four upgradeable singletons to the timelock and closes the deployer's window
+/// @notice Hands the five upgradeable singletons to the timelock and closes the deployer's window
 /// @dev The last of the three deployment scripts. Until this has run, one externally owned account
-///      owns `Registry`, `LazyWalletRegistry` and both factories, and owning the factories reaches
-///      every device wallet and every eSIM wallet through the two beacons. That is the state the
-///      deployment is being moved off, so the gap between `Deploy.s.sol` and this script should be
-///      minutes rather than days.
+///      owns `Registry`, `LazyWalletRegistry`, both factories and `PaymentAdapter`. Owning the
+///      factories reaches every device wallet and every eSIM wallet through the two beacons, and
+///      owning the adapter sets the token address every purchase is paid into. That is the state
+///      the deployment is being moved off, so the gap between `Deploy.s.sol` and this script should
+///      be minutes rather than days.
 ///
 ///      Two steps, because these contracts are `Ownable2Step`. The deployer offers ownership, then
 ///      the new owner accepts it. `ProtocolAdmin.acceptOwnershipBatch` is permissionless and takes
-///      all four in one transaction, so the second step needs no key at all and cannot be the thing
+///      all five in one transaction, so the second step needs no key at all and cannot be the thing
 ///      that strands a handover halfway.
 ///
 ///      Nothing here is timelocked. Accepting an offer of ownership is not an operation the
 ///      timelock schedules; it is a function on the timelock contract itself. After this runs,
-///      every owner gated call on all four contracts is.
+///      every owner gated call on all five contracts is.
 contract TransferOwnership is Script {
 
     /// @notice Number of contracts handed over in one run
-    uint256 private constant TARGET_COUNT = 4;
+    uint256 private constant TARGET_COUNT = 5;
 
     /// @notice A contract did not end the run owned by the timelock
     error OwnershipNotMoved(address target, address owner);
@@ -38,7 +39,7 @@ contract TransferOwnership is Script {
     /// @notice The deployer does not own a contract it is supposed to hand over
     error NotOwner(address target, address owner, address deployer);
 
-    /// @notice Offers all four singletons to the timelock and has it accept them
+    /// @notice Offers all five singletons to the timelock and has it accept them
     /// @dev Broadcasts as the deployer for the offers. The acceptance is permissionless but is
     ///      broadcast from the same key, since somebody has to pay for it.
     function run() external {
@@ -64,11 +65,11 @@ contract TransferOwnership is Script {
         DeploymentRecord.writeStatus("ownershipTransferred", true);
 
         console.log("");
-        console.log("All four singletons are owned by", protocolAdmin);
+        console.log("All five singletons are owned by", protocolAdmin);
         console.log("Every owner gated call now waits for the timelock delay.");
     }
 
-    /// @notice The four contracts whose owner is the upgrade authority
+    /// @notice The five contracts whose owner is the upgrade authority
     /// @dev Read from the record rather than taken as arguments. An address typed on a command line
     ///      is the one way to hand the wrong contract to the wrong owner permanently.
     function _targets() private view returns (address[] memory targets) {
@@ -77,6 +78,7 @@ contract TransferOwnership is Script {
         targets[1] = DeploymentRecord.readAddress("LazyWalletRegistryProxy");
         targets[2] = DeploymentRecord.readAddress("DeviceWalletFactoryProxy");
         targets[3] = DeploymentRecord.readAddress("ESIMWalletFactoryProxy");
+        targets[4] = DeploymentRecord.readAddress("PaymentAdapterProxy");
     }
 
     /// @notice Refuses to start unless the deployer still owns every target
