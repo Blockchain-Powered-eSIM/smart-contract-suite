@@ -67,7 +67,7 @@ abstract contract CampaignBase is InvariantBase {
         symbols[0] = bytes32("USD");
         symbols[1] = bytes32("USDC");
         symbols[2] = bytes32("ETH");
-        paymentHandler = new PaymentHandler(config, paymentAdapter, symbols);
+        paymentHandler = new PaymentHandler(config, paymentAdapter, settlementERC20, symbols);
 
         // The second implementations are built here rather than inside the handler so the beacon
         // swap starts from the same wallet logic the campaign deployed against

@@ -38,6 +38,29 @@ contract PaymentInvariantsTest is CampaignBase {
         }
     }
 
+    /// @notice The adapter holds no tokens between transactions
+    /// @dev Money passes through it in one call. A balance left behind would mean a settlement paid
+    ///      the vault less than the buyer funded, with the difference sitting where the next
+    ///      purchase could carry it off.
+    function invariant_theAdapterHoldsNoTokensAtRest() public view {
+        assertEq(
+            settlementERC20.balanceOf(address(paymentAdapter)),
+            0,
+            "The payment adapter is holding tokens"
+        );
+    }
+
+    /// @notice The vault holds exactly what the purchases that went through were priced at
+    /// @dev The adapter converts the price itself, so this is the check that the figure it worked
+    ///      out is the figure that arrived. Nothing else in the campaign sends the vault tokens.
+    function invariant_theVaultHoldsWhatWasSettled() public view {
+        assertEq(
+            settlementERC20.balanceOf(VAULT),
+            paymentHandler.ghost_settledToVault(),
+            "The vault balance does not match what the purchases came to"
+        );
+    }
+
     /// @notice A currency the table has withdrawn never returns a price
     /// @dev The withdrawal is what stops a purchase being recorded against a currency the protocol
     ///      no longer accepts, so an answer that outlives it would leave the withdrawal meaning

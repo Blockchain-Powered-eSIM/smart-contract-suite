@@ -18,6 +18,7 @@ import "test/utils/mocks/MockRegistry.sol";
 import "test/utils/mocks/MockLazyWalletRegistry.sol";
 import "test/utils/mocks/MockDeviceWallet.sol";
 import "test/utils/mocks/MockESIMWallet.sol";
+import {MockERC20} from "test/utils/mocks/tokens/MockERC20.sol";
 
 /// @notice Deploys the whole protocol once for an invariant campaign to run against.
 /// @dev Deliberately not a subclass of `DeployerBase`. That base carries the fixture arrays every
@@ -41,8 +42,10 @@ contract InvariantBase is Test {
     address internal constant ATTACKER = address(0xbADc0DE000000000000000000000000000000001);
     uint64 internal constant DEFAULT_PRICE_CAP_USD_CENTS = 100_000;   // $1000
 
-    /// @dev A stand-in for USDC. Nothing settles onchain yet, so it only has to be resolvable.
-    address internal constant SETTLEMENT_TOKEN = address(0x036CbD53842c5426634e7929541eC2318f3dCF7e);
+    /// @dev A stand-in for USDC, deployed rather than a fixed address because the campaign settles
+    ///      real balances through it.
+    MockERC20 internal settlementERC20;
+    address internal settlementToken;
 
     /// @notice The address the admin role rotates onto, and back off
     /// @dev Carries a budget of its own. Every admin path reads the role out of the registry, so
@@ -120,12 +123,15 @@ contract InvariantBase is Test {
         );
         lazyWalletRegistry = MockLazyWalletRegistry(address(lazyWalletRegistryProxy));
 
+        settlementERC20 = new MockERC20("USD Coin", "USDC", 6);
+        settlementToken = address(settlementERC20);
+
         PaymentAdapter paymentAdapterImpl = new PaymentAdapter();
         ERC1967Proxy paymentAdapterProxy = new ERC1967Proxy(
             address(paymentAdapterImpl),
             abi.encodeCall(
                 paymentAdapterImpl.initialize,
-                (address(registry), SETTLEMENT_TOKEN, UPGRADE_MANAGER)
+                (address(registry), settlementToken, UPGRADE_MANAGER)
             )
         );
         paymentAdapter = PaymentAdapter(address(paymentAdapterProxy));
@@ -147,7 +153,7 @@ contract InvariantBase is Test {
             allowed: true,
             isDollarUnit: true,
             decimals: 6,
-            token: SETTLEMENT_TOKEN
+            token: settlementToken
         }));
         paymentAdapter.registerAsset("ETH", Asset({
             allowed: true,

@@ -7,6 +7,7 @@ import {ESIMWallet} from "contracts/esim-wallet/ESIMWallet.sol";
 import {PaymentAdapter, Asset} from "contracts/payments/PaymentAdapter.sol";
 
 import {HandlerBase, HandlerConfig} from "test/foundry/invariant-testing/handler/HandlerBase.sol";
+import {MockERC20} from "test/utils/mocks/tokens/MockERC20.sol";
 
 /// @notice Drives both payment paths and the currency table against one another.
 /// @dev The two paths spend payment references through the same adapter but reach it by different
@@ -24,9 +25,19 @@ contract PaymentHandler is HandlerBase {
     ///      catching here. At this size a sequence collides several times over.
     uint256 private constant REFERENCE_POOL = 128;
 
+    /// @notice Decimals of the currency the token path settles in
+    uint8 private constant SETTLEMENT_DECIMALS = 6;
+
+    /// @notice Symbol the token path settles in
+    bytes32 private constant SETTLEMENT_SYMBOL = bytes32("USDC");
+
     PaymentAdapter internal immutable paymentAdapter;
+    MockERC20 internal immutable settlementERC20;
 
     bytes32[] internal symbols;
+
+    /// @notice What every settled purchase should have moved to the vault, added up
+    uint256 public ghost_settledToVault;
 
     /// @notice How many times each reference has been spent by a call that went through
     mapping(bytes32 paymentReference => uint256 spends) public ghost_spendCount;
@@ -40,10 +51,14 @@ contract PaymentHandler is HandlerBase {
     /// @notice Set when `quote` answered for a currency the table had already withdrawn
     bool public ghost_withdrawnCurrencyQuoted;
 
-    constructor(HandlerConfig memory config, PaymentAdapter _paymentAdapter, bytes32[] memory _symbols)
-        HandlerBase(config)
-    {
+    constructor(
+        HandlerConfig memory config,
+        PaymentAdapter _paymentAdapter,
+        MockERC20 _settlementERC20,
+        bytes32[] memory _symbols
+    ) HandlerBase(config) {
         paymentAdapter = _paymentAdapter;
+        settlementERC20 = _settlementERC20;
         symbols = _symbols;
     }
 
@@ -120,6 +135,51 @@ contract PaymentHandler is HandlerBase {
             state.recordCall("buyDataBundle");
         } catch {
             state.recordRevert("buyDataBundle");
+        }
+    }
+
+    /// @notice A wallet buys a data bundle with the settlement token
+    /// @dev The funding is minted to the eSIM wallet rather than to its device wallet, so whether
+    ///      the call goes through turns on the reference rather than on an access flag another
+    ///      handler happens to have toggled.
+    /// @param eSIMIndex Picks the wallet
+    /// @param priceUSDCents Price to charge, bound under whichever ceiling applies
+    /// @param fundingSeed How much of the price the wallet is given, so both funded and short cases run
+    /// @param referenceSeed Picks the payment reference from the pool
+    function buyDataBundleWithToken(
+        uint256 eSIMIndex,
+        uint64 priceUSDCents,
+        uint256 fundingSeed,
+        uint256 referenceSeed
+    ) external counted {
+        address wallet = _pickESIMWallet(eSIMIndex);
+        if (wallet == address(0)) {
+            state.recordRevert("buyDataBundleWithToken");
+            return;
+        }
+
+        bytes32 paymentReference = _reference(referenceSeed);
+        priceUSDCents = uint64(bound(priceUSDCents, 1, _effectiveCap(wallet)));
+
+        uint256 needed = (uint256(priceUSDCents) * 10 ** SETTLEMENT_DECIMALS) / 100;
+        settlementERC20.mint(wallet, bound(fundingSeed, 0, needed * 2));
+
+        vm.prank(_currentAdmin());
+        try ESIMWallet(payable(wallet)).buyDataBundleWithToken(
+            DataBundleDetails({
+                id: "token",
+                priceUSDCents: priceUSDCents,
+                settlement: Settlement.Fiat
+            }),
+            SETTLEMENT_SYMBOL,
+            needed,
+            paymentReference
+        ) {
+            _recordSpend(paymentReference);
+            ghost_settledToVault += needed;
+            state.recordCall("buyDataBundleWithToken");
+        } catch {
+            state.recordRevert("buyDataBundleWithToken");
         }
     }
 

@@ -35,8 +35,11 @@ contract HandlerDistributionTest is CampaignBase {
     /// @notice Offset placing switch destinations outside the identifiers the lazy path populates
     uint256 internal constant SWITCH_SEEDS = 100_000;
 
-    /// @notice Offset separating the settled path's payment references from the ETH path's
-    uint256 internal constant PAYMENT_REFERENCE_SEEDS = 64;
+    /// @notice Width of the reference block each payment path draws from
+    /// @dev Three paths, one block each, laid out end to end. The handler wraps its seeds into a
+    ///      pool of 128, so the three blocks together have to stay inside that or one path
+    ///      re-presents a reference another already spent.
+    uint256 internal constant PAYMENT_REFERENCE_SEEDS = DRIVE_ROUNDS;
 
     /// @notice Every entry point can reach the protocol and change its state
     function test_handlersReachEveryEntryPoint() public {
@@ -82,6 +85,7 @@ contract HandlerDistributionTest is CampaignBase {
             // which is a revert rather than the count this drive is checking
             paymentHandler.buyDataBundle(round, 100, 1 gwei, round);
             paymentHandler.recordSettledPurchase(round, 100, round + PAYMENT_REFERENCE_SEEDS, 0, false);
+            paymentHandler.buyDataBundleWithToken(round, 100, 10e6, round + 2 * PAYMENT_REFERENCE_SEEDS);
             paymentHandler.quote(0, 100);
             // Withdrawn and put back inside the round, so the next round starts from the same
             // currency table this one did
@@ -145,6 +149,7 @@ contract HandlerDistributionTest is CampaignBase {
         _assertExercised("setESIMIdentifier");
         _assertExercised("toggleAccessToFunds");
         _assertExercised("buyDataBundle");
+        _assertExercised("buyDataBundleWithToken");
         _assertExercised("recordSettledPurchase");
         _assertExercised("quote");
         _assertExercised("updateAsset");
