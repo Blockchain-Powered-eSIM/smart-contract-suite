@@ -25,6 +25,10 @@
 /// to each rule and reports the verdict of that modified rule rather than a verdict on the check. A
 /// record reading `Violated: <rule>-<method>-rule_not_vacuous` means the body was reachable, which
 /// is the outcome wanted. Count the records carrying no sanity suffix and ignore the fraction.
+///
+/// Verified 2026-08-28 at
+/// `prover.certora.com/output/7200817/464cd89895e440c7845d7bb5e4cbd4f5`: 146 records verified, zero
+/// assert failures, every violated record carrying a `-rule_not_vacuous` suffix.
 
 methods {
     function assets(bytes32) external returns (bool, bool, uint8, address) envfree;
