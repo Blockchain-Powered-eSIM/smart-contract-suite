@@ -102,6 +102,8 @@ interface Errors {
     error NotADeviceWallet(address account);
     error OnlyRequestedOwner(address newRequestedOwner);
     error UseAcceptOwnershipTransfer();
+    error ZeroDataBundlePriceCents();
+    error DataBundlePriceAboveCentsCap(uint64 priceUSDCents, uint64 cap);
 
     // DeviceWallet
     error UnknownESIMWallet(address eSIMWallet);
@@ -115,4 +117,27 @@ interface Errors {
     error OnlyESIMWalletAdminOrRegistry();
     error OnlyAssociatedESIMWallets();
     error OnlyESIMWalletAdmin();
+
+    // Registry, on the path that records a purchase the contracts did not witness
+    error PaymentAdapterNotSet();
+    error PaymentAdapterUnchanged(address paymentAdapter);
+    // buyDataBundle is the only caller allowed to claim the protocol saw the money move
+    error SettlementNotAsserted();
+    // The lazy registry still owes this eSIM history, so a new entry would land out of order
+    error HistoryNotFullyCopied(string eSIMIdentifier, uint256 outstanding);
+
+    // PaymentAdapter
+    error EmptyAssetSymbol();
+    error EmptyPaymentReference();
+    error AssetNotAllowed(bytes32 asset);
+    error AssetAlreadyRegistered(bytes32 asset);
+    error AssetNotRegistered(bytes32 asset);
+    // quote scales cents by 10**decimals and divides by 100, so anything under two truncates
+    error AssetDecimalsTooLow(bytes32 asset, uint8 decimals);
+    // No oracle, so a price only becomes a token amount for an asset already denominated in dollars
+    error AssetNeedsSwap(bytes32 asset);
+    // Record-only assets, fiat and non-EVM, carry no token address to move
+    error AssetNotSettleable(bytes32 asset);
+    error PaymentReferenceAlreadyUsed(bytes32 paymentReference);
+    error SettlementNotAvailable();
 }
