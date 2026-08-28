@@ -1,10 +1,25 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.36;
 
+/// @notice Which contract, if any, saw the money for a data bundle move
+/// @dev `DeviceWallet` is the only value the protocol can prove. The other two are the admin
+///      stating what happened on a rail the contracts cannot see, so they are assertions and the
+///      price cap is the only guard on them.
+enum Settlement {
+    DeviceWallet,
+    ExternalWallet,
+    Fiat
+}
+
 /// @notice Data Bundle related details stored in the eSIM wallet
+/// @dev Two slots: `id` fills the first, then `priceUSDCents` and `settlement` pack into the
+///      second. The provider's bundle id fits in 32 bytes, so a `string` would have paid for a
+///      general case this protocol does not have. No purchase timestamp: the event log carries the
+///      block timestamp already.
 struct DataBundleDetails {
-    string dataBundleID;
-    uint256 dataBundlePrice;
+    bytes32 id;
+    uint64 priceUSDCents;   // 123456 reads as $1234.56
+    Settlement settlement;
 }
 
 /// @notice Object returned when a new device and eSIM wallet is deployed

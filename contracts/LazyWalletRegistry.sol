@@ -5,7 +5,7 @@ pragma solidity 0.8.36;
 import {Errors} from "./Errors.sol";
 
 // Types
-import {DataBundleDetails} from "./CustomStructs.sol";
+import {DataBundleDetails, Settlement} from "./CustomStructs.sol";
 
 // Contracts
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
@@ -574,12 +574,14 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
                 }
             }
 
-            DataBundleDetails[] storage dataBundleDetails = deviceIdentifierToESIMDetails[_deviceUniqueIdentifier][eSIMUniqueIdentifier];
-            // Manually add a new struct to history and then set its fields
-            dataBundleDetails.push();  // Increase the array length by one
-            DataBundleDetails storage newDataBundleDetail = dataBundleDetails[dataBundleDetails.length - 1];
-            newDataBundleDetail.dataBundleID = _dataBundleDetails[i].dataBundleID;
-            newDataBundleDetail.dataBundlePrice = _dataBundleDetails[i].dataBundlePrice;
+            // These entries predate the wallet, so no contract in this protocol can have seen the
+            // money move. Letting the admin claim otherwise would make the settlement field mean
+            // nothing on the one path where it is the only evidence there is.
+            if(_dataBundleDetails[i].settlement == Settlement.DeviceWallet) {
+                revert Errors.SettlementNotAsserted();
+            }
+
+            deviceIdentifierToESIMDetails[_deviceUniqueIdentifier][eSIMUniqueIdentifier].push(_dataBundleDetails[i]);
         }
 
         emit DataUpdatedForDevice(_deviceUniqueIdentifier, _eSIMUniqueIdentifiers, _dataBundleDetails);
@@ -722,6 +724,22 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
     ///      copy could only ever disagree with it.
     function upgradeManager() public view returns (address) {
         return owner();
+    }
+
+    /// @notice How many stored history entries this eSIM still owes its deployed wallet
+    /// @dev The public getter on `deviceIdentifierToESIMDetails` takes an index rather than
+    ///      returning a length, so the count cannot be worked out from outside this contract.
+    ///
+    ///      Zero for an eSIM this contract never deployed a wallet for, which is the safe answer:
+    ///      such a wallet has no stored history waiting to land after a new entry.
+    /// @param _eSIMIdentifier eSIM being asked about
+    /// @return Entries still waiting to be copied
+    function outstandingHistoryEntries(string calldata _eSIMIdentifier) external view returns (uint256) {
+        string memory deviceIdentifier = eSIMIdentifierToDeviceIdentifier[_eSIMIdentifier];
+        if(bytes(deviceIdentifier).length == 0) return 0;
+
+        return deviceIdentifierToESIMDetails[deviceIdentifier][_eSIMIdentifier].length
+            - historyEntriesCopied[_eSIMIdentifier];
     }
 
     /// @notice Whether a device identifier has purchases recorded against it here

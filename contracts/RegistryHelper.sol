@@ -5,7 +5,7 @@ pragma solidity 0.8.36;
 import {Errors} from "./Errors.sol";
 
 // Types
-import {DataBundleDetails, Wallets} from "./CustomStructs.sol";
+import {DataBundleDetails, Settlement, Wallets} from "./CustomStructs.sol";
 
 // Contracts
 import {DeviceWalletFactory} from "./device-wallet/DeviceWalletFactory.sol";
@@ -158,8 +158,30 @@ contract RegistryHelper {
     /// @notice Emitted when the owner releases the pause
     event Unpaused(address indexed _owner);
 
-    /// @notice Emitted when the owner changes the price ceiling eSIM wallets fall back to
+    /// @notice Emitted when the owner changes the wei price ceiling eSIM wallets fall back to
     event DefaultDataBundlePriceCapUpdated(uint256 _cap);
+
+    /// @notice Emitted when the owner changes the cents price ceiling eSIM wallets fall back to
+    event DefaultPriceCapUSDCentsUpdated(uint64 _cap);
+
+    /// @notice Emitted when the owner points the registry at a payment adapter
+    event PaymentAdapterUpdated(address indexed _paymentAdapter);
+
+    /// @notice Emitted for a purchase settled on a rail the protocol's contracts cannot see
+    /// @dev Emitted here rather than on the wallet so an indexer has one address to follow instead
+    ///      of one per beacon proxy. `_tokenAmount` is what the admin observed the user pay, in
+    ///      that currency's own smallest unit. Nothing validates it: both it and the price come
+    ///      from the admin, so the price ceiling is the guard, not a comparison between the two.
+    event DataBundleSettled(
+        address indexed _eSIMWallet,
+        bytes32 _dataBundleID,
+        uint64 _priceUSDCents,
+        Settlement _settlement,
+        bytes32 indexed _asset,
+        address _token,
+        uint256 _tokenAmount,
+        bytes32 indexed _paymentReference
+    );
 
     /// @notice Emitted when an eSIM wallet's outstanding transfer is raised or settled
     event ESIMWalletSetOnStandby(
