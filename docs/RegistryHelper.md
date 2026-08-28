@@ -240,13 +240,32 @@ event Unpaused(address _owner)
 
 Emitted when the owner releases the pause
 
-### DefaultDataBundlePriceCapUpdated
+### DefaultPriceCapUSDCentsUpdated
 
 ```solidity
-event DefaultDataBundlePriceCapUpdated(uint256 _cap)
+event DefaultPriceCapUSDCentsUpdated(uint64 _cap)
 ```
 
 Emitted when the owner changes the price ceiling eSIM wallets fall back to
+
+### PaymentAdapterUpdated
+
+```solidity
+event PaymentAdapterUpdated(address _paymentAdapter)
+```
+
+Emitted when the owner points the registry at a payment adapter
+
+### DataBundleSettled
+
+```solidity
+event DataBundleSettled(address _eSIMWallet, bytes32 _dataBundleID, uint64 _priceUSDCents, enum Settlement _settlement, bytes32 _asset, address _token, uint256 _tokenAmount, bytes32 _paymentReference)
+```
+
+Emitted for a purchase paid for outside the protocol
+
+_On the registry and not the wallet, so an indexer follows one address instead of one
+     per wallet. `_tokenAmount` is unchecked: it and the price both come from the admin._
 
 ### ESIMWalletSetOnStandby
 
@@ -377,6 +396,53 @@ _Shared by the first batch and every batch after it so the two cannot drift apar
 | Name | Type | Description |
 | ---- | ---- | ----------- |
 | [0] | address | Address of the eSIM wallet deployed |
+
+### _assignESIMIdentifier
+
+```solidity
+function _assignESIMIdentifier(address _eSIMWalletAddress, string _eSIMUniqueIdentifier) internal returns (string)
+```
+
+Records an eSIM identifier against a wallet and writes it onto the wallet
+
+_Internal on purpose. Only the admin knows which identifier a wallet is owed, and a
+     device wallet can call anything through `execute`, so an external claim let any owner
+     take a string bought by someone else. `Registry.assignESIMIdentifier` is the way in.
+
+     Both slots are written here so they cannot disagree. Claim first: the wallet's slot is
+     set once, so a claim failing after it would strand an identifier the registry never saw._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _eSIMWalletAddress | address | Wallet receiving the identifier |
+| _eSIMUniqueIdentifier | string | Identifier being assigned |
+
+#### Return Values
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| [0] | string | The identifier now on the wallet |
+
+### _claimESIMIdentifier
+
+```solidity
+function _claimESIMIdentifier(string _eSIMUniqueIdentifier, address _eSIMWalletAddress, address _deviceWallet) internal
+```
+
+Records the wallet holding an eSIM identifier, refusing a second holder
+
+_A reservation is compared against the device wallet's own identifier rather than
+     refused outright, since the lazy route claims against its own reservation._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _eSIMUniqueIdentifier | string | Identifier being claimed |
+| _eSIMWalletAddress | address | Wallet claiming it |
+| _deviceWallet | address | Device wallet holding that eSIM wallet |
 
 ### _updateDeviceWalletInfo
 

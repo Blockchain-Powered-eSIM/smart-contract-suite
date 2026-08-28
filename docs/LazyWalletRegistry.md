@@ -501,6 +501,30 @@ _Reads through to the owner rather than holding its own copy. `_authorizeUpgrade
      gated on `onlyOwner`, so the owner is the upgrade authority by definition and a second
      copy could only ever disagree with it._
 
+### outstandingHistoryEntries
+
+```solidity
+function outstandingHistoryEntries(string _eSIMIdentifier) external view returns (uint256)
+```
+
+How many history entries are still waiting to be copied into this eSIM's wallet
+
+_Needed because the public getter on `deviceIdentifierToESIMDetails` takes an index and
+     never returns a length, so nothing outside this contract can count the entries.
+     Returns zero for an eSIM this contract never handled, which has nothing waiting anyway._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _eSIMIdentifier | string | eSIM being asked about |
+
+#### Return Values
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| [0] | uint256 | Entries still waiting to be copied |
+
 ### isDeviceIdentifierReserved
 
 ```solidity

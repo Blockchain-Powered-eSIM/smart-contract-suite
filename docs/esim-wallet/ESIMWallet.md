@@ -49,17 +49,18 @@ address newRequestedOwner
 
 Address of the owner (device wallet) that becomes the new owner
 
-### dataBundlePriceCap
+### priceCapUSDCents
 
 ```solidity
-uint256 dataBundlePriceCap
+uint64 priceCapUSDCents
 ```
 
-Most this wallet may be charged for one data bundle, or zero to follow the registry
+Most this wallet may be charged for one data bundle, in USD cents, or zero to follow
+        the registry
 
-_Appended, and this contract is a leaf, so the slot lands past everything a live proxy
-     already holds and reads zero there. Zero has to keep meaning "no limit of my own" for
-     that reason, which is why the fallback lives on the registry rather than here._
+_Declared here so it shares a slot with `newRequestedOwner`. Solidity packs in
+     declaration order, so moving this line costs that slot. A handover clears both, which
+     is then one write instead of two. Zero means "follow the registry", not "no ceiling"._
 
 ### ESIMWalletDeployed
 
@@ -72,10 +73,38 @@ Emitted when the eSIM wallet is deployed
 ### DataBundleBought
 
 ```solidity
-event DataBundleBought(string _dataBundleID, uint256 _dataBundlePrice, uint256 _ethFromUser)
+event DataBundleBought(bytes32 _dataBundleID, uint64 _priceUSDCents, uint256 _priceWei, uint256 _ethFromUser, bytes32 _paymentReference)
 ```
 
 Emitted when the payment for a data bundle is made
+
+### DataBundleBoughtWithToken
+
+```solidity
+event DataBundleBoughtWithToken(bytes32 _dataBundleID, uint64 _priceUSDCents, bytes32 _asset, address _token, uint256 _amountSpent, bytes32 _paymentReference)
+```
+
+Emitted when a data bundle is paid for in an ERC-20
+
+_The adapter emits the settlement. This one is for an indexer watching one wallet._
+
+### TokenSentToDeviceWallet
+
+```solidity
+event TokenSentToDeviceWallet(address _token, address _deviceWallet, uint256 _amount)
+```
+
+Emitted when an ERC-20 is returned to the owning device wallet
+
+### DataBundleSettlementRecorded
+
+```solidity
+event DataBundleSettlementRecorded(bytes32 _dataBundleID, uint64 _priceUSDCents, enum Settlement _settlement)
+```
+
+Emitted when a purchase paid for outside the protocol is recorded here
+
+_The registry emits the full record. This one is for an indexer watching one wallet._
 
 ### ESIMUniqueIdentifierInitialised
 
@@ -119,10 +148,10 @@ event OwnershipTransferRevoked(address _currentOwner, address _revokedOwner)
 
 Emitted when the current owner revoked the ownership transfer request
 
-### DataBundlePriceCapUpdated
+### PriceCapUSDCentsUpdated
 
 ```solidity
-event DataBundlePriceCapUpdated(uint256 _cap)
+event PriceCapUSDCentsUpdated(uint64 _cap)
 ```
 
 Emitted when the owner sets this wallet's own price ceiling
@@ -191,7 +220,9 @@ function setESIMUniqueIdentifier(string _eSIMUniqueIdentifier) external
 Since buying the eSIM (along with data bundle) happens before the identifier is generated,
         the identifier is to be set separately after the wallet is deployed and eSIM is created
 
-_This function can only be called once_
+_Set once, and only by the registry, which records the claim in the same call. The
+     owning device wallet used to be the caller, which let an owner write a string the
+     registry has no record of._
 
 #### Parameters
 
@@ -199,10 +230,10 @@ _This function can only be called once_
 | ---- | ---- | ----------- |
 | _eSIMUniqueIdentifier | string | String that uniquely identifies eSIM wallet |
 
-### setDataBundlePriceCap
+### setPriceCapUSDCents
 
 ```solidity
-function setDataBundlePriceCap(uint256 _cap) external
+function setPriceCapUSDCents(uint64 _cap) external
 ```
 
 Sets the most this wallet may be charged for one data bundle
@@ -217,7 +248,7 @@ _Only the owning device wallet, which means the person holding its P256 key: rea
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| _cap | uint256 | Maximum price in wei, or zero to follow the registry |
+| _cap | uint64 | Maximum price in USD cents, or zero to follow the registry |
 
 ### populateHistory
 
@@ -298,26 +329,101 @@ Deliberately not nonReentrant. removeESIMWallet calls this from inside a try/cat
 ### buyDataBundle
 
 ```solidity
-function buyDataBundle(struct DataBundleDetails _dataBundleDetail) public payable returns (bool)
+function buyDataBundle(struct DataBundleDetails _dataBundleDetail, uint256 _priceWei, bytes32 _paymentReference) public payable returns (bool)
 ```
 
-Pays the vault for one data bundle and records the purchase
+Pays the vault for one data bundle in ETH and records the purchase
 
 _Callable by the owning device wallet or by the admin, since the admin is the party that
      knows the price. Any shortfall is pulled from the device wallet, which is why the price
-     is checked against a ceiling the admin cannot raise._
+     is checked against a ceiling the admin cannot raise.
+
+     The ceiling is in cents and the ETH sent is in wei, and nothing onchain converts
+     between them. So the ceiling limits what gets recorded, not what gets sent, and
+     `_priceWei` is taken on trust. The token path closes that gap by working the amount
+     out from the price instead._
 
 #### Parameters
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| _dataBundleDetail | struct DataBundleDetails | Details of the data bundle being bought. (dataBundleID, dataBundlePrice) |
+| _dataBundleDetail | struct DataBundleDetails | Data bundle being bought. Its settlement field is overwritten here. |
+| _priceWei | uint256 | ETH actually being sent to the vault |
+| _paymentReference | bytes32 | The offchain order id. Spent once, so a retry of a call that        already landed cannot charge the user twice. |
 
 #### Return Values
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
 | [0] | bool | True if the transaction is successful |
+
+### buyDataBundleWithToken
+
+```solidity
+function buyDataBundleWithToken(struct DataBundleDetails _dataBundleDetail, bytes32 _asset, uint256 _maxAmountIn, bytes32 _paymentReference) public returns (bool)
+```
+
+Pays the vault for one data bundle in an ERC-20 and records the purchase
+
+_The adapter works the amount out from the price, so unlike the ETH path there is no
+     second figure to take on trust. Any shortfall is pulled from the device wallet._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _dataBundleDetail | struct DataBundleDetails | Data bundle being bought. Its settlement field is overwritten here. |
+| _asset | bytes32 | Symbol of the currency to pay in |
+| _maxAmountIn | uint256 | Most of that currency the buyer will spend, in its smallest unit |
+| _paymentReference | bytes32 | The offchain order id. Spent once, so a retry of a call that        already landed cannot charge the user twice. |
+
+#### Return Values
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| [0] | bool | True if the transaction is successful |
+
+### sendTokenToDeviceWallet
+
+```solidity
+function sendTokenToDeviceWallet(address _token, uint256 _amount) external returns (uint256)
+```
+
+Sends an ERC-20 held here back to the owning device wallet
+
+_The callback on `removeESIMWallet` moves ETH only, so without this a token balance
+     would be stranded when the wallet changes hands._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _token | address | ERC-20 to send back |
+| _amount | uint256 | Amount in that token's smallest unit |
+
+#### Return Values
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| [0] | uint256 | The amount sent |
+
+### recordSettledPurchase
+
+```solidity
+function recordSettledPurchase(struct DataBundleDetails _dataBundleDetail) external
+```
+
+Appends a purchase paid for outside the protocol
+
+_No money moves here. Nothing onchain saw this payment, so the ceiling is the only
+     limit on what the admin can write into a user's history. Checked here and not on the
+     registry because the wallet's own ceiling lives here._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _dataBundleDetail | struct DataBundleDetails | The purchase to record |
 
 ### transferOwnership
 

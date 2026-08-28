@@ -1,13 +1,33 @@
 # Solidity API
 
+## Settlement
+
+Which contract, if any, saw the money for a data bundle move
+
+_Only `DeviceWallet` can be proven onchain. The other two are the admin's word, so the
+     price cap is the only check on them._
+
+```solidity
+enum Settlement {
+  DeviceWallet,
+  ExternalWallet,
+  Fiat
+}
+```
+
 ## DataBundleDetails
 
 Data Bundle related details stored in the eSIM wallet
 
+_Two slots: `id`, then `priceUSDCents` and `settlement` packed together. `id` is
+     `bytes32` because the provider's ids fit in 32 bytes and a `string` would cost an extra
+     slot on every entry. No timestamp field: the event log already has one._
+
 ```solidity
 struct DataBundleDetails {
-  string dataBundleID;
-  uint256 dataBundlePrice;
+  bytes32 id;
+  uint64 priceUSDCents;
+  enum Settlement settlement;
 }
 ```
 

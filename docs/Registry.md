@@ -88,18 +88,37 @@ _Packs into the spare bytes beside `paused`, so it costs no slot of its own. Sus
      lifting it is an owner action and therefore waits. A key that could restore itself as
      fast as it was suspended would leave the two sides trading transactions forever._
 
-### defaultDataBundlePriceCap
+### defaultPriceCapUSDCents
 
 ```solidity
-uint256 defaultDataBundlePriceCap
+uint64 defaultPriceCapUSDCents
 ```
 
-Most an eSIM wallet may be charged for one data bundle unless it sets its own limit
+Most an eSIM wallet may be charged for one data bundle, in USD cents, unless it sets
+        its own limit
 
-_Held here rather than only on each wallet because a wallet deployed before this existed
-     reads zero, and there is no enumerable list to write a value into. Never zero: `initialize`
-     and `setDefaultDataBundlePriceCap` both reject it, since a zero here or on a wallet's own
-     cap reads as "no ceiling" in `ESIMWallet._requirePriceWithinCap`._
+_Held here because there is no way to list every wallet and write into each one, so one
+     write here is how a change reaches all of them. Never zero: both setters reject it,
+     because zero on a wallet means "follow the registry" and would mean nothing here._
+
+### paymentAdapter
+
+```solidity
+address paymentAdapter
+```
+
+Contract holding the accepted currencies and the spent payment references
+
+_A pointer and a setter, the same shape this registry already uses for the lazy wallet
+     registry._
+
+### onlyESIMWallet
+
+```solidity
+modifier onlyESIMWallet()
+```
+
+Restricts a call to an eSIM wallet this registry has recorded
 
 ### onlyDeviceWallet
 
@@ -143,7 +162,7 @@ _Locks the implementation contract itself. Without this, anyone can call initial
 ### initialize
 
 ```solidity
-function initialize(address _eSIMWalletAdmin, address _vault, address _upgradeManager, address _deviceWalletFactory, address _eSIMWalletFactory, contract IEntryPoint _entryPoint, uint256 _defaultDataBundlePriceCap) external
+function initialize(address _eSIMWalletAdmin, address _vault, address _upgradeManager, address _deviceWalletFactory, address _eSIMWalletFactory, contract IEntryPoint _entryPoint, uint64 _defaultPriceCapUSDCents) external
 ```
 
 Wires the registry to the two factories and sets the protocol's addresses
@@ -158,7 +177,7 @@ Wires the registry to the two factories and sets the protocol's addresses
 | _deviceWalletFactory | address | Factory that deploys device wallets |
 | _eSIMWalletFactory | address | Factory that deploys eSIM wallets |
 | _entryPoint | contract IEntryPoint | ERC-4337 EntryPoint singleton for this chain |
-| _defaultDataBundlePriceCap | uint256 | Starting price ceiling. Must be non-zero: a zero cap, here        or on a wallet's own, reads as "no ceiling" in `ESIMWallet._requirePriceWithinCap`. |
+| _defaultPriceCapUSDCents | uint64 | Starting price ceiling in USD cents. Must be non-zero: a        zero cap, here or on a wallet's own, reads as "no ceiling" in        `ESIMWallet._requirePriceWithinCap`. |
 
 ### requestAdminUpdate
 
@@ -319,10 +338,10 @@ Reverts while the protocol is paused
 _Device wallets and eSIM wallets call this rather than reading `paused` and reverting
      themselves, so the revert reason is the same wherever it comes from._
 
-### setDefaultDataBundlePriceCap
+### setDefaultPriceCapUSDCents
 
 ```solidity
-function setDefaultDataBundlePriceCap(uint256 _cap) external
+function setDefaultPriceCapUSDCents(uint64 _cap) external
 ```
 
 Sets the price ceiling eSIM wallets fall back to when they hold none of their own
@@ -336,7 +355,64 @@ _Owner and not admin, deliberately. The admin is the party this ceiling constrai
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| _cap | uint256 | Maximum price in wei, non-zero |
+| _cap | uint64 | Maximum price in USD cents, non-zero |
+
+### setPaymentAdapter
+
+```solidity
+function setPaymentAdapter(address _paymentAdapter) external
+```
+
+Points this registry at the payment adapter
+
+_Owner and not admin. The adapter holds the spent payment references, so an admin that
+     could swap it would get an empty set back and record every purchase a second time._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _paymentAdapter | address | Address of the payment adapter |
+
+### consumePaymentReference
+
+```solidity
+function consumePaymentReference(bytes32 _paymentReference) external
+```
+
+Spends a payment reference for an eSIM wallet buying with ETH
+
+_The adapter only accepts this from the registry, so the wallet has to come through
+     here. One reference then cannot be spent once on each path._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _paymentReference | bytes32 | Hash tying the purchase to the offchain order behind it |
+
+### recordSettledPurchase
+
+```solidity
+function recordSettledPurchase(address _eSIMWallet, struct DataBundleDetails _dataBundleDetail, bytes32 _asset, uint256 _tokenAmount, bytes32 _paymentReference) external
+```
+
+Records a data bundle paid for through Moonpay, a card or an external wallet
+
+_No money moves here. Three things bound what the admin can state: the price ceiling,
+     the payment reference being spendable once, and the settlement not being
+     `DeviceWallet`. Written here and not by the adapter, because eSIM wallets accept
+     history from this address alone._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _eSIMWallet | address | Wallet the purchase belongs to |
+| _dataBundleDetail | struct DataBundleDetails | The purchase, priced in USD cents like everywhere else |
+| _asset | bytes32 | Symbol of the currency the user paid in |
+| _tokenAmount | uint256 | What the user actually paid, in that currency's smallest unit. Recorded        for offchain matching, never checked: it and the price both come from the admin. |
+| _paymentReference | bytes32 | Hash of the Moonpay charge or the Stripe payment intent |
 
 ### updateDeviceWalletInfo
 
@@ -426,28 +502,31 @@ _The association is a registration: once the registry has named a device wallet 
 | _eSIMWalletAddress | address | Address of the eSIM wallet |
 | _deviceWalletAddress | address | The device wallet taking it on, which must be the caller |
 
-### claimESIMIdentifier
+### assignESIMIdentifier
 
 ```solidity
-function claimESIMIdentifier(string _eSIMUniqueIdentifier, address _eSIMWalletAddress) external
+function assignESIMIdentifier(address _eSIMWalletAddress, string _eSIMUniqueIdentifier) external returns (string)
 ```
 
-Records that an eSIM wallet now holds an eSIM identifier, refusing a second holder
+Binds an eSIM identifier to an eSIM wallet and writes it onto the wallet
 
-_The guard lives here rather than in `DeviceWallet` because a device wallet can reach
-     this directly through `execute`, which would skip anything sitting on the wallet side.
-     For the same reason the caller's device identifier is read from it rather than taken as
-     an argument.
-
-     A reservation is compared against the caller's own identifier rather than refused
-     outright, since the lazy route reaches this while deploying against its own._
+_Admin only. Which identifier a wallet is owed is known offchain when the eSIM is
+     bought, and no onchain check replaces that: a device wallet reaches every external
+     function through `execute`, and any fact it could present about its own wallets is one
+     it writes itself. The lazy route shares the same internal claim._
 
 #### Parameters
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| _eSIMUniqueIdentifier | string | Identifier being claimed |
-| _eSIMWalletAddress | address | Wallet claiming it, which must be one the caller owns |
+| _eSIMWalletAddress | address | Wallet receiving the identifier |
+| _eSIMUniqueIdentifier | string | Identifier being assigned |
+
+#### Return Values
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| [0] | string | The identifier now on the wallet |
 
 ### toggleESIMWalletStandbyStatus
 
