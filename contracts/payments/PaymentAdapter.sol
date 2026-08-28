@@ -202,9 +202,12 @@ contract PaymentAdapter is Initializable, UUPSUpgradeable, Ownable2StepUpgradeab
     /// @dev The caller funds this contract and calls settle in the same transaction, which leaves
     ///      the tokens here for a swap to be added later without changing this signature.
     ///
-    ///      The refund is bounded by what the caller funded rather than by the balance, so a token
-    ///      sent here by mistake is not swept out by the next purchase. A fee-on-transfer token
-    ///      delivers less than declared and fails the funding check.
+    ///      `_amountIn` is the caller's word for what it sent, checked only against the balance, so
+    ///      a caller naming more than it sent would carry off a token somebody left here by
+    ///      mistake. What stops that is the caller: the one path into here passes `quote`, and an
+    ///      eSIM wallet has no way to call this with a figure of its own choosing. Keep it that way.
+    ///
+    ///      A fee-on-transfer token delivers less than declared and fails the funding check.
     /// @param _symbol Currency being paid in
     /// @param _priceUSDCents Price of the data bundle, in USD cents
     /// @param _amountIn Amount the caller has funded, and the most it is willing to spend

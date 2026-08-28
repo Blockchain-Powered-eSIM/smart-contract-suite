@@ -232,6 +232,27 @@ contract PaymentAdapterSettleTest is DeviceWalletFixture {
     // What settle leaves alone
     // ---------------------------------------------------------------------------------------------
 
+    /// @notice A caller naming more than it funded takes the difference, so nothing may name more
+    /// @dev Records what the contract does rather than what it should. `_amountIn` is checked
+    ///      against the balance and nothing else, so the guard is the caller: `buyDataBundleWithToken`
+    ///      is the one path in and it always passes `quote`. An eSIM wallet with a way to call
+    ///      `settle` with a figure of its own would make this reachable.
+    function test_settle_aCallerNamingMoreThanItSentTakesTheDifference() public {
+        uint256 donation = 500e6;
+        fundSettlementToken(address(paymentAdapter), donation);
+
+        uint256 needed = settlementAmount(PRICE_CENTS);
+        fundSettlementToken(address(paymentAdapter), needed);
+
+        vm.prank(address(eSIMWallet1));
+        (uint256 spent, uint256 refunded) =
+            paymentAdapter.settle(ASSET_USDC, PRICE_CENTS, donation + needed, address(eSIMWallet1));
+
+        assertEq(spent, needed, "Only the price reaches the vault either way");
+        assertEq(refunded, donation, "The declared surplus came back as a refund");
+        assertEq(settlementERC20.balanceOf(address(eSIMWallet1)), donation, "The caller took what it never sent");
+    }
+
     /// @notice A token sent here by mistake belongs to nobody, and a purchase must not carry it off
     function test_settle_leavesATokenSentHereByMistake() public {
         uint256 donation = 500e6;
