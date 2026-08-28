@@ -16,9 +16,8 @@ import {MockESIMWallet} from "test/utils/mocks/MockESIMWallet.sol";
 ///      is checking is whether that reach stops where the contracts say it stops.
 contract AdminHandler is HandlerBase {
 
-    /// @dev A payment reference is spendable once protocol-wide, so every purchase in a run
-    ///      needs a fresh one or the second call reverts on replay rather than on what is
-    ///      being tested.
+    /// @dev A reference can only be spent once, so without a fresh one per purchase the second
+    ///      call reverts on replay instead of on what is being tested.
     uint256 private _refNonce;
 
     constructor(HandlerConfig memory config) HandlerBase(config) {}
@@ -149,10 +148,9 @@ contract AdminHandler is HandlerBase {
     }
 
     /// @notice The admin charges an eSIM wallet for a data bundle
-    /// @dev Both figures are unbounded upward on purpose. The ceiling is the only thing standing
-    ///      between the admin and a wallet's whole balance, so a run has to reach past it. They are
-    ///      fuzzed separately because the ceiling is in cents and the ETH that moves is in wei, and
-    ///      no contract relates the two.
+    /// @dev Both figures reach past the ceiling on purpose, since the ceiling is the only thing
+    ///      between the admin and a wallet's whole balance. Fuzzed separately because the ceiling
+    ///      is in cents and the ETH is in wei, and nothing converts between them.
     /// @param eSIMIndex Which eSIM wallet pays
     /// @param priceUSDCents What the purchase is recorded at
     /// @param priceWei What the wallet actually sends the vault

@@ -64,7 +64,8 @@ contract ESIMWalletGuardsTest is DeployerBase {
     }
 
     /// @notice Buys a bundle at the given recorded price as the admin
-    /// @dev The ETH figure is fixed. The ceiling bounds the recorded price, not the amount sent.
+    /// @dev The ETH figure is fixed, since the ceiling limits the recorded price and not the
+    ///      amount sent.
     /// @param _priceUSDCents The price to record
     function _buyAt(uint64 _priceUSDCents) internal {
         vm.prank(eSIMWalletAdmin);

@@ -574,9 +574,8 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
                 }
             }
 
-            // These entries predate the wallet, so no contract in this protocol can have seen the
-            // money move. Letting the admin claim otherwise would make the settlement field mean
-            // nothing on the one path where it is the only evidence there is.
+            // These purchases happened before the wallet existed, so no contract here saw the
+            // money move. The admin must not be able to claim otherwise.
             if(_dataBundleDetails[i].settlement == Settlement.DeviceWallet) {
                 revert Errors.SettlementNotAsserted();
             }
@@ -726,12 +725,10 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         return owner();
     }
 
-    /// @notice How many stored history entries this eSIM still owes its deployed wallet
-    /// @dev The public getter on `deviceIdentifierToESIMDetails` takes an index rather than
-    ///      returning a length, so the count cannot be worked out from outside this contract.
-    ///
-    ///      Zero for an eSIM this contract never deployed a wallet for, which is the safe answer:
-    ///      such a wallet has no stored history waiting to land after a new entry.
+    /// @notice How many history entries are still waiting to be copied into this eSIM's wallet
+    /// @dev Needed because the public getter on `deviceIdentifierToESIMDetails` takes an index and
+    ///      never returns a length, so nothing outside this contract can count the entries.
+    ///      Returns zero for an eSIM this contract never handled, which has nothing waiting anyway.
     /// @param _eSIMIdentifier eSIM being asked about
     /// @return Entries still waiting to be copied
     function outstandingHistoryEntries(string calldata _eSIMIdentifier) external view returns (uint256) {

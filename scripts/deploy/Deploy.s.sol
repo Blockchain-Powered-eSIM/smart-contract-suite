@@ -166,8 +166,8 @@ contract Deploy is Script {
             )
         );
 
-        // The registry refuses to record a settled purchase until it has an adapter to resolve the
-        // currency through, so the pointer is part of the deployment rather than of configuration.
+        // The registry cannot record a purchase without an adapter to read the currency from, so
+        // the pointer is part of the deployment rather than of configuration.
         Registry(deployed.registry).setPaymentAdapter(deployed.paymentAdapter);
     }
 

@@ -2,9 +2,8 @@
 pragma solidity 0.8.36;
 
 /// @notice Which contract, if any, saw the money for a data bundle move
-/// @dev `DeviceWallet` is the only value the protocol can prove. The other two are the admin
-///      stating what happened on a rail the contracts cannot see, so they are assertions and the
-///      price cap is the only guard on them.
+/// @dev Only `DeviceWallet` can be proven onchain. The other two are the admin's word, so the
+///      price cap is the only check on them.
 enum Settlement {
     DeviceWallet,
     ExternalWallet,
@@ -12,10 +11,9 @@ enum Settlement {
 }
 
 /// @notice Data Bundle related details stored in the eSIM wallet
-/// @dev Two slots: `id` fills the first, then `priceUSDCents` and `settlement` pack into the
-///      second. The provider's bundle id fits in 32 bytes, so a `string` would have paid for a
-///      general case this protocol does not have. No purchase timestamp: the event log carries the
-///      block timestamp already.
+/// @dev Two slots: `id`, then `priceUSDCents` and `settlement` packed together. `id` is
+///      `bytes32` because the provider's ids fit in 32 bytes and a `string` would cost an extra
+///      slot on every entry. No timestamp field: the event log already has one.
 struct DataBundleDetails {
     bytes32 id;
     uint64 priceUSDCents;   // 123456 reads as $1234.56

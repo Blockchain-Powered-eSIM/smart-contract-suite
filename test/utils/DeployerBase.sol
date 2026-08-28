@@ -71,8 +71,8 @@ contract DeployerBase is Test {
     bytes32 constant ASSET_USD = bytes32("USD");
     bytes32 constant ASSET_ETH = bytes32("ETH");
 
-    // Stands in wherever a test is about something other than the recorded price. Well under
-    // the registry default, so it never trips the cents ceiling by accident.
+    // Used wherever a test is about something other than the recorded price. Well under the
+    // registry default, so it never trips the ceiling by accident.
     uint64 constant TEST_PRICE_CENTS = 100;   // $1.00
 
     MockEntryPoint entryPoint;
@@ -215,8 +215,8 @@ contract DeployerBase is Test {
     }
 
     /// @notice Registers the three currencies the suite prices in
-    /// @dev USD is the fiat entry, record-only with no token behind it. ETH is registered but not
-    ///      denominated in dollars, which is what makes it the case `quote` has to refuse.
+    /// @dev USD has no token address, so nothing can be transferred in it. ETH is allowed but is
+    ///      not in dollars, which makes it the case `quote` has to refuse.
     function registerDefaultAssets() public {
         paymentAdapter.registerAsset(ASSET_USDC, Asset({
             allowed: true,
@@ -238,9 +238,8 @@ contract DeployerBase is Test {
         }));
     }
 
-    /// @notice One purchase the admin asserts happened on a rail the contracts cannot see
-    /// @dev `buyDataBundle` overwrites the settlement with `DeviceWallet` itself, so this shape
-    ///      suits both paths and neither has to state it.
+    /// @notice One purchase the admin says was paid for outside the protocol
+    /// @dev `buyDataBundle` overwrites the settlement itself, so this shape suits both paths.
     function bundle(bytes32 _id, uint64 _priceUSDCents) internal pure returns (DataBundleDetails memory) {
         return DataBundleDetails({
             id: _id,
@@ -255,8 +254,8 @@ contract DeployerBase is Test {
     }
 
     /// @notice A payment reference no earlier call in this test has spent
-    /// @dev A reference is spendable once protocol-wide, so any test buying more than one bundle
-    ///      needs a fresh one each time. Tests about replay pass the same reference deliberately.
+    /// @dev A reference can only be spent once, so a test buying more than one bundle needs a
+    ///      fresh one each time. Replay tests pass the same reference on purpose.
     function nextRef() internal returns (bytes32) {
         return keccak256(abi.encode("ref", ++_refNonce));
     }

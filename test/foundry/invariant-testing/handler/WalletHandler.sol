@@ -269,8 +269,7 @@ contract WalletHandler is HandlerBase {
             state.recordRevert("setESIMWalletPriceCap");
             return;
         }
-        // Zero, one cent, ten dollars, a million dollars. Zero is in the ladder because it is
-        // the value that hands the wallet back to the registry ceiling.
+        // Zero is in the ladder because it is what hands the wallet back to the registry ceiling.
         uint64[4] memory ladder = [uint64(0), 1, 1_000, 100_000_000];
 
         vm.prank(device);

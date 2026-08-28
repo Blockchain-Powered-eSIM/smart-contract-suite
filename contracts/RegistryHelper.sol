@@ -164,11 +164,9 @@ contract RegistryHelper {
     /// @notice Emitted when the owner points the registry at a payment adapter
     event PaymentAdapterUpdated(address indexed _paymentAdapter);
 
-    /// @notice Emitted for a purchase settled on a rail the protocol's contracts cannot see
-    /// @dev Emitted here rather than on the wallet so an indexer has one address to follow instead
-    ///      of one per beacon proxy. `_tokenAmount` is what the admin observed the user pay, in
-    ///      that currency's own smallest unit. Nothing validates it: both it and the price come
-    ///      from the admin, so the price ceiling is the guard, not a comparison between the two.
+    /// @notice Emitted for a purchase paid for outside the protocol
+    /// @dev On the registry and not the wallet, so an indexer follows one address instead of one
+    ///      per wallet. `_tokenAmount` is unchecked: it and the price both come from the admin.
     event DataBundleSettled(
         address indexed _eSIMWallet,
         bytes32 _dataBundleID,

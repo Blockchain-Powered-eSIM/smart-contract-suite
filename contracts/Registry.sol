@@ -93,16 +93,14 @@ contract Registry is
 
     /// @notice Most an eSIM wallet may be charged for one data bundle, in USD cents, unless it sets
     ///         its own limit
-    /// @dev Held here rather than only on each wallet because wallets are beacon proxies tracked by
-    ///      a mapping with no enumerable list, so one write here is how a change reaches all of
-    ///      them. Never zero: `initialize` and `setDefaultPriceCapUSDCents` both reject it, since a
-    ///      zero here or on a wallet's own cap reads as "no ceiling" in
-    ///      `ESIMWallet._requirePriceWithinCap`.
+    /// @dev Held here because there is no way to list every wallet and write into each one, so one
+    ///      write here is how a change reaches all of them. Never zero: both setters reject it,
+    ///      because zero on a wallet means "follow the registry" and would mean nothing here.
     uint64 public defaultPriceCapUSDCents;
 
-    /// @notice The protocol's authority on how a data bundle was paid for
-    /// @dev Holds the currency vocabulary and the spent payment references. This registry keeps a
-    ///      pointer and a setter, the same shape it already uses for the lazy wallet registry.
+    /// @notice Contract holding the accepted currencies and the spent payment references
+    /// @dev A pointer and a setter, the same shape this registry already uses for the lazy wallet
+    ///      registry.
     address public paymentAdapter;
 
     /// @notice Restricts a call to an eSIM wallet this registry has recorded
@@ -359,10 +357,9 @@ contract Registry is
         emit DefaultPriceCapUSDCentsUpdated(_cap);
     }
 
-    /// @notice Points this registry at the contract that owns the currency vocabulary
-    /// @dev Owner and not admin. The adapter decides what may be paid in and holds the spent
-    ///      payment references, so an admin able to re-point it could hand itself an empty set of
-    ///      spent references and record every purchase again.
+    /// @notice Points this registry at the payment adapter
+    /// @dev Owner and not admin. The adapter holds the spent payment references, so an admin that
+    ///      could swap it would get an empty set back and record every purchase a second time.
     /// @param _paymentAdapter Address of the payment adapter
     function setPaymentAdapter(address _paymentAdapter) external onlyOwner {
         if(_paymentAdapter == address(0)) revert Errors.ZeroAddress("_paymentAdapter");
@@ -373,32 +370,27 @@ contract Registry is
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Purchases settled off the protocol's own rails
+    // Purchases paid for outside the protocol
     // ---------------------------------------------------------------------------------------------
 
-    /// @notice Spends a payment reference on behalf of an eSIM wallet paying through its own vault
-    /// @dev The adapter accepts this from the registry alone, so routing the wallet's call through
-    ///      here keeps one reference from being spent once on each path.
+    /// @notice Spends a payment reference for an eSIM wallet buying with ETH
+    /// @dev The adapter only accepts this from the registry, so the wallet has to come through
+    ///      here. One reference then cannot be spent once on each path.
     /// @param _paymentReference Hash tying the purchase to the offchain order behind it
     function consumePaymentReference(bytes32 _paymentReference) external onlyESIMWallet {
         _consumePaymentReference(_paymentReference);
     }
 
-    /// @notice Records a data bundle the user paid for somewhere the protocol cannot see
-    /// @dev The counterpart to `buyDataBundle`, for money that moved through Moonpay, a card or an
-    ///      external wallet. No transfer happens here. What the admin asserts is bounded by the
-    ///      price ceiling, by the payment reference being spendable once, and by the settlement
-    ///      being anything other than `DeviceWallet`, which only `buyDataBundle` may claim.
-    ///
-    ///      Written through this contract rather than by the adapter, because eSIM wallets accept
-    ///      history from this address and nothing else. Giving them a second writer to trust is
-    ///      what the routing in `populateLazyHistory` already exists to avoid.
+    /// @notice Records a data bundle paid for through Moonpay, a card or an external wallet
+    /// @dev No money moves here. Three things bound what the admin can state: the price ceiling,
+    ///      the payment reference being spendable once, and the settlement not being
+    ///      `DeviceWallet`. Written here and not by the adapter, because eSIM wallets accept
+    ///      history from this address alone.
     /// @param _eSIMWallet Wallet the purchase belongs to
     /// @param _dataBundleDetail The purchase, priced in USD cents like everywhere else
     /// @param _asset Symbol of the currency the user paid in
-    /// @param _tokenAmount What the admin observed the user pay, in that currency's smallest unit.
-    ///        Carried for reconciliation and never validated: it and the price both come from the
-    ///        admin, so checking one against the other would be the admin checking itself.
+    /// @param _tokenAmount What the user actually paid, in that currency's smallest unit. Recorded
+    ///        for offchain matching, never checked: it and the price both come from the admin.
     /// @param _paymentReference Hash of the Moonpay charge or the Stripe payment intent
     function recordSettledPurchase(
         address _eSIMWallet,
@@ -414,8 +406,7 @@ contract Registry is
         if(_dataBundleDetail.id == bytes32(0)) revert Errors.EmptyDataBundleID();
         if(_dataBundleDetail.priceUSDCents == 0) revert Errors.ZeroDataBundlePrice();
 
-        // Only the contract that saw the money reach the vault may say it did, and that contract is
-        // never this one. Without this the settlement field stops carrying the one thing it is for.
+        // This contract never sees the money move, so it must not be able to say it did.
         if(_dataBundleDetail.settlement == Settlement.DeviceWallet) {
             revert Errors.SettlementNotAsserted();
         }
@@ -439,11 +430,10 @@ contract Registry is
         );
     }
 
-    /// @notice Refuses to append to a wallet the lazy registry has not finished copying history to
-    /// @dev Turns "call these three in this order" into something the contracts enforce. The
-    ///      backend retries the whole onchain step on any failure, so an ordering rule that lives
-    ///      only in an operational runbook does get violated, and the result is a transaction
-    ///      history that is no longer in chronological order.
+    /// @notice Refuses a new entry while older history is still waiting to be copied in
+    /// @dev The new entry would land first and the older ones append after it, leaving the history
+    ///      out of order. The backend retries the whole onchain step on failure, so this cannot be
+    ///      left as an ordering rule for the caller to follow.
     /// @param _eSIMWallet Wallet being appended to
     function _requireLazyHistoryCopied(address _eSIMWallet) private view {
         if(lazyWalletRegistry == address(0)) return;
@@ -455,12 +445,11 @@ contract Registry is
         if(outstanding != 0) revert Errors.HistoryNotFullyCopied(eSIMIdentifier, outstanding);
     }
 
-    /// @notice Spends a payment reference through the adapter
     function _consumePaymentReference(bytes32 _paymentReference) private {
         PaymentAdapter(_requirePaymentAdapter()).consumePaymentReference(_paymentReference);
     }
 
-    /// @notice The payment adapter, refusing to act while none is set
+    /// @notice The payment adapter, or a revert if none is set yet
     function _requirePaymentAdapter() private view returns (address) {
         address adapter = paymentAdapter;
         if(adapter == address(0)) revert Errors.PaymentAdapterNotSet();

@@ -100,8 +100,8 @@ library DeployConfig {
         config.priceCapUSDCents = uint64(vm.envUint("PRICE_CAP_USD_CENTS"));
         if(config.priceCapUSDCents == 0) revert MissingValue("PRICE_CAP_USD_CENTS");
 
-        // The currency the vault is meant to hold. Nothing reads it until swaps exist, but the
-        // adapter takes it at initialisation so adding them later needs no migration transaction.
+        // Nothing reads this until swaps exist, but the adapter takes it at initialisation so
+        // adding them later needs no migration transaction.
         config.settlementToken = vm.envAddress("SETTLEMENT_TOKEN");
         if(config.settlementToken == address(0)) revert MissingAddress("SETTLEMENT_TOKEN");
 

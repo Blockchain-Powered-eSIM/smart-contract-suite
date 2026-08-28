@@ -40,12 +40,9 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
 
     /// @notice Most this wallet may be charged for one data bundle, in USD cents, or zero to follow
     ///         the registry
-    /// @dev Declared here so it packs into the 12 spare bytes beside `newRequestedOwner`. Both are
-    ///      cleared together on a handover, which makes that one SSTORE instead of two. Solidity
-    ///      packs in declaration order, so moving this line costs the slot.
-    ///
-    ///      Zero has to keep meaning "no limit of my own" rather than "no limit", which is why the
-    ///      fallback lives on the registry rather than here.
+    /// @dev Declared here so it shares a slot with `newRequestedOwner`. Solidity packs in
+    ///      declaration order, so moving this line costs that slot. A handover clears both, which
+    ///      is then one write instead of two. Zero means "follow the registry", not "no ceiling".
     uint64 public priceCapUSDCents;
 
     /// @notice Emitted when the eSIM wallet is deployed
@@ -64,9 +61,8 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         bytes32 indexed _paymentReference
     );
 
-    /// @notice Emitted when a purchase settled somewhere the contracts cannot see is recorded here
-    /// @dev The registry emits the full record. This one exists so an indexer following a single
-    ///      wallet sees the same entry the wallet's own history now holds.
+    /// @notice Emitted when a purchase paid for outside the protocol is recorded here
+    /// @dev The registry emits the full record. This one is for an indexer watching one wallet.
     event DataBundleSettlementRecorded(
         bytes32 _dataBundleID,
         uint64 _priceUSDCents,
@@ -293,16 +289,14 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     ///      knows the price. Any shortfall is pulled from the device wallet, which is why the price
     ///      is checked against a ceiling the admin cannot raise.
     ///
-    ///      The ceiling is in cents and the money that moves is in wei, and with no rate onchain
-    ///      nothing here relates the two. So the ceiling bounds what may be recorded, not what may
-    ///      be sent, and `_priceWei` is the admin's figure taken as given. That gap closes when the
-    ///      ETH path is replaced by the token path, where the amount is derived from the price
-    ///      rather than stated alongside it.
-    /// @param _dataBundleDetail Data bundle being bought. Its settlement field is ignored: this
-    ///        function is the only one that can prove the money moved, so it fills that in itself.
+    ///      The ceiling is in cents and the ETH sent is in wei, and nothing onchain converts
+    ///      between them. So the ceiling limits what gets recorded, not what gets sent, and
+    ///      `_priceWei` is taken on trust. The token path closes that gap by working the amount
+    ///      out from the price instead.
+    /// @param _dataBundleDetail Data bundle being bought. Its settlement field is overwritten here.
     /// @param _priceWei ETH actually being sent to the vault
-    /// @param _paymentReference Ties this purchase to the offchain order, and is spent once, so a
-    ///        retry of a call that already landed cannot charge the user twice
+    /// @param _paymentReference The offchain order id. Spent once, so a retry of a call that
+    ///        already landed cannot charge the user twice.
     /// @return True if the transaction is successful
     function buyDataBundle(
         DataBundleDetails memory _dataBundleDetail,
@@ -316,15 +310,11 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         if(_priceWei == 0) revert Errors.ZeroDataBundlePrice();
         _requirePriceWithinCap(_dataBundleDetail.priceUSDCents, registry);
 
-        // The one path where the protocol sees the money reach the vault, so it is the one path
-        // allowed to say so. Overwritten rather than validated: the caller has no say either way.
+        // This is the only path that sees the money reach the vault, so it sets this itself.
         _dataBundleDetail.settlement = Settlement.DeviceWallet;
 
         registry.consumePaymentReference(_paymentReference);
 
-        // 1. msg.value is received by contract
-        // 2. if wallet balance is less than the price, pull ETH from device wallet
-        // 3. send the price to the vault
         uint256 walletBalance = address(this).balance;
 
         if (walletBalance < _priceWei) {
@@ -350,10 +340,9 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         return true;
     }
 
-    /// @notice Appends a purchase the registry has already validated and settled elsewhere
-    /// @dev No money moves here. Everything that guards this entry, the price ceiling, the payment
-    ///      reference and the rule that the settlement cannot claim to be witnessed, is checked on
-    ///      the registry before the call arrives.
+    /// @notice Appends a purchase the registry has already checked
+    /// @dev No money moves here. The price ceiling, the payment reference and the settlement rule
+    ///      are all checked on the registry before this call arrives.
     /// @param _dataBundleDetail The purchase to record
     function recordSettledPurchase(DataBundleDetails calldata _dataBundleDetail) external onlyRegistry {
         transactionHistory.push(_dataBundleDetail);

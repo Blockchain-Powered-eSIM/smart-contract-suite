@@ -116,12 +116,12 @@ interface Errors {
     error OnlyAssociatedESIMWallets();
     error OnlyESIMWalletAdmin();
 
-    // Registry, on the path that records a purchase the contracts did not witness
+    // Registry, on the path for purchases paid for outside the protocol
     error PaymentAdapterNotSet();
     error PaymentAdapterUnchanged(address paymentAdapter);
-    // buyDataBundle is the only caller allowed to claim the protocol saw the money move
+    // Only buyDataBundle may claim the protocol saw the money move
     error SettlementNotAsserted();
-    // The lazy registry still owes this eSIM history, so a new entry would land out of order
+    // Older history is still waiting to be copied, so a new entry would land out of order
     error HistoryNotFullyCopied(string eSIMIdentifier, uint256 outstanding);
 
     // PaymentAdapter
@@ -130,11 +130,11 @@ interface Errors {
     error AssetNotAllowed(bytes32 asset);
     error AssetAlreadyRegistered(bytes32 asset);
     error AssetNotRegistered(bytes32 asset);
-    // quote scales cents by 10**decimals and divides by 100, so anything under two truncates
+    // quote divides by 100, so fewer than two decimals loses the cents
     error AssetDecimalsTooLow(bytes32 asset, uint8 decimals);
-    // No oracle, so a price only becomes a token amount for an asset already denominated in dollars
+    // No price feeds, so only a currency already in dollars can be converted from cents
     error AssetNeedsSwap(bytes32 asset);
-    // Record-only assets, fiat and non-EVM, carry no token address to move
+    // Fiat and non-EVM currencies have no token address, so nothing can be transferred
     error AssetNotSettleable(bytes32 asset);
     error PaymentReferenceAlreadyUsed(bytes32 paymentReference);
     error SettlementNotAvailable();

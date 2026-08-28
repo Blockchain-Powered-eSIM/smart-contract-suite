@@ -106,8 +106,7 @@ contract UpgradeManagerHandler is HandlerBase {
     ///      charge, so the ceiling is sometimes binding and sometimes not.
     /// @param seed Chooses the ceiling
     function setDefaultPriceCap(uint256 seed) external counted {
-        // Zero is in the ladder deliberately: the registry refuses it, and a run has to reach
-        // that refusal rather than only ever offering values it accepts.
+        // Zero is in the ladder so a run reaches the registry's refusal of it.
         uint64[4] memory ladder = [uint64(0), 1, 1_000, 100_000_000];
         uint64 cap = ladder[bound(seed, 0, 3)];
 

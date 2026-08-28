@@ -133,8 +133,8 @@ contract InvariantBase is Test {
         vm.startPrank(UPGRADE_MANAGER);
         registry.addOrUpdateLazyWalletRegistryAddress(address(lazyWalletRegistry));
         registry.setPaymentAdapter(address(paymentAdapter));
-        // A purchase spends a payment reference through the adapter, so a campaign with no
-        // currencies registered would see every purchase revert before it reached anything else.
+        // Every purchase spends a payment reference through the adapter, so with no currencies
+        // registered a campaign would see all of them revert before reaching anything else.
         paymentAdapter.registerAsset("USD", Asset({
             allowed: true,
             isDollarUnit: true,

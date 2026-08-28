@@ -15,8 +15,8 @@ import {FuzzBase} from "test/foundry/fuzz-testing/base/FuzzBase.sol";
 ///      price cap is honoured whichever of its two levels supplies it. And an amount larger than
 ///      the balance behind it fails rather than moving a partial amount.
 ///
-///      The ceiling is in cents and the ETH that moves is in wei, so the two are fuzzed
-///      independently. Nothing onchain relates them without a rate.
+///      The ceiling is in cents and the ETH is in wei, so the two are fuzzed separately. Nothing
+///      onchain converts between them.
 ///
 ///      The cap resolution is the part worth fuzzing rather than enumerating: the wallet's own cap
 ///      wins when set, and the registry default applies when it is not. Zero on the wallet still
@@ -27,7 +27,7 @@ contract ETHAmountsTest is FuzzBase {
     /// @dev Keeps fuzzed amounts inside what vm.deal can fund without the totals overflowing
     uint256 private constant MAX_FUZZED_ETH = 1_000_000 ether;
 
-    /// @dev $10,000,000 in cents. Large enough to exercise the ceiling, small enough to read.
+    /// @dev $10,000,000 in cents
     uint64 private constant MAX_FUZZED_CENTS = 1_000_000_000;
 
     function setUp() public override {
