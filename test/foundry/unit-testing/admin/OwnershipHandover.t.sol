@@ -126,8 +126,8 @@ contract OwnershipHandoverTest is AdminBase {
         assertEq(registry.owner(), user5);
 
         vm.prank(user5);
-        registry.setDefaultDataBundlePriceCap(6 ether);
-        assertEq(registry.defaultDataBundlePriceCap(), 6 ether);
+        registry.setDefaultPriceCapUSDCents(6 ether);
+        assertEq(registry.defaultPriceCapUSDCents(), 6 ether);
     }
 
     /// @dev None of the four will let their owner walk away, so a handover cannot end with nobody

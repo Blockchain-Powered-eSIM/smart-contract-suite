@@ -44,8 +44,8 @@ contract LazyWalletRegistryTest is DeployerBase {
             customESIMUniqueIdentifiers[0][1]
         );
         assertEq(storedData.length, 1, "DataBundleDetails array length should be 1");
-        assertEq(storedData[0].dataBundleID, "DB_ID_2");
-        assertEq(storedData[0].dataBundlePrice, 21);
+        assertEq(storedData[0].id, "DB_ID_2");
+        assertEq(storedData[0].priceUSDCents, 21);
     }
 
     /// @notice A rotated admin has to reach this registry, which the factory alone does not
@@ -122,8 +122,8 @@ contract LazyWalletRegistryTest is DeployerBase {
         );
 
         assertEq(storedData.length, 2, "DataBundleDetails array length should be 2");
-        assertEq(storedData[1].dataBundleID, "DB_ID_2");
-        assertEq(storedData[1].dataBundlePrice, 21);
+        assertEq(storedData[1].id, "DB_ID_2");
+        assertEq(storedData[1].priceUSDCents, 21);
     }
 
     /// Providing eSIM identifiers that have been associated with a different device identifier
@@ -200,8 +200,8 @@ contract LazyWalletRegistryTest is DeployerBase {
             eSIMIdentifier
         );
         assertEq(newDeviceData.length, 1, "Data bundles should have been added to the new device identifier");
-        assertEq(newDeviceData[0].dataBundleID, customDataBundleDetails[1][0].dataBundleID);
-        assertEq(newDeviceData[0].dataBundlePrice, customDataBundleDetails[1][0].dataBundlePrice);
+        assertEq(newDeviceData[0].id, customDataBundleDetails[1][0].id);
+        assertEq(newDeviceData[0].priceUSDCents, customDataBundleDetails[1][0].priceUSDCents);
 
         string[] memory oldDeviceListOfESIMs = lazyWalletRegistry.getESIMIdentifiersAssociatedWithDeviceIdentifier(
             oldDeviceIdentifier
@@ -546,7 +546,7 @@ contract LazyWalletRegistryTest is DeployerBase {
 
         for(uint256 i=0; i<_count; ++i) {
             eSIMs[0][i] = string.concat(_prefix, vm.toString(i));
-            bundles[0][i] = DataBundleDetails("DB_CAP", 1);
+            bundles[0][i] = bundle("DB_CAP", TEST_PRICE_CENTS);
         }
 
         vm.prank(eSIMWalletAdmin);
@@ -610,7 +610,7 @@ contract LazyWalletRegistryTest is DeployerBase {
         for(uint256 i=0; i<_purchases; ++i) {
             DataBundleDetails[][] memory bundles = new DataBundleDetails[][](1);
             bundles[0] = new DataBundleDetails[](1);
-            bundles[0][0] = DataBundleDetails(string.concat("DB_", vm.toString(i)), i + 1);
+            bundles[0][0] = bundle(bytes32(bytes(string.concat("DB_", vm.toString(i)))), uint64(i + 1));
 
             vm.prank(eSIMWalletAdmin);
             lazyWalletRegistry.batchPopulateHistory(devices, eSIMs, bundles);
@@ -946,8 +946,8 @@ contract LazyWalletRegistryTest is DeployerBase {
 
         assertEq(inWallet.length, stored.length, "The wallet must end up holding every stored entry");
         for(uint256 i=0; i<stored.length; ++i) {
-            assertEq(inWallet[i].dataBundleID, stored[i].dataBundleID);
-            assertEq(inWallet[i].dataBundlePrice, stored[i].dataBundlePrice);
+            assertEq(inWallet[i].id, stored[i].id);
+            assertEq(inWallet[i].priceUSDCents, stored[i].priceUSDCents);
         }
         assertEq(lazyWalletRegistry.historyEntriesCopied("copy_esim"), 7, "The cursor must sit at the end");
     }
@@ -1098,7 +1098,7 @@ contract LazyWalletRegistryTest is DeployerBase {
 
         DataBundleDetails[][] memory bundles = new DataBundleDetails[][](1);
         bundles[0] = new DataBundleDetails[](1);
-        bundles[0][0] = DataBundleDetails("DB_LEN", 1);
+        bundles[0][0] = bundle("DB_LEN", TEST_PRICE_CENTS);
 
         vm.prank(eSIMWalletAdmin);
         lazyWalletRegistry.batchPopulateHistory(devices, eSIMs, bundles);

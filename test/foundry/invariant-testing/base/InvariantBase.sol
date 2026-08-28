@@ -11,6 +11,7 @@ import "contracts/CustomStructs.sol";
 import {P256Verifier} from "contracts/P256Verifier.sol";
 import {DeviceWalletFactory} from "contracts/device-wallet/DeviceWalletFactory.sol";
 import {ESIMWalletFactory} from "contracts/esim-wallet/ESIMWalletFactory.sol";
+import {PaymentAdapter, Asset} from "contracts/payments/PaymentAdapter.sol";
 
 import "test/utils/mocks/MockEntryPoint.sol";
 import "test/utils/mocks/MockRegistry.sol";
@@ -38,7 +39,10 @@ contract InvariantBase is Test {
     address internal constant UPGRADE_MANAGER = address(0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2);
     address internal constant VAULT = address(0x78731D3Ca6b7E34aC0F824c42a7cC18A495cabaB);
     address internal constant ATTACKER = address(0xbADc0DE000000000000000000000000000000001);
-    uint256 internal constant DEFAULT_DATA_BUNDLE_PRICE_CAP = 1 ether;
+    uint64 internal constant DEFAULT_PRICE_CAP_USD_CENTS = 100_000;   // $1000
+
+    /// @dev A stand-in for USDC. Nothing settles onchain yet, so it only has to be resolvable.
+    address internal constant SETTLEMENT_TOKEN = address(0x036CbD53842c5426634e7929541eC2318f3dCF7e);
 
     /// @notice The address the admin role rotates onto, and back off
     /// @dev Carries a budget of its own. Every admin path reads the role out of the registry, so
@@ -57,6 +61,7 @@ contract InvariantBase is Test {
     ESIMWalletFactory internal eSIMWalletFactory;
     MockRegistry internal registry;
     MockLazyWalletRegistry internal lazyWalletRegistry;
+    PaymentAdapter internal paymentAdapter;
 
     /// @notice Deploys the system in the same order the deploy script does
     function _deployProtocol() internal {
@@ -102,7 +107,7 @@ contract InvariantBase is Test {
                     address(deviceWalletFactory),
                     address(eSIMWalletFactory),
                     IEntryPoint(address(entryPoint)),
-                    DEFAULT_DATA_BUNDLE_PRICE_CAP
+                    DEFAULT_PRICE_CAP_USD_CENTS
                 )
             )
         );
@@ -115,8 +120,27 @@ contract InvariantBase is Test {
         );
         lazyWalletRegistry = MockLazyWalletRegistry(address(lazyWalletRegistryProxy));
 
+        PaymentAdapter paymentAdapterImpl = new PaymentAdapter();
+        ERC1967Proxy paymentAdapterProxy = new ERC1967Proxy(
+            address(paymentAdapterImpl),
+            abi.encodeCall(
+                paymentAdapterImpl.initialize,
+                (address(registry), SETTLEMENT_TOKEN, UPGRADE_MANAGER)
+            )
+        );
+        paymentAdapter = PaymentAdapter(address(paymentAdapterProxy));
+
         vm.startPrank(UPGRADE_MANAGER);
         registry.addOrUpdateLazyWalletRegistryAddress(address(lazyWalletRegistry));
+        registry.setPaymentAdapter(address(paymentAdapter));
+        // A purchase spends a payment reference through the adapter, so a campaign with no
+        // currencies registered would see every purchase revert before it reached anything else.
+        paymentAdapter.registerAsset("USD", Asset({
+            allowed: true,
+            isDollarUnit: true,
+            decimals: 2,
+            token: address(0)
+        }));
         deviceWalletFactory.addRegistryAddress(address(registry));
         eSIMWalletFactory.addRegistryAddress(address(registry));
         vm.stopPrank();

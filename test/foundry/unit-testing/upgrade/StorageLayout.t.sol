@@ -108,7 +108,7 @@ contract StorageLayoutTest is DeployerBase {
         // One entry long, with a price written straight into the element the length implies
         vm.store(_target, bytes32(uint256(3)), bytes32(uint256(1)));
         vm.store(_target, bytes32(uint256(keccak256(abi.encode(uint256(3)))) + 1), bytes32(uint256(0xB1)));
-        (, uint256 price) = _wallet.transactionHistory(0);
+        (, uint64 price,) = _wallet.transactionHistory(0);
         assertEq(price, 0xB1, "ESIMWallet.transactionHistory must read slot 3");
 
         vm.store(_target, bytes32(uint256(4)), bytes32(uint256(uint160(SENTINEL))));

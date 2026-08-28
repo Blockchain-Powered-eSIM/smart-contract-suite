@@ -102,15 +102,13 @@ contract DeviceWalletETHTest is DeviceWalletFixture {
 
         assertEq(deviceWallet.canPullETH(address(eSIMWallet1)), false, "eSIMWallet1 should not be able to pull ETH");
 
-        DataBundleDetails memory _dataBundleDetail = DataBundleDetails(
-            "DB_ID_0",
-            0.1 ether
-        );
+        DataBundleDetails memory _dataBundleDetail = bundle("DB_ID_0", TEST_PRICE_CENTS);
+        uint256 _priceWei = 0.1 ether;
 
         vm.deal(address(deviceWallet), 1 ether);
         vm.startPrank(eSIMWalletAdmin);
         vm.expectRevert(abi.encodeWithSelector(Errors.ETHAccessRevoked.selector, address(eSIMWallet1)));
-        eSIMWallet1.buyDataBundle(_dataBundleDetail);
+        eSIMWallet1.buyDataBundle(_dataBundleDetail, _priceWei, nextRef());
         vm.stopPrank();
     }
 
@@ -128,14 +126,12 @@ contract DeviceWalletETHTest is DeviceWalletFixture {
 
         assertEq(deviceWallet.canPullETH(address(eSIMWallet1)), false, "eSIMWallet1 should not be able to pull ETH");
 
-        DataBundleDetails memory _dataBundleDetail = DataBundleDetails(
-            "DB_ID_0",
-            0.1 ether
-        );
+        DataBundleDetails memory _dataBundleDetail = bundle("DB_ID_0", TEST_PRICE_CENTS);
+        uint256 _priceWei = 0.1 ether;
 
         vm.deal(address(eSIMWallet1), 1 ether);
         vm.startPrank(eSIMWalletAdmin);
-        eSIMWallet1.buyDataBundle(_dataBundleDetail);
+        eSIMWallet1.buyDataBundle(_dataBundleDetail, _priceWei, nextRef());
         vm.stopPrank();
 
         assertEq(address(eSIMWallet1).balance, 0.9 ether, "ESIMWalletAdmin balance should have been decreased to 0.9 ETH");
@@ -143,8 +139,8 @@ contract DeviceWalletETHTest is DeviceWalletFixture {
 
         DataBundleDetails[] memory history = eSIMWallet1.getTransactionHistory();
         assertEq(history.length, 1, "Transaction history should have been updated");
-        assertEq(history[0].dataBundleID, "DB_ID_0", "Data bundle ID should have been correct");
-        assertEq(history[0].dataBundlePrice, 0.1 ether, "Data bundle price should have been correct");
+        assertEq(history[0].id, "DB_ID_0", "Data bundle ID should have been correct");
+        assertEq(history[0].priceUSDCents, TEST_PRICE_CENTS, "Data bundle price should have been correct");
     }
 
     function test_toggleAccessToETH_revoke_userHasETH() public {
@@ -161,14 +157,12 @@ contract DeviceWalletETHTest is DeviceWalletFixture {
 
         assertEq(deviceWallet.canPullETH(address(eSIMWallet1)), false, "eSIMWallet1 should not be able to pull ETH");
 
-        DataBundleDetails memory _dataBundleDetail = DataBundleDetails(
-            "DB_ID_0",
-            0.1 ether
-        );
+        DataBundleDetails memory _dataBundleDetail = bundle("DB_ID_0", TEST_PRICE_CENTS);
+        uint256 _priceWei = 0.1 ether;
 
         vm.deal(eSIMWalletAdmin, 1 ether);
         vm.startPrank(eSIMWalletAdmin);
-        eSIMWallet1.buyDataBundle{value: 0.2 ether}(_dataBundleDetail);
+        eSIMWallet1.buyDataBundle{value: 0.2 ether}(_dataBundleDetail, _priceWei, nextRef());
         vm.stopPrank();
 
         assertEq(address(eSIMWallet1).balance, 0.1 ether, "ESIMWallet balance should have been increased to 0.1 ETH");
@@ -177,8 +171,8 @@ contract DeviceWalletETHTest is DeviceWalletFixture {
 
         DataBundleDetails[] memory history = eSIMWallet1.getTransactionHistory();
         assertEq(history.length, 1, "Transaction history should have been updated");
-        assertEq(history[0].dataBundleID, "DB_ID_0", "Data bundle ID should have been correct");
-        assertEq(history[0].dataBundlePrice, 0.1 ether, "Data bundle price should have been correct");
+        assertEq(history[0].id, "DB_ID_0", "Data bundle ID should have been correct");
+        assertEq(history[0].priceUSDCents, TEST_PRICE_CENTS, "Data bundle price should have been correct");
     }
 
     function test_toggleAccessToETH_grant_deviceWalletHasETH() public {
@@ -195,14 +189,12 @@ contract DeviceWalletETHTest is DeviceWalletFixture {
 
         assertEq(deviceWallet.canPullETH(address(eSIMWallet2)), true, "eSIMWallet2 should be able to pull ETH");
 
-        DataBundleDetails memory _dataBundleDetail = DataBundleDetails(
-            "DB_ID_0",
-            0.1 ether
-        );
+        DataBundleDetails memory _dataBundleDetail = bundle("DB_ID_0", TEST_PRICE_CENTS);
+        uint256 _priceWei = 0.1 ether;
 
         vm.deal(address(deviceWallet), 1 ether);
         vm.startPrank(eSIMWalletAdmin);
-        eSIMWallet2.buyDataBundle(_dataBundleDetail);
+        eSIMWallet2.buyDataBundle(_dataBundleDetail, _priceWei, nextRef());
         vm.stopPrank();
 
         assertEq(vault.balance, 0.1 ether, "Vault balance should have updated to 0.1 ETH");
@@ -210,8 +202,8 @@ contract DeviceWalletETHTest is DeviceWalletFixture {
 
         DataBundleDetails[] memory history = eSIMWallet2.getTransactionHistory();
         assertEq(history.length, 1, "Transaction history should have been updated");
-        assertEq(history[0].dataBundleID, "DB_ID_0", "Data bundle ID should have been correct");
-        assertEq(history[0].dataBundlePrice, 0.1 ether, "Data bundle price should have been correct");
+        assertEq(history[0].id, "DB_ID_0", "Data bundle ID should have been correct");
+        assertEq(history[0].priceUSDCents, TEST_PRICE_CENTS, "Data bundle price should have been correct");
     }
 
     function test_toggleAccessToETH_grant_userHasETH() public {
@@ -228,14 +220,12 @@ contract DeviceWalletETHTest is DeviceWalletFixture {
 
         assertEq(deviceWallet.canPullETH(address(eSIMWallet2)), true, "eSIMWallet2 should be able to pull ETH");
 
-        DataBundleDetails memory _dataBundleDetail = DataBundleDetails(
-            "DB_ID_0",
-            0.1 ether
-        );
+        DataBundleDetails memory _dataBundleDetail = bundle("DB_ID_0", TEST_PRICE_CENTS);
+        uint256 _priceWei = 0.1 ether;
 
         vm.deal(eSIMWalletAdmin, 1 ether);
         vm.startPrank(eSIMWalletAdmin);
-        eSIMWallet2.buyDataBundle{value: 0.2 ether}(_dataBundleDetail);
+        eSIMWallet2.buyDataBundle{value: 0.2 ether}(_dataBundleDetail, _priceWei, nextRef());
         vm.stopPrank();
 
         assertEq(address(eSIMWallet2).balance, 0.1 ether, "ESIMWallet balance should have been increased to 0.1 ETH");
@@ -244,8 +234,8 @@ contract DeviceWalletETHTest is DeviceWalletFixture {
 
         DataBundleDetails[] memory history = eSIMWallet2.getTransactionHistory();
         assertEq(history.length, 1, "Transaction history should have been updated");
-        assertEq(history[0].dataBundleID, "DB_ID_0", "Data bundle ID should have been correct");
-        assertEq(history[0].dataBundlePrice, 0.1 ether, "Data bundle price should have been correct");
+        assertEq(history[0].id, "DB_ID_0", "Data bundle ID should have been correct");
+        assertEq(history[0].priceUSDCents, TEST_PRICE_CENTS, "Data bundle price should have been correct");
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -296,7 +286,7 @@ contract DeviceWalletETHTest is DeviceWalletFixture {
 
         vm.prank(eSIMWalletAdmin);
         vm.expectRevert(abi.encodeWithSelector(Errors.ETHAccessRevoked.selector, fresh));
-        MockESIMWallet(payable(fresh)).buyDataBundle(DataBundleDetails("DB_ID_0", 1 ether));
+        MockESIMWallet(payable(fresh)).buyDataBundle(bundle("DB_ID_0", TEST_PRICE_CENTS), 1 ether, nextRef());
 
         assertEq(address(deviceWallet).balance, 10 ether, "No ETH may leave through a wallet the user never granted");
         assertEq(vault.balance, 0, "The vault must have been paid nothing");
@@ -350,7 +340,7 @@ contract DeviceWalletETHTest is DeviceWalletFixture {
         assertTrue(deviceWallet.canPullETH(fresh), "The grant must land");
 
         vm.prank(eSIMWalletAdmin);
-        MockESIMWallet(payable(fresh)).buyDataBundle(DataBundleDetails("DB_ID_0", 1 ether));
+        MockESIMWallet(payable(fresh)).buyDataBundle(bundle("DB_ID_0", TEST_PRICE_CENTS), 1 ether, nextRef());
 
         assertEq(vault.balance, 1 ether, "The vault must have been paid");
         assertEq(address(deviceWallet).balance, 9 ether, "The price must have come out of the device wallet");

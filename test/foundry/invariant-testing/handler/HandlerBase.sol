@@ -221,7 +221,7 @@ abstract contract HandlerBase is Test {
 
         for (uint256 i = 0; i < entries.length; ++i) {
             fullDigest =
-                keccak256(abi.encode(fullDigest, entries[i].dataBundleID, entries[i].dataBundlePrice));
+                keccak256(abi.encode(fullDigest, entries[i].id, entries[i].priceUSDCents));
             if (i + 1 == recorded) prefixDigest = fullDigest;
         }
 

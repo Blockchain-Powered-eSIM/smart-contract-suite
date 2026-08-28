@@ -123,10 +123,10 @@ contract AdminRotationTest is DeployerBase {
         vm.expectRevert(Errors.OnlyESIMWalletAdmin.selector);
         DeviceWallet(payable(deviceWallet)).deployESIMWallet(false, 99);
 
-        DataBundleDetails memory bundle = DataBundleDetails("bundle", 1);
+        DataBundleDetails memory purchase = bundle("bundle", TEST_PRICE_CENTS);
         vm.prank(eSIMWalletAdmin);
         vm.expectRevert(Errors.OnlyDeviceWalletOrESIMWalletAdmin.selector);
-        ESIMWallet(payable(eSIMWallet)).buyDataBundle(bundle);
+        ESIMWallet(payable(eSIMWallet)).buyDataBundle(purchase, 1 ether, nextRef());
 
         // The nominee has nothing yet either. The role is dormant, not transferred.
         _assertAdminGatesClosed(user2);
@@ -293,10 +293,10 @@ contract AdminRotationTest is DeployerBase {
         vm.expectRevert(Errors.OnlyESIMWalletAdmin.selector);
         DeviceWallet(payable(deviceWallet)).deployESIMWallet(false, 99);
 
-        DataBundleDetails memory bundle = DataBundleDetails("bundle", 1);
+        DataBundleDetails memory purchase = bundle("bundle", TEST_PRICE_CENTS);
         vm.prank(eSIMWalletAdmin);
         vm.expectRevert(Errors.OnlyDeviceWalletOrESIMWalletAdmin.selector);
-        ESIMWallet(payable(eSIMWallet)).buyDataBundle(bundle);
+        ESIMWallet(payable(eSIMWallet)).buyDataBundle(purchase, 1 ether, nextRef());
     }
 
     /// @notice Suspension is the owner's, which is what lets a guardian reach it through the

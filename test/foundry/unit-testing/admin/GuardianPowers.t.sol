@@ -265,7 +265,7 @@ contract GuardianPowersTest is AdminBase {
     }
 
     function test_guardian_cannotSchedule() public {
-        bytes memory data = abi.encodeCall(registry.setDefaultDataBundlePriceCap, (4 ether));
+        bytes memory data = abi.encodeCall(registry.setDefaultPriceCapUSDCents, (4 ether));
         uint256 delay = protocolAdmin.getMinDelay();
         bytes32 role = protocolAdmin.PROPOSER_ROLE();
 
@@ -311,14 +311,14 @@ contract GuardianPowersTest is AdminBase {
             bytes32(uint256(1))
         );
 
-        bytes memory data = abi.encodeCall(registry.setDefaultDataBundlePriceCap, (4 ether));
+        bytes memory data = abi.encodeCall(registry.setDefaultPriceCapUSDCents, (4 ether));
         _schedule(address(registry), data, bytes32(uint256(2)));
         vm.warp(block.timestamp + DELAY);
 
         vm.prank(guardian);
         protocolAdmin.execute(address(registry), 0, data, bytes32(0), bytes32(uint256(2)));
 
-        assertEq(registry.defaultDataBundlePriceCap(), 4 ether);
+        assertEq(registry.defaultPriceCapUSDCents(), 4 ether);
     }
 
     /// @dev With open execution closed, an ordinary execution needs the role again.
@@ -331,7 +331,7 @@ contract GuardianPowersTest is AdminBase {
             bytes32(uint256(1))
         );
 
-        bytes memory data = abi.encodeCall(registry.setDefaultDataBundlePriceCap, (4 ether));
+        bytes memory data = abi.encodeCall(registry.setDefaultPriceCapUSDCents, (4 ether));
         _schedule(address(registry), data, bytes32(uint256(2)));
         vm.warp(block.timestamp + DELAY);
 

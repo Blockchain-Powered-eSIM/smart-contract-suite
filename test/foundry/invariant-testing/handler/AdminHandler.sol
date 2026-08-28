@@ -16,6 +16,11 @@ import {MockESIMWallet} from "test/utils/mocks/MockESIMWallet.sol";
 ///      is checking is whether that reach stops where the contracts say it stops.
 contract AdminHandler is HandlerBase {
 
+    /// @dev A payment reference is spendable once protocol-wide, so every purchase in a run
+    ///      needs a fresh one or the second call reverts on replay rather than on what is
+    ///      being tested.
+    uint256 private _refNonce;
+
     constructor(HandlerConfig memory config) HandlerBase(config) {}
 
     /// @notice The admin deploys a batch of device wallets, each with one eSIM wallet
@@ -144,17 +149,21 @@ contract AdminHandler is HandlerBase {
     }
 
     /// @notice The admin charges an eSIM wallet for a data bundle
-    /// @dev The price is unbounded upward on purpose. The ceiling is the only thing standing
-    ///      between the admin and a wallet's whole balance, so a run has to reach past it.
+    /// @dev Both figures are unbounded upward on purpose. The ceiling is the only thing standing
+    ///      between the admin and a wallet's whole balance, so a run has to reach past it. They are
+    ///      fuzzed separately because the ceiling is in cents and the ETH that moves is in wei, and
+    ///      no contract relates the two.
     /// @param eSIMIndex Which eSIM wallet pays
-    /// @param price What it is charged
-    function buyDataBundle(uint256 eSIMIndex, uint256 price) external counted {
+    /// @param priceUSDCents What the purchase is recorded at
+    /// @param priceWei What the wallet actually sends the vault
+    function buyDataBundle(uint256 eSIMIndex, uint64 priceUSDCents, uint256 priceWei) external counted {
         address wallet = _pickESIMWallet(eSIMIndex);
         if (wallet == address(0)) {
             state.recordRevert("buyDataBundle");
             return;
         }
-        price = bound(price, 1, 100 ether);
+        priceUSDCents = uint64(bound(priceUSDCents, 1, 1_000_000));
+        priceWei = bound(priceWei, 1, 100 ether);
 
         address device = registry.isESIMWalletValid(wallet);
         uint256 vaultBefore = vault.balance;
@@ -163,27 +172,33 @@ contract AdminHandler is HandlerBase {
 
         vm.prank(_currentAdmin());
         try ESIMWallet(payable(wallet)).buyDataBundle(
-            DataBundleDetails({dataBundleID: "bundle", dataBundlePrice: price})
+            DataBundleDetails({
+                id: "bundle",
+                priceUSDCents: priceUSDCents,
+                settlement: Settlement.Fiat
+            }),
+            priceWei,
+            keccak256(abi.encode("admin-handler", ++_refNonce))
         ) {
             // Asserted here rather than as an invariant because the ceiling is a property of the
             // charge and not of any state left behind. Both ceilings move during a run, so a
             // purchase that was inside the ceiling when it went through can sit above the one the
             // next invariant call would read
-            uint256 cap = ESIMWallet(payable(wallet)).dataBundlePriceCap();
-            if (cap == 0) cap = registry.defaultDataBundlePriceCap();
+            uint64 cap = ESIMWallet(payable(wallet)).priceCapUSDCents();
+            if (cap == 0) cap = registry.defaultPriceCapUSDCents();
             if (cap != 0) {
-                assertLe(price, cap, "A purchase went through above the ceiling that applied to it");
+                assertLe(priceUSDCents, cap, "A purchase went through above the ceiling that applied to it");
             }
 
             // The wallet pays out of its own balance and pulls the shortfall from the device
             // wallet, so neither balance alone says what a purchase cost. Their sum does, and it
             // has to fall by exactly what the vault gained
             assertEq(
-                vault.balance - vaultBefore, price, "The vault received something other than the price"
+                vault.balance - vaultBefore, priceWei, "The vault received something other than the price"
             );
             assertEq(
                 walletsBefore - (wallet.balance + device.balance),
-                price,
+                priceWei,
                 "A purchase moved a different amount out of the wallets than it sent to the vault"
             );
             assertEq(
@@ -233,7 +248,11 @@ contract AdminHandler is HandlerBase {
             eSIMIdentifiers[0][i] = contest
                 ? _contestedESIMIdentifier(seed + i)
                 : _eSIMIdentifier(seed + i);
-            bundles[0][i] = DataBundleDetails({dataBundleID: "bundle", dataBundlePrice: 1 gwei});
+            bundles[0][i] = DataBundleDetails({
+                id: "bundle",
+                priceUSDCents: 100,
+                settlement: Settlement.Fiat
+            });
         }
 
         vm.prank(_currentAdmin());

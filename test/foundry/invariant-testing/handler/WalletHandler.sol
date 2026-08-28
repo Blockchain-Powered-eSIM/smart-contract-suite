@@ -269,10 +269,12 @@ contract WalletHandler is HandlerBase {
             state.recordRevert("setESIMWalletPriceCap");
             return;
         }
-        uint256[4] memory ladder = [uint256(0), 1 gwei, 1 ether, 100 ether];
+        // Zero, one cent, ten dollars, a million dollars. Zero is in the ladder because it is
+        // the value that hands the wallet back to the registry ceiling.
+        uint64[4] memory ladder = [uint64(0), 1, 1_000, 100_000_000];
 
         vm.prank(device);
-        try ESIMWallet(payable(wallet)).setDataBundlePriceCap(ladder[bound(seed, 0, 3)]) {
+        try ESIMWallet(payable(wallet)).setPriceCapUSDCents(ladder[bound(seed, 0, 3)]) {
             state.recordCall("setESIMWalletPriceCap");
         } catch {
             state.recordRevert("setESIMWalletPriceCap");

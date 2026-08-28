@@ -233,13 +233,11 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
         assertEq(address(eSIMWallet1).balance, 0, "eSIMWallet1 balance should have been 0 ETH");
 
         // 6. Add ETH to deviceWallet2, and buy data bundle for eSIMWallet1
-        DataBundleDetails memory _dataBundleDetail = DataBundleDetails(
-            "DB_ID_0",
-            1 ether
-        );
+        DataBundleDetails memory _dataBundleDetail = bundle("DB_ID_0", TEST_PRICE_CENTS);
+        uint256 _priceWei = 1 ether;
 
         vm.startPrank(eSIMWalletAdmin);
-        eSIMWallet1.buyDataBundle(_dataBundleDetail);
+        eSIMWallet1.buyDataBundle(_dataBundleDetail, _priceWei, nextRef());
         vm.stopPrank();
 
         assertEq(address(deviceWallet2).balance, 4 ether, "Device wallet balance should have been 4 ETH");
@@ -247,8 +245,8 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
 
         DataBundleDetails[] memory history = eSIMWallet1.getTransactionHistory();
         assertEq(history.length, 1, "Transaction history should have been updated");
-        assertEq(history[0].dataBundleID, "DB_ID_0", "Transaction history's data bundle ID should have been correct");
-        assertEq(history[0].dataBundlePrice, 1 ether, "Transaction history's data bundle price should have been correct");
+        assertEq(history[0].id, "DB_ID_0", "Transaction history's data bundle ID should have been correct");
+        assertEq(history[0].priceUSDCents, TEST_PRICE_CENTS, "Transaction history's data bundle price should have been correct");
     }
 
     /// @notice A registered device wallet cannot release an eSIM wallet another one holds
@@ -321,7 +319,7 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
         _assertESIMWalletBinding(deviceWallet, eSIMWallet1, true, address(deviceWallet), false, false);
 
         DataBundleDetails[] memory batch = new DataBundleDetails[](1);
-        batch[0] = DataBundleDetails("DB_ID_0", 1 ether);
+        batch[0] = bundle("DB_ID_0", TEST_PRICE_CENTS);
 
         vm.prank(address(lazyWalletRegistry));
         registry.populateLazyHistory(address(eSIMWallet1), batch);
@@ -458,13 +456,11 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
         assertEq(address(eSIMWallet1).balance, 0, "eSIMWallet1 balance should have been 0 ETH");
 
         // 7. Add ETH to deviceWallet2, and buy data bundle for eSIMWallet1
-        DataBundleDetails memory _dataBundleDetail = DataBundleDetails(
-            "DB_ID_0",
-            1 ether
-        );
+        DataBundleDetails memory _dataBundleDetail = bundle("DB_ID_0", TEST_PRICE_CENTS);
+        uint256 _priceWei = 1 ether;
 
         vm.startPrank(eSIMWalletAdmin);
-        eSIMWallet1.buyDataBundle(_dataBundleDetail);
+        eSIMWallet1.buyDataBundle(_dataBundleDetail, _priceWei, nextRef());
         vm.stopPrank();
 
         assertEq(address(deviceWallet2).balance, 4 ether, "Device wallet balance should have been 4 ETH");
@@ -472,7 +468,7 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
 
         DataBundleDetails[] memory history = eSIMWallet1.getTransactionHistory();
         assertEq(history.length, 1, "Transaction history should have been updated");
-        assertEq(history[0].dataBundleID, "DB_ID_0", "Transaction history's data bundle ID should have been correct");
-        assertEq(history[0].dataBundlePrice, 1 ether, "Transaction history's data bundle price should have been correct");
+        assertEq(history[0].id, "DB_ID_0", "Transaction history's data bundle ID should have been correct");
+        assertEq(history[0].priceUSDCents, TEST_PRICE_CENTS, "Transaction history's data bundle price should have been correct");
     }
 }

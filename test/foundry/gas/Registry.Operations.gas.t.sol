@@ -82,10 +82,10 @@ contract RegistryOperationsGasTest is GasBase {
     }
 
     /// @notice Moving the default price cap new eSIM wallets inherit
-    function test_setDefaultDataBundlePriceCap() public {
+    function test_setDefaultPriceCapUSDCents() public {
         vm.prank(upgradeManager);
-        registry.setDefaultDataBundlePriceCap(2 ether);
-        vm.snapshotGasLastCall(NAMESPACE, "setDefaultDataBundlePriceCap");
+        registry.setDefaultPriceCapUSDCents(2 ether);
+        vm.snapshotGasLastCall(NAMESPACE, "setDefaultPriceCapUSDCents");
     }
 
     /// @notice Pointing every data bundle payment at a different vault

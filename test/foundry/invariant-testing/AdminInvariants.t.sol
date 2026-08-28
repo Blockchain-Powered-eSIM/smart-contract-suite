@@ -139,7 +139,7 @@ contract AdminInvariantsTest is AdminBase {
     ///      bookkeeping; this one says the bookkeeping actually governs the protocol.
     function invariant_theRegistryOnlyReflectsCompletedOperations() public view {
         assertEq(
-            registry.defaultDataBundlePriceCap(),
+            registry.defaultPriceCapUSDCents(),
             handler.expectedCap(),
             "the registry holds a value no completed operation wrote"
         );

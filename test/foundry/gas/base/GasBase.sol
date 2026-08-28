@@ -104,7 +104,7 @@ abstract contract GasBase is DeployerBase {
 
         for(uint256 i = 0; i < _count; ++i) {
             eSIMs[0][i] = _eSIMName(_device, i);
-            bundles[0][i] = DataBundleDetails("DB_GAS", 1);
+            bundles[0][i] = bundle("DB_GAS", TEST_PRICE_CENTS);
         }
 
         for(uint256 pass = 0; pass < _entriesPerESIM; ++pass) {

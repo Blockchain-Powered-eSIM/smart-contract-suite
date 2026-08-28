@@ -73,7 +73,7 @@ contract HandlerDistributionTest is CampaignBase {
             adminHandler.setESIMIdentifier(round, seed + 3000, false);
             walletHandler.toggleAccessToETH(round, true);
             walletHandler.setESIMWalletPriceCap(round, round);
-            adminHandler.buyDataBundle(round, 1 gwei);
+            adminHandler.buyDataBundle(round, 100, 1 gwei);
             walletHandler.pullETH(round, 1 gwei);
             // Removal comes before the transfer pair on purpose. Requesting a transfer detaches
             // the wallet on its way through, so a removal after it has nothing left to remove.

@@ -24,9 +24,9 @@ contract ETHRefuser {
 /// @dev The purchase and ownership transfer behaviour is covered in `ESIMWallet.t.sol`.
 contract ESIMWalletGuardsTest is DeployerBase {
 
-    uint256 constant REGISTRY_CAP = 1 ether;
-    uint256 constant WALLET_CAP = 3 ether;
-    uint256 constant PRICE_BETWEEN_THE_TWO = 2 ether;
+    uint64 constant REGISTRY_CAP = 10_000;            // $100
+    uint64 constant WALLET_CAP = 30_000;              // $300
+    uint64 constant PRICE_BETWEEN_THE_TWO = 20_000;   // $200
 
     DeviceWallet deviceWallet;
     ESIMWallet eSIMWallet;
@@ -63,11 +63,12 @@ contract ESIMWalletGuardsTest is DeployerBase {
         new BeaconProxy(_beacon, abi.encodeCall(ESIMWallet.initialize, (_factory, _deviceWallet)));
     }
 
-    /// @notice Buys a bundle at the given price as the admin
-    /// @param _price The price to charge
-    function _buyAt(uint256 _price) internal {
+    /// @notice Buys a bundle at the given recorded price as the admin
+    /// @dev The ETH figure is fixed. The ceiling bounds the recorded price, not the amount sent.
+    /// @param _priceUSDCents The price to record
+    function _buyAt(uint64 _priceUSDCents) internal {
         vm.prank(eSIMWalletAdmin);
-        eSIMWallet.buyDataBundle(DataBundleDetails("DB_ID_CAP", _price));
+        eSIMWallet.buyDataBundle(bundle("DB_ID_CAP", _priceUSDCents), 0.1 ether, nextRef());
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -105,7 +106,7 @@ contract ESIMWalletGuardsTest is DeployerBase {
 
         vm.prank(eSIMWalletAdmin);
         vm.expectRevert(Errors.EmptyDataBundleID.selector);
-        eSIMWallet.buyDataBundle(DataBundleDetails("", 1));
+        eSIMWallet.buyDataBundle(bundle("", TEST_PRICE_CENTS), 1, nextRef());
     }
 
     /// @notice A purchase for nothing is refused
@@ -115,7 +116,7 @@ contract ESIMWalletGuardsTest is DeployerBase {
 
         vm.prank(eSIMWalletAdmin);
         vm.expectRevert(Errors.ZeroDataBundlePrice.selector);
-        eSIMWallet.buyDataBundle(DataBundleDetails("DB_ID_1", 0));
+        eSIMWallet.buyDataBundle(bundle("DB_ID_1", 0), 0.1 ether, nextRef());
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -142,25 +143,25 @@ contract ESIMWalletGuardsTest is DeployerBase {
     ///      deployed before the cap existed reads zero and has to keep working. This is the
     ///      transition that says so: the same price is accepted under the wallet's own ceiling and
     ///      refused once that ceiling is cleared.
-    function test_setDataBundlePriceCap_clearingItReturnsToTheRegistryDefault() public {
+    function test_setPriceCapUSDCents_clearingItReturnsToTheRegistryDefault() public {
         _deployWallets(9004);
         vm.deal(address(deviceWallet), 10 ether);
 
         vm.prank(upgradeManager);
-        registry.setDefaultDataBundlePriceCap(REGISTRY_CAP);
+        registry.setDefaultPriceCapUSDCents(REGISTRY_CAP);
         vm.prank(address(deviceWallet));
-        eSIMWallet.setDataBundlePriceCap(WALLET_CAP);
+        eSIMWallet.setPriceCapUSDCents(WALLET_CAP);
 
         _buyAt(PRICE_BETWEEN_THE_TWO);
 
         vm.prank(address(deviceWallet));
-        eSIMWallet.setDataBundlePriceCap(0);
+        eSIMWallet.setPriceCapUSDCents(0);
 
         vm.prank(eSIMWalletAdmin);
         vm.expectRevert(
             abi.encodeWithSelector(Errors.DataBundlePriceAboveCap.selector, PRICE_BETWEEN_THE_TWO, REGISTRY_CAP)
         );
-        eSIMWallet.buyDataBundle(DataBundleDetails("DB_ID_CAP", PRICE_BETWEEN_THE_TWO));
+        eSIMWallet.buyDataBundle(bundle("DB_ID_CAP", PRICE_BETWEEN_THE_TWO), 0.1 ether, nextRef());
     }
 
     // ---------------------------------------------------------------------------------------------

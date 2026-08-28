@@ -26,7 +26,7 @@ contract ProtocolAdminHandler is Test {
         bytes data;
         bytes32 salt;
         bytes32 id;
-        uint256 cap;
+        uint64 cap;
     }
 
     ProtocolAdmin public immutable admin;
@@ -45,7 +45,7 @@ contract ProtocolAdminHandler is Test {
     /// @notice What the registry's ceiling should read, given every operation that has completed
     /// @dev Written only where an execution succeeded, so a value reaching the registry any other
     ///      way pulls the two apart.
-    uint256 public expectedCap;
+    uint64 public expectedCap;
 
     uint256 public scheduled;
     uint256 public executed;
@@ -68,10 +68,10 @@ contract ProtocolAdminHandler is Test {
         guardian = _guardian;
         walletAdmin = _walletAdmin;
 
-        // The registry never holds a zero cap: `initialize` and `setDefaultDataBundlePriceCap`
+        // The registry never holds a zero cap: `initialize` and `setDefaultPriceCapUSDCents`
         // both refuse it. Starting the tracker from whatever the registry was deployed with, rather
         // than from zero, is what keeps it matching a value no operation in this campaign wrote.
-        expectedCap = _registry.defaultDataBundlePriceCap();
+        expectedCap = _registry.defaultPriceCapUSDCents();
 
         for(uint256 i = 0; i < _cancellers.length; ++i) {
             cancellers.push(_cancellers[i]);
@@ -91,8 +91,8 @@ contract ProtocolAdminHandler is Test {
     }
 
     /// @notice A proposer announces a change to the registry's price ceiling
-    function scheduleCap(uint96 _cap, bytes32 _salt) external {
-        bytes memory data = abi.encodeCall(registry.setDefaultDataBundlePriceCap, (_cap));
+    function scheduleCap(uint64 _cap, bytes32 _salt) external {
+        bytes memory data = abi.encodeCall(registry.setDefaultPriceCapUSDCents, (_cap));
         uint256 delay = admin.getMinDelay();
 
         vm.prank(proposer);
@@ -190,10 +190,10 @@ contract ProtocolAdminHandler is Test {
     }
 
     /// @notice Nobody outside the proposer set may announce anything
-    function rejectsAnUnauthorisedSchedule(address _caller, uint96 _cap) external {
+    function rejectsAnUnauthorisedSchedule(address _caller, uint64 _cap) external {
         if(_caller == proposer) return;
 
-        bytes memory data = abi.encodeCall(registry.setDefaultDataBundlePriceCap, (_cap));
+        bytes memory data = abi.encodeCall(registry.setDefaultPriceCapUSDCents, (_cap));
 
         vm.prank(_caller);
         try admin.schedule(address(registry), 0, data, bytes32(0), bytes32(0), admin.getMinDelay()) {
@@ -245,11 +245,11 @@ contract ProtocolAdminHandler is Test {
     }
 
     /// @notice Nobody may reach the registry without going through the admin contract
-    function rejectsADirectCallToTheRegistry(address _caller, uint96 _cap) external {
+    function rejectsADirectCallToTheRegistry(address _caller, uint64 _cap) external {
         if(_caller == address(admin)) return;
 
         vm.prank(_caller);
-        try registry.setDefaultDataBundlePriceCap(_cap) {
+        try registry.setDefaultPriceCapUSDCents(_cap) {
             revert("an account reached the registry without going through the admin contract");
         } catch {
             ++rejections;

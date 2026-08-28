@@ -140,7 +140,7 @@ contract ProtocolAdminTest is AdminBase {
     }
 
     function test_schedule_rejectsAnAccountWithoutTheProposerRole() public {
-        bytes memory data = abi.encodeCall(registry.setDefaultDataBundlePriceCap, (1 ether));
+        bytes memory data = abi.encodeCall(registry.setDefaultPriceCapUSDCents, (1 ether));
 
         bytes32 role = protocolAdmin.PROPOSER_ROLE();
 
@@ -153,7 +153,7 @@ contract ProtocolAdminTest is AdminBase {
 
     /// @dev A guardian skips the wait but cannot start one. Scheduling stays with the proposers.
     function test_schedule_rejectsTheGuardian() public {
-        bytes memory data = abi.encodeCall(registry.setDefaultDataBundlePriceCap, (1 ether));
+        bytes memory data = abi.encodeCall(registry.setDefaultPriceCapUSDCents, (1 ether));
 
         bytes32 role = protocolAdmin.PROPOSER_ROLE();
 
@@ -165,7 +165,7 @@ contract ProtocolAdminTest is AdminBase {
     }
 
     function test_execute_rejectsAnOperationStillInsideItsDelay() public {
-        bytes memory data = abi.encodeCall(registry.setDefaultDataBundlePriceCap, (1 ether));
+        bytes memory data = abi.encodeCall(registry.setDefaultPriceCapUSDCents, (1 ether));
         bytes32 id = _schedule(address(registry), data, bytes32(0));
 
         vm.warp(block.timestamp + DELAY - 1);
@@ -184,19 +184,19 @@ contract ProtocolAdminTest is AdminBase {
     /// @dev The point of open execution: once the wait is served the protocol does not depend on
     ///      any particular key still being available to press the button.
     function test_execute_allowsAnyoneOnceTheDelayHasPassed() public {
-        assertEq(registry.defaultDataBundlePriceCap(), defaultDataBundlePriceCap);
+        assertEq(registry.defaultPriceCapUSDCents(), defaultPriceCapUSDCents);
 
         _runThroughTheDelay(
             address(registry),
-            abi.encodeCall(registry.setDefaultDataBundlePriceCap, (7 ether)),
+            abi.encodeCall(registry.setDefaultPriceCapUSDCents, (7 ether)),
             bytes32(0)
         );
 
-        assertEq(registry.defaultDataBundlePriceCap(), 7 ether);
+        assertEq(registry.defaultPriceCapUSDCents(), 7 ether);
     }
 
     function test_execute_rejectsAnOperationThatWasNeverScheduled() public {
-        bytes memory data = abi.encodeCall(registry.setDefaultDataBundlePriceCap, (1 ether));
+        bytes memory data = abi.encodeCall(registry.setDefaultPriceCapUSDCents, (1 ether));
 
         vm.prank(outsider);
         vm.expectRevert();
@@ -209,7 +209,7 @@ contract ProtocolAdminTest is AdminBase {
     ///      Requiring the proposer set to agree to stop something would make the delay useless in
     ///      exactly the case it exists for, which is that set having been compromised.
     function test_cancel_worksForAProposerAndForACancellerAlike() public {
-        bytes memory data = abi.encodeCall(registry.setDefaultDataBundlePriceCap, (1 ether));
+        bytes memory data = abi.encodeCall(registry.setDefaultPriceCapUSDCents, (1 ether));
 
         bytes32 first = _schedule(address(registry), data, bytes32(uint256(1)));
         vm.prank(proposer);
@@ -230,7 +230,7 @@ contract ProtocolAdminTest is AdminBase {
     /// @dev The guardian is not part of the veto. It can take the cancel power away from an
     ///      account and can never use it, which is what keeps it evictable.
     function test_cancel_rejectsTheGuardian() public {
-        bytes memory data = abi.encodeCall(registry.setDefaultDataBundlePriceCap, (1 ether));
+        bytes memory data = abi.encodeCall(registry.setDefaultPriceCapUSDCents, (1 ether));
         bytes32 id = _schedule(address(registry), data, bytes32(0));
         bytes32 role = protocolAdmin.CANCELLER_ROLE();
 
@@ -242,7 +242,7 @@ contract ProtocolAdminTest is AdminBase {
     }
 
     function test_cancel_rejectsAnAccountHoldingNeitherRole() public {
-        bytes memory data = abi.encodeCall(registry.setDefaultDataBundlePriceCap, (1 ether));
+        bytes memory data = abi.encodeCall(registry.setDefaultPriceCapUSDCents, (1 ether));
         bytes32 id = _schedule(address(registry), data, bytes32(0));
 
         bytes32 role = protocolAdmin.CANCELLER_ROLE();
@@ -257,14 +257,14 @@ contract ProtocolAdminTest is AdminBase {
     /// @dev A cancelled operation goes back to unset, so the same payload can be proposed again
     ///      rather than being burned by one cancellation.
     function test_cancel_leavesThePayloadSchedulableAgain() public {
-        bytes memory data = abi.encodeCall(registry.setDefaultDataBundlePriceCap, (1 ether));
+        bytes memory data = abi.encodeCall(registry.setDefaultPriceCapUSDCents, (1 ether));
         bytes32 id = _schedule(address(registry), data, bytes32(0));
 
         vm.prank(proposer);
         protocolAdmin.cancel(id);
 
         _runThroughTheDelay(address(registry), data, bytes32(0));
-        assertEq(registry.defaultDataBundlePriceCap(), 1 ether);
+        assertEq(registry.defaultPriceCapUSDCents(), 1 ether);
     }
 
     function test_getMinDelay_startsAtTheConstructorValue() public view {
@@ -296,7 +296,7 @@ contract ProtocolAdminTest is AdminBase {
 
         assertEq(protocolAdmin.getMinDelay(), DELAY_FLOOR);
 
-        bytes memory data = abi.encodeCall(registry.setDefaultDataBundlePriceCap, (1 ether));
+        bytes memory data = abi.encodeCall(registry.setDefaultPriceCapUSDCents, (1 ether));
 
         vm.prank(proposer);
         vm.expectRevert(
@@ -359,7 +359,7 @@ contract ProtocolAdminTest is AdminBase {
         vm.prank(outsider);
         protocolAdmin.executeBatch(targets, values, payloads, bytes32(0), bytes32(0));
 
-        assertEq(registry.defaultDataBundlePriceCap(), 3 ether);
+        assertEq(registry.defaultPriceCapUSDCents(), 3 ether);
         assertEq(registry.lazyWalletRegistry(), address(lazyWalletRegistry));
     }
 
@@ -371,7 +371,7 @@ contract ProtocolAdminTest is AdminBase {
         bytes[] memory payloads = new bytes[](2);
 
         targets[0] = address(registry);
-        payloads[0] = abi.encodeCall(registry.setDefaultDataBundlePriceCap, (3 ether));
+        payloads[0] = abi.encodeCall(registry.setDefaultPriceCapUSDCents, (3 ether));
         targets[1] = address(registry);
         payloads[1] = abi.encodeCall(registry.addOrUpdateLazyWalletRegistryAddress, (address(0)));
 
@@ -385,8 +385,8 @@ contract ProtocolAdminTest is AdminBase {
         protocolAdmin.executeBatch(targets, values, payloads, bytes32(0), bytes32(0));
 
         assertEq(
-            registry.defaultDataBundlePriceCap(),
-            defaultDataBundlePriceCap,
+            registry.defaultPriceCapUSDCents(),
+            defaultPriceCapUSDCents,
             "the first call must not have stuck"
         );
     }
@@ -414,7 +414,7 @@ contract ProtocolAdminTest is AdminBase {
         payloads = new bytes[](2);
 
         targets[0] = address(registry);
-        payloads[0] = abi.encodeCall(registry.setDefaultDataBundlePriceCap, (3 ether));
+        payloads[0] = abi.encodeCall(registry.setDefaultPriceCapUSDCents, (3 ether));
         targets[1] = address(registry);
         payloads[1] = abi.encodeCall(registry.addOrUpdateLazyWalletRegistryAddress, (address(lazyWalletRegistry)));
     }

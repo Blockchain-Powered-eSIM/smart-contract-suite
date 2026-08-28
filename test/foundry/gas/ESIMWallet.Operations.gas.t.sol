@@ -46,12 +46,12 @@ contract ESIMWalletOperationsGasTest is GasBase {
 
         vm.deal(address(eSIMWallet), 10 ether);
         vm.prank(address(wallet));
-        eSIMWallet.buyDataBundle(DataBundleDetails("DB_GAS_1", 1 ether));
+        eSIMWallet.buyDataBundle(bundle("DB_GAS_1", TEST_PRICE_CENTS), 1 ether, paymentRef("gas-1"));
         vm.snapshotGasLastCall(NAMESPACE, "buyDataBundle: wallet already holds the price");
 
         vm.deal(address(eSIMWallet), 0);
         vm.prank(address(wallet));
-        eSIMWallet.buyDataBundle(DataBundleDetails("DB_GAS_2", 1 ether));
+        eSIMWallet.buyDataBundle(bundle("DB_GAS_2", TEST_PRICE_CENTS), 1 ether, paymentRef("gas-2"));
         vm.snapshotGasLastCall(NAMESPACE, "buyDataBundle: pulls from the device wallet");
     }
 
@@ -69,16 +69,16 @@ contract ESIMWalletOperationsGasTest is GasBase {
     }
 
     /// @notice Moving the wallet's own price ceiling, and handing it back to the registry's
-    function test_setDataBundlePriceCap() public {
+    function test_setPriceCapUSDCents() public {
         _deploy();
 
         vm.prank(address(wallet));
-        eSIMWallet.setDataBundlePriceCap(5 ether);
-        vm.snapshotGasLastCall(NAMESPACE, "setDataBundlePriceCap: set");
+        eSIMWallet.setPriceCapUSDCents(5 ether);
+        vm.snapshotGasLastCall(NAMESPACE, "setPriceCapUSDCents: set");
 
         vm.prank(address(wallet));
-        eSIMWallet.setDataBundlePriceCap(0);
-        vm.snapshotGasLastCall(NAMESPACE, "setDataBundlePriceCap: back to the registry ceiling");
+        eSIMWallet.setPriceCapUSDCents(0);
+        vm.snapshotGasLastCall(NAMESPACE, "setPriceCapUSDCents: back to the registry ceiling");
     }
 
     /// @notice The two halves of an eSIM wallet ownership transfer
@@ -104,7 +104,7 @@ contract ESIMWalletOperationsGasTest is GasBase {
 
         DataBundleDetails[] memory history = new DataBundleDetails[](10);
         for(uint256 i = 0; i < history.length; ++i) {
-            history[i] = DataBundleDetails("DB_GAS_HISTORY", 1);
+            history[i] = bundle("DB_GAS_HISTORY", TEST_PRICE_CENTS);
         }
 
         vm.prank(address(registry));
