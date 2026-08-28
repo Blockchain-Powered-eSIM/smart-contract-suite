@@ -340,11 +340,15 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         return true;
     }
 
-    /// @notice Appends a purchase the registry has already checked
-    /// @dev No money moves here. The price ceiling, the payment reference and the settlement rule
-    ///      are all checked on the registry before this call arrives.
+    /// @notice Appends a purchase paid for outside the protocol
+    /// @dev No money moves here. Nothing onchain saw this payment, so the ceiling is the only
+    ///      limit on what the admin can write into a user's history. Checked here and not on the
+    ///      registry because the wallet's own ceiling lives here.
     /// @param _dataBundleDetail The purchase to record
     function recordSettledPurchase(DataBundleDetails calldata _dataBundleDetail) external onlyRegistry {
+        // The modifier has already checked the caller is the registry
+        _requirePriceWithinCap(_dataBundleDetail.priceUSDCents, Registry(msg.sender));
+
         transactionHistory.push(_dataBundleDetail);
 
         emit DataBundleSettlementRecorded(
