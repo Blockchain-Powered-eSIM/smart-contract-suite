@@ -232,8 +232,9 @@ rule theOwnerIsAlwaysTheDeviceWallet(method f) filtered {
 
 /// R-12. Purchase history is append-only.
 ///
-/// Two writers, `buyDataBundle` and the registry's `populateHistory`, and neither is allowed to
-/// drop an entry. History is what a dispute is settled from, so losing one is not recoverable.
+/// Two writers, `buyDataBundleWithToken` and the registry's `populateHistory`, and neither is
+/// allowed to drop an entry. History is what a dispute is settled from, so losing one is not
+/// recoverable.
 ///
 /// Not stated here, because the prover cannot reach the array length on this contract. The storage
 /// analysis fails on `setESIMUniqueIdentifier`, and every phrasing needs it:
@@ -251,8 +252,8 @@ rule theOwnerIsAlwaysTheDeviceWallet(method f) filtered {
 /// handover.
 ///
 /// Not in the original milestone list, since the ceiling postdates it. Worth stating because the
-/// ceiling is what stops the admin naming its own price on `buyDataBundle`, and the guard on the
-/// setter is the whole of that protection.
+/// ceiling is what stops the admin naming its own price on `buyDataBundleWithToken`, and the guard
+/// on the setter is the whole of that protection.
 ///
 /// The second assert is what makes the handover exception safe. A handover may only take the
 /// ceiling to zero, which hands the wallet to the registry default rather than to a figure the

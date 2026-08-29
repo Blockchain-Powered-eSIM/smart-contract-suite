@@ -1,11 +1,14 @@
 /// DeviceWallet: the rights it hands to eSIM wallets, and the key that owns it.
 ///
-/// A device wallet holds user ETH and decides which eSIM wallets may reach it. Two mappings carry
-/// that decision, `isValidESIMWallet` for membership and `canPullFunds` for the spending right, and
-/// the second is meaningless without the first: `pullETH` checks `canPullFunds` on its own, so a
-/// wallet that kept the right after being let go would still be able to spend. The rules below fix
-/// the relation between the two, fix the one ETH path against the balance, and fix the P256 key
-/// that authorises everything this wallet does.
+/// A device wallet holds user funds and decides which eSIM wallets may reach them. Two mappings
+/// carry that decision, `isValidESIMWallet` for membership and `canPullFunds` for the spending
+/// right, and the second is meaningless without the first: `pullToken` checks `canPullFunds` on its
+/// own, so a wallet that kept the right after being let go would still be able to spend. The rules
+/// below fix the relation between the two, and fix the P256 key that authorises everything this
+/// wallet does.
+///
+/// What a pull moves is not stated here. It is an ERC-20 transfer, and the token is outside the
+/// scene, so the amount is carried by the unit tests in `DeviceWalletTokens.t.sol` instead.
 ///
 /// Scope. Calls out of this wallet, into the registry, the two factories and the eSIM wallets, are
 /// summarised as NONDET, so what is proved is this contract's own storage. That is the same scope
@@ -87,21 +90,7 @@ rule theRightToPullETHNeverOutlivesMembership(method f, address eSIMWallet) filt
     f(callEnv, args);
 
     assert canPullFunds(eSIMWallet) => isValidESIMWallet(eSIMWallet),
-        "an eSIM wallet kept the right to pull ETH without being recognised";
-}
-
-/// R-14. The ETH path pays out no more than the wallet holds.
-///
-/// The route ends in `_transferETH`, which compares against the live balance. Stated over the entry
-/// point rather than over the internal function, so the guard is proved where a caller meets it. It
-/// is not payable, so the balance the call reads is the balance read here.
-rule pullingMoreETHThanTheWalletHoldsAlwaysReverts(uint256 amount) {
-    require amount > nativeBalances[currentContract];
-
-    env callEnv;
-    pullETH@withrevert(callEnv, amount);
-
-    assert lastReverted, "an eSIM wallet pulled more ETH than the device wallet held";
+        "an eSIM wallet kept the right to spend without being recognised";
 }
 
 /// R-15. The registry and the eSIM wallet factory are written once.
