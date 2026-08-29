@@ -242,8 +242,8 @@ contract Deploy is Script {
         record = vm.serializeString("record", "contracts", _contractsSection(deployed));
         record = vm.serializeString("record", "status", _statusSection());
 
-        vm.writeJson(record, DeploymentRecord.PATH, string.concat(".", network));
-        console.log("Record written to", DeploymentRecord.PATH, "under", network);
+        vm.writeJson(record, DeploymentRecord.recordPath(), string.concat(".", network));
+        console.log("Record written to", DeploymentRecord.recordPath(), "under", network);
     }
 
     /// @notice Everything needed to rebuild this bytecode later, collected offchain

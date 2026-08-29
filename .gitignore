@@ -8,6 +8,10 @@ forge-cache/
 # Written by every `forge script --broadcast` run. The deployment record kept on purpose is
 # deployments/address.json, which the scripts write and later scripts read.
 broadcast/
+
+# Scratch records the deploy script tests write. They live here because fs_permissions grants the
+# scripts write access to this directory and nowhere else.
+deployments/.test-*.json
 lcov.info
 .DS_Store
 

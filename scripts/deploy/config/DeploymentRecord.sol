@@ -19,9 +19,19 @@ import {DeployConfig} from "./DeployConfig.sol";
 ///      address is indistinguishable from a deployed one to every reader of this file.
 library DeploymentRecord {
 
-    string internal constant PATH = "deployments/address.json";
+    /// @notice The record a run reads and writes unless it is pointed somewhere else
+    string internal constant DEFAULT_PATH = "deployments/address.json";
 
     Vm private constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
+
+    /// @notice File this run reads and writes
+    /// @dev A function rather than a constant so a test can point a script at a scratch file. The
+    ///      real record is the only thing that remembers a live deployment's addresses, so a test
+    ///      writing over it loses them. `fs_permissions` keeps any value inside `deployments/`.
+    /// @return location Path to the record for this run
+    function recordPath() internal view returns (string memory location) {
+        location = vm.envOr("DEPLOYMENT_RECORD_PATH", DEFAULT_PATH);
+    }
 
     /// @notice The deployment record has no entry for this contract on this chain
     error NotRecorded(string network, string key);
@@ -36,7 +46,7 @@ library DeploymentRecord {
     /// @return target Address recorded for this contract on the current chain
     function readAddress(string memory key) internal view returns (address target) {
         string memory network = DeployConfig.recordKey();
-        string memory json = vm.readFile(PATH);
+        string memory json = vm.readFile(recordPath());
         string memory pointer = string.concat(".", network, ".contracts.", key, ".address");
 
         if(!vm.keyExistsJson(json, pointer)) revert NotRecorded(network, key);
@@ -52,7 +62,7 @@ library DeploymentRecord {
     /// @return value Address at that path
     function readRaw(string memory path) internal view returns (address value) {
         string memory network = DeployConfig.recordKey();
-        string memory json = vm.readFile(PATH);
+        string memory json = vm.readFile(recordPath());
         string memory pointer = string.concat(".", network, ".", path);
 
         if(!vm.keyExistsJson(json, pointer)) revert NotRecorded(network, path);
@@ -65,7 +75,7 @@ library DeploymentRecord {
     /// @return value Number at that path
     function readUint(string memory path) internal view returns (uint256 value) {
         string memory network = DeployConfig.recordKey();
-        string memory json = vm.readFile(PATH);
+        string memory json = vm.readFile(recordPath());
         string memory pointer = string.concat(".", network, ".", path);
 
         if(!vm.keyExistsJson(json, pointer)) revert NotRecorded(network, path);
@@ -78,7 +88,7 @@ library DeploymentRecord {
     /// @return value Bytes at that path
     function readBytes(string memory path) internal view returns (bytes memory value) {
         string memory network = DeployConfig.recordKey();
-        string memory json = vm.readFile(PATH);
+        string memory json = vm.readFile(recordPath());
         string memory pointer = string.concat(".", network, ".", path);
 
         if(!vm.keyExistsJson(json, pointer)) revert NotRecorded(network, path);
@@ -91,7 +101,7 @@ library DeploymentRecord {
     /// @return value Word at that path
     function readBytes32(string memory path) internal view returns (bytes32 value) {
         string memory network = DeployConfig.recordKey();
-        string memory json = vm.readFile(PATH);
+        string memory json = vm.readFile(recordPath());
         string memory pointer = string.concat(".", network, ".", path);
 
         if(!vm.keyExistsJson(json, pointer)) revert NotRecorded(network, path);
@@ -109,7 +119,7 @@ library DeploymentRecord {
         // serialized object. Serializing here would write `{"configured":true}` where the bool goes.
         vm.writeJson(
             done ? "true" : "false",
-            PATH,
+            recordPath(),
             string.concat(".", DeployConfig.recordKey(), ".status.", key)
         );
     }
@@ -122,14 +132,14 @@ library DeploymentRecord {
     /// @param path Dotted path below the network key
     /// @param json Serialized object to write there
     function writeObject(string memory path, string memory json) internal {
-        vm.writeJson(json, PATH, string.concat(".", DeployConfig.recordKey(), ".", path));
+        vm.writeJson(json, recordPath(), string.concat(".", DeployConfig.recordKey(), ".", path));
     }
 
     /// @notice True when the record already holds an entry at this path for the current chain
     /// @param path Dotted path below the network key
     /// @return present Whether the path resolves
     function has(string memory path) internal view returns (bool present) {
-        string memory json = vm.readFile(PATH);
+        string memory json = vm.readFile(recordPath());
         present = vm.keyExistsJson(
             json,
             string.concat(".", DeployConfig.recordKey(), ".", path)
