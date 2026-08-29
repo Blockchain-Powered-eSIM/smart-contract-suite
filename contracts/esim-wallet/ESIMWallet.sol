@@ -20,7 +20,7 @@ import {DeviceWallet} from "../device-wallet/DeviceWallet.sol";
 import {PaymentAdapter, Asset} from "../payments/PaymentAdapter.sol";
 import {Registry} from "../Registry.sol";
 
-/// @notice One eSIM, its purchase history and the ETH that pays for its data bundles
+/// @notice One eSIM, its purchase history, and the funds that move through it while it buys data bundles
 /// @dev A beacon proxy deployed by `ESIMWalletFactory`, always owned by a device wallet. The owner
 ///      is a contract rather than a key, so every call that moves ETH or ownership arrives through
 ///      a device wallet `execute` and has already been signed for. The admin can charge this wallet
@@ -58,7 +58,7 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         address indexed _owner
     );
 
-    /// @notice Emitted when a data bundle is paid for in an ERC-20
+    /// @notice Emitted when a data bundle is paid for in USDC (or any other acceptable stablecoin/ERC20)
     /// @dev The adapter emits the settlement. This one is for an indexer watching one wallet.
     event DataBundleBoughtWithToken(
         bytes32 _dataBundleID,
@@ -295,9 +295,9 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         return _amount;
     }
 
-    /// @notice Pays the vault for one data bundle in an ERC-20 and records the purchase
-    /// @dev The adapter works the amount out from the price, so unlike the ETH path there is no
-    ///      second figure to take on trust. Any shortfall is pulled from the device wallet.
+    /// @notice Pays the vault for one data bundle in USDC (or any other acceptable stablecoin/ERC20) and records the purchase
+    /// @dev The adapter works the amount out from the price, so there is never a second figure to
+    ///      take on trust. Any shortfall is pulled from the device wallet.
     /// @param _dataBundleDetail Data bundle being bought. Its settlement field is overwritten here.
     /// @param _asset Symbol of the currency to pay in
     /// @param _maxAmountIn Most of that currency the buyer will spend, in its smallest unit

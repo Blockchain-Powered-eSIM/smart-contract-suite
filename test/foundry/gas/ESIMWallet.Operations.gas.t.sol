@@ -38,7 +38,7 @@ contract ESIMWalletOperationsGasTest is GasBase {
         vm.snapshotGasLastCall(NAMESPACE, "deployESIMWallet: through the factory");
     }
 
-    /// @notice Buying a data bundle with an ERC-20, funded and unfunded
+    /// @notice Buying a data bundle with USDC (or any other acceptable stablecoin/ERC20), funded and unfunded
     /// @dev The unfunded case is the common one and costs a pull on top. A first purchase writes
     ///      the vault a balance it did not have, so one runs unmeasured before either figure is
     ///      taken and the two are then comparable.

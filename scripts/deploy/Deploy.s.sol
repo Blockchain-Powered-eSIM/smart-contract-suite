@@ -37,7 +37,7 @@ import {DeploymentRecord} from "./config/DeploymentRecord.sol";
 ///      depend on it and the handover script has nothing left to decide.
 ///
 ///      Ordinary `ERC1967Proxy`, not the upgrades plugin. The whole test suite stands the protocol
-///      up this way, so the deployed shape is the shape 573 tests run against, and the safety the
+///      up this way, so the deployed shape is the shape the whole test suite runs against, and the safety the
 ///      plugin checks at deploy time is already pinned by `ImplementationLocks.t.sol` and
 ///      `StorageLayout.t.sol`.
 contract Deploy is Script {

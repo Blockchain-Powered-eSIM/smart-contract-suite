@@ -34,7 +34,7 @@ import {TimelockController} from "@openzeppelin/contracts/governance/TimelockCon
 ///      chosen by the guardian. Restoring any of the three is an owner action and waits, so the
 ///      side taking power away always wins the race against the side handing it back. A guardian
 ///      able to reinstate an admin would lose that, and a guardian able to appoint one would reach
-///      `ESIMWallet.buyDataBundle` and every wallet holding ETH access through it.
+///      `ESIMWallet.buyDataBundleWithToken` and every wallet holding funds access through it.
 ///
 ///      The second one exists because without it a compromised canceller is permanent. Evicting any
 ///      role holder means scheduling `revokeRole`, a scheduled operation can be cancelled by any

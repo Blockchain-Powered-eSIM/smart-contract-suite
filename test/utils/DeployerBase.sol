@@ -246,7 +246,7 @@ contract DeployerBase is Test {
     }
 
     /// @notice One purchase the admin says was paid for outside the protocol
-    /// @dev `buyDataBundle` overwrites the settlement itself, so this shape suits both paths.
+    /// @dev `buyDataBundleWithToken` overwrites the settlement itself, so this shape suits both paths.
     function bundle(bytes32 _id, uint64 _priceUSDCents) internal pure returns (DataBundleDetails memory) {
         return DataBundleDetails({
             id: _id,

@@ -12,7 +12,7 @@ import {DeviceWalletFixture} from "test/foundry/unit-testing/device-wallet/base/
 import {MockERC20} from "test/utils/mocks/tokens/MockERC20.sol";
 import {MockReenteringERC20} from "test/utils/mocks/tokens/MockReenteringERC20.sol";
 
-/// @notice Buying a data bundle with an ERC-20, and getting a token balance back out again.
+/// @notice Buying a data bundle with USDC (or any other acceptable stablecoin/ERC20), and getting a token balance back out again.
 contract ESIMWalletTokenPurchaseTest is DeviceWalletFixture {
 
     uint64 constant PRICE_CENTS = 1_250;   // $12.50

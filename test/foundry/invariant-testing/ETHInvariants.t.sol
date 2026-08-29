@@ -39,8 +39,8 @@ contract ETHInvariantsTest is CampaignBase {
     }
 
     /// @notice The right to spend a device wallet's money only ever comes from its owner
-    /// @dev One flag covers ETH and tokens, so this is the whole spending right rather than the ETH
-    ///      half. A pair holding it with no grant recorded is access the campaign got some other
+    /// @dev The flag covers only tokens now, so this is the whole spending right rather than part of
+    ///      it. A pair holding it with no grant recorded is access the campaign got some other
     ///      way. Both the current device wallet and the last one are checked, since the two differ
     ///      while a transfer is outstanding.
     function invariant_fundsAccessOnlyEverCameFromTheOwner() public view {

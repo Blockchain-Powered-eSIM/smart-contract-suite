@@ -78,7 +78,7 @@ contract WalletHandler is HandlerBase {
             );
             assertFalse(
                 DeviceWallet(payable(device)).canPullFunds(wallet),
-                "A removed eSIM wallet kept its right to pull ETH"
+                "A removed eSIM wallet kept its right to pull funds"
             );
             assertEq(
                 registry.isESIMWalletValid(wallet),
@@ -181,7 +181,7 @@ contract WalletHandler is HandlerBase {
             );
             assertFalse(
                 DeviceWallet(payable(device)).canPullFunds(wallet),
-                "An added eSIM wallet arrived with the right to pull ETH"
+                "An added eSIM wallet arrived with the right to pull funds"
             );
             assertEq(
                 registry.isESIMWalletValid(wallet),
@@ -197,7 +197,7 @@ contract WalletHandler is HandlerBase {
         }
     }
 
-    /// @notice The wallet owner revokes or restores an eSIM wallet's right to pull ETH
+    /// @notice The wallet owner revokes or restores an eSIM wallet's right to pull funds
     /// @param eSIMIndex Which eSIM wallet to toggle
     /// @param hasAccessToFunds The access it should end up with
     function toggleAccessToFunds(uint256 eSIMIndex, bool hasAccessToFunds) external counted {

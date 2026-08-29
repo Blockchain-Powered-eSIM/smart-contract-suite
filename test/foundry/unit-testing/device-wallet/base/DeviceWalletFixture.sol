@@ -18,9 +18,9 @@ abstract contract DeviceWalletFixture is DeployerBase {
     MockDeviceWallet deviceWallet;
     MockDeviceWallet deviceWallet2;
     MockDeviceWallet deviceWallet3;     // Carol's (Malicious actor) device wallet
-    MockESIMWallet eSIMWallet1;         // has access to ETH, has eSIM identifier set, belongs to deviceWallet1
-    MockESIMWallet eSIMWallet2;         // no access to ETH, no eSIM identifier set, belongs to deviceWallet1
-    MockESIMWallet eSIMWallet3;         // has access to ETH, has eSIM identifier set, belongs to deviceWallet2
+    MockESIMWallet eSIMWallet1;         // has funds access, has eSIM identifier set, belongs to deviceWallet1
+    MockESIMWallet eSIMWallet2;         // no funds access, no eSIM identifier set, belongs to deviceWallet1
+    MockESIMWallet eSIMWallet3;         // has funds access, has eSIM identifier set, belongs to deviceWallet2
     MockDeviceWallet userDeviceWallet;  // Custom device wallet deployed with user defined x and y keys
     MockESIMWallet userESIMWallet;      // eSIM wallet associated with user's custom device wallet
 
@@ -109,7 +109,7 @@ abstract contract DeviceWalletFixture is DeployerBase {
 
     /// @notice Deploys the three device wallets and three eSIM wallets the tests share
     /// @dev The three eSIM wallets differ deliberately: eSIMWallet1 has an identifier and may pull
-    ///      ETH, eSIMWallet2 has neither, and eSIMWallet3 belongs to a second device wallet so
+    ///      funds, eSIMWallet2 has neither, and eSIMWallet3 belongs to a second device wallet so
     ///      cross-owner cases have somewhere to move a wallet to.
     function deployWallets() public {
         address admin = deviceWalletFactory.eSIMWalletAdmin();
@@ -141,7 +141,7 @@ abstract contract DeviceWalletFixture is DeployerBase {
         );
         vm.stopPrank();
 
-        // eSIMWallet1 -> has access to ETH, has eSIM identifier set
+        // eSIMWallet1 -> has funds access, has eSIM identifier set
         deviceWallet = MockDeviceWallet(payable(wallets[0].deviceWallet));
         deviceWallet2 = MockDeviceWallet(payable(wallets[1].deviceWallet));
         deviceWallet3 = MockDeviceWallet(payable(wallets[2].deviceWallet));
@@ -149,7 +149,7 @@ abstract contract DeviceWalletFixture is DeployerBase {
         eSIMWallet3 = MockESIMWallet(payable(wallets[1].eSIMWallet));
 
         vm.startPrank(admin);
-        // eSIMWallet1 -> has access to ETH, has eSIM identifier set
+        // eSIMWallet1 -> has funds access, has eSIM identifier set
         registry.assignESIMIdentifier(address(eSIMWallet1), "ESIM_0_1");
         registry.assignESIMIdentifier(address(eSIMWallet3), "ESIM_1_1");
         vm.stopPrank();
@@ -161,11 +161,11 @@ abstract contract DeviceWalletFixture is DeployerBase {
         deviceWallet2.toggleAccessToFunds(address(eSIMWallet3), true);
 
         vm.startPrank(admin);
-        // eSIMWallet2 -> no access to ETH, no eSIM identifier set
+        // eSIMWallet2 -> no funds access, no eSIM identifier set
         address newESIMWallet = deviceWallet.deployESIMWallet(false, 919);
         vm.stopPrank();
 
-        // eSIMWallet2 -> no access to ETH, no eSIM identifier set
+        // eSIMWallet2 -> no funds access, no eSIM identifier set
         eSIMWallet2 = MockESIMWallet(payable(newESIMWallet));
 
         assertNotEq(address(deviceWallet), address(0), "deviceWallet address cannot be address(0)");

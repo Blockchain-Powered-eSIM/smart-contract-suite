@@ -76,7 +76,7 @@ contract Registry is
     ///      that is never accepted leaves the role dormant rather than shared.
     address public newRequestedAdmin;
 
-    /// @notice True while the ETH-moving paths are stopped protocol-wide
+    /// @notice True while the protocol's guarded purchase and pull paths are stopped
     /// @dev Held here for the same reason the admin address is: device wallets and eSIM wallets are
     ///      beacon proxies tracked by a mapping with no enumerable list, so there is no way to
     ///      write a flag into each of them. Both already read this contract on their guarded paths,
@@ -319,7 +319,7 @@ contract Registry is
     // Pause and price ceiling
     // ---------------------------------------------------------------------------------------------
 
-    /// @notice Stops the ETH-moving paths on every device wallet and eSIM wallet
+    /// @notice Stops the token purchase and pull paths on every device wallet and eSIM wallet
     /// @dev The admin trips this and the owner clears it. The admin key signs backend batches all
     ///      day and is the one watching, so it needs to act without waiting; giving it the release
     ///      as well would let a single hot key hold user funds indefinitely. Neither key can reach
@@ -372,7 +372,7 @@ contract Registry is
     // Purchases paid for outside the protocol
     // ---------------------------------------------------------------------------------------------
 
-    /// @notice Spends a payment reference for an eSIM wallet buying with ETH
+    /// @notice Spends a payment reference for an eSIM wallet paying with USDC (or any other acceptable stablecoin/ERC20)
     /// @dev The adapter only accepts this from the registry, so the wallet has to come through
     ///      here. One reference then cannot be spent once on each path.
     /// @param _paymentReference Hash tying the purchase to the offchain order behind it
@@ -380,7 +380,7 @@ contract Registry is
         _consumePaymentReference(_paymentReference);
     }
 
-    /// @notice Records a data bundle paid for through Moonpay, a card or an external wallet
+    /// @notice Records a data bundle paid for through an external wallet or a card
     /// @dev No money moves here. Three things bound what the admin can state: the price ceiling,
     ///      the payment reference being spendable once, and the settlement not being
     ///      `DeviceWallet`. Written here and not by the adapter, because eSIM wallets accept
@@ -390,7 +390,7 @@ contract Registry is
     /// @param _asset Symbol of the currency the user paid in
     /// @param _tokenAmount What the user actually paid, in that currency's smallest unit. Recorded
     ///        for offchain matching, never checked: it and the price both come from the admin.
-    /// @param _paymentReference Hash of the Moonpay charge or the Stripe payment intent
+    /// @param _paymentReference Hash tying this purchase to its offchain payment intent
     function recordSettledPurchase(
         address _eSIMWallet,
         DataBundleDetails calldata _dataBundleDetail,

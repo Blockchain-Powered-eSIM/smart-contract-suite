@@ -152,7 +152,7 @@ contract RegistryHelper {
     /// @notice Emitted when the owner points data bundle payments at a different vault
     event VaultAddressUpdated(address indexed _updatedVaultAddress);
 
-    /// @notice Emitted when the admin stops the ETH-moving paths protocol-wide
+    /// @notice Emitted when the admin stops the protocol's guarded purchase and pull paths
     event Paused(address indexed _admin);
 
     /// @notice Emitted when the owner releases the pause

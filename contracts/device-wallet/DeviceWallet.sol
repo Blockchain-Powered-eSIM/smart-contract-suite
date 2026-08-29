@@ -41,9 +41,9 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     /// @notice Set to true if the eSIM wallet belongs to this device wallet
     mapping(address eSIMWalletAddress => bool isValid) public isValidESIMWallet;
 
-    /// @notice Tracks if an associated eSIM wallet may pull this wallet's ETH and tokens
-    /// @dev One flag for both. A wallet trusted with the ETH can already drain the owner, so a
-    ///      second flag per asset would cost another signature and limit nothing.
+    /// @notice Tracks if an associated eSIM wallet may pull this wallet's tokens
+    /// @dev A wallet trusted with the funds can already drain the owner, so a second flag per
+    ///      asset would cost another signature and limit nothing.
     mapping(address eSIMWalletAddress => bool isAllowedToPullFunds) public canPullFunds;
 
     /// @notice Emitted when owner updates an eSIM wallet's access to this wallet's money
