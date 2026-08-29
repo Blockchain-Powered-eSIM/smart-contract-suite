@@ -58,15 +58,6 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         address indexed _owner
     );
 
-    /// @notice Emitted when the payment for a data bundle is made
-    event DataBundleBought(
-        bytes32 _dataBundleID,
-        uint64 _priceUSDCents,
-        uint256 _priceWei,
-        uint256 _ethFromUser,
-        bytes32 indexed _paymentReference
-    );
-
     /// @notice Emitted when a data bundle is paid for in an ERC-20
     /// @dev The adapter emits the settlement. This one is for an indexer watching one wallet.
     event DataBundleBoughtWithToken(
@@ -302,62 +293,6 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         _transferETH(owner(), _amount);
 
         return _amount;
-    }
-
-    /// @notice Pays the vault for one data bundle in ETH and records the purchase
-    /// @dev Callable by the owning device wallet or by the admin, since the admin is the party that
-    ///      knows the price. Any shortfall is pulled from the device wallet, which is why the price
-    ///      is checked against a ceiling the admin cannot raise.
-    ///
-    ///      The ceiling is in cents and the ETH sent is in wei, and nothing onchain converts
-    ///      between them. So the ceiling limits what gets recorded, not what gets sent, and
-    ///      `_priceWei` is taken on trust. The token path closes that gap by working the amount
-    ///      out from the price instead.
-    /// @param _dataBundleDetail Data bundle being bought. Its settlement field is overwritten here.
-    /// @param _priceWei ETH actually being sent to the vault
-    /// @param _paymentReference The offchain order id. Spent once, so a retry of a call that
-    ///        already landed cannot charge the user twice.
-    /// @return True if the transaction is successful
-    function buyDataBundle(
-        DataBundleDetails memory _dataBundleDetail,
-        uint256 _priceWei,
-        bytes32 _paymentReference
-    ) public payable onlyDeviceWalletOrESIMWalletAdmin nonReentrant returns (bool) {
-        Registry registry = deviceWallet.registry();
-        registry.requireNotPaused();
-        if(_dataBundleDetail.id == bytes32(0)) revert Errors.EmptyDataBundleID();
-        if(_dataBundleDetail.priceUSDCents == 0) revert Errors.ZeroDataBundlePrice();
-        if(_priceWei == 0) revert Errors.ZeroDataBundlePrice();
-        _requirePriceWithinCap(_dataBundleDetail.priceUSDCents, registry);
-
-        // This is the only path that sees the money reach the vault, so it sets this itself.
-        _dataBundleDetail.settlement = Settlement.DeviceWallet;
-
-        registry.consumePaymentReference(_paymentReference);
-
-        uint256 walletBalance = address(this).balance;
-
-        if (walletBalance < _priceWei) {
-            deviceWallet.pullETH(_priceWei - walletBalance);
-        }
-
-        address vault = deviceWallet.getVaultAddress();
-
-        // Recorded before the transfer, so a vault that is a contract cannot observe a purchase
-        // that is not yet in the history it would be reading.
-        transactionHistory.push(_dataBundleDetail);
-
-        _transferETH(vault, _priceWei);
-
-        emit DataBundleBought(
-            _dataBundleDetail.id,
-            _dataBundleDetail.priceUSDCents,
-            _priceWei,
-            msg.value,
-            _paymentReference
-        );
-
-        return true;
     }
 
     /// @notice Pays the vault for one data bundle in an ERC-20 and records the purchase

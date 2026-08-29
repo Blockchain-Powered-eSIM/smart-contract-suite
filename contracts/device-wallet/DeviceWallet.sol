@@ -49,10 +49,6 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     /// @notice Emitted when owner updates an eSIM wallet's access to this wallet's money
     event FundsAccessUpdated(address indexed _eSIMWalletAddress, bool _hasAccessToFunds);
 
-    /// @notice Emitted when ETH is sent out from the contract
-    /// @dev mostly when an eSIM wallet pulls ETH from this contract
-    event ETHSent(address indexed _eSIMWalletAddress, uint256 _amount);
-
     /// @notice Emitted when an ERC-20 leaves this contract
     /// @dev mostly when an eSIM wallet pulls tokens to pay for a data bundle
     event TokenSent(address indexed _token, address indexed _eSIMWalletAddress, uint256 _amount);
@@ -203,25 +199,11 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     // Money movement
     // ---------------------------------------------------------------------------------------------
 
-    /// @notice Allow the eSIM wallets associated with this device wallet to pull ETH (for data bundles)
-    /// @dev Refused while the protocol is paused, and refused for a wallet whose access the owner
-    ///      has revoked.
-    /// @param _amount Amount of ETH to pull
-    /// @return The amount pulled
-    function pullETH(uint256 _amount) external onlyAssociatedESIMWallets nonReentrant returns (uint256) {
-        registry.requireNotPaused();
-        if(_amount == 0) revert Errors.ZeroAmount();
-        if(!canPullFunds[msg.sender]) revert Errors.FundsAccessRevoked(msg.sender);
-
-        _transferETH(msg.sender, _amount);
-
-        return _amount;
-    }
-
     /// @notice Allow an associated eSIM wallet to pull an ERC-20 (for data bundles)
-    /// @dev Same gate and pause check as `pullETH`. It exists so the admin can charge this wallet
-    ///      without an owner signature in that transaction; an owner buying for themselves can
-    ///      batch the transfer and the purchase through `executeBatch` instead.
+    /// @dev Refused while the protocol is paused, and refused for a wallet whose access the owner
+    ///      has revoked. It exists so the admin can charge this wallet without an owner signature
+    ///      in that transaction; an owner buying for themselves can batch the transfer and the
+    ///      purchase through `executeBatch` instead.
     /// @param _token ERC-20 being pulled
     /// @param _amount Amount in that token's smallest unit
     /// @return The amount pulled
@@ -369,24 +351,8 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     }
 
     // ---------------------------------------------------------------------------------------------
-    // ETH transfers and key checks
+    // Key checks
     // ---------------------------------------------------------------------------------------------
-
-    /// @notice Sends ETH out of this wallet, reverting if the call fails
-    /// @dev A zero amount is a no-op rather than a revert.
-    /// @param _recipient Address receiving the ETH
-    /// @param _amount Amount in wei
-    function _transferETH(address _recipient, uint256 _amount) internal virtual {
-        uint256 balance = address(this).balance;
-        if(_amount > balance) revert Errors.InsufficientBalance(balance, _amount);
-        if(_recipient == address(0)) revert Errors.ZeroAddress("_recipient");
-
-        if (_amount > 0) {
-            (bool success,) = _recipient.call{value: _amount}("");
-            if (!success) revert Errors.FailedToTransfer();
-            else emit ETHSent(_recipient, _amount);
-        }
-    }
 
     /// @notice Rejects a P256 public key that is not a point on the curve
     /// @dev Same predicate the three deploy paths apply, repeated here because the factory holds
