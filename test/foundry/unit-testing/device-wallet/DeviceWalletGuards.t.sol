@@ -118,20 +118,6 @@ contract DeviceWalletGuardsTest is DeployerBase {
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Amounts
-    // ---------------------------------------------------------------------------------------------
-
-    /// @notice A zero pull is refused rather than emitting a transfer of nothing
-    function test_pullETH_rejectsAZeroAmount() public {
-        _deployWallet(customDeviceUniqueIdentifiers[0], pubKey1, 8004);
-        vm.deal(address(wallet), 1 ether);
-
-        vm.prank(eSIMWallet);
-        vm.expectRevert(Errors.ZeroAmount.selector);
-        wallet.pullETH(0);
-    }
-
-    // ---------------------------------------------------------------------------------------------
     // Addresses the wallet has never bound
     // ---------------------------------------------------------------------------------------------
 

@@ -38,36 +38,10 @@ contract ESIMWalletOperationsGasTest is GasBase {
         vm.snapshotGasLastCall(NAMESPACE, "deployESIMWallet: through the factory");
     }
 
-    /// @notice Buying a data bundle, funded and unfunded
-    /// @dev The unfunded case is the common one. A wallet holds no float, so every purchase pulls
-    ///      from the device wallet and pays the vault in the same call.
-    ///
-    ///      The first purchase gives the vault a balance it did not have, which costs more than
-    ///      every one after it, so one runs unmeasured before either figure is taken.
-    function test_buyDataBundle() public {
-        _deploy();
-
-        vm.deal(address(eSIMWallet), 10 ether);
-        vm.prank(address(wallet));
-        eSIMWallet.buyDataBundle(bundle("DB_GAS_0", TEST_PRICE_CENTS), 1 ether, paymentRef("gas-0"));
-
-        vm.prank(address(wallet));
-        eSIMWallet.buyDataBundle(bundle("DB_GAS_1", TEST_PRICE_CENTS), 1 ether, paymentRef("gas-1"));
-        vm.snapshotGasLastCall(NAMESPACE, "buyDataBundle: wallet already holds the price");
-
-        vm.deal(address(eSIMWallet), 0);
-        vm.prank(address(wallet));
-        eSIMWallet.buyDataBundle(bundle("DB_GAS_2", TEST_PRICE_CENTS), 1 ether, paymentRef("gas-2"));
-        vm.snapshotGasLastCall(NAMESPACE, "buyDataBundle: pulls from the device wallet");
-    }
-
     /// @notice Buying a data bundle with an ERC-20, funded and unfunded
     /// @dev The unfunded case is the common one and costs a pull on top. A first purchase writes
     ///      the vault a balance it did not have, so one runs unmeasured before either figure is
     ///      taken and the two are then comparable.
-    ///
-    ///      Both are dearer than the ETH path, which moves money once where this moves it into the
-    ///      wallet, on to the adapter and then to the vault.
     function test_buyDataBundleWithToken() public {
         _deploy();
         uint256 needed = settlementAmount(TEST_PRICE_CENTS);

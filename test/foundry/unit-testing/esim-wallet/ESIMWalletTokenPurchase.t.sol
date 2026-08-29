@@ -257,19 +257,6 @@ contract ESIMWalletTokenPurchaseTest is DeviceWalletFixture {
         eSIMWallet1.buyDataBundleWithToken(bundle("DB_TOKEN", PRICE_CENTS), ASSET_USDC, needed, spentRef);
     }
 
-    /// @notice References are spent protocol-wide, so the ETH path cannot re-use one from here
-    function test_buyDataBundleWithToken_referenceCannotBeReusedOnTheETHPath() public {
-        bytes32 spentRef = nextRef();
-
-        vm.prank(eSIMWalletAdmin);
-        eSIMWallet1.buyDataBundleWithToken(bundle("DB_TOKEN", PRICE_CENTS), ASSET_USDC, settlementAmount(PRICE_CENTS), spentRef);
-
-        vm.deal(address(eSIMWallet1), 1 ether);
-        vm.prank(eSIMWalletAdmin);
-        vm.expectRevert(abi.encodeWithSelector(Errors.PaymentReferenceAlreadyUsed.selector, spentRef));
-        eSIMWallet1.buyDataBundle(bundle("DB_ETH", PRICE_CENTS), 0.1 ether, spentRef);
-    }
-
     /// @notice A second wallet cannot spend a reference the first one used
     function test_buyDataBundleWithToken_referenceCannotBeReusedByAnotherWallet() public {
         bytes32 spentRef = nextRef();

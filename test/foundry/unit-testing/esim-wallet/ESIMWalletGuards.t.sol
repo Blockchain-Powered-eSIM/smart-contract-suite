@@ -64,12 +64,13 @@ contract ESIMWalletGuardsTest is DeployerBase {
     }
 
     /// @notice Buys a bundle at the given recorded price as the admin
-    /// @dev The ETH figure is fixed, since the ceiling limits the recorded price and not the
-    ///      amount sent.
     /// @param _priceUSDCents The price to record
     function _buyAt(uint64 _priceUSDCents) internal {
+        uint256 needed = settlementAmount(_priceUSDCents);
+        fundSettlementToken(address(eSIMWallet), needed);
+
         vm.prank(eSIMWalletAdmin);
-        eSIMWallet.buyDataBundle(bundle("DB_ID_CAP", _priceUSDCents), 0.1 ether, nextRef());
+        eSIMWallet.buyDataBundleWithToken(bundle("DB_ID_CAP", _priceUSDCents), ASSET_USDC, needed, nextRef());
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -97,28 +98,6 @@ contract ESIMWalletGuardsTest is DeployerBase {
     // ---------------------------------------------------------------------------------------------
     // Purchase inputs
     // ---------------------------------------------------------------------------------------------
-
-    /// @notice A purchase with no bundle named is refused
-    /// @dev The identifier is what the offchain side reconciles the payment against, so an empty
-    ///      one records a payment nothing can be matched to.
-    function test_buyDataBundle_rejectsAnEmptyDataBundleID() public {
-        _deployWallets(9001);
-        vm.deal(address(deviceWallet), 1 ether);
-
-        vm.prank(eSIMWalletAdmin);
-        vm.expectRevert(Errors.EmptyDataBundleID.selector);
-        eSIMWallet.buyDataBundle(bundle("", TEST_PRICE_CENTS), 1, nextRef());
-    }
-
-    /// @notice A purchase for nothing is refused
-    function test_buyDataBundle_rejectsAZeroPrice() public {
-        _deployWallets(9002);
-        vm.deal(address(deviceWallet), 1 ether);
-
-        vm.prank(eSIMWalletAdmin);
-        vm.expectRevert(Errors.ZeroDataBundlePrice.selector);
-        eSIMWallet.buyDataBundle(bundle("DB_ID_1", 0), 0.1 ether, nextRef());
-    }
 
     // ---------------------------------------------------------------------------------------------
     // Pre-deployment history
@@ -162,7 +141,12 @@ contract ESIMWalletGuardsTest is DeployerBase {
         vm.expectRevert(
             abi.encodeWithSelector(Errors.DataBundlePriceAboveCap.selector, PRICE_BETWEEN_THE_TWO, REGISTRY_CAP)
         );
-        eSIMWallet.buyDataBundle(bundle("DB_ID_CAP", PRICE_BETWEEN_THE_TWO), 0.1 ether, nextRef());
+        eSIMWallet.buyDataBundleWithToken(
+            bundle("DB_ID_CAP", PRICE_BETWEEN_THE_TWO),
+            ASSET_USDC,
+            settlementAmount(PRICE_BETWEEN_THE_TWO),
+            nextRef()
+        );
     }
 
     // ---------------------------------------------------------------------------------------------

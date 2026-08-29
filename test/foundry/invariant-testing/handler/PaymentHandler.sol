@@ -97,46 +97,8 @@ contract PaymentHandler is HandlerBase {
     }
 
     // ---------------------------------------------------------------------------------------------
-    // The two payment paths
+    // The payment path
     // ---------------------------------------------------------------------------------------------
-
-    /// @notice A wallet buys a data bundle with ETH
-    /// @param eSIMIndex Picks the wallet
-    /// @param priceUSDCents Price to record, bound under whichever ceiling applies
-    /// @param priceWei ETH to send to the vault
-    /// @param referenceSeed Picks the payment reference from the pool
-    function buyDataBundle(
-        uint256 eSIMIndex,
-        uint64 priceUSDCents,
-        uint256 priceWei,
-        uint256 referenceSeed
-    ) external counted {
-        address wallet = _pickESIMWallet(eSIMIndex);
-        if (wallet == address(0)) {
-            state.recordRevert("buyDataBundle");
-            return;
-        }
-
-        bytes32 paymentReference = _reference(referenceSeed);
-        priceUSDCents = uint64(bound(priceUSDCents, 1, _effectiveCap(wallet)));
-        priceWei = bound(priceWei, 1, 1 ether);
-
-        vm.prank(_currentAdmin());
-        try ESIMWallet(payable(wallet)).buyDataBundle(
-            DataBundleDetails({
-                id: "bundle",
-                priceUSDCents: priceUSDCents,
-                settlement: Settlement.Fiat
-            }),
-            priceWei,
-            paymentReference
-        ) {
-            _recordSpend(paymentReference);
-            state.recordCall("buyDataBundle");
-        } catch {
-            state.recordRevert("buyDataBundle");
-        }
-    }
 
     /// @notice A wallet buys a data bundle with the settlement token
     /// @dev The funding is minted to the eSIM wallet rather than to its device wallet, so whether

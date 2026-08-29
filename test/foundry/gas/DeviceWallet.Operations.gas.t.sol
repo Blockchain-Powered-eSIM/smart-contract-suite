@@ -71,19 +71,6 @@ contract DeviceWalletOperationsGasTest is GasBase {
         vm.snapshotGasLastCall(NAMESPACE, "toggleAccessToFunds: revoke");
     }
 
-    /// @notice An eSIM wallet pulling ETH from the device wallet that owns it
-    function test_pullETH() public {
-        _deploy();
-        vm.deal(address(wallet), 10 ether);
-
-        vm.prank(address(wallet));
-        wallet.toggleAccessToFunds(address(firstESIMWallet), true);
-
-        vm.prank(address(firstESIMWallet));
-        wallet.pullETH(1 ether);
-        vm.snapshotGasLastCall(NAMESPACE, "pullETH: 1 ether to the eSIM wallet");
-    }
-
     /// @notice An eSIM wallet pulling an ERC-20 from the device wallet that owns it
     /// @dev Two cases because the eSIM wallet's balance slot is cold on its first purchase and warm
     ///      after, and the difference is what a wallet buying more than once actually pays.

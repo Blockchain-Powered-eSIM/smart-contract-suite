@@ -10,14 +10,16 @@ import {DeviceWallet} from "contracts/device-wallet/DeviceWallet.sol";
 ///         the removal callback is not fixed for the life of the protocol.
 contract ReentrantESIMWallet {
     DeviceWallet public immutable deviceWallet;
+    address public immutable settlementToken;
 
     /// @notice What the wallet could still see and do while its own removal was in progress
     bool public wasStillValidDuringRemoval;
-    bool public couldStillPullETHDuringRemoval;
-    bool public pullETHSucceededDuringRemoval;
+    bool public couldStillPullDuringRemoval;
+    bool public pullSucceededDuringRemoval;
 
-    constructor(DeviceWallet _deviceWallet) {
+    constructor(DeviceWallet _deviceWallet, address _settlementToken) {
         deviceWallet = _deviceWallet;
+        settlementToken = _settlementToken;
     }
 
     /// @dev The registry reads both of these while the association is being cleared
@@ -34,11 +36,11 @@ contract ReentrantESIMWallet {
         // These are etched over an existing eSIM wallet, so the slots hold that wallet's leftover
         // storage until each one is written. All three have to be set, not just the observed ones.
         wasStillValidDuringRemoval = deviceWallet.isValidESIMWallet(address(this));
-        couldStillPullETHDuringRemoval = deviceWallet.canPullFunds(address(this));
-        pullETHSucceededDuringRemoval = false;
+        couldStillPullDuringRemoval = deviceWallet.canPullFunds(address(this));
+        pullSucceededDuringRemoval = false;
 
-        try deviceWallet.pullETH(1 ether) returns (uint256) {
-            pullETHSucceededDuringRemoval = true;
+        try deviceWallet.pullToken(settlementToken, 1e6) returns (uint256) {
+            pullSucceededDuringRemoval = true;
         } catch {}
 
         return 0;

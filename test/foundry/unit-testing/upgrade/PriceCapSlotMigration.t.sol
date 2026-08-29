@@ -92,8 +92,11 @@ contract PriceCapSlotMigrationTest is DeployerBase {
         _clearCeilingBytes(address(registry), REGISTRY_PACKED_SLOT, 176);
         _clearCeilingBytes(address(eSIMWallet), WALLET_PACKED_SLOT, 160);
 
+        uint256 needed = settlementAmount(type(uint64).max);
+        fundSettlementToken(address(eSIMWallet), needed);
+
         vm.prank(eSIMWalletAdmin);
-        eSIMWallet.buyDataBundle(bundle("DB_UNCAPPED", type(uint64).max), 1 ether, nextRef());
+        eSIMWallet.buyDataBundleWithToken(bundle("DB_UNCAPPED", type(uint64).max), ASSET_USDC, needed, nextRef());
 
         (, uint64 recorded,) = eSIMWallet.transactionHistory(0);
         assertEq(recorded, type(uint64).max, "A price of $184 quadrillion was recorded with no ceiling set");
@@ -117,7 +120,12 @@ contract PriceCapSlotMigrationTest is DeployerBase {
                 Errors.DataBundlePriceAboveCap.selector, type(uint64).max, defaultPriceCapUSDCents
             )
         );
-        eSIMWallet.buyDataBundle(bundle("DB_UNCAPPED", type(uint64).max), 1 ether, nextRef());
+        eSIMWallet.buyDataBundleWithToken(
+            bundle("DB_UNCAPPED", type(uint64).max),
+            ASSET_USDC,
+            settlementAmount(type(uint64).max),
+            nextRef()
+        );
     }
 
     // ---------------------------------------------------------------------------------------------

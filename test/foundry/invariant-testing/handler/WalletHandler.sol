@@ -6,6 +6,7 @@ import {DeviceWallet} from "contracts/device-wallet/DeviceWallet.sol";
 import {ESIMWallet} from "contracts/esim-wallet/ESIMWallet.sol";
 
 import {HandlerBase, HandlerConfig} from "test/foundry/invariant-testing/handler/HandlerBase.sol";
+import {MockERC20} from "test/utils/mocks/tokens/MockERC20.sol";
 
 /// @notice Everything a wallet does on its owner's behalf.
 /// @dev Every entry point here impersonates a wallet rather than a person. That is the whole
@@ -226,29 +227,31 @@ contract WalletHandler is HandlerBase {
         }
     }
 
-    /// @notice An eSIM wallet pulls ETH from the device wallet that owns it
+    /// @notice An eSIM wallet pulls an ERC-20 from the device wallet that owns it
     /// @dev The amount is allowed to exceed the device wallet's balance, which is the case the
-    ///      transfer guard has to refuse rather than partially serve.
+    ///      transfer has to refuse rather than partially serve.
     /// @param eSIMIndex Which eSIM wallet pulls
     /// @param amount How much it asks for
-    function pullETH(uint256 eSIMIndex, uint256 amount) external counted {
+    /// @param fundingSeed How much the device wallet is holding when it asks
+    function pullToken(uint256 eSIMIndex, uint256 amount, uint256 fundingSeed) external counted {
         address wallet = _pickESIMWallet(eSIMIndex);
         if (wallet == address(0)) {
-            state.recordRevert("pullETH");
+            state.recordRevert("pullToken");
             return;
         }
         address device = registry.isESIMWalletValid(wallet);
         if (device == address(0)) {
-            state.recordRevert("pullETH");
+            state.recordRevert("pullToken");
             return;
         }
-        amount = bound(amount, 0, 20 ether);
+        amount = bound(amount, 0, 20_000e6);
+        MockERC20(settlementToken).mint(device, bound(fundingSeed, 0, 10_000e6));
 
         vm.prank(wallet);
-        try DeviceWallet(payable(device)).pullETH(amount) {
-            state.recordCall("pullETH");
+        try DeviceWallet(payable(device)).pullToken(settlementToken, amount) {
+            state.recordCall("pullToken");
         } catch {
-            state.recordRevert("pullETH");
+            state.recordRevert("pullToken");
         }
     }
 

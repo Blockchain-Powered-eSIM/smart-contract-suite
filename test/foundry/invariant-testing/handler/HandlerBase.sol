@@ -30,6 +30,7 @@ struct HandlerConfig {
     address upgradeManager;
     address vault;
     address attacker;
+    address settlementToken;
 }
 
 /// @notice What every handler in the campaign shares.
@@ -50,6 +51,7 @@ abstract contract HandlerBase is Test {
     address internal immutable upgradeManager;
     address internal immutable vault;
     address internal immutable attacker;
+    address internal immutable settlementToken;
 
     DeviceWalletFactory internal immutable deviceWalletFactory;
     ESIMWalletFactory internal immutable eSIMWalletFactory;
@@ -69,6 +71,7 @@ abstract contract HandlerBase is Test {
         upgradeManager = config.upgradeManager;
         vault = config.vault;
         attacker = config.attacker;
+        settlementToken = config.settlementToken;
     }
 
     /// @notice Counts an invocation before the body decides whether it can go through, and reads

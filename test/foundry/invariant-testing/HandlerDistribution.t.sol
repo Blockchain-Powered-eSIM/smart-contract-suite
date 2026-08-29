@@ -79,11 +79,9 @@ contract HandlerDistributionTest is CampaignBase {
             adminHandler.setESIMIdentifier(round, seed + 3000, false);
             walletHandler.toggleAccessToFunds(round, true);
             walletHandler.setESIMWalletPriceCap(round, round);
-            adminHandler.buyDataBundle(round, 100, 1 gwei);
             // Each payment path is given its own block of reference seeds. Two calls presenting
             // the same reference is a case the campaign covers, and the second one is refused,
             // which is a revert rather than the count this drive is checking
-            paymentHandler.buyDataBundle(round, 100, 1 gwei, round);
             paymentHandler.recordSettledPurchase(round, 100, round + PAYMENT_REFERENCE_SEEDS, 0, false);
             paymentHandler.buyDataBundleWithToken(round, 100, 10e6, round + 2 * PAYMENT_REFERENCE_SEEDS);
             paymentHandler.quote(0, 100);
@@ -91,7 +89,7 @@ contract HandlerDistributionTest is CampaignBase {
             // currency table this one did
             paymentHandler.updateAsset(1, false, true);
             paymentHandler.updateAsset(1, true, true);
-            walletHandler.pullETH(round, 1 gwei);
+            walletHandler.pullToken(round, 1_000e6, 5_000e6);
             // Removal comes before the transfer pair on purpose. Requesting a transfer detaches
             // the wallet on its way through, so a removal after it has nothing left to remove.
             //
@@ -148,12 +146,11 @@ contract HandlerDistributionTest is CampaignBase {
         _assertExercised("deployESIMWalletForDevice");
         _assertExercised("setESIMIdentifier");
         _assertExercised("toggleAccessToFunds");
-        _assertExercised("buyDataBundle");
         _assertExercised("buyDataBundleWithToken");
         _assertExercised("recordSettledPurchase");
         _assertExercised("quote");
         _assertExercised("updateAsset");
-        _assertExercised("pullETH");
+        _assertExercised("pullToken");
         _assertExercised("removeESIMWallet");
         _assertExercised("addESIMWallet");
         _assertExercised("requestTransferOwnership");

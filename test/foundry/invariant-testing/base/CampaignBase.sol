@@ -56,7 +56,8 @@ abstract contract CampaignBase is InvariantBase {
             adminSuccessor: ADMIN_SUCCESSOR,
             upgradeManager: UPGRADE_MANAGER,
             vault: VAULT,
-            attacker: ATTACKER
+            attacker: ATTACKER,
+            settlementToken: settlementToken
         });
 
         adminHandler = new AdminHandler(config);

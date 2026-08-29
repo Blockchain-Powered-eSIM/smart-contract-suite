@@ -307,13 +307,16 @@ contract SettledPurchaseTest is DeployerBase {
         assertEq(eSIMWallet.getTransactionHistory().length, 1, "The purchase must be recorded once");
     }
 
-    /// @notice A reference spent buying with ETH cannot be spent again on the settled path
+    /// @notice A reference spent by a purchase cannot be spent again on the settled path
     function test_recordSettledPurchase_rejectsAReferenceSpentByAPurchase() public {
         _deployWallets();
         bytes32 orderRef = paymentRef("shared-order");
 
+        uint256 needed = settlementAmount(TEST_PRICE_CENTS);
+        fundSettlementToken(address(eSIMWallet), needed);
+
         vm.prank(eSIMWalletAdmin);
-        eSIMWallet.buyDataBundle(bundle("DB_BOUGHT", TEST_PRICE_CENTS), 0.1 ether, orderRef);
+        eSIMWallet.buyDataBundleWithToken(bundle("DB_BOUGHT", TEST_PRICE_CENTS), ASSET_USDC, needed, orderRef);
 
         vm.prank(eSIMWalletAdmin);
         vm.expectRevert(abi.encodeWithSelector(Errors.PaymentReferenceAlreadyUsed.selector, orderRef));
@@ -324,14 +327,17 @@ contract SettledPurchaseTest is DeployerBase {
 
     /// @notice And the same reference cannot go the other way round either
     /// @dev Both paths spend through the one adapter, which is what makes this hold.
-    function test_buyDataBundle_rejectsAReferenceSpentBySettlement() public {
+    function test_buyDataBundleWithToken_rejectsAReferenceSpentBySettlement() public {
         _deployWallets();
         bytes32 orderRef = paymentRef("shared-order-reversed");
         _settle("DB_SETTLED", TEST_PRICE_CENTS, orderRef);
 
+        uint256 needed = settlementAmount(TEST_PRICE_CENTS);
+        fundSettlementToken(address(eSIMWallet), needed);
+
         vm.prank(eSIMWalletAdmin);
         vm.expectRevert(abi.encodeWithSelector(Errors.PaymentReferenceAlreadyUsed.selector, orderRef));
-        eSIMWallet.buyDataBundle(bundle("DB_BOUGHT", TEST_PRICE_CENTS), 0.1 ether, orderRef);
+        eSIMWallet.buyDataBundleWithToken(bundle("DB_BOUGHT", TEST_PRICE_CENTS), ASSET_USDC, needed, orderRef);
     }
 
     /// @notice An empty reference ties the purchase to nothing
