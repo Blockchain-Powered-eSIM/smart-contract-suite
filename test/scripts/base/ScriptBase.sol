@@ -15,9 +15,16 @@ import {DeployConfig} from "scripts/deploy/config/DeployConfig.sol";
 ///      fork and is the better check of the happy path; what these tests reach that it cannot is
 ///      the failure and resume branches, which need a broken environment on purpose.
 ///
-///      The environment is process wide, and so is the scratch record path built on top of it.
-///      Each test contract therefore writes to a file named after itself, and `setUp` re-seeds it
-///      so one test never reads what the previous one left.
+///      Forge runs every `setUp` in the run before it runs any test, and environment variables
+///      belong to the process rather than to the EVM. So the last `setUp` to write a variable
+///      decides what every test in every contract reads, and two contracts cannot hold different
+///      values for one name. Everything written here is therefore identical whichever contract
+///      calls it, down to the settlement token, which is put at a fixed address for that reason
+///      rather than deployed wherever the next nonce lands.
+///
+///      The same applies to the scratch record, which is one file for the whole suite. Two
+///      contracts writing it at once would interleave, so the tests that write it share a single
+///      contract.
 abstract contract ScriptBase is Test {
 
     /// @notice Anvil's first account, the key `rehearse.sh` deploys with
@@ -34,6 +41,18 @@ abstract contract ScriptBase is Test {
     ///      token answering something else is what that path has to survive.
     uint8 internal constant SETTLEMENT_DECIMALS = 6;
 
+    /// @notice Where the stand-in settlement token is put
+    /// @dev Fixed, because its address goes into an environment variable every contract in this
+    ///      suite has to agree on. Deploying it normally would put it wherever the deploying
+    ///      contract's next nonce landed, which differs per contract.
+    address internal constant SETTLEMENT_TOKEN_ADDRESS =
+        0x0000000000000000000000000000000000005DC0;
+
+    /// @notice Scratch record shared by every test in this suite
+    /// @dev One file, for the same reason the environment values are identical: the path is itself
+    ///      an environment variable, so per-contract paths are not possible.
+    string internal constant SCRATCH_RECORD = "deployments/.test-deploy-scripts.json";
+
     address internal deployer;
     address internal eSIMWalletAdmin;
     address internal vault;
@@ -48,10 +67,10 @@ abstract contract ScriptBase is Test {
     string internal scratchRecord;
 
     /// @notice Puts a complete, valid environment in place and seeds an empty record
-    /// @dev Call from `setUp` before anything runs a script. The name has to be unique per test
-    ///      contract, since forge runs contracts in parallel against one filesystem.
-    /// @param _name Short name for this contract's scratch record
-    function _setUpScriptEnvironment(string memory _name) internal {
+    /// @dev Call from `setUp` before anything runs a script. Every value it writes is the same in
+    ///      whichever contract calls it, which is what lets more than one contract in this suite
+    ///      exist at all.
+    function _setUpScriptEnvironment() internal {
         deployer = vm.addr(DEPLOYER_KEY);
         eSIMWalletAdmin = makeAddr("eSIMWalletAdmin");
         vault = makeAddr("vault");
@@ -62,14 +81,19 @@ abstract contract ScriptBase is Test {
         canceller = makeAddr("canceller");
         guardian = makeAddr("guardian");
 
-        settlementToken = new MockERC20("USD Coin", "USDC", SETTLEMENT_DECIMALS);
+        deployCodeTo(
+            "MockERC20.sol:MockERC20",
+            abi.encode("USD Coin", "USDC", SETTLEMENT_DECIMALS),
+            SETTLEMENT_TOKEN_ADDRESS
+        );
+        settlementToken = MockERC20(SETTLEMENT_TOKEN_ADDRESS);
 
         // The scripts refuse a chain the EntryPoint is not on, which is every chain a test runs on
         // until something is put there.
         vm.etch(DeployConfig.ENTRY_POINT_V08, address(new MockEntryPoint()).code);
 
         _setEnvironment();
-        _resetRecord(_name);
+        _resetRecord();
     }
 
     /// @notice Writes every variable `DeployConfig.load` reads
@@ -84,13 +108,13 @@ abstract contract ScriptBase is Test {
         vm.setEnv("TIMELOCK_GUARDIANS", vm.toString(guardian));
     }
 
-    /// @notice Points the scripts at an empty record of this contract's own
+    /// @notice Points the scripts at an empty scratch record
     /// @dev `fs_permissions` grants write access to `deployments` and nowhere else, so the scratch
     ///      file lives beside the real record rather than in a temporary directory. The leading dot
-    ///      and the `test-` prefix are what `.gitignore` matches on.
-    /// @param _name Short name for this contract's scratch record
-    function _resetRecord(string memory _name) internal {
-        scratchRecord = string.concat("deployments/.test-", _name, ".json");
+    ///      and the `test-` prefix are what `.gitignore` matches on. Call it again at the top of a
+    ///      test that needs a clean record, since `setUp` runs once for the whole contract.
+    function _resetRecord() internal {
+        scratchRecord = SCRATCH_RECORD;
 
         vm.writeFile(scratchRecord, "{}");
         vm.setEnv("DEPLOYMENT_RECORD_PATH", scratchRecord);

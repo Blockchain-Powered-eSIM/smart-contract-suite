@@ -35,7 +35,7 @@ contract DeployConfigTest is ScriptBase {
     ConfigLoader private loader;
 
     function setUp() public {
-        _setUpScriptEnvironment("deploy-config");
+        _setUpScriptEnvironment();
         loader = new ConfigLoader();
     }
 
