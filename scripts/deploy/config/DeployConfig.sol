@@ -77,11 +77,11 @@ library DeployConfig {
     /// @notice An account appears in two role lists the timelock requires to stay separate
     error RolesMustNotOverlap(address account);
 
-    /// @notice Reads and checks every deployment parameter from the environment
-    /// @dev Every failure here is one a deployment can recover from, so they all happen before
-    ///      anything is broadcast. The role overlap checks duplicate what `ProtocolAdmin`'s
-    ///      constructor enforces, deliberately: reverting inside a broadcast leaves the earlier
-    ///      contracts of that run deployed and orphaned.
+    /// @notice Reads every deployment parameter from the environment and checks it
+    /// @dev Reading and checking are separate so the checks can be reached with a configuration
+    ///      built by hand. Environment variables are process wide and forge does not restore them
+    ///      between tests, so a test that reached these by rewriting the environment would change
+    ///      what every later test in the same file reads.
     /// @return config Resolved parameters for this run
     function load() internal view returns (Config memory config) {
         config.chainId = block.chainid;
@@ -90,34 +90,45 @@ library DeployConfig {
         config.deployer = vm.addr(config.deployerPrivateKey);
 
         config.eSIMWalletAdmin = vm.envAddress("ESIM_WALLET_ADMIN");
-        if(config.eSIMWalletAdmin == address(0)) revert MissingAddress("ESIM_WALLET_ADMIN");
-
         config.vault = vm.envAddress("VAULT");
-        if(config.vault == address(0)) revert MissingAddress("VAULT");
-
-        // Required, and never zero: `Registry.initialize` refuses a zero cap, since zero would
-        // read as "no ceiling" for every wallet that never sets its own.
         config.priceCapUSDCents = uint64(vm.envUint("PRICE_CAP_USD_CENTS"));
-        if(config.priceCapUSDCents == 0) revert MissingValue("PRICE_CAP_USD_CENTS");
-
-        // Nothing reads this until swaps exist, but the adapter takes it at initialisation so
-        // adding them later needs no migration transaction.
         config.settlementToken = vm.envAddress("SETTLEMENT_TOKEN");
-        if(config.settlementToken == address(0)) revert MissingAddress("SETTLEMENT_TOKEN");
-
         config.entryPoint = IEntryPoint(ENTRY_POINT_V08);
-        if(ENTRY_POINT_V08.code.length == 0) {
-            revert EntryPointNotDeployed(ENTRY_POINT_V08, block.chainid);
-        }
 
         config.proposers = vm.envAddress("TIMELOCK_PROPOSERS", ",");
-        if(config.proposers.length == 0) revert EmptyList("TIMELOCK_PROPOSERS");
 
         // Empty is allowed. The base constructor already gives every proposer the cancel power,
         // so this list is for accounts that cancel and do nothing else.
         config.cancellers = vm.envOr("TIMELOCK_CANCELLERS", ",", new address[](0));
 
         config.guardians = vm.envAddress("TIMELOCK_GUARDIANS", ",");
+
+        validate(config);
+    }
+
+    /// @notice Refuses a configuration the deployment could not recover from
+    /// @dev Every failure here is one a deployment can recover from, so they all happen before
+    ///      anything is broadcast. The role overlap checks duplicate what `ProtocolAdmin`'s
+    ///      constructor enforces, deliberately: reverting inside a broadcast leaves the earlier
+    ///      contracts of that run deployed and orphaned.
+    /// @param config Parameters to check
+    function validate(Config memory config) internal view {
+        if(config.eSIMWalletAdmin == address(0)) revert MissingAddress("ESIM_WALLET_ADMIN");
+        if(config.vault == address(0)) revert MissingAddress("VAULT");
+
+        // Never zero: `Registry.initialize` refuses a zero cap, since zero would read as "no
+        // ceiling" for every wallet that never sets its own.
+        if(config.priceCapUSDCents == 0) revert MissingValue("PRICE_CAP_USD_CENTS");
+
+        // Nothing reads this until swaps exist, but the adapter takes it at initialisation so
+        // adding them later needs no migration transaction.
+        if(config.settlementToken == address(0)) revert MissingAddress("SETTLEMENT_TOKEN");
+
+        if(address(config.entryPoint).code.length == 0) {
+            revert EntryPointNotDeployed(address(config.entryPoint), block.chainid);
+        }
+
+        if(config.proposers.length == 0) revert EmptyList("TIMELOCK_PROPOSERS");
         if(config.guardians.length == 0) revert EmptyList("TIMELOCK_GUARDIANS");
 
         _requireDisjoint(config.proposers, config.cancellers);
