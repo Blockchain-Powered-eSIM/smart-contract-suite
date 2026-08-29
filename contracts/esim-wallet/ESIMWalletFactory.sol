@@ -35,10 +35,10 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgrad
     mapping(address eSIMWalletAddress => bool isDeployed) public isESIMWalletDeployed;
 
     /// @notice Emitted when the eSIM wallet factory is deployed
-    event ESIMWalletFactorydeployed(
+    event ESIMWalletFactoryDeployed(
         address indexed _upgradeManager,
         address indexed _eSIMWalletImplementation,
-        address indexed beacon
+        address indexed _beacon
     );
 
     /// @notice Emitted when a new eSIM wallet is deployed
@@ -97,7 +97,7 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgrad
 
         beacon = new UpgradeableBeacon(_eSIMWalletImplementation, (address(this)));
 
-        emit ESIMWalletFactorydeployed(
+        emit ESIMWalletFactoryDeployed(
             _upgradeManager,
             _eSIMWalletImplementation,
             address(beacon)

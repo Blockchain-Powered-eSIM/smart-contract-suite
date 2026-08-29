@@ -550,7 +550,7 @@ contract Registry is
         }
 
         isESIMWalletValid[_eSIMWalletAddress] = _deviceWalletAddress;
-        emit UpdatedDeviceWalletassociatedWithESIMWallet(_eSIMWalletAddress, _deviceWalletAddress);
+        emit UpdatedDeviceWalletAssociatedWithESIMWallet(_eSIMWalletAddress, _deviceWalletAddress);
 
         // Only written on a change, so a wallet that was never released emits nothing here
         if(isESIMWalletOnStandby[_eSIMWalletAddress]) {

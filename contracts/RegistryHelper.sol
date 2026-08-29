@@ -113,7 +113,7 @@ contract RegistryHelper {
     );
 
     /// @notice Emitted when an eSIM wallet is bound to a device wallet
-    event UpdatedDeviceWalletassociatedWithESIMWallet(
+    event UpdatedDeviceWalletAssociatedWithESIMWallet(
         address indexed _eSIMWalletAddress,
         address indexed _deviceWalletAddress
     );
