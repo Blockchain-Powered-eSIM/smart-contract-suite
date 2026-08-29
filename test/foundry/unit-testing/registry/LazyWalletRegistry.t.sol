@@ -97,9 +97,6 @@ contract LazyWalletRegistryTest is DeployerBase {
         assertEq(storedData.length, 5, "DataBundleDetails array length should be 5");
 
         string[] memory listOfESIMIdentifiers = lazyWalletRegistry.getESIMIdentifiersAssociatedWithDeviceIdentifier(customDeviceUniqueIdentifiers[0]);
-        for(uint256 i=0; i<listOfESIMIdentifiers.length; ++i) {
-            console.log(listOfESIMIdentifiers[i]);
-        }
         assertEq(listOfESIMIdentifiers.length, 1);
         assertEq(listOfESIMIdentifiers[0], duplicateESIMUniqueIdentifiers[0][1]);
     }

@@ -3,7 +3,6 @@
 pragma solidity 0.8.36;
 
 import "forge-std/Test.sol";
-import "forge-std/console.sol";
 
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
@@ -93,24 +92,14 @@ contract DeployerBase is Test {
     uint256 private _refNonce;
 
     function setUp() public virtual {
-        // 1.a. Deploy Mock Entry Point
         entryPoint = new MockEntryPoint();
-        // 1.b. Typecast for further use
         typeCastEntryPoint = IEntryPoint(address(entryPoint));
-        console.log("typeCastEntryPoint: ", address(typeCastEntryPoint));
 
-        // 2. Deploy P256 Verifier
         p256Verifier = new P256Verifier();
-        console.log("p256Verifier: ", address(p256Verifier));
 
-        // 3. Deploy ESIM Wallet implementation
         eSIMWalletImpl = new MockESIMWallet();
-        console.log("eSIMWalletImpl: ", address(eSIMWalletImpl));
 
-        // 4.a. Deploy ESIM Wallet Factory Implementation (Logic) contract
         ESIMWalletFactory eSIMWalletFactoryImpl = new ESIMWalletFactory();
-        console.log("eSIMWalletFactoryImpl: ", address(eSIMWalletFactoryImpl));
-        // 4.b. Deploy ESIM Wallet Factory Proxy contract
         ERC1967Proxy eSIMWalletFactoryProxy = new ERC1967Proxy(
             address(eSIMWalletFactoryImpl),
             abi.encodeCall(
@@ -119,19 +108,13 @@ contract DeployerBase is Test {
             )
         );
         eSIMWalletFactory = ESIMWalletFactory(address(eSIMWalletFactoryProxy));
-        console.log("eSIMWalletFactory: ", address(eSIMWalletFactory));
 
-        // 5. Deploy Device Wallet implementation
         deviceWalletImpl = new MockDeviceWallet(
             typeCastEntryPoint,
             p256Verifier
         );
-        console.log("deviceWalletImpl: ", address(deviceWalletImpl));
 
-        // 6.a. Deploy Device Wallet Factory Implementation (Logic) contract
         DeviceWalletFactory deviceWalletFactoryImpl = new DeviceWalletFactory();
-        console.log("deviceWalletFactoryImpl: ", address(deviceWalletFactoryImpl));
-        // 6.b. Deploy Device Wallet Factory Proxy contract
         ERC1967Proxy deviceWalletFactoryProxy = new ERC1967Proxy(
             address(deviceWalletFactoryImpl),
             abi.encodeCall(
@@ -140,12 +123,8 @@ contract DeployerBase is Test {
             )
         );
         deviceWalletFactory = DeviceWalletFactory(address(deviceWalletFactoryProxy));
-        console.log("deviceWalletFactory: ", address(deviceWalletFactory));
 
-        // 7.a. Deploy Registry Implementation (Logic) contract
         MockRegistry registryImpl = new MockRegistry();
-        console.log("registryImpl: ", address(registryImpl));
-        // 7.b. Deploy Registry Proxy contract
         ERC1967Proxy registryProxy = new ERC1967Proxy(
             address(registryImpl),
             abi.encodeCall(
@@ -154,12 +133,8 @@ contract DeployerBase is Test {
             )
         );
         registry = MockRegistry(address(registryProxy));
-        console.log("registry: ", address(registry));
 
-        // 8.a. Deploy Lazy Wallet Registry Implementation (Logic) contract
         MockLazyWalletRegistry lazyWalletRegistryImpl = new MockLazyWalletRegistry();
-        console.log("lazyWalletRegistryImpl: ", address(lazyWalletRegistryImpl));
-        // 8.b. Deploy Lazy Wallet Registry Proxy contract
         ERC1967Proxy lazyWalletRegistryProxy = new ERC1967Proxy(
             address(lazyWalletRegistryImpl),
             abi.encodeCall(
@@ -168,13 +143,9 @@ contract DeployerBase is Test {
             )
         );
         lazyWalletRegistry = MockLazyWalletRegistry(address(lazyWalletRegistryProxy));
-        console.log("lazyWalletRegistry: ", address(lazyWalletRegistry));
 
-        // 9. Populate addresses deployed during the process
-        // 8.c. Deploy the payment adapter and give it the currencies the tests price in
         settlementERC20 = new MockERC20("USD Coin", "USDC", SETTLEMENT_DECIMALS);
         settlementToken = address(settlementERC20);
-        console.log("settlementToken: ", settlementToken);
 
         PaymentAdapter paymentAdapterImpl = new PaymentAdapter();
         ERC1967Proxy paymentAdapterProxy = new ERC1967Proxy(
@@ -185,7 +156,6 @@ contract DeployerBase is Test {
             )
         );
         paymentAdapter = PaymentAdapter(address(paymentAdapterProxy));
-        console.log("paymentAdapter: ", address(paymentAdapter));
 
         vm.startPrank(upgradeManager);
         registry.addOrUpdateLazyWalletRegistryAddress(address(lazyWalletRegistry));
