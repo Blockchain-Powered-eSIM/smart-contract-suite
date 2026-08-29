@@ -360,7 +360,7 @@ _Callable by the owning device wallet or by the admin, since the admin is the pa
 ### buyDataBundleWithToken
 
 ```solidity
-function buyDataBundleWithToken(struct DataBundleDetails _dataBundleDetail, bytes32 _asset, uint256 _maxAmountIn, bytes32 _paymentReference) public returns (bool)
+function buyDataBundleWithToken(struct DataBundleDetails _dataBundleDetail, bytes32 _asset, uint256 _maxAmountIn, bytes32 _paymentReference) external returns (bool)
 ```
 
 Pays the vault for one data bundle in an ERC-20 and records the purchase

@@ -241,9 +241,12 @@ Pays the vault for one data bundle out of tokens the caller has already sent her
 _The caller funds this contract and calls settle in the same transaction, which leaves
      the tokens here for a swap to be added later without changing this signature.
 
-     The refund is bounded by what the caller funded rather than by the balance, so a token
-     sent here by mistake is not swept out by the next purchase. A fee-on-transfer token
-     delivers less than declared and fails the funding check._
+     `_amountIn` is the caller's word for what it sent, checked only against the balance, so
+     a caller naming more than it sent would carry off a token somebody left here by
+     mistake. What stops that is the caller: the one path into here passes `quote`, and an
+     eSIM wallet has no way to call this with a figure of its own choosing. Keep it that way.
+
+     A fee-on-transfer token delivers less than declared and fails the funding check._
 
 #### Parameters
 
@@ -259,7 +262,7 @@ _The caller funds this contract and calls settle in the same transaction, which 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
 | spent | uint256 | Amount that reached the vault |
-| refunded | uint256 | Amount returned to `_refundTo`, always zero until a swap can overshoot |
+| refunded | uint256 | What `_amountIn` came to over the price, sent back to `_refundTo` |
 
 ### consumePaymentReference
 
