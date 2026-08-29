@@ -29,9 +29,14 @@
 /// record reading `Violated: <rule>-<method>-rule_not_vacuous` means the body was reachable, which
 /// is the outcome wanted. Count the records carrying no sanity suffix and ignore the fraction.
 ///
-/// Verified 2026-08-28 at
-/// `prover.certora.com/output/7200817/464cd89895e440c7845d7bb5e4cbd4f5`: 146 records verified, zero
-/// assert failures, every violated record carrying a `-rule_not_vacuous` suffix.
+/// Verified 2026-08-29 at
+/// `prover.certora.com/output/7200817/d83cd3623dd144e0acd3520ffd9d345e`: zero assert failures, every
+/// violated record carrying a `-rule_not_vacuous` suffix.
+///
+/// `prover.certora.com/output/7200817/f15ea8d39bfe49caa9fea8cf9b7326e0` is the same source again and
+/// is the one to read for per-rule verdicts. It lost the connection during its closing sanity checks
+/// and so signs off `Violations were found`, which is that count being wrong again rather than a
+/// result. It had reached 118 verified records and 62 violated, all 62 sanity.
 
 methods {
     function assets(bytes32) external returns (bool, bool, uint8, address) envfree;
