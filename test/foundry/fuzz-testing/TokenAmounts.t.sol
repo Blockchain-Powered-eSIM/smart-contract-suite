@@ -17,7 +17,10 @@ import {FuzzBase} from "test/foundry/fuzz-testing/base/FuzzBase.sol";
 ///
 ///      The ceiling now bounds what gets spent rather than only what gets recorded, because the
 ///      adapter works the amount out from the same price the cap is checked against.
-contract ETHAmountsTest is FuzzBase {
+///
+///      The last two cases are about the other two amounts on that path: what a pull moves, and the
+///      access flag a bind is never allowed to set.
+contract TokenAmountsTest is FuzzBase {
 
     /// @dev $10,000,000 in cents
     uint64 private constant MAX_FUZZED_CENTS = 1_000_000_000;

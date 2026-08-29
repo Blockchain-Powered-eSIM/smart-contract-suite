@@ -14,7 +14,7 @@ import {MockESIMWallet} from "test/utils/mocks/MockESIMWallet.sol";
 /// @notice Who may reach a device wallet's money, and where the vault address comes from.
 /// @dev The pull itself is covered in DeviceWalletTokens. What is here is the access flag seen
 ///      through a purchase, which is the only thing that spends on a user's behalf.
-contract DeviceWalletETHTest is DeviceWalletFixture {
+contract DeviceWalletFundsAccessTest is DeviceWalletFixture {
 
     function test_getVaultAddress() public {
         deployWallets();
