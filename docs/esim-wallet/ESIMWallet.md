@@ -70,14 +70,6 @@ event ESIMWalletDeployed(address _eSIMWalletAddress, address _deviceWalletAddres
 
 Emitted when the eSIM wallet is deployed
 
-### DataBundleBought
-
-```solidity
-event DataBundleBought(bytes32 _dataBundleID, uint64 _priceUSDCents, uint256 _priceWei, uint256 _ethFromUser, bytes32 _paymentReference)
-```
-
-Emitted when the payment for a data bundle is made
-
 ### DataBundleBoughtWithToken
 
 ```solidity
@@ -325,37 +317,6 @@ Deliberately not nonReentrant. removeESIMWallet calls this from inside a try/cat
 | Name | Type | Description |
 | ---- | ---- | ----------- |
 | _amount | uint256 | Amount of ETH to be sent |
-
-### buyDataBundle
-
-```solidity
-function buyDataBundle(struct DataBundleDetails _dataBundleDetail, uint256 _priceWei, bytes32 _paymentReference) public payable returns (bool)
-```
-
-Pays the vault for one data bundle in ETH and records the purchase
-
-_Callable by the owning device wallet or by the admin, since the admin is the party that
-     knows the price. Any shortfall is pulled from the device wallet, which is why the price
-     is checked against a ceiling the admin cannot raise.
-
-     The ceiling is in cents and the ETH sent is in wei, and nothing onchain converts
-     between them. So the ceiling limits what gets recorded, not what gets sent, and
-     `_priceWei` is taken on trust. The token path closes that gap by working the amount
-     out from the price instead._
-
-#### Parameters
-
-| Name | Type | Description |
-| ---- | ---- | ----------- |
-| _dataBundleDetail | struct DataBundleDetails | Data bundle being bought. Its settlement field is overwritten here. |
-| _priceWei | uint256 | ETH actually being sent to the vault |
-| _paymentReference | bytes32 | The offchain order id. Spent once, so a retry of a call that        already landed cannot charge the user twice. |
-
-#### Return Values
-
-| Name | Type | Description |
-| ---- | ---- | ----------- |
-| [0] | bool | True if the transaction is successful |
 
 ### buyDataBundleWithToken
 

@@ -60,16 +60,6 @@ event FundsAccessUpdated(address _eSIMWalletAddress, bool _hasAccessToFunds)
 
 Emitted when owner updates an eSIM wallet's access to this wallet's money
 
-### ETHSent
-
-```solidity
-event ETHSent(address _eSIMWalletAddress, uint256 _amount)
-```
-
-Emitted when ETH is sent out from the contract
-
-_mostly when an eSIM wallet pulls ETH from this contract_
-
 ### TokenSent
 
 ```solidity
@@ -208,29 +198,6 @@ _The new wallet has no eSIM identifier yet. That arrives through
 | ---- | ---- | ----------- |
 | [0] | address | eSIM wallet address |
 
-### pullETH
-
-```solidity
-function pullETH(uint256 _amount) external returns (uint256)
-```
-
-Allow the eSIM wallets associated with this device wallet to pull ETH (for data bundles)
-
-_Refused while the protocol is paused, and refused for a wallet whose access the owner
-     has revoked._
-
-#### Parameters
-
-| Name | Type | Description |
-| ---- | ---- | ----------- |
-| _amount | uint256 | Amount of ETH to pull |
-
-#### Return Values
-
-| Name | Type | Description |
-| ---- | ---- | ----------- |
-| [0] | uint256 | The amount pulled |
-
 ### pullToken
 
 ```solidity
@@ -239,9 +206,10 @@ function pullToken(address _token, uint256 _amount) external returns (uint256)
 
 Allow an associated eSIM wallet to pull an ERC-20 (for data bundles)
 
-_Same gate and pause check as `pullETH`. It exists so the admin can charge this wallet
-     without an owner signature in that transaction; an owner buying for themselves can
-     batch the transfer and the purchase through `executeBatch` instead._
+_Refused while the protocol is paused, and refused for a wallet whose access the owner
+     has revoked. It exists so the admin can charge this wallet without an owner signature
+     in that transaction; an owner buying for themselves can batch the transfer and the
+     purchase through `executeBatch` instead._
 
 #### Parameters
 
@@ -356,23 +324,6 @@ _Refuses a wallet this device wallet does not already own, so binding cannot run
 | ---- | ---- | ----------- |
 | _eSIMWalletAddress | address | Address of the eSIM wallet to bind |
 | _hasAccessToFunds | bool | Must be false |
-
-### _transferETH
-
-```solidity
-function _transferETH(address _recipient, uint256 _amount) internal virtual
-```
-
-Sends ETH out of this wallet, reverting if the call fails
-
-_A zero amount is a no-op rather than a revert._
-
-#### Parameters
-
-| Name | Type | Description |
-| ---- | ---- | ----------- |
-| _recipient | address | Address receiving the ETH |
-| _amount | uint256 | Amount in wei |
 
 ### getVaultAddress
 
