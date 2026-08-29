@@ -85,6 +85,23 @@ The long invariant campaign is a separate profile, run before a release rather t
 FOUNDRY_PROFILE=campaign forge test --match-path "test/foundry/invariant-testing/*"
 ```
 
+The deployment scripts have their own suite, kept out of the default run:
+
+```bash
+FOUNDRY_PROFILE=scripts forge test --threads 1
+```
+
+50 tests in `test/scripts/`, exercising `Deploy.s.sol`, `Configure.s.sol` and `TransferOwnership.s.sol`
+against a scratch record. `scripts/fork/rehearse.sh` runs the same three against a Base Sepolia fork
+and checks the happy path better than any test can, but it needs an RPC key and a live anvil, so CI
+never runs it. These reach what it cannot: the resume branches and the mismatch guards, which only
+fire on a deployment that has already gone wrong.
+
+`--threads 1` is not optional. The scripts read their parameters from the process environment and
+their record from one file, and forge runs every `setUp` before any test and then runs the tests in
+parallel. Without the flag, somewhere between 2 and 12 of the 50 fail on each run, and which ones
+changes every time.
+
 Two gas baselines, measuring different things. `.gas-snapshot` is the whole-test-body figure, useful as a regression tripwire and not as a protocol gas number, since a row can include whatever that test deployed.
 `snapshots/*.json` is per operation, written by the tests under `test/foundry/gas/` and rewritten by any ordinary `forge test`.
 
