@@ -12,11 +12,11 @@ contract MockNonceManager is INonceManager {
     /// @param sender The account address
     /// @param key The high 192 bits of the nonce
     /// @return nonce The full nonce for the next user operation from this sender
-    function getNonce(address sender, uint192 key) 
-        external 
-        view 
-        override 
-        returns (uint256 nonce) 
+    function getNonce(address sender, uint192 key)
+        external
+        view
+        override
+        returns (uint256 nonce)
     {
         return nonces[sender][key];
     }

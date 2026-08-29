@@ -10,7 +10,7 @@ contract MockESIMWalletV2 is ESIMWallet {
         return transactionHistory;
     }
 
-    // Just to check upgradability of the contract
+    // Confirms an upgrade actually replaced the logic contract
     function addTwoNumbers(uint256 _a, uint256 _b) public pure returns (uint256) {
         return _a + _b;
     }

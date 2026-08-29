@@ -41,7 +41,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     /// @notice Contract the device wallets verify WebAuthn assertions through
     P256Verifier public verifier;
 
-    ///@notice Registry contract instance
+    /// @notice Registry contract instance
     Registry public registry;
 
     /// @notice eSIM wallet factory contract instance
