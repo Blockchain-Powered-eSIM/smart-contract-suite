@@ -58,12 +58,16 @@ contract RegistryHelper {
     ///      is what makes the first sentence true rather than assumed.
     mapping(address eSIMWalletAddress => address deviceWalletAddress) public isESIMWalletValid;
 
-    /// @notice If an existing eSIM wallet is in the process of being transferred from one device wallet to another
-    /// @dev If bool is `true`, the eSIM wallet is in a transient state. `isESIMWalletValid` still
-    ///      points at the old device wallet. Do not use this mapping to check whether an eSIM
-    ///      wallet belongs to the protocol; that is what `isESIMWalletValid` is for. Its job is to
-    ///      hold transactions on this eSIM wallet until it reads false again, meaning the new
-    ///      device wallet has accepted it.
+    /// @notice True while an eSIM wallet sits between device wallets, released by one and not yet
+    ///         taken on by another
+    /// @dev A marker for offchain readers, not a gate: nothing in the protocol reads it, and no
+    ///      purchase, pull or history path is held while it is true. Gating spend on it would brick
+    ///      a wallet its device wallet simply removed, since `removeESIMWallet` raises it whether or
+    ///      not a transfer follows and only a later bind lowers it again.
+    ///
+    ///      `isESIMWalletValid` still names the device wallet that last held the wallet while this
+    ///      is true. Do not use this mapping to ask whether an eSIM wallet belongs to the protocol;
+    ///      that is what `isESIMWalletValid` is for.
     mapping(address eSIMWalletAddress => bool isOnStandby) public isESIMWalletOnStandby;
 
     /// @notice The eSIM wallet holding each eSIM identifier, protocol-wide

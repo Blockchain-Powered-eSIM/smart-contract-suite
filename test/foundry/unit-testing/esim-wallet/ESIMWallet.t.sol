@@ -522,6 +522,44 @@ contract ESIMWalletTest is DeployerBase {
         assertEq(registry.isESIMWalletValid(address(eSIMWallet1)), address(deviceWallet2), "Registry should have updated the eSIM wallet to the new device wallet");
     }
 
+    /// @notice Between acceptance and the new owner binding, the registry association still names
+    ///         the old device wallet, and that stale value hands it nothing
+    /// @dev The association is a registration rather than a permission. Every gate that decides
+    ///      anything about an eSIM wallet reads `ESIMWallet.owner()`, which moved with the
+    ///      acceptance, so the association is free to lag behind it without opening a way back in
+    ///      for the device wallet that let the wallet go.
+    function test_acceptOwnershipTransfer_theStaleAssociationGrantsTheOldOwnerNothing() public {
+        test_requestTransferOwnership();
+
+        vm.prank(address(deviceWallet2));
+        eSIMWallet1.acceptOwnershipTransfer();
+
+        assertEq(registry.isESIMWalletValid(address(eSIMWallet1)), address(deviceWallet), "The association still lags behind the owner");
+        assertEq(eSIMWallet1.owner(), address(deviceWallet2), "The owner moved with the acceptance");
+
+        // Re-binding reads owner(), so the old device wallet cannot take the wallet back
+        vm.prank(address(deviceWallet));
+        vm.expectRevert(abi.encodeWithSelector(
+            Errors.ESIMWalletNotOwnedByThisDeviceWallet.selector,
+            address(eSIMWallet1),
+            address(deviceWallet2)
+        ));
+        deviceWallet.addESIMWallet(address(eSIMWallet1), false);
+
+        // The standby flag reads owner() too, so the old device wallet cannot clear the marker
+        vm.prank(address(deviceWallet));
+        vm.expectRevert(abi.encodeWithSelector(
+            Errors.NotTheESIMWalletOwnerOrItsDeviceWallet.selector,
+            address(eSIMWallet1)
+        ));
+        registry.toggleESIMWalletStandbyStatus(address(eSIMWallet1), false);
+
+        // And the wallet lost its route to the old device wallet's money on the release
+        vm.prank(address(eSIMWallet1));
+        vm.expectRevert(Errors.OnlyAssociatedESIMWallets.selector);
+        deviceWallet.pullToken(settlementToken, 1);
+    }
+
     /// @notice A single ownership transfer emits exactly one OwnershipTransferred
     /// @dev Counts logs rather than using vm.expectEmit, which matches one occurrence and would
     ///      pass just as happily against a duplicate emission.

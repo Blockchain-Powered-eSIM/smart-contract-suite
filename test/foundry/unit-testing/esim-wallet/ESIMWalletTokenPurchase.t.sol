@@ -278,6 +278,49 @@ contract ESIMWalletTokenPurchaseTest is DeviceWalletFixture {
     }
 
     // ---------------------------------------------------------------------------------------------
+    // What the ceiling and the standby flag do not bound
+    // ---------------------------------------------------------------------------------------------
+
+    /// @notice The ceiling bounds one charge, not the total the admin can charge
+    /// @dev Each call spends up to the ceiling against a payment reference the caller picks, and
+    ///      nothing counts the calls, so the whole device wallet balance is reachable one capped
+    ///      charge at a time. Granting a wallet funds access is an open allowance, not a capped one.
+    function test_buyDataBundleWithToken_theCeilingDoesNotBoundRepeatedCharges() public {
+        uint64 cap = 10_000;   // $100 per purchase
+        vm.prank(address(deviceWallet));
+        eSIMWallet1.setPriceCapUSDCents(cap);
+
+        uint256 perPurchase = settlementAmount(cap);
+        uint256 purchases = DEVICE_BALANCE / perPurchase;
+
+        for (uint256 i = 0; i < purchases; ++i) {
+            vm.prank(eSIMWalletAdmin);
+            eSIMWallet1.buyDataBundleWithToken(bundle("DB_TOKEN", cap), ASSET_USDC, perPurchase, nextRef());
+        }
+
+        assertEq(settlementERC20.balanceOf(address(deviceWallet)), 0, "The whole balance is reachable through capped charges");
+        assertEq(settlementERC20.balanceOf(vault), DEVICE_BALANCE, "Every charge should have landed in the vault");
+    }
+
+    /// @notice A wallet marked on standby can still be charged
+    /// @dev The flag says a release is outstanding and gates nothing. `removeESIMWallet` raises it
+    ///      whether or not a transfer follows and only a later bind lowers it, so refusing spend
+    ///      here would leave a plainly removed wallet unable to spend its own balance for good.
+    function test_buyDataBundleWithToken_isNotHeldByTheStandbyFlag() public {
+        uint256 needed = settlementAmount(PRICE_CENTS);
+        fundSettlementToken(address(eSIMWallet1), needed);
+
+        vm.prank(address(deviceWallet));
+        deviceWallet.removeESIMWallet(address(eSIMWallet1), false);
+        assertTrue(registry.isESIMWalletOnStandby(address(eSIMWallet1)), "The release should be outstanding");
+
+        vm.prank(eSIMWalletAdmin);
+        eSIMWallet1.buyDataBundleWithToken(bundle("DB_TOKEN", PRICE_CENTS), ASSET_USDC, needed, nextRef());
+
+        assertEq(settlementERC20.balanceOf(vault), needed, "Standby should not have stopped the purchase");
+    }
+
+    // ---------------------------------------------------------------------------------------------
     // Fee-on-transfer assets
     // ---------------------------------------------------------------------------------------------
 

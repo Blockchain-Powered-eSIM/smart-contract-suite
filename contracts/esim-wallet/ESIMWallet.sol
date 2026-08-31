@@ -192,6 +192,10 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     ///      price on `buyDataBundle`, so it must not also be able to raise the ceiling on that
     ///      price. Setting zero hands the wallet back to the registry's ceiling. A handover clears
     ///      it, so an incoming owner starts on the registry ceiling.
+    ///
+    ///      The ceiling bounds one charge and not what the admin can charge in total. Nothing limits
+    ///      how many purchases it makes, so a wallet holding `canPullFunds` is an open allowance over
+    ///      the device wallet's balance in that asset rather than a capped one.
     /// @param _cap Maximum price in USD cents, or zero to follow the registry
     function setPriceCapUSDCents(uint64 _cap) external onlyDeviceWallet {
         priceCapUSDCents = _cap;
