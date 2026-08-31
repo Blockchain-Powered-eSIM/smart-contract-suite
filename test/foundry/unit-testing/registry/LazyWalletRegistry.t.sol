@@ -414,6 +414,67 @@ contract LazyWalletRegistryTest is DeployerBase {
         );
     }
 
+    /// @notice The pause reaches the one lazy route that moves ETH
+    /// @dev It forwards the admin's deposit into a device wallet it creates in the same call, which
+    ///      is the same kind of movement `buyDataBundleWithToken` and `pullToken` are held for.
+    ///      Before the check it ran through a pause and the deposit landed.
+    function test_deployLazyWalletAndSetESIMIdentifier_isRefusedWhilePaused() public {
+        test_batchPopulateHistory();
+
+        vm.prank(eSIMWalletAdmin);
+        registry.pause();
+
+        vm.deal(eSIMWalletAdmin, 2 ether);
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(Errors.ProtocolPaused.selector);
+        lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier{value: 2 ether}(
+            pubKey1,
+            customDeviceUniqueIdentifiers[0],
+            5501,
+            2 ether,
+            FULL_BATCH
+        );
+
+        assertEq(eSIMWalletAdmin.balance, 2 ether, "The deposit must stay with the caller");
+        assertEq(
+            registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[0]),
+            address(0),
+            "No device wallet must have been created"
+        );
+    }
+
+    /// @notice A device already half deployed can still be finished while the protocol is paused
+    /// @dev Deliberate, and pinned here so the pause is not extended to these two later. Neither
+    ///      moves ETH, and a device left with some of its eSIM wallets and none of its history is
+    ///      worse for the user than one completed under a pause that stops every path to money.
+    function test_lazyFollowUpCalls_stillRunWhilePaused() public {
+        test_batchPopulateHistory();
+
+        string memory deviceIdentifier = customDeviceUniqueIdentifiers[0];
+
+        vm.prank(eSIMWalletAdmin);
+        (, address[] memory firstBatch, uint256 remaining) = lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(
+            pubKey1,
+            deviceIdentifier,
+            5601,
+            0,
+            1
+        );
+        assertGt(remaining, 0, "The device must still be waiting on eSIM wallets");
+
+        vm.prank(eSIMWalletAdmin);
+        registry.pause();
+
+        vm.prank(eSIMWalletAdmin);
+        (address[] memory secondBatch,) = lazyWalletRegistry.deployMoreESIMWalletsForLazyDevice(deviceIdentifier, 1);
+        assertEq(secondBatch.length, 1, "The next batch must still deploy");
+
+        vm.prank(eSIMWalletAdmin);
+        (uint256 copied,) = lazyWalletRegistry.setHistoryForLazyWallet(customESIMUniqueIdentifiers[0][0], 10);
+        assertGt(copied, 0, "History must still reach the first wallet");
+        assertGt(firstBatch.length, 0, "The first batch must have deployed something to copy into");
+    }
+
     function test_batchPopulateHistory_afterDeployment() public {
         test_deployLazyWalletAndSetESIMIdentifier();
 

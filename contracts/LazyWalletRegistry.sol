@@ -257,6 +257,12 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
     ///      bought. Switching an eSIM to another device is refused for the whole time the rest are
     ///      outstanding, which `switchESIMIdentifierToNewDeviceIdentifier` already does by refusing
     ///      any device that has a wallet.
+    ///
+    ///      Refused while the protocol is paused. This is the one lazy route that moves ETH, so it
+    ///      is held for the same reason the purchase and pull paths are. Its two siblings,
+    ///      `deployMoreESIMWalletsForLazyDevice` and `setHistoryForLazyWallet`, move none and run
+    ///      through a pause deliberately, so a stopped protocol can still finish a device already
+    ///      half deployed.
     /// @param _deviceOwnerPublicKey P256 public key of the device owner
     /// @param _deviceUniqueIdentifier Unique device identifier associated with the device
     /// @param _salt Salt the whole deployment derives its eSIM wallet addresses from
@@ -276,6 +282,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         address[] memory eSIMWallets,
         uint256 remaining
     ) {
+        registry.requireNotPaused();
         if(_depositAmount != msg.value) revert Errors.DepositDoesNotMatchValue(_depositAmount, msg.value);
         if(registry.isDeviceIdentifierAlreadyUsed(_deviceUniqueIdentifier)) {
             revert Errors.LazyWalletAlreadyDeployed(_deviceUniqueIdentifier);
