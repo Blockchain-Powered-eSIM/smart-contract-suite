@@ -64,4 +64,25 @@ fail_on_revert = false
 test = 'test/scripts'
 threads = 1
 
+# The Echidna and Medusa harness.
+# FOUNDRY_PROFILE=fuzz forge build
+#
+# The Yul optimizer merges branches, so a campaign run against optimized bytecode reports maybe ten
+# percent less coverage than the source actually reaches. Turning the optimizer off recovers most of
+# that. Turning via-IR off would recover all of it and does not compile: the suite is stack-too-deep
+# without it.
+#
+# Its own `out` because the two profiles disagree on optimizer settings, and sharing one directory
+# makes every profile switch a full rebuild. Its own `test` for the same reason `scripts` has one,
+# to keep an ordinary `forge test` from picking the harness up.
+[profile.fuzz]
+via_ir = true
+optimizer = false
+out = 'out-fuzz'
+test = 'test/fizz'
+# The fuzzers match deployed bytecode back to a source file to attribute coverage, and the metadata
+# hash is what makes that match unambiguous. Kept here only; the default profile still drops it,
+# which is what holds the byte-for-byte agreement with hardhat.
+bytecode_hash = 'ipfs'
+
 # See more config options https://book.getfoundry.sh/reference/config.html
