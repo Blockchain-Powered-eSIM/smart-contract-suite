@@ -45,10 +45,11 @@ contract NotAToken {
 ///      deployment that has already gone wrong in a particular way, which is not a state a
 ///      rehearsal can arrive at. Those are what most of this file is.
 ///
-///      One contract for all of it, and that is forced rather than chosen. The record path is an
-///      environment variable, forge runs every `setUp` before any test, and the environment belongs
-///      to the process, so two contracts cannot point at two different files. Sharing one file
-///      across contracts that run at the same time would interleave their writes.
+///      One contract for all of it, and that is forced rather than chosen. The record path and the
+///      address book path are both environment variables, forge runs every `setUp` before any test,
+///      and the environment belongs to the process, so two contracts cannot point at two different
+///      files. Sharing one file across contracts that run at the same time would interleave their
+///      writes.
 ///
 ///      For the same reason nothing here rewrites an environment variable. A broken configuration
 ///      is arrived at through EVM state instead, which forge does restore between tests.
@@ -88,7 +89,7 @@ contract DeployScriptsTest is ScriptBase {
     function _recordedAddress(string memory key) private view returns (address target) {
         target = vm.parseJsonAddress(
             vm.readFile(scratchRecord),
-            string.concat(".", _recordKey(), ".contracts.", key, ".address")
+            string.concat(".contracts.", key, ".address")
         );
     }
 
@@ -105,8 +106,13 @@ contract DeployScriptsTest is ScriptBase {
     // ---------------------------------------------------------------------------------------------
 
     function test_recordPath_followsTheOverride() public view {
-        assertEq(DeploymentRecord.recordPath(), scratchRecord, "override");
-        assertEq(DeploymentRecord.DEFAULT_PATH, "deployments/address.json", "default");
+        assertEq(DeploymentRecord.recordPath(), scratchRecord, "record override");
+        assertEq(DeploymentRecord.addressBookPath(), scratchAddressBook, "address book override");
+        assertEq(
+            DeploymentRecord.DEFAULT_ADDRESS_BOOK,
+            "deployments/address.json",
+            "default address book"
+        );
     }
 
     function test_readAddress_returnsWhatTheDeployWrote() public {
@@ -211,7 +217,7 @@ contract DeployScriptsTest is ScriptBase {
         assertTrue(
             vm.parseJsonBool(
                 vm.readFile(scratchRecord),
-                string.concat(".", _recordKey(), ".status.configured")
+                ".status.configured"
             ),
             "configured reads as a bool"
         );
@@ -288,7 +294,7 @@ contract DeployScriptsTest is ScriptBase {
         address proxy = address(_registry());
         address recorded = vm.parseJsonAddress(
             vm.readFile(scratchRecord),
-            string.concat(".", _recordKey(), ".contracts.RegistryProxy.implementation")
+            ".contracts.RegistryProxy.implementation"
         );
 
         assertEq(
@@ -305,7 +311,7 @@ contract DeployScriptsTest is ScriptBase {
         assertEq(
             vm.parseJsonAddress(
                 vm.readFile(scratchRecord),
-                string.concat(".", _recordKey(), ".contracts.ESIMWalletFactoryProxy.beacon")
+                ".contracts.ESIMWalletFactoryProxy.beacon"
             ),
             address(ESIMWalletFactory(_recordedAddress("ESIMWalletFactoryProxy")).beacon()),
             "esim beacon"
@@ -313,7 +319,7 @@ contract DeployScriptsTest is ScriptBase {
         assertEq(
             vm.parseJsonAddress(
                 vm.readFile(scratchRecord),
-                string.concat(".", _recordKey(), ".contracts.DeviceWalletFactoryProxy.beacon")
+                ".contracts.DeviceWalletFactoryProxy.beacon"
             ),
             address(DeviceWalletFactory(_recordedAddress("DeviceWalletFactoryProxy")).beacon()),
             "device beacon"
@@ -326,13 +332,13 @@ contract DeployScriptsTest is ScriptBase {
         string memory record = vm.readFile(scratchRecord);
 
         assertFalse(
-            vm.parseJsonBool(record, string.concat(".", _recordKey(), ".status.configured")),
+            vm.parseJsonBool(record, ".status.configured"),
             "not configured yet"
         );
         assertFalse(
             vm.parseJsonBool(
                 record,
-                string.concat(".", _recordKey(), ".status.ownershipTransferred")
+                ".status.ownershipTransferred"
             ),
             "not handed over yet"
         );
@@ -409,7 +415,7 @@ contract DeployScriptsTest is ScriptBase {
         assertTrue(
             vm.parseJsonBool(
                 vm.readFile(scratchRecord),
-                string.concat(".", _recordKey(), ".status.configured")
+                ".status.configured"
             ),
             "configured"
         );
@@ -537,7 +543,7 @@ contract DeployScriptsTest is ScriptBase {
         assertTrue(
             vm.parseJsonBool(
                 vm.readFile(scratchRecord),
-                string.concat(".", _recordKey(), ".status.ownershipTransferred")
+                ".status.ownershipTransferred"
             ),
             "ownership transferred"
         );

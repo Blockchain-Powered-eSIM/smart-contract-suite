@@ -53,6 +53,11 @@ abstract contract ScriptBase is Test {
     ///      an environment variable, so per-contract paths are not possible.
     string internal constant SCRATCH_RECORD = "deployments/.test-deploy-scripts.json";
 
+    /// @notice Scratch address book shared by every test in this suite
+    /// @dev `Deploy.run()` writes an entry here as well as to the record, and without an override
+    ///      every one of those writes would land in the real, committed `deployments/address.json`.
+    string internal constant SCRATCH_ADDRESS_BOOK = "deployments/.test-deploy-scripts-addresses.json";
+
     address internal deployer;
     address internal eSIMWalletAdmin;
     address internal vault;
@@ -65,6 +70,9 @@ abstract contract ScriptBase is Test {
 
     /// @notice Record this contract's tests read and write
     string internal scratchRecord;
+
+    /// @notice Address book this contract's tests read and write
+    string internal scratchAddressBook;
 
     /// @notice Puts a complete, valid environment in place and seeds an empty record
     /// @dev Call from `setUp` before anything runs a script. Every value it writes is the same in
@@ -108,16 +116,23 @@ abstract contract ScriptBase is Test {
         vm.setEnv("TIMELOCK_GUARDIANS", vm.toString(guardian));
     }
 
-    /// @notice Points the scripts at an empty scratch record
+    /// @notice Points the scripts at a scratch record and a scratch address book, neither present
     /// @dev `fs_permissions` grants write access to `deployments` and nowhere else, so the scratch
-    ///      file lives beside the real record rather than in a temporary directory. The leading dot
+    ///      files live beside the real ones rather than in a temporary directory. The leading dot
     ///      and the `test-` prefix are what `.gitignore` matches on. Call it again at the top of a
     ///      test that needs a clean record, since `setUp` runs once for the whole contract.
+    ///
+    ///      Removed rather than written empty: `DeploymentRecord.isRecorded` reads file presence as
+    ///      "already deployed", the same as it does for a live chain that has never seen these
+    ///      scripts run. An empty `{}` placeholder would read as a deployment that deployed nothing.
     function _resetRecord() internal {
         scratchRecord = SCRATCH_RECORD;
+        scratchAddressBook = SCRATCH_ADDRESS_BOOK;
 
-        vm.writeFile(scratchRecord, "{}");
+        if(vm.isFile(scratchRecord)) vm.removeFile(scratchRecord);
+        if(vm.isFile(scratchAddressBook)) vm.removeFile(scratchAddressBook);
         vm.setEnv("DEPLOYMENT_RECORD_PATH", scratchRecord);
+        vm.setEnv("ADDRESS_BOOK_PATH", scratchAddressBook);
     }
 
     /// @notice The key this chain's entry lives under, which is `anvil-31337-entrypoint-v8` in tests
@@ -126,18 +141,15 @@ abstract contract ScriptBase is Test {
     }
 
     /// @notice Reads a value out of the scratch record
-    /// @param _path Dotted path below the network key
+    /// @param _path Dotted path into the record
     function _recorded(string memory _path) internal view returns (string memory value) {
         value = vm.readFile(scratchRecord);
-        value = vm.parseJsonString(value, string.concat(".", _recordKey(), ".", _path));
+        value = vm.parseJsonString(value, string.concat(".", _path));
     }
 
     /// @notice True when the scratch record holds something at this path
-    /// @param _path Dotted path below the network key
+    /// @param _path Dotted path into the record
     function _recordHas(string memory _path) internal view returns (bool present) {
-        present = vm.keyExistsJson(
-            vm.readFile(scratchRecord),
-            string.concat(".", _recordKey(), ".", _path)
-        );
+        present = vm.keyExistsJson(vm.readFile(scratchRecord), string.concat(".", _path));
     }
 }

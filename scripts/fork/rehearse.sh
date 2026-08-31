@@ -16,8 +16,8 @@
 # id into userOpHash; EntryPointValidation.t.sol covers that at the real chain id and this does not
 # try to.
 #
-# The whole run writes to its own record rather than the real one, so nothing here can reach the
-# file that tracks live deployments. It is deleted on exit.
+# The whole run writes to its own record and its own address book rather than the real ones, so
+# nothing here can reach the files that track live deployments. Both are deleted on exit.
 
 set -euo pipefail
 
@@ -27,11 +27,13 @@ FORK_BLOCK="${FORK_BLOCK:-45600000}"
 CHAIN_ID=31337
 RPC="http://127.0.0.1:8545"
 
-# The scripts read this and write nowhere else. fs_permissions only grants them deployments/, so
-# the rehearsal's record has to sit beside the real one rather than in a temporary directory.
+# The scripts read these and write nowhere else. fs_permissions only grants them deployments/, so
+# the rehearsal's record and address book sit beside the real ones rather than in a temporary
+# directory.
 RECORD="deployments/.test-rehearsal.json"
+ADDRESS_BOOK="deployments/.test-rehearsal-addresses.json"
 export DEPLOYMENT_RECORD_PATH="$RECORD"
-RECORD_KEY="anvil-${CHAIN_ID}-entrypoint-v8"
+export ADDRESS_BOOK_PATH="$ADDRESS_BOOK"
 LOG_DIR="$(mktemp -d)"
 ANVIL_PID=""
 
@@ -42,9 +44,9 @@ cleanup() {
     local status=$?
     [[ -n "$ANVIL_PID" ]] && kill "$ANVIL_PID" 2>/dev/null || true
 
-    # Drop the rehearsal's record however the run ended. Leaving it behind is how a fork address
-    # gets mistaken for a deployed one later.
-    rm -f "$RECORD"
+    # Drop the rehearsal's record and address book however the run ended. Leaving either behind is
+    # how a fork address gets mistaken for a deployed one later.
+    rm -f "$RECORD" "$ADDRESS_BOOK"
 
     echo "Logs kept in $LOG_DIR"
     exit $status
@@ -136,9 +138,11 @@ probe_p256() {
 probe_p256 "$RPC" "the fork"
 probe_p256 "$ALCHEMY_BASE_SEPOLIA_HTTPS" "Base Sepolia itself"
 
-# Start from an empty record. A leftover from an interrupted run would make Deploy.s.sol refuse to
-# start, which is the behaviour a real deployment wants and not what a rehearsal wants.
+# Start from an empty record and an empty address book. A leftover from an interrupted run would
+# make Deploy.s.sol refuse to start, which is the behaviour a real deployment wants and not what a
+# rehearsal wants.
 echo '{}' > "$RECORD"
+echo '{}' > "$ADDRESS_BOOK"
 
 # Forge sizes a broadcast transaction from what the simulation consumed. That is wrong for
 # handleOps: the EntryPoint checks the transaction carries the operation's whole declared gas
@@ -167,10 +171,20 @@ run_script configure scripts/deploy/Configure.s.sol:Configure
 run_script handover scripts/deploy/TransferOwnership.s.sol:TransferOwnership
 run_script rehearsal scripts/fork/ForkRehearsal.s.sol:ForkRehearsal
 
+RECORD_KEY="anvil-${CHAIN_ID}-entrypoint-v8"
+
+log "Addresses written by the rehearsal"
+python3 -c "
+import json
+print(json.dumps(json.load(open('$ADDRESS_BOOK'))['$RECORD_KEY'], indent=2))
+"
+
 log "Deployment record written by the rehearsal"
 python3 -c "
 import json
-print(json.dumps(json.load(open('$RECORD'))['$RECORD_KEY'], indent=2))
+r = json.load(open('$RECORD'))
+print(json.dumps({k: r[k] for k in ('chain', 'external', 'admin', 'status') if k in r}, indent=2))
+print('contracts:', ', '.join(r.get('contracts', {})))
 "
 
 log "Rehearsal passed"
