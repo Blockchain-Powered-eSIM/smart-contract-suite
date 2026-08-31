@@ -320,6 +320,59 @@ contract SettledPurchaseTest is DeployerBase {
         );
     }
 
+    /// @notice The backfill is not held to the price ceiling, and deliberately so
+    /// @dev The ceiling bounds what the admin can charge, and this path charges nothing: the
+    ///      entries record what the user paid before any of this existed. Capping it would only
+    ///      stop true history from being written once the ceiling moved. Pinned because the
+    ///      asymmetry with `recordSettledPurchase` reads like an oversight and is not one.
+    function test_setHistoryForLazyWallet_copiesAPriceAboveTheCeiling() public {
+        uint64 aboveTheCap = defaultPriceCapUSDCents + 1;
+        (string memory eSIMIdentifier, MockESIMWallet lazyWallet) = _lazyDeployPricedAt(aboveTheCap);
+
+        vm.prank(eSIMWalletAdmin);
+        (uint256 copied, uint256 remaining) = lazyWalletRegistry.setHistoryForLazyWallet(eSIMIdentifier, FULL_BATCH);
+
+        assertEq(copied, 1, "The entry must copy through");
+        assertEq(remaining, 0, "and nothing must be left waiting");
+
+        (, uint64 price,) = lazyWallet.transactionHistory(0);
+        assertEq(price, aboveTheCap, "The recorded price must be what was actually paid");
+
+        // The same price is still refused where money would actually move
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(abi.encodeWithSelector(
+            Errors.DataBundlePriceAboveCap.selector, aboveTheCap, defaultPriceCapUSDCents
+        ));
+        registry.recordSettledPurchase(
+            address(lazyWallet), bundle("DB_CHARGE", aboveTheCap), ASSET_USDC, 1e6, nextRef()
+        );
+    }
+
+    /// @notice Binds one eSIM with a single purchase at the given price and deploys its wallet
+    /// @return The eSIM identifier the history is stored under, and the wallet holding it
+    function _lazyDeployPricedAt(uint64 _priceUSDCents) internal returns (string memory, MockESIMWallet) {
+        string memory device = "Device_Ceiling";
+        string memory eSIM = "eSIM_Ceiling_1";
+
+        string[] memory devices = new string[](1);
+        devices[0] = device;
+
+        string[][] memory eSIMs = new string[][](1);
+        eSIMs[0] = new string[](1);
+        eSIMs[0][0] = eSIM;
+
+        DataBundleDetails[][] memory bundles = new DataBundleDetails[][](1);
+        bundles[0] = new DataBundleDetails[](1);
+        bundles[0][0] = bundle("DB_CEILING", _priceUSDCents);
+
+        vm.startPrank(eSIMWalletAdmin);
+        lazyWalletRegistry.batchPopulateHistory(devices, eSIMs, bundles);
+        lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(pubKey2, device, 7701, 0, FULL_BATCH);
+        vm.stopPrank();
+
+        return (eSIM, MockESIMWallet(payable(lazyWalletRegistry.lazyDeployedESIMWallet(eSIM))));
+    }
+
     // ---------------------------------------------------------------------------------------------
     // Payment references
     // ---------------------------------------------------------------------------------------------

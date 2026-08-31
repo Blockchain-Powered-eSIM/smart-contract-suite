@@ -206,6 +206,12 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     ///         wallet registry
     /// @dev The registry carries the cursor that says how much of an eSIM's history has already been
     ///      copied, so this function appends whatever it is handed and does not police repeats.
+    ///
+    ///      Not held to the price ceiling, unlike `recordSettledPurchase`. These entries are a
+    ///      record of what the user already paid before any of this existed, so there is nothing
+    ///      here for a ceiling to bound: the ceiling limits what the admin can charge, and no
+    ///      charge happens on this path. Refusing an entry priced above today's ceiling would only
+    ///      stop true history from being written.
     /// @param _dataBundleDetails One batch of data bundle purchase details from before the wallet
     ///        was deployed
     /// @return True once the batch has been appended
