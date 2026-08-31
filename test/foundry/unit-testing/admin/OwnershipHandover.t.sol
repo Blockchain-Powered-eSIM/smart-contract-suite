@@ -211,6 +211,28 @@ contract OwnershipHandoverTest is AdminBase {
         assertEq(registry.owner(), address(protocolAdmin));
     }
 
+    /// @notice `OwnershipAccepted` names whatever address the caller passed in
+    /// @dev Both answers the batch checks come from the target, so a contract written to give them
+    ///      passes. Nothing onchain can tell it from a protocol contract, which is why the event is
+    ///      a claim about an address rather than proof the protocol took anything. Anyone reading
+    ///      the log has to filter it against the contracts this one is meant to own.
+    function test_accept_emitsForATargetTheProtocolNeverOwned() public {
+        ProtocolAdmin next = _deployReplacement(7 days);
+        ImpostorTarget impostor = new ImpostorTarget(address(next));
+
+        address[] memory targets = new address[](1);
+        targets[0] = address(impostor);
+
+        vm.expectEmit(true, false, false, false, address(next));
+        emit ProtocolAdmin.OwnershipAccepted(address(impostor));
+
+        vm.prank(outsider);
+        next.acceptOwnershipBatch(targets);
+
+        assertEq(registry.owner(), address(protocolAdmin), "The real contracts must be untouched");
+        assertEq(next.getMinDelay(), 7 days, "and the caller must have gained nothing");
+    }
+
     /// @notice Offers all four contracts to one address, in a single operation
     function _offerAllFourTo(address _destination) private {
         address[] memory targets = _ownedContracts();
@@ -229,4 +251,16 @@ contract OwnershipHandoverTest is AdminBase {
         vm.prank(outsider);
         protocolAdmin.executeBatch(targets, values, payloads, bytes32(0), bytes32(0));
     }
+}
+
+/// @notice Answers the two questions `acceptOwnershipBatch` asks, while owing the protocol nothing
+contract ImpostorTarget {
+    address public pendingOwner;
+
+    constructor(address _pendingOwner) {
+        pendingOwner = _pendingOwner;
+    }
+
+    // solhint-disable-next-line no-empty-blocks
+    function acceptOwnership() external {}
 }

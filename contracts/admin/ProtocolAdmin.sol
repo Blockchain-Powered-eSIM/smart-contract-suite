@@ -309,6 +309,14 @@ contract ProtocolAdmin is TimelockController {
     ///      Each event is emitted ahead of the call it describes, so a target that emits its own
     ///      events on handover cannot interleave them out of order. A failing handover takes the
     ///      whole batch down with it, so no event here can outlive the call it announced.
+    ///
+    ///      `OwnershipAccepted` names an address the caller chose, and anyone can call this with a
+    ///      contract they wrote that answers this address to `pendingOwner()` and returns quietly
+    ///      from `acceptOwnership()`. Both answers come from the target, so no check here can tell
+    ///      a protocol contract from one written to look like it. Read the event as a claim about
+    ///      an address, and filter it against the contracts this one is meant to own. It costs the
+    ///      protocol nothing beyond the log line: this contract holds no funds, and the powers it
+    ///      does hold are gated on roles a target cannot obtain by being called.
     /// @param targets Contracts whose `pendingOwner` is this address
     function acceptOwnershipBatch(address[] calldata targets) external {
         for(uint256 i = 0; i < targets.length; ++i) {
