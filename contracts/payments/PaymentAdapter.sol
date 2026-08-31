@@ -61,8 +61,12 @@ contract PaymentAdapter is Initializable, UUPSUpgradeable, Ownable2StepUpgradeab
     mapping(bytes32 symbol => Asset asset) public assets;
 
     /// @notice Payment references already spent, protocol-wide
-    /// @dev One reference is one offchain payment. The backend retries the whole onchain step on
-    ///      any failure, so without this a retry of a call that already landed records it twice.
+    /// @dev Retired: `Registry.usedPaymentReferences` is now the live replay-protection store, kept
+    ///      there instead of here so it survives `setPaymentAdapter` rotating this contract out, and
+    ///      scoped per wallet there so one wallet cannot burn a reference for another. Left declared
+    ///      at this slot, unread and unwritten by the live purchase paths, because
+    ///      `StorageLayout.t.sol` pins it here behind the proxy and removing it would shift every
+    ///      variable below.
     mapping(bytes32 paymentReference => bool used) public usedReferences;
 
     /// @notice Emitted when this contract is wired up
@@ -208,6 +212,13 @@ contract PaymentAdapter is Initializable, UUPSUpgradeable, Ownable2StepUpgradeab
     ///      eSIM wallet has no way to call this with a figure of its own choosing. Keep it that way.
     ///
     ///      A fee-on-transfer token delivers less than declared and fails the funding check.
+    ///
+    ///      `spent` is recomputed here from `_symbol` and `_priceUSDCents` rather than taken from
+    ///      the caller's own `quote()` call, so the two agree only because nothing mutates
+    ///      `assets[_symbol]` between the two calls in the same transaction today. Nothing
+    ///      structurally enforces that: a swap path or any other step that can change an asset's
+    ///      entry mid-transaction would need `settle` to check a value the caller's own `quote()`
+    ///      call committed to, not one recomputed fresh here.
     /// @param _symbol Currency being paid in
     /// @param _priceUSDCents Price of the data bundle, in USD cents
     /// @param _amountIn Amount the caller has funded, and the most it is willing to spend
@@ -246,8 +257,11 @@ contract PaymentAdapter is Initializable, UUPSUpgradeable, Ownable2StepUpgradeab
     // Payment references
     // ---------------------------------------------------------------------------------------------
 
-    /// @notice Spends a payment reference, refusing one already spent
-    /// @dev Registry only, on both payment paths, so one reference cannot be spent once on each.
+    /// @notice Spends a payment reference against this adapter's own record, refusing one already
+    ///         spent through it
+    /// @dev Retired from the registry's live purchase paths; see `usedReferences`. Left callable so
+    ///      an adapter instance's own record still means what it says, but nothing in the protocol
+    ///      calls this any more.
     /// @param _paymentReference Hash tying this purchase to the offchain payment behind it
     function consumePaymentReference(bytes32 _paymentReference) external onlyRegistry {
         if(_paymentReference == bytes32(0)) revert Errors.EmptyPaymentReference();

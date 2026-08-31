@@ -59,6 +59,12 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgrad
     /// @notice Restricts a call to the registry, the device wallet factory or a known device wallet
     /// @dev The first two deploy on behalf of a device wallet during setup. A device wallet reaching
     ///      this directly is constrained further inside `deployESIMWallet`.
+    ///
+    ///      That third caller is what makes `DeviceWallet.deployESIMWallet`'s admin gate a workflow
+    ///      convenience rather than a boundary: an owner can sign an `execute` straight at this
+    ///      function and get the same wallet with no admin in the call. Deliberate, since a device
+    ///      wallet reaches every external function through `execute` and no check downstream of its
+    ///      call can tell which of its owner's intents produced it.
     modifier onlyRegistryOrDeviceWalletFactoryOrDeviceWallet() {
         if(
             msg.sender != address(registry) &&

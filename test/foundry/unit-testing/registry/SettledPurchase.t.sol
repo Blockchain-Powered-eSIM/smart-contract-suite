@@ -9,6 +9,8 @@ import {Errors} from "contracts/Errors.sol";
 import {Registry} from "contracts/Registry.sol";
 import {PaymentAdapter, Asset} from "contracts/payments/PaymentAdapter.sol";
 
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+
 import "test/utils/DeployerBase.sol";
 
 /// @notice Covers purchases the admin says were paid for outside the protocol.
@@ -43,6 +45,48 @@ contract SettledPurchaseTest is DeployerBase {
         vm.deal(address(deviceWallet), 10 ether);
         vm.prank(address(deviceWallet));
         deviceWallet.toggleAccessToFunds(address(eSIMWallet), true);
+    }
+
+    /// @notice Deploys a second, unrelated device wallet and eSIM wallet
+    /// @dev Used to show that one wallet's spend cannot reach into another's payment references.
+    function _deploySecondWallet() internal returns (DeviceWallet secondDeviceWallet, MockESIMWallet secondESIMWallet) {
+        string[] memory identifiers = new string[](1);
+        bytes32[2][] memory keys = new bytes32[2][](1);
+        uint256[] memory salts = new uint256[](1);
+
+        identifiers[0] = customDeviceUniqueIdentifiers[1];
+        keys[0] = pubKey2;
+        salts[0] = 2;
+
+        vm.prank(eSIMWalletAdmin);
+        Wallets[] memory wallets =
+            deviceWalletFactory.deployDeviceWalletForUsers(identifiers, keys, salts, new uint256[](1));
+
+        secondDeviceWallet = DeviceWallet(payable(wallets[0].deviceWallet));
+        secondESIMWallet = MockESIMWallet(payable(wallets[0].eSIMWallet));
+
+        vm.prank(address(secondDeviceWallet));
+        secondDeviceWallet.toggleAccessToFunds(address(secondESIMWallet), true);
+    }
+
+    /// @notice Deploys a fresh payment adapter wired to the same registry, with USDC registered
+    function _deployFreshAdapter() internal returns (PaymentAdapter) {
+        PaymentAdapter freshImpl = new PaymentAdapter();
+        ERC1967Proxy freshProxy = new ERC1967Proxy(
+            address(freshImpl),
+            abi.encodeCall(freshImpl.initialize, (address(registry), settlementToken, upgradeManager))
+        );
+        PaymentAdapter fresh = PaymentAdapter(address(freshProxy));
+
+        vm.prank(upgradeManager);
+        fresh.registerAsset(ASSET_USDC, Asset({
+            allowed: true,
+            isDollarUnit: true,
+            decimals: SETTLEMENT_DECIMALS,
+            token: settlementToken
+        }));
+
+        return fresh;
     }
 
     /// @notice Records a purchase the admin says was paid for offchain
@@ -280,14 +324,17 @@ contract SettledPurchaseTest is DeployerBase {
     // Payment references
     // ---------------------------------------------------------------------------------------------
 
-    /// @notice Recording a purchase spends its reference
+    /// @notice Recording a purchase spends its reference, scoped to the wallet it was recorded for
     function test_recordSettledPurchase_spendsTheReference() public {
         _deployWallets();
         bytes32 orderRef = paymentRef("stripe-intent");
 
         _settle("DB_ID", TEST_PRICE_CENTS, orderRef);
 
-        assertTrue(paymentAdapter.usedReferences(orderRef), "The reference must be spent");
+        assertTrue(
+            registry.usedPaymentReferences(keccak256(abi.encode(address(eSIMWallet), orderRef))),
+            "The reference must be spent for this wallet"
+        );
     }
 
     /// @notice A retried call cannot record the purchase twice
@@ -358,6 +405,50 @@ contract SettledPurchaseTest is DeployerBase {
         registry.consumePaymentReference(paymentRef("forged-order"));
     }
 
+    /// @notice A reference cannot be replayed by rotating to a fresh payment adapter
+    /// @dev Replay protection lives on the registry, not the adapter, so a rotation that starts a
+    ///      new adapter's own record empty changes nothing about whether this reference is spent.
+    function test_setPaymentAdapter_rotationDoesNotReviveASpentReference() public {
+        _deployWallets();
+        bytes32 orderRef = paymentRef("moonpay-charge");
+        _settle("DB_FIRST", TEST_PRICE_CENTS, orderRef);
+
+        PaymentAdapter freshAdapter = _deployFreshAdapter();
+        vm.prank(upgradeManager);
+        registry.setPaymentAdapter(address(freshAdapter));
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(abi.encodeWithSelector(Errors.PaymentReferenceAlreadyUsed.selector, orderRef));
+        registry.recordSettledPurchase(
+            address(eSIMWallet), bundle("DB_REPLAYED", TEST_PRICE_CENTS), ASSET_USDC, 1e6, orderRef
+        );
+    }
+
+    /// @notice An unrelated wallet cannot burn a reference an admin's pending settlement for a
+    ///         different wallet is about to spend
+    /// @dev Before scoping, the two payment paths shared one reference space, so any wallet owner
+    ///      could watch the public mempool for a pending `recordSettledPurchase` naming a reference
+    ///      and front-run it with their own cheap `buyDataBundleWithToken` call on that same raw
+    ///      reference, on their own unrelated wallet, permanently burning it. Scoping by wallet
+    ///      means the two spends are independent records, so the admin's settlement still lands.
+    function test_consumePaymentReference_anUnrelatedWalletCannotBlockAnothersSettlement() public {
+        _deployWallets();
+        (, MockESIMWallet attackerWallet) = _deploySecondWallet();
+
+        bytes32 victimRef = paymentRef("victim-stripe-charge");
+        uint256 needed = settlementAmount(TEST_PRICE_CENTS);
+        fundSettlementToken(address(attackerWallet), needed);
+
+        vm.prank(eSIMWalletAdmin);
+        attackerWallet.buyDataBundleWithToken(bundle("DB_ATTACK", TEST_PRICE_CENTS), ASSET_USDC, needed, victimRef);
+
+        // The admin's settlement for the actual, unrelated victim wallet still lands.
+        _settle("DB_VICTIM", TEST_PRICE_CENTS, victimRef);
+
+        (bytes32 id,,) = eSIMWallet.transactionHistory(0);
+        assertEq(id, "DB_VICTIM", "The victim's settlement must not have been blocked");
+    }
+
     // ---------------------------------------------------------------------------------------------
     // The ordering guard
     // ---------------------------------------------------------------------------------------------
@@ -378,6 +469,55 @@ contract SettledPurchaseTest is DeployerBase {
         registry.recordSettledPurchase(
             address(lazyWallet), bundle("DB_ID", TEST_PRICE_CENTS), ASSET_USDC, 1e6, nextRef()
         );
+    }
+
+    /// @notice A token-paid purchase cannot land ahead of history still waiting to be copied in
+    ///         either, the same as a settled one
+    /// @dev Without this guard the purchase pushed straight to `transactionHistory` regardless, so
+    ///      it landed at index 0 and the older, pre-deployment entries appended after it once the
+    ///      copy caught up.
+    function test_buyDataBundleWithToken_rejectsWhileHistoryIsOutstanding() public {
+        MockESIMWallet lazyWallet = _lazyDeployWithHistoryOutstanding();
+        string memory eSIMIdentifier = customESIMUniqueIdentifiers[0][0];
+        uint256 outstanding = lazyWalletRegistry.outstandingHistoryEntries(eSIMIdentifier);
+        assertGt(outstanding, 0, "The fixture must leave history uncopied");
+
+        address lazyDeviceWallet = address(lazyWallet.deviceWallet());
+        fundSettlementToken(lazyDeviceWallet, settlementAmount(TEST_PRICE_CENTS));
+        vm.prank(lazyDeviceWallet);
+        DeviceWallet(payable(lazyDeviceWallet)).toggleAccessToFunds(address(lazyWallet), true);
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(abi.encodeWithSelector(
+            Errors.HistoryNotFullyCopied.selector, eSIMIdentifier, outstanding
+        ));
+        lazyWallet.buyDataBundleWithToken(
+            bundle("DB_NEW", TEST_PRICE_CENTS), ASSET_USDC, settlementAmount(TEST_PRICE_CENTS), nextRef()
+        );
+    }
+
+    /// @notice Once the history is copied a token-paid purchase goes through and lands last
+    function test_buyDataBundleWithToken_acceptsOnceHistoryIsCopied() public {
+        MockESIMWallet lazyWallet = _lazyDeployWithHistoryOutstanding();
+        string memory eSIMIdentifier = customESIMUniqueIdentifiers[0][0];
+
+        vm.prank(eSIMWalletAdmin);
+        lazyWalletRegistry.setHistoryForLazyWallet(eSIMIdentifier, FULL_BATCH);
+        uint256 copiedEntries = lazyWallet.getTransactionHistory().length;
+
+        address lazyDeviceWallet = address(lazyWallet.deviceWallet());
+        fundSettlementToken(lazyDeviceWallet, settlementAmount(TEST_PRICE_CENTS));
+        vm.prank(lazyDeviceWallet);
+        DeviceWallet(payable(lazyDeviceWallet)).toggleAccessToFunds(address(lazyWallet), true);
+
+        vm.prank(eSIMWalletAdmin);
+        lazyWallet.buyDataBundleWithToken(
+            bundle("DB_LAST", TEST_PRICE_CENTS), ASSET_USDC, settlementAmount(TEST_PRICE_CENTS), nextRef()
+        );
+
+        assertEq(lazyWallet.getTransactionHistory().length, copiedEntries + 1, "The purchase must be appended");
+        (bytes32 id,,) = lazyWallet.transactionHistory(copiedEntries);
+        assertEq(id, "DB_LAST", "The new purchase must be the last entry");
     }
 
     /// @notice Once the history is copied the purchase goes through and lands last

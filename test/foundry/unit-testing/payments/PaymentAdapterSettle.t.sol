@@ -122,6 +122,21 @@ contract PaymentAdapterSettleTest is DeviceWalletFixture {
         assertEq(token.balanceOf(vault), needed, "The vault should have been paid");
     }
 
+    /// @notice `settle` still charges exactly what `quote()` said for the same inputs
+    /// @dev This holds today only because nothing mutates `assets[_symbol]` between the two calls in
+    ///      the same transaction; see the note on `settle`. Pinned here so a future change that
+    ///      breaks that assumption (a swap path, or anything else that can move an asset's entry
+    ///      mid-transaction) fails this test first, rather than surfacing as a quiet mismatch.
+    function test_settle_matchesQuoteForTheSameInputsWithinOneTransaction() public {
+        uint256 quoted = paymentAdapter.quote(ASSET_USDC, PRICE_CENTS);
+        fundSettlementToken(address(paymentAdapter), quoted);
+
+        vm.prank(address(eSIMWallet1));
+        (uint256 spent,) = paymentAdapter.settle(ASSET_USDC, PRICE_CENTS, quoted, address(eSIMWallet1));
+
+        assertEq(spent, quoted, "settle must charge exactly what quote() said for the same inputs");
+    }
+
     // ---------------------------------------------------------------------------------------------
     // What settle refuses
     // ---------------------------------------------------------------------------------------------

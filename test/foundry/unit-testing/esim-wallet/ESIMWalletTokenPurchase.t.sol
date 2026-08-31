@@ -10,6 +10,7 @@ import {Asset} from "contracts/payments/PaymentAdapter.sol";
 
 import {DeviceWalletFixture} from "test/foundry/unit-testing/device-wallet/base/DeviceWalletFixture.sol";
 import {MockERC20} from "test/utils/mocks/tokens/MockERC20.sol";
+import {MockFeeOnTransferERC20} from "test/utils/mocks/tokens/MockFeeOnTransferERC20.sol";
 import {MockReenteringERC20} from "test/utils/mocks/tokens/MockReenteringERC20.sol";
 
 /// @notice Buying a data bundle with USDC (or any other acceptable stablecoin/ERC20), and getting a token balance back out again.
@@ -257,17 +258,57 @@ contract ESIMWalletTokenPurchaseTest is DeviceWalletFixture {
         eSIMWallet1.buyDataBundleWithToken(bundle("DB_TOKEN", PRICE_CENTS), ASSET_USDC, needed, spentRef);
     }
 
-    /// @notice A second wallet cannot spend a reference the first one used
-    function test_buyDataBundleWithToken_referenceCannotBeReusedByAnotherWallet() public {
-        bytes32 spentRef = nextRef();
+    /// @notice A second, unrelated wallet can use the same raw reference: the record is scoped per
+    ///         wallet, so this is not the same spend
+    /// @dev A reference already used by one wallet used to block every other wallet from ever using
+    ///      the identical raw value, which let anyone burn a reference an admin's pending
+    ///      settlement for a completely different wallet was about to spend. Scoping by wallet
+    ///      closes that off: the two are independent records.
+    function test_buyDataBundleWithToken_aDifferentWalletCanUseTheSameRawReference() public {
+        bytes32 sharedRef = nextRef();
 
         vm.prank(eSIMWalletAdmin);
-        eSIMWallet1.buyDataBundleWithToken(bundle("DB_TOKEN", PRICE_CENTS), ASSET_USDC, settlementAmount(PRICE_CENTS), spentRef);
+        eSIMWallet1.buyDataBundleWithToken(bundle("DB_TOKEN", PRICE_CENTS), ASSET_USDC, settlementAmount(PRICE_CENTS), sharedRef);
 
         fundSettlementToken(address(deviceWallet2), DEVICE_BALANCE);
         vm.prank(eSIMWalletAdmin);
-        vm.expectRevert(abi.encodeWithSelector(Errors.PaymentReferenceAlreadyUsed.selector, spentRef));
-        eSIMWallet3.buyDataBundleWithToken(bundle("DB_TOKEN", PRICE_CENTS), ASSET_USDC, settlementAmount(PRICE_CENTS), spentRef);
+        eSIMWallet3.buyDataBundleWithToken(bundle("DB_TOKEN", PRICE_CENTS), ASSET_USDC, settlementAmount(PRICE_CENTS), sharedRef);
+
+        assertEq(eSIMWallet3.getTransactionHistory().length, 1, "The second wallet's purchase must have landed");
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Fee-on-transfer assets
+    // ---------------------------------------------------------------------------------------------
+
+    /// @notice A fee-on-transfer asset fails at settle's own funding check, not on an opaque
+    ///         transfer revert inside this wallet
+    /// @dev Before this, the wallet forwarded the nominal price regardless of what the pull actually
+    ///      delivered, so the plain `token.safeTransfer` a few lines below reverted with a bare
+    ///      ERC-20 balance error for every purchase in a mistakenly registered fee-on-transfer
+    ///      asset. Forwarding the real balance instead means the wallet's own device wallet balance
+    ///      is never touched (the whole call still reverts atomically either way), and the failure
+    ///      now surfaces through settle()'s existing, tested funding check.
+    function test_buyDataBundleWithToken_revertsCleanlyOnAFeeOnTransferAsset() public {
+        uint256 feeBps = 100; // 1%
+        MockFeeOnTransferERC20 feeToken = new MockFeeOnTransferERC20("Fee Token", "FEE", 6, feeBps);
+        vm.prank(upgradeManager);
+        paymentAdapter.registerAsset(bytes32("FEE"), Asset({
+            allowed: true,
+            isDollarUnit: true,
+            decimals: 6,
+            token: address(feeToken)
+        }));
+
+        uint256 amountIn = settlementAmount(PRICE_CENTS);
+        feeToken.mint(address(deviceWallet), amountIn * 10);
+
+        // The fee bites once pulling from the device wallet and again forwarding to the adapter.
+        uint256 afterPull = amountIn - (amountIn * feeBps) / 10_000;
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(abi.encodeWithSelector(Errors.SettlementAboveMax.selector, amountIn, afterPull));
+        eSIMWallet1.buyDataBundleWithToken(bundle("DB_FEE", PRICE_CENTS), bytes32("FEE"), amountIn, nextRef());
     }
 
     // ---------------------------------------------------------------------------------------------

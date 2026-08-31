@@ -1,7 +1,7 @@
 {
   "acceptOwnershipTransfer": "3529",
-  "buyDataBundleWithToken: pulls from the device wallet": "156648",
-  "buyDataBundleWithToken: wallet already holds the price": "127162",
+  "buyDataBundleWithToken: pulls from the device wallet": "161439",
+  "buyDataBundleWithToken: wallet already holds the price": "131140",
   "deployESIMWallet: through the factory": "289547",
   "populateHistory: 10 entries": "489333",
   "requestTransferOwnership": "64238",

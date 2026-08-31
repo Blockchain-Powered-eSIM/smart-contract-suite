@@ -164,6 +164,9 @@ contract RegistryHelper {
     /// @notice Emitted when the owner points the registry at a payment adapter
     event PaymentAdapterUpdated(address indexed _paymentAdapter);
 
+    /// @notice Emitted when a payment reference is spent for an eSIM wallet
+    event PaymentReferenceConsumed(address indexed _eSIMWallet, bytes32 indexed _paymentReference);
+
     /// @notice Emitted for a purchase paid for outside the protocol
     /// @dev On the registry and not the wallet, so an indexer follows one address instead of one
     ///      per wallet. `_tokenAmount` is unchecked: it and the price both come from the admin.

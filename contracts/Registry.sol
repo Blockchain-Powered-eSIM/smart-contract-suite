@@ -102,6 +102,14 @@ contract Registry is
     ///      registry.
     address public paymentAdapter;
 
+    /// @notice Payment references already spent, scoped per eSIM wallet
+    /// @dev Held here rather than on the payment adapter, so replay protection survives an adapter
+    ///      rotation through `setPaymentAdapter` instead of resetting with it. Keyed by
+    ///      `keccak256(abi.encode(eSIMWallet, paymentReference))` rather than by the reference
+    ///      alone, so one wallet spending a reference cannot burn it for an unrelated wallet's
+    ///      pending settlement.
+    mapping(bytes32 scopedReference => bool used) public usedPaymentReferences;
+
     /// @notice Restricts a call to an eSIM wallet this registry has recorded
     modifier onlyESIMWallet() {
         if(isESIMWalletValid[msg.sender] == address(0)) {
@@ -373,11 +381,11 @@ contract Registry is
     // ---------------------------------------------------------------------------------------------
 
     /// @notice Spends a payment reference for an eSIM wallet paying with USDC (or any other acceptable stablecoin/ERC20)
-    /// @dev The adapter only accepts this from the registry, so the wallet has to come through
-    ///      here. One reference then cannot be spent once on each path.
+    /// @dev Scoped to `msg.sender`, so this and `recordSettledPurchase` cannot spend the same
+    ///      reference once on each for the same wallet.
     /// @param _paymentReference Hash tying the purchase to the offchain order behind it
     function consumePaymentReference(bytes32 _paymentReference) external onlyESIMWallet {
-        _consumePaymentReference(_paymentReference);
+        _consumePaymentReference(msg.sender, _paymentReference);
     }
 
     /// @notice Records a data bundle paid for through an external wallet or a card
@@ -413,7 +421,7 @@ contract Registry is
         _requireLazyHistoryCopied(_eSIMWallet);
 
         Asset memory asset = PaymentAdapter(_requirePaymentAdapter()).resolveAsset(_asset);
-        _consumePaymentReference(_paymentReference);
+        _consumePaymentReference(_eSIMWallet, _paymentReference);
 
         ESIMWallet(payable(_eSIMWallet)).recordSettledPurchase(_dataBundleDetail);
 
@@ -432,7 +440,16 @@ contract Registry is
     /// @notice Refuses a new entry while older history is still waiting to be copied in
     /// @dev The new entry would land first and the older ones append after it, leaving the history
     ///      out of order. The backend retries the whole onchain step on failure, so this cannot be
-    ///      left as an ordering rule for the caller to follow.
+    ///      left as an ordering rule for the caller to follow. External so a wallet can run the same
+    ///      check on its own paths that see the money move; `recordSettledPurchase` uses the
+    ///      private form since it already has this contract's own state in scope.
+    /// @param _eSIMWallet Wallet being appended to
+    function requireLazyHistoryCopied(address _eSIMWallet) external view {
+        _requireLazyHistoryCopied(_eSIMWallet);
+    }
+
+    /// @notice Refuses a new entry while older history is still waiting to be copied in
+    /// @dev See `requireLazyHistoryCopied`.
     /// @param _eSIMWallet Wallet being appended to
     function _requireLazyHistoryCopied(address _eSIMWallet) private view {
         if(lazyWalletRegistry == address(0)) return;
@@ -444,8 +461,21 @@ contract Registry is
         if(outstanding != 0) revert Errors.HistoryNotFullyCopied(eSIMIdentifier, outstanding);
     }
 
-    function _consumePaymentReference(bytes32 _paymentReference) private {
-        PaymentAdapter(_requirePaymentAdapter()).consumePaymentReference(_paymentReference);
+    /// @notice Spends a payment reference for one eSIM wallet, refusing one already spent by it
+    /// @dev Checked and written here rather than on the payment adapter, for the two reasons
+    ///      `usedPaymentReferences` documents: this survives an adapter rotation, and scoping by
+    ///      wallet means the reference space is not shared, so nothing here can be front-run to
+    ///      burn a reference an unrelated wallet's settlement is about to spend.
+    /// @param _eSIMWallet Wallet the reference is being spent for
+    /// @param _paymentReference Hash tying this purchase to the offchain payment behind it
+    function _consumePaymentReference(address _eSIMWallet, bytes32 _paymentReference) private {
+        if(_paymentReference == bytes32(0)) revert Errors.EmptyPaymentReference();
+
+        bytes32 scopedReference = keccak256(abi.encode(_eSIMWallet, _paymentReference));
+        if(usedPaymentReferences[scopedReference]) revert Errors.PaymentReferenceAlreadyUsed(_paymentReference);
+
+        usedPaymentReferences[scopedReference] = true;
+        emit PaymentReferenceConsumed(_eSIMWallet, _paymentReference);
     }
 
     /// @notice The payment adapter, or a revert if none is set yet

@@ -297,7 +297,12 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
 
     /// @notice Pays the vault for one data bundle in USDC (or any other acceptable stablecoin/ERC20) and records the purchase
     /// @dev The adapter works the amount out from the price, so there is never a second figure to
-    ///      take on trust. Any shortfall is pulled from the device wallet.
+    ///      take on trust. Any shortfall is pulled from the device wallet. What reaches the adapter
+    ///      is this wallet's real balance after the pull, not the nominal amount asked for, so a
+    ///      non-standard token that delivers less than requested (fee-on-transfer, deflationary)
+    ///      fails at `settle`'s funding check with a clear reason instead of an opaque transfer
+    ///      revert here. The protocol does not otherwise support such tokens: `settle` still needs
+    ///      the price in full.
     /// @param _dataBundleDetail Data bundle being bought. Its settlement field is overwritten here.
     /// @param _asset Symbol of the currency to pay in
     /// @param _maxAmountIn Most of that currency the buyer will spend, in its smallest unit
@@ -315,6 +320,7 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         if(_dataBundleDetail.id == bytes32(0)) revert Errors.EmptyDataBundleID();
         if(_dataBundleDetail.priceUSDCents == 0) revert Errors.ZeroDataBundlePrice();
         _requirePriceWithinCap(_dataBundleDetail.priceUSDCents, registry);
+        registry.requireLazyHistoryCopied(address(this));
 
         // The money moves through this contract, so this path can say the protocol saw it.
         _dataBundleDetail.settlement = Settlement.DeviceWallet;
@@ -336,12 +342,23 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
 
         IERC20 token = IERC20(asset.token);
         uint256 held = token.balanceOf(address(this));
-        if(held < amountIn) deviceWallet.pullToken(asset.token, amountIn - held);
+        if(held < amountIn) {
+            deviceWallet.pullToken(asset.token, amountIn - held);
+            // A fee-on-transfer asset delivers less than requested, so the shortfall pull can still
+            // leave this wallet short of amountIn. Re-read the real balance rather than assume the
+            // pull landed in full.
+            held = token.balanceOf(address(this));
+        }
+
+        // Forwards what this wallet actually holds, not the nominal amountIn: the same fee can bite
+        // again on the way to the adapter. settle() re-checks its own balance against the price and
+        // is what decides whether the purchase was funded.
+        uint256 toForward = held < amountIn ? held : amountIn;
 
         // Funded first, then told to settle. That is what lets a swap be added there later
         // without changing anything here.
-        token.safeTransfer(adapterAddress, amountIn);
-        (uint256 spent,) = adapter.settle(_asset, _dataBundleDetail.priceUSDCents, amountIn, address(this));
+        token.safeTransfer(adapterAddress, toForward);
+        (uint256 spent,) = adapter.settle(_asset, _dataBundleDetail.priceUSDCents, toForward, address(this));
 
         // The adapter's figure, not what this wallet sent. The two match today, and will not once
         // a swap can spend less than the ceiling it was funded to.

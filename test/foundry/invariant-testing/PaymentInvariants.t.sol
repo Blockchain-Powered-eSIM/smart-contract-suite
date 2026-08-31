@@ -11,28 +11,30 @@ contract PaymentInvariantsTest is CampaignBase {
 
     bytes32[3] private symbols = [bytes32("USD"), bytes32("USDC"), bytes32("ETH")];
 
-    /// @notice One payment reference pays for one purchase, whichever path spends it
+    /// @notice One payment reference pays for one purchase on one wallet, whichever path spends it
     /// @dev A reference is one offchain payment. The backend retries the whole onchain step on any
-    ///      failure, so a reference that could be spent a second time is a user charged once and
-    ///      billed twice. The two payment paths reach the adapter by different routes, which is
-    ///      what makes this a question about the pair rather than about either one.
+    ///      failure, so a reference that could be spent a second time on the same wallet is a user
+    ///      charged once and billed twice. The two payment paths reach the registry by different
+    ///      routes, which is what makes this a question about the pair rather than about either
+    ///      one. Two different wallets spending the same raw reference is not a double-spend, since
+    ///      the registry scopes the record per wallet.
     function invariant_aPaymentReferenceIsSpentAtMostOnce() public view {
         assertFalse(
             paymentHandler.ghost_referenceSpentTwice(),
-            "A payment reference paid for a second purchase"
+            "A wallet-scoped payment reference paid for a second purchase"
         );
 
         uint256 count = paymentHandler.spentReferenceCount();
         for (uint256 i = 0; i < count; ++i) {
-            bytes32 paymentReference = paymentHandler.spentReferences(i);
+            bytes32 scopedReference = paymentHandler.spentReferences(i);
 
             assertEq(
-                paymentHandler.ghost_spendCount(paymentReference),
+                paymentHandler.ghost_spendCount(scopedReference),
                 1,
-                "A payment reference was spent more than once"
+                "A wallet-scoped payment reference was spent more than once"
             );
             assertTrue(
-                paymentAdapter.usedReferences(paymentReference),
+                registry.usedPaymentReferences(scopedReference),
                 "A reference a purchase spent does not read as spent"
             );
         }

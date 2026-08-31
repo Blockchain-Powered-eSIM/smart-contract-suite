@@ -181,6 +181,13 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     ///
     ///      Access to this wallet's money is granted only afterwards, by the owner, with
     ///      `toggleAccessToFunds`.
+    ///
+    ///      The admin gate here is a workflow convenience, not a security boundary against this
+    ///      wallet's own owner: `ESIMWalletFactory.deployESIMWallet` also accepts a call from any
+    ///      device wallet the registry knows, so the owner can reach the same outcome directly
+    ///      through `execute` with no admin involved. Closing that would need the deployment
+    ///      triggered by the admin rather than by this wallet, since nothing downstream of a device
+    ///      wallet's own call can tell one caller's signed intent from another's.
     /// @param _hasAccessToFunds Must be false
     /// @param _salt CREATE2 salt for the new eSIM wallet
     /// @return eSIM wallet address

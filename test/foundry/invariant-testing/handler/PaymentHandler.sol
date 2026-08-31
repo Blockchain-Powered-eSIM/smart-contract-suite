@@ -10,9 +10,11 @@ import {HandlerBase, HandlerConfig} from "test/foundry/invariant-testing/handler
 import {MockERC20} from "test/utils/mocks/tokens/MockERC20.sol";
 
 /// @notice Drives both payment paths and the currency table against one another.
-/// @dev The two paths spend payment references through the same adapter but reach it by different
-///      routes, one from the wallet and one from the admin, so whether a reference can be spent
-///      twice is a question about the pair rather than about either one.
+/// @dev The two paths spend payment references through the registry but reach it by different
+///      routes, one from the wallet and one from the admin, so whether one wallet's reference can
+///      be spent twice is a question about the pair rather than about either one. Two different
+///      wallets spending the same raw reference is not a double-spend, since the registry scopes
+///      the record per wallet.
 ///
 ///      Ghost state sits on this handler rather than in `ProtocolState`, because this is the only
 ///      contract that writes it. A handler body that reverts takes its ghost writes with it, so a
@@ -39,10 +41,13 @@ contract PaymentHandler is HandlerBase {
     /// @notice What every settled purchase should have moved to the vault, added up
     uint256 public ghost_settledToVault;
 
-    /// @notice How many times each reference has been spent by a call that went through
-    mapping(bytes32 paymentReference => uint256 spends) public ghost_spendCount;
+    /// @notice How many times each wallet-scoped reference has been spent by a call that went through
+    /// @dev Keyed the same way `Registry.usedPaymentReferences` is, `keccak256(abi.encode(wallet,
+    ///      paymentReference))`, since two different wallets spending the same raw reference is not
+    ///      a double-spend of anything.
+    mapping(bytes32 scopedReference => uint256 spends) public ghost_spendCount;
 
-    /// @notice Every reference a call has spent, listed once each
+    /// @notice Every wallet-scoped reference a call has spent, listed once each
     bytes32[] public spentReferences;
 
     /// @notice Set when a reference was spent by a second call that went through
@@ -72,15 +77,18 @@ contract PaymentHandler is HandlerBase {
         return symbols[bound(seed, 0, symbols.length - 1)];
     }
 
-    /// @notice Counts a spend that went through, and notices a second one on the same reference
-    function _recordSpend(bytes32 _paymentReference) internal {
-        if (ghost_spendCount[_paymentReference] == 0) {
-            spentReferences.push(_paymentReference);
+    /// @notice Counts a spend that went through, and notices a second one on the same wallet-scoped
+    ///         reference
+    function _recordSpend(address _wallet, bytes32 _paymentReference) internal {
+        bytes32 scopedReference = keccak256(abi.encode(_wallet, _paymentReference));
+
+        if (ghost_spendCount[scopedReference] == 0) {
+            spentReferences.push(scopedReference);
         } else {
             ghost_referenceSpentTwice = true;
         }
 
-        ghost_spendCount[_paymentReference] += 1;
+        ghost_spendCount[scopedReference] += 1;
     }
 
     /// @notice The ceiling that applies to this wallet right now
@@ -137,7 +145,7 @@ contract PaymentHandler is HandlerBase {
             needed,
             paymentReference
         ) {
-            _recordSpend(paymentReference);
+            _recordSpend(wallet, paymentReference);
             ghost_settledToVault += needed;
             state.recordCall("buyDataBundleWithToken");
         } catch {
@@ -179,7 +187,7 @@ contract PaymentHandler is HandlerBase {
             uint256(priceUSDCents),
             paymentReference
         ) {
-            _recordSpend(paymentReference);
+            _recordSpend(wallet, paymentReference);
             state.recordCall("recordSettledPurchase");
         } catch {
             state.recordRevert("recordSettledPurchase");
