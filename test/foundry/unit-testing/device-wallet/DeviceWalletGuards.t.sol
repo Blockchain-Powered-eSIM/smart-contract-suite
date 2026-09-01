@@ -118,34 +118,20 @@ contract DeviceWalletGuardsTest is DeployerBase {
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Amounts
-    // ---------------------------------------------------------------------------------------------
-
-    /// @notice A zero pull is refused rather than emitting a transfer of nothing
-    function test_pullETH_rejectsAZeroAmount() public {
-        _deployWallet(customDeviceUniqueIdentifiers[0], pubKey1, 8004);
-        vm.deal(address(wallet), 1 ether);
-
-        vm.prank(eSIMWallet);
-        vm.expectRevert(Errors.ZeroAmount.selector);
-        wallet.pullETH(0);
-    }
-
-    // ---------------------------------------------------------------------------------------------
     // Addresses the wallet has never bound
     // ---------------------------------------------------------------------------------------------
 
     /// @notice ETH access cannot be granted to an address the wallet has never bound
-    /// @dev Without this an arbitrary address could be given canPullETH, and the pull path checks
+    /// @dev Without this an arbitrary address could be given canPullFunds, and the pull path checks
     ///      only that flag and the binding it is set alongside.
-    function test_toggleAccessToETH_rejectsAnUnknownESIMWallet() public {
+    function test_toggleAccessToFunds_rejectsAnUnknownESIMWallet() public {
         _deployWallet(customDeviceUniqueIdentifiers[0], pubKey1, 8006);
 
         vm.prank(address(wallet));
         vm.expectRevert(abi.encodeWithSelector(Errors.UnknownESIMWallet.selector, user1));
-        wallet.toggleAccessToETH(user1, true);
+        wallet.toggleAccessToFunds(user1, true);
 
-        assertEq(wallet.canPullETH(user1), false, "A refused grant must leave the address without access");
+        assertEq(wallet.canPullFunds(user1), false, "A refused grant must leave the address without access");
     }
 
     /// @notice An eSIM wallet this device does not hold cannot be removed from it

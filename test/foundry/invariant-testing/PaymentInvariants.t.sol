@@ -1,0 +1,89 @@
+// SPDX-License-Identifier: MIT
+
+pragma solidity 0.8.36;
+
+import {CampaignBase} from "test/foundry/invariant-testing/base/CampaignBase.sol";
+
+/// @notice What has to stay true about payment references and the currency table.
+/// @dev The whole campaign runs underneath these, so both hold while wallets are being
+///      transferred, removed and moved onto new beacon logic.
+contract PaymentInvariantsTest is CampaignBase {
+
+    bytes32[3] private symbols = [bytes32("USD"), bytes32("USDC"), bytes32("ETH")];
+
+    /// @notice One payment reference pays for one purchase on one wallet, whichever path spends it
+    /// @dev A reference is one offchain payment. The backend retries the whole onchain step on any
+    ///      failure, so a reference that could be spent a second time on the same wallet is a user
+    ///      charged once and billed twice. The two payment paths reach the registry by different
+    ///      routes, which is what makes this a question about the pair rather than about either
+    ///      one. Two different wallets spending the same raw reference is not a double-spend, since
+    ///      the registry scopes the record per wallet.
+    function invariant_aPaymentReferenceIsSpentAtMostOnce() public view {
+        assertFalse(
+            paymentHandler.ghost_referenceSpentTwice(),
+            "A wallet-scoped payment reference paid for a second purchase"
+        );
+
+        uint256 count = paymentHandler.spentReferenceCount();
+        for (uint256 i = 0; i < count; ++i) {
+            bytes32 scopedReference = paymentHandler.spentReferences(i);
+
+            assertEq(
+                paymentHandler.ghost_spendCount(scopedReference),
+                1,
+                "A wallet-scoped payment reference was spent more than once"
+            );
+            assertTrue(
+                registry.usedPaymentReferences(scopedReference),
+                "A reference a purchase spent does not read as spent"
+            );
+        }
+    }
+
+    /// @notice The adapter holds no tokens between transactions
+    /// @dev Money passes through it in one call. A balance left behind would mean a settlement paid
+    ///      the vault less than the buyer funded, with the difference sitting where the next
+    ///      purchase could carry it off.
+    function invariant_theAdapterHoldsNoTokensAtRest() public view {
+        assertEq(
+            settlementERC20.balanceOf(address(paymentAdapter)),
+            0,
+            "The payment adapter is holding tokens"
+        );
+    }
+
+    /// @notice The vault holds exactly what the purchases that went through were priced at
+    /// @dev The adapter converts the price itself, so this is the check that the figure it worked
+    ///      out is the figure that arrived. Nothing else in the campaign sends the vault tokens.
+    function invariant_theVaultHoldsWhatWasSettled() public view {
+        assertEq(
+            settlementERC20.balanceOf(VAULT),
+            paymentHandler.ghost_settledToVault(),
+            "The vault balance does not match what the purchases came to"
+        );
+    }
+
+    /// @notice A currency the table has withdrawn never returns a price
+    /// @dev The withdrawal is what stops a purchase being recorded against a currency the protocol
+    ///      no longer accepts, so an answer that outlives it would leave the withdrawal meaning
+    ///      nothing.
+    function invariant_aWithdrawnCurrencyNeverQuotes() public {
+        assertFalse(
+            paymentHandler.ghost_withdrawnCurrencyQuoted(),
+            "A withdrawn currency returned a price"
+        );
+
+        for (uint256 i = 0; i < symbols.length; ++i) {
+            (bool allowed,,,) = paymentAdapter.assets(symbols[i]);
+            if (allowed) continue;
+
+            bool quoted = true;
+            try paymentAdapter.quote(symbols[i], 100) returns (uint256) {}
+            catch {
+                quoted = false;
+            }
+
+            assertFalse(quoted, "A withdrawn currency returned a price");
+        }
+    }
+}

@@ -35,10 +35,10 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgrad
     mapping(address eSIMWalletAddress => bool isDeployed) public isESIMWalletDeployed;
 
     /// @notice Emitted when the eSIM wallet factory is deployed
-    event ESIMWalletFactorydeployed(
+    event ESIMWalletFactoryDeployed(
         address indexed _upgradeManager,
         address indexed _eSIMWalletImplementation,
-        address indexed beacon
+        address indexed _beacon
     );
 
     /// @notice Emitted when a new eSIM wallet is deployed
@@ -59,6 +59,12 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgrad
     /// @notice Restricts a call to the registry, the device wallet factory or a known device wallet
     /// @dev The first two deploy on behalf of a device wallet during setup. A device wallet reaching
     ///      this directly is constrained further inside `deployESIMWallet`.
+    ///
+    ///      That third caller is what makes `DeviceWallet.deployESIMWallet`'s admin gate a workflow
+    ///      convenience rather than a boundary: an owner can sign an `execute` straight at this
+    ///      function and get the same wallet with no admin in the call. Deliberate, since a device
+    ///      wallet reaches every external function through `execute` and no check downstream of its
+    ///      call can tell which of its owner's intents produced it.
     modifier onlyRegistryOrDeviceWalletFactoryOrDeviceWallet() {
         if(
             msg.sender != address(registry) &&
@@ -74,6 +80,7 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgrad
     // Initialisation
     // ---------------------------------------------------------------------------------------------
 
+    /// @notice Disables initializers on the implementation contract
     /// @dev Locks the implementation contract itself. Without this, anyone can call initialize
     ///      directly on the implementation, own it, and make it deploy a beacon it controls. The
     ///      proxy is unaffected either way, but an owned implementation is a trap for any later
@@ -97,7 +104,7 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgrad
 
         beacon = new UpgradeableBeacon(_eSIMWalletImplementation, (address(this)));
 
-        emit ESIMWalletFactorydeployed(
+        emit ESIMWalletFactoryDeployed(
             _upgradeManager,
             _eSIMWalletImplementation,
             address(beacon)
@@ -234,6 +241,7 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgrad
     {}
 
     /// @notice The eSIM wallet logic contract every eSIM wallet currently runs
+    /// @return The current implementation address
     function getCurrentESIMWalletImplementation() public view returns (address) {
         return beacon.implementation();
     }

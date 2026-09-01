@@ -50,6 +50,15 @@ jobs:
           forge test --via-ir -vvv
         id: test
 
+      # The deploy scripts, which the fork rehearsal covers better but which it cannot run here:
+      # that needs an RPC key and a live anvil. These reach the failure and resume branches
+      # instead. They run one at a time because they share one record file and one process
+      # environment, so `--threads 1` is not optional.
+      - name: Run deploy script tests
+        run: |
+          FOUNDRY_PROFILE=scripts forge test --via-ir --threads 1 -vvv
+        id: script-test
+
       # Fuzz and invariant runs draw a fresh seed each time, and the malleable twin case verifies a
       # signature generated offchain per run, so all three report a different figure every time.
       # They are left out of the baseline rather than given a tolerance, so what remains is checked

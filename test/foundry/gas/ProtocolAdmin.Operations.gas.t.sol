@@ -26,7 +26,7 @@ contract ProtocolAdminOperationsGasTest is AdminBase {
 
     /// @notice Announcing a change, one call and four
     function test_schedule() public {
-        bytes memory data = abi.encodeCall(registry.setDefaultDataBundlePriceCap, (1 ether));
+        bytes memory data = abi.encodeCall(registry.setDefaultPriceCapUSDCents, (1 ether));
 
         vm.prank(proposer);
         protocolAdmin.schedule(address(registry), 0, data, bytes32(0), bytes32(uint256(1)), DELAY);
@@ -43,7 +43,7 @@ contract ProtocolAdminOperationsGasTest is AdminBase {
     /// @dev Held apart from the batch below because both land on the same registry slot. Measured
     ///      in one body, whichever ran first would pay the cold write and make the other look free.
     function test_execute_oneCall() public {
-        bytes memory data = abi.encodeCall(registry.setDefaultDataBundlePriceCap, (1 ether));
+        bytes memory data = abi.encodeCall(registry.setDefaultPriceCapUSDCents, (1 ether));
         _schedule(address(registry), data, bytes32(uint256(1)));
 
         vm.warp(block.timestamp + DELAY);
@@ -88,7 +88,7 @@ contract ProtocolAdminOperationsGasTest is AdminBase {
 
     /// @notice Calling off something already announced
     function test_cancel() public {
-        bytes memory data = abi.encodeCall(registry.setDefaultDataBundlePriceCap, (1 ether));
+        bytes memory data = abi.encodeCall(registry.setDefaultPriceCapUSDCents, (1 ether));
         bytes32 id = _schedule(address(registry), data, bytes32(0));
 
         vm.prank(proposer);
@@ -177,7 +177,7 @@ contract ProtocolAdminOperationsGasTest is AdminBase {
 
         for(uint256 i = 0; i < 4; ++i) {
             targets[i] = address(registry);
-            payloads[i] = abi.encodeCall(registry.setDefaultDataBundlePriceCap, ((i + 1) * 1 ether));
+            payloads[i] = abi.encodeCall(registry.setDefaultPriceCapUSDCents, (uint64((i + 1) * 1_000)));
         }
     }
 

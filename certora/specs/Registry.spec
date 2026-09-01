@@ -259,7 +259,7 @@ rule aValidDeviceWalletNeverBecomesInvalid(method f, address d) filtered { f -> 
 /// wrong for two of them. This one is genuinely write-once.
 rule theEntryPointMovesOnlyAtInitialization(method f) filtered {
     f -> !alwaysReverts(f)
-      && f.selector != sig:initialize(address, address, address, address, address, address, uint256).selector
+      && f.selector != sig:initialize(address, address, address, address, address, address, uint64).selector
 } {
     address entryPointBefore = entryPoint();
 
@@ -278,7 +278,7 @@ rule theEntryPointMovesOnlyAtInitialization(method f) filtered {
 /// pointing somewhere the money never went.
 rule theVaultMovesOnlyThroughItsSetter(method f) filtered {
     f -> !alwaysReverts(f)
-      && f.selector != sig:initialize(address, address, address, address, address, address, uint256).selector
+      && f.selector != sig:initialize(address, address, address, address, address, address, uint64).selector
 } {
     address vaultBefore = vault();
 
@@ -313,7 +313,7 @@ rule theVaultIsNeverSetToZero(address newVault) {
 /// `disableAdmin` for a reason that has nothing to do with the address moving.
 rule theAdminMovesOnlyToTheNominatedAddress(method f) filtered {
     f -> !alwaysReverts(f)
-      && f.selector != sig:initialize(address, address, address, address, address, address, uint256).selector
+      && f.selector != sig:initialize(address, address, address, address, address, address, uint64).selector
 } {
     address adminBefore = adminOfRecord();
     address nominated = newRequestedAdmin();

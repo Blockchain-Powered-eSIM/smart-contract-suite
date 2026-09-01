@@ -118,7 +118,7 @@ contract LazySaltCollisionTest is DeployerBase {
 
         for(uint256 i=0; i<_count; ++i) {
             eSIMs[0][i] = _eSIMName(i);
-            bundles[0][i] = DataBundleDetails("DB_BATCH", 1);
+            bundles[0][i] = bundle("DB_BATCH", TEST_PRICE_CENTS);
         }
 
         vm.prank(eSIMWalletAdmin);

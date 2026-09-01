@@ -90,11 +90,14 @@ interface Errors {
     // ESIMWallet and DeviceWallet
     error FailedToTransfer();
     error InsufficientBalance(uint256 balance, uint256 amount);
+    error ZeroAmount();
+    // A currency with no token address, so nothing can be transferred in it
+    error AssetNotTransferable(bytes32 asset);
 
     // ESIMWallet
     error OnlyRegistry();
     error OnlyDeviceWalletOrESIMWalletAdmin();
-    error DataBundlePriceAboveCap(uint256 price, uint256 cap);
+    error DataBundlePriceAboveCap(uint64 priceUSDCents, uint64 cap);
     error ESIMIdentifierAlreadySet(string eSIMUniqueIdentifier);
     error EmptyDataBundleID();
     error ZeroDataBundlePrice();
@@ -105,9 +108,8 @@ interface Errors {
 
     // DeviceWallet
     error UnknownESIMWallet(address eSIMWallet);
-    error ZeroAmount();
-    error ETHAccessRevoked(address eSIMWallet);
-    error ETHAccessNotGrantableAtBind(address eSIMWallet);
+    error FundsAccessRevoked(address eSIMWallet);
+    error FundsAccessNotGrantableAtBind(address eSIMWallet);
     error ESIMWalletAlreadyAdded(address eSIMWallet);
     error ESIMWalletNotOwnedByThisDeviceWallet(address eSIMWallet, address eSIMWalletOwner);
     error OnlyRegistryOrDeviceWalletFactoryOrOwner();
@@ -115,4 +117,30 @@ interface Errors {
     error OnlyESIMWalletAdminOrRegistry();
     error OnlyAssociatedESIMWallets();
     error OnlyESIMWalletAdmin();
+
+    // Registry, on the path for purchases paid for outside the protocol
+    error PaymentAdapterNotSet();
+    error PaymentAdapterUnchanged(address paymentAdapter);
+    // Only buyDataBundle may claim the protocol saw the money move
+    error SettlementNotAsserted();
+    // Older history is still waiting to be copied, so a new entry would land out of order
+    error HistoryNotFullyCopied(string eSIMIdentifier, uint256 outstanding);
+
+    // PaymentAdapter
+    error EmptyAssetSymbol();
+    error EmptyPaymentReference();
+    error AssetNotAllowed(bytes32 asset);
+    error AssetAlreadyRegistered(bytes32 asset);
+    error AssetNotRegistered(bytes32 asset);
+    // quote divides by 100, so fewer than two decimals loses the cents
+    error AssetDecimalsTooLow(bytes32 asset, uint8 decimals);
+    // Past the ceiling, quote overflows and the currency can never be priced
+    error AssetDecimalsTooHigh(bytes32 asset, uint8 decimals);
+    // No price feeds, so only a currency already in dollars can be converted from cents
+    error AssetNeedsSwap(bytes32 asset);
+    error PaymentReferenceAlreadyUsed(bytes32 paymentReference);
+    // The price costs more of the currency than the buyer was willing to spend
+    error SettlementAboveMax(uint256 required, uint256 maxAmountIn);
+    // The caller has to send the tokens before calling settle, and sent less than it declared
+    error SettlementNotFunded(uint256 amountIn, uint256 balance);
 }

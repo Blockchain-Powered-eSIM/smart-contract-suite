@@ -39,11 +39,11 @@ contract ProtocolState {
     /// @notice The last device wallet that held each eSIM wallet, kept after a detachment
     /// @dev The mapping above goes back to zero when a wallet is removed, which loses the one
     ///      address worth checking afterwards. A removal that cleared the association but left the
-    ///      right to pull ETH behind would leave the leftover on the wallet that just let go, and
+    ///      right to pull funds behind would leave the leftover on the wallet that just let go, and
     ///      finding it any other way means comparing every device wallet against every eSIM wallet.
     mapping(address eSIMWallet => address deviceWallet) public ghost_lastDevice;
 
-    /// @notice Set for each pair the owner has granted the right to pull ETH and not since revoked
+    /// @notice Set for each pair the owner has granted the right to pull funds and not since revoked
     /// @dev Keyed by the pair, so a wallet that moves to a second device wallet does not read as
     ///      carrying the first one's grant.
     mapping(address deviceWallet => mapping(address eSIMWallet => bool granted)) public ghost_ethAccessGranted;
@@ -230,7 +230,7 @@ contract ProtocolState {
         _setESIMOwner(wallet, device);
     }
 
-    /// @notice Records that the owner granted an eSIM wallet the right to pull ETH
+    /// @notice Records that the owner granted an eSIM wallet the right to pull funds
     function recordETHAccessGrant(address device, address wallet) external {
         ghost_ethAccessGranted[device][wallet] = true;
     }

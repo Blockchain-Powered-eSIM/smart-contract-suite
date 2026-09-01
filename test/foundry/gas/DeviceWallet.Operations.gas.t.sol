@@ -26,7 +26,7 @@ contract DeviceWalletOperationsGasTest is GasBase {
 
     /// @notice Adding another eSIM wallet to a device that already has one
     /// @dev The first eSIM wallet comes with the device deployment, so this is the marginal cost of
-    ///      the second and every one after it. The grant is measured in `test_toggleAccessToETH`.
+    ///      the second and every one after it. The grant is measured in `test_toggleAccessToFunds`.
     function test_deployESIMWallet() public {
         _deploy();
 
@@ -59,29 +59,35 @@ contract DeviceWalletOperationsGasTest is GasBase {
     /// @notice Granting and revoking an eSIM wallet's access to the device's ETH
     /// @dev Gated on the wallet calling itself, which in production means it arrives as the target
     ///      of an `execute` rather than as a transaction of its own.
-    function test_toggleAccessToETH() public {
+    function test_toggleAccessToFunds() public {
         _deploy();
 
         vm.prank(address(wallet));
-        wallet.toggleAccessToETH(address(firstESIMWallet), true);
-        vm.snapshotGasLastCall(NAMESPACE, "toggleAccessToETH: grant");
+        wallet.toggleAccessToFunds(address(firstESIMWallet), true);
+        vm.snapshotGasLastCall(NAMESPACE, "toggleAccessToFunds: grant");
 
         vm.prank(address(wallet));
-        wallet.toggleAccessToETH(address(firstESIMWallet), false);
-        vm.snapshotGasLastCall(NAMESPACE, "toggleAccessToETH: revoke");
+        wallet.toggleAccessToFunds(address(firstESIMWallet), false);
+        vm.snapshotGasLastCall(NAMESPACE, "toggleAccessToFunds: revoke");
     }
 
-    /// @notice An eSIM wallet pulling ETH from the device wallet that owns it
-    function test_pullETH() public {
+    /// @notice An eSIM wallet pulling an ERC-20 from the device wallet that owns it
+    /// @dev Two cases because the eSIM wallet's balance slot is cold on its first purchase and warm
+    ///      after, and the difference is what a wallet buying more than once actually pays.
+    function test_pullToken() public {
         _deploy();
-        vm.deal(address(wallet), 10 ether);
+        fundSettlementToken(address(wallet), 1_000e6);
 
         vm.prank(address(wallet));
-        wallet.toggleAccessToETH(address(firstESIMWallet), true);
+        wallet.toggleAccessToFunds(address(firstESIMWallet), true);
 
         vm.prank(address(firstESIMWallet));
-        wallet.pullETH(1 ether);
-        vm.snapshotGasLastCall(NAMESPACE, "pullETH: 1 ether to the eSIM wallet");
+        wallet.pullToken(settlementToken, 100e6);
+        vm.snapshotGasLastCall(NAMESPACE, "pullToken: first pull, the wallet holds none of it");
+
+        vm.prank(address(firstESIMWallet));
+        wallet.pullToken(settlementToken, 100e6);
+        vm.snapshotGasLastCall(NAMESPACE, "pullToken: the wallet already holds some");
     }
 
     /// @notice Funding the wallet's entry point deposit

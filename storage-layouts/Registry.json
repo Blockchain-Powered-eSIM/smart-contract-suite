@@ -128,11 +128,25 @@
       "type": "t_bool"
     },
     {
+      "slot": "64",
+      "offset": 22,
+      "bytes": "8",
+      "label": "defaultPriceCapUSDCents",
+      "type": "t_uint64"
+    },
+    {
       "slot": "65",
       "offset": 0,
+      "bytes": "20",
+      "label": "paymentAdapter",
+      "type": "t_address"
+    },
+    {
+      "slot": "66",
+      "offset": 0,
       "bytes": "32",
-      "label": "defaultDataBundlePriceCap",
-      "type": "t_uint256"
+      "label": "usedPaymentReferences",
+      "type": "t_mapping(t_bytes32,t_bool)"
     }
   ]
 }

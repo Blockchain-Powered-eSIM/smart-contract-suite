@@ -13,21 +13,25 @@ import {DeployConfig} from "./DeployConfig.sol";
 ///      command line is how the wrong proxy gets upgraded, so each script looks its targets up here
 ///      instead and fails loudly when an entry is missing.
 ///
-///      Two files, because they are read by different people. `deployments/address.json` is a flat
-///      name to address map keyed by chain, which is what a reader wants and what the SDK and the
-///      README quote. `deployments/<recordKey>.json` is the full record for one deployment: build
-///      provenance, constructor arguments, role holders, codehashes, status. Keeping the detail out
-///      of the address book is what stops the address book growing past the point where anyone
-///      reads it.
+///      Two files, because they are read by different people. The address book is a flat name to
+///      address map keyed by chain, which is what a reader wants and what the SDK and the README
+///      quote. The record is the full detail for one deployment: build provenance, constructor
+///      arguments, role holders, codehashes, status. Keeping the detail out of the address book is
+///      what stops the address book growing past the point where anyone reads it.
 ///
 ///      The record file is named after the record key, `base-sepolia-84532-entrypoint-v8.json`, so
-///      the filename cannot disagree with the chain and EntryPoint version it describes. Nothing
-///      here is hand edited: a hand edited address is indistinguishable from a deployed one to
-///      every reader of this file.
+///      the filename cannot disagree with the chain and EntryPoint version it describes, and the
+///      record itself is written at the file's root rather than nested under that key again.
+///
+///      Both paths can be overridden through an environment variable, `DEPLOYMENT_RECORD_PATH` and
+///      `ADDRESS_BOOK_PATH`. A test or a fork rehearsal points both at a scratch file so nothing it
+///      does can reach the files that track a live deployment. Nothing here is hand edited outside
+///      of that override: a hand edited address is indistinguishable from a deployed one to every
+///      reader of this file.
 library DeploymentRecord {
 
-    /// @notice Flat name to address map, one entry per deployment
-    string internal constant ADDRESS_BOOK = "deployments/address.json";
+    /// @notice Flat name to address map, one entry per deployment, unless overridden
+    string internal constant DEFAULT_ADDRESS_BOOK = "deployments/address.json";
 
     Vm private constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
@@ -44,8 +48,25 @@ library DeploymentRecord {
     error NoRecordFile(string network, string path);
 
     /// @notice Path to the full record for the chain the script is connected to
+    /// @dev A function rather than a constant so a test or a rehearsal can point a script at a
+    ///      scratch file. The real record is the only thing that remembers a live deployment's
+    ///      addresses, so a run writing over it loses them. `fs_permissions` keeps any value inside
+    ///      `deployments/`.
     /// @return path Record file path, for example `deployments/base-sepolia-84532-entrypoint-v8.json`
     function recordPath() internal view returns (string memory path) {
+        path = vm.envOr("DEPLOYMENT_RECORD_PATH", _defaultRecordPath());
+    }
+
+    /// @notice Path to the flat address book, unless overridden
+    /// @dev Same override reasoning as `recordPath`. The real address book is committed and shared
+    ///      across every chain, so a test writing an entry into it would corrupt the tracked file
+    ///      for everyone rather than for one test run.
+    /// @return path Address book path
+    function addressBookPath() internal view returns (string memory path) {
+        path = vm.envOr("ADDRESS_BOOK_PATH", DEFAULT_ADDRESS_BOOK);
+    }
+
+    function _defaultRecordPath() private view returns (string memory path) {
         path = string.concat("deployments/", DeployConfig.recordKey(), ".json");
     }
 
@@ -124,7 +145,7 @@ library DeploymentRecord {
     /// @notice Adds this chain's entry to the flat address book
     /// @param json Serialized name to address map
     function writeAddressBook(string memory json) internal {
-        vm.writeJson(json, ADDRESS_BOOK, string.concat(".", DeployConfig.recordKey()));
+        vm.writeJson(json, addressBookPath(), string.concat(".", DeployConfig.recordKey()));
     }
 
     /// @notice Records a step as complete
@@ -168,10 +189,10 @@ library DeploymentRecord {
     function isRecorded() internal view returns (bool deployed) {
         if(vm.isFile(recordPath())) return true;
 
-        deployed = vm.keyExistsJson(
-            vm.readFile(ADDRESS_BOOK),
-            string.concat(".", DeployConfig.recordKey())
-        );
+        string memory book = addressBookPath();
+        if(!vm.isFile(book)) return false;
+
+        deployed = vm.keyExistsJson(vm.readFile(book), string.concat(".", DeployConfig.recordKey()));
     }
 
     /// @notice Reads the record file, failing with the path when there is none

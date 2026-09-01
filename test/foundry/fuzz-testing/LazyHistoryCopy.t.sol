@@ -57,8 +57,8 @@ contract LazyHistoryCopyTest is FuzzBase {
 
         assertEq(inWallet.length, entries, "The wallet must hold every entry and no more");
         for(uint256 i=0; i<entries; ++i) {
-            assertEq(inWallet[i].dataBundleID, stored[i].dataBundleID);
-            assertEq(inWallet[i].dataBundlePrice, stored[i].dataBundlePrice);
+            assertEq(inWallet[i].id, stored[i].id);
+            assertEq(inWallet[i].priceUSDCents, stored[i].priceUSDCents);
         }
         assertEq(lazyWalletRegistry.historyEntriesCopied(ESIM), entries, "The cursor must end at the length");
     }
@@ -115,7 +115,7 @@ contract LazyHistoryCopyTest is FuzzBase {
         for(uint256 i=0; i<_entries; ++i) {
             DataBundleDetails[][] memory bundles = new DataBundleDetails[][](1);
             bundles[0] = new DataBundleDetails[](1);
-            bundles[0][0] = DataBundleDetails(string.concat("DB_", vm.toString(i)), i + 1);
+            bundles[0][0] = bundle(bytes32(bytes(string.concat("DB_", vm.toString(i)))), uint64(i + 1));
 
             vm.prank(eSIMWalletAdmin);
             lazyWalletRegistry.batchPopulateHistory(devices, eSIMs, bundles);

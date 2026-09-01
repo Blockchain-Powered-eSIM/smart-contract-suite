@@ -71,21 +71,21 @@ contract WalletInvariantsTest is CampaignBase {
         }
     }
 
-    /// @notice Nothing may pull ETH from a device wallet that the device wallet does not hold
+    /// @notice Nothing may spend from a device wallet that does not hold it
     /// @dev The pair is set together on the way in and cleared together on the way out, so the
     ///      only way to separate them is a path that clears one and not the other. A detached
-    ///      wallet that kept its right to pull would be reaching into someone else's balance.
-    function invariant_onlyHeldWalletsCanPullETH() public view {
+    ///      wallet that kept its right to spend would be reaching into someone else's balance.
+    function invariant_onlyHeldWalletsCanSpend() public view {
         uint256 count = state.eSIMWalletCount();
         for (uint256 i = 0; i < count; ++i) {
             address wallet = state.eSIMWallets(i);
             address device = state.ghost_lastDevice(wallet);
             if (device == address(0)) continue;
 
-            if (MockDeviceWallet(payable(device)).canPullETH(wallet)) {
+            if (MockDeviceWallet(payable(device)).canPullFunds(wallet)) {
                 assertTrue(
                     MockDeviceWallet(payable(device)).isValidESIMWallet(wallet),
-                    "An eSIM wallet may pull ETH from a device wallet that does not hold it"
+                    "An eSIM wallet may spend from a device wallet that does not hold it"
                 );
             }
         }

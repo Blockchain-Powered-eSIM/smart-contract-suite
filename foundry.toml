@@ -48,4 +48,41 @@ runs = 5000
 depth = 100
 fail_on_revert = false
 
+# The deploy script tests, which have to run one at a time.
+# FOUNDRY_PROFILE=scripts forge test --threads 1
+#
+# They live outside `test/foundry` so an ordinary `forge test` does not pick them up. Two of them
+# cannot run at once: the scripts read their parameters from the process environment and their
+# record from one file, and forge runs every setUp before any test and then runs the tests in
+# parallel. So a second test rewrites the record between the first one's write and its read.
+#
+# `--threads 1` on the command line is what actually serializes them. The setting below resolves,
+# and `forge config` reports it, but the run is still parallel without the flag. Measured: with the
+# flag, CPU time equals wall time and 50 tests pass five runs running; without it, CPU time is ten
+# times wall and between 2 and 12 tests fail each run.
+[profile.scripts]
+test = 'test/scripts'
+threads = 1
+
+# The Echidna and Medusa harness.
+# FOUNDRY_PROFILE=fuzz forge build
+#
+# The Yul optimizer merges branches, so a campaign run against optimized bytecode reports maybe ten
+# percent less coverage than the source actually reaches. Turning the optimizer off recovers most of
+# that. Turning via-IR off would recover all of it and does not compile: the suite is stack-too-deep
+# without it.
+#
+# Its own `out` because the two profiles disagree on optimizer settings, and sharing one directory
+# makes every profile switch a full rebuild. Its own `test` for the same reason `scripts` has one,
+# to keep an ordinary `forge test` from picking the harness up.
+[profile.fuzz]
+via_ir = true
+optimizer = false
+out = 'out-fuzz'
+test = 'test/fizz'
+# The fuzzers match deployed bytecode back to a source file to attribute coverage, and the metadata
+# hash is what makes that match unambiguous. Kept here only; the default profile still drops it,
+# which is what holds the byte-for-byte agreement with hardhat.
+bytecode_hash = 'ipfs'
+
 # See more config options https://book.getfoundry.sh/reference/config.html

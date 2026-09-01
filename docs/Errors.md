@@ -338,6 +338,18 @@ error FailedToTransfer()
 error InsufficientBalance(uint256 balance, uint256 amount)
 ```
 
+### ZeroAmount
+
+```solidity
+error ZeroAmount()
+```
+
+### AssetNotTransferable
+
+```solidity
+error AssetNotTransferable(bytes32 asset)
+```
+
 ### OnlyRegistry
 
 ```solidity
@@ -353,7 +365,7 @@ error OnlyDeviceWalletOrESIMWalletAdmin()
 ### DataBundlePriceAboveCap
 
 ```solidity
-error DataBundlePriceAboveCap(uint256 price, uint256 cap)
+error DataBundlePriceAboveCap(uint64 priceUSDCents, uint64 cap)
 ```
 
 ### ESIMIdentifierAlreadySet
@@ -404,22 +416,16 @@ error UseAcceptOwnershipTransfer()
 error UnknownESIMWallet(address eSIMWallet)
 ```
 
-### ZeroAmount
+### FundsAccessRevoked
 
 ```solidity
-error ZeroAmount()
+error FundsAccessRevoked(address eSIMWallet)
 ```
 
-### ETHAccessRevoked
+### FundsAccessNotGrantableAtBind
 
 ```solidity
-error ETHAccessRevoked(address eSIMWallet)
-```
-
-### ETHAccessNotGrantableAtBind
-
-```solidity
-error ETHAccessNotGrantableAtBind(address eSIMWallet)
+error FundsAccessNotGrantableAtBind(address eSIMWallet)
 ```
 
 ### ESIMWalletAlreadyAdded
@@ -462,5 +468,95 @@ error OnlyAssociatedESIMWallets()
 
 ```solidity
 error OnlyESIMWalletAdmin()
+```
+
+### PaymentAdapterNotSet
+
+```solidity
+error PaymentAdapterNotSet()
+```
+
+### PaymentAdapterUnchanged
+
+```solidity
+error PaymentAdapterUnchanged(address paymentAdapter)
+```
+
+### SettlementNotAsserted
+
+```solidity
+error SettlementNotAsserted()
+```
+
+### HistoryNotFullyCopied
+
+```solidity
+error HistoryNotFullyCopied(string eSIMIdentifier, uint256 outstanding)
+```
+
+### EmptyAssetSymbol
+
+```solidity
+error EmptyAssetSymbol()
+```
+
+### EmptyPaymentReference
+
+```solidity
+error EmptyPaymentReference()
+```
+
+### AssetNotAllowed
+
+```solidity
+error AssetNotAllowed(bytes32 asset)
+```
+
+### AssetAlreadyRegistered
+
+```solidity
+error AssetAlreadyRegistered(bytes32 asset)
+```
+
+### AssetNotRegistered
+
+```solidity
+error AssetNotRegistered(bytes32 asset)
+```
+
+### AssetDecimalsTooLow
+
+```solidity
+error AssetDecimalsTooLow(bytes32 asset, uint8 decimals)
+```
+
+### AssetDecimalsTooHigh
+
+```solidity
+error AssetDecimalsTooHigh(bytes32 asset, uint8 decimals)
+```
+
+### AssetNeedsSwap
+
+```solidity
+error AssetNeedsSwap(bytes32 asset)
+```
+
+### PaymentReferenceAlreadyUsed
+
+```solidity
+error PaymentReferenceAlreadyUsed(bytes32 paymentReference)
+```
+
+### SettlementAboveMax
+
+```solidity
+error SettlementAboveMax(uint256 required, uint256 maxAmountIn)
+```
+
+### SettlementNotFunded
+
+```solidity
+error SettlementNotFunded(uint256 amountIn, uint256 balance)
 ```
 

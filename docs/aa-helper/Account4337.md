@@ -84,6 +84,8 @@ Restricts a call to the EntryPoint singleton
 constructor(contract IEntryPoint _entryPoint, contract P256Verifier _verifier) public
 ```
 
+Wires the entry point and WebAuthn verifier used by this account
+
 #### Parameters
 
 | Name | Type | Description |
@@ -248,6 +250,12 @@ function getDeposit() public view returns (uint256)
 ```
 
 This account's gas deposit held by the EntryPoint
+
+#### Return Values
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| [0] | uint256 | The deposited amount |
 
 ### addDeposit
 

@@ -32,7 +32,7 @@ contract LazyWalletRegistryGuardsTest is DeployerBase {
         eSIMs[0] = new string[](1);
         eSIMs[0][0] = ESIM;
         bundles[0] = new DataBundleDetails[](1);
-        bundles[0][0] = DataBundleDetails("DB_ID_1", 11);
+        bundles[0][0] = bundle("DB_ID_1", TEST_PRICE_CENTS);
 
         vm.prank(eSIMWalletAdmin);
         lazyWalletRegistry.batchPopulateHistory(devices, eSIMs, bundles);

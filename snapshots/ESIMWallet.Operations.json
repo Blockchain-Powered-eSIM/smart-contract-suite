@@ -1,11 +1,12 @@
 {
-  "acceptOwnershipTransfer": "5611",
-  "buyDataBundle: pulls from the device wallet": "80668",
-  "buyDataBundle: wallet already holds the price": "122259",
-  "deployESIMWallet: through the factory": "289326",
-  "populateHistory: 10 entries": "497912",
-  "requestTransferOwnership": "64168",
-  "setDataBundlePriceCap: back to the registry ceiling": "2286",
-  "setDataBundlePriceCap: set": "24286",
-  "setESIMUniqueIdentifier: first time": "27311"
+  "acceptOwnershipTransfer": "3529",
+  "buyDataBundleWithToken: pulls from the device wallet": "161439",
+  "buyDataBundleWithToken: wallet already holds the price": "131140",
+  "deployESIMWallet: through the factory": "289547",
+  "populateHistory: 10 entries": "489333",
+  "requestTransferOwnership": "64238",
+  "sendTokenToDeviceWallet: the whole balance": "28701",
+  "setESIMUniqueIdentifier: first time": "27249",
+  "setPriceCapUSDCents: back to the registry ceiling": "2543",
+  "setPriceCapUSDCents: set": "22443"
 }

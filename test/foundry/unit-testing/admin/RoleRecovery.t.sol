@@ -318,14 +318,14 @@ contract RoleRecoveryTest is AdminBase {
         vm.prank(guardian);
         protocolAdmin.execute(address(protocolAdmin), 0, grant, bytes32(0), bytes32(uint256(1)));
 
-        bytes memory priceCap = abi.encodeCall(registry.setDefaultDataBundlePriceCap, (3 ether));
+        bytes memory priceCap = abi.encodeCall(registry.setDefaultPriceCapUSDCents, (3 ether));
         _schedule(address(registry), priceCap, bytes32(uint256(2)));
         vm.warp(block.timestamp + protocolAdmin.getMinDelay());
 
         vm.prank(newGuardian);
         protocolAdmin.execute(address(registry), 0, priceCap, bytes32(0), bytes32(uint256(2)));
 
-        assertEq(registry.defaultDataBundlePriceCap(), 3 ether);
+        assertEq(registry.defaultPriceCapUSDCents(), 3 ether);
     }
 
     /// @dev The grant is paired and the revocation is not, because `revokeRole` cannot tell a

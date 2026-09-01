@@ -11,12 +11,14 @@ import "contracts/CustomStructs.sol";
 import {P256Verifier} from "contracts/P256Verifier.sol";
 import {DeviceWalletFactory} from "contracts/device-wallet/DeviceWalletFactory.sol";
 import {ESIMWalletFactory} from "contracts/esim-wallet/ESIMWalletFactory.sol";
+import {PaymentAdapter, Asset} from "contracts/payments/PaymentAdapter.sol";
 
 import "test/utils/mocks/MockEntryPoint.sol";
 import "test/utils/mocks/MockRegistry.sol";
 import "test/utils/mocks/MockLazyWalletRegistry.sol";
 import "test/utils/mocks/MockDeviceWallet.sol";
 import "test/utils/mocks/MockESIMWallet.sol";
+import {MockERC20} from "test/utils/mocks/tokens/MockERC20.sol";
 
 /// @notice Deploys the whole protocol once for an invariant campaign to run against.
 /// @dev Deliberately not a subclass of `DeployerBase`. That base carries the fixture arrays every
@@ -38,7 +40,12 @@ contract InvariantBase is Test {
     address internal constant UPGRADE_MANAGER = address(0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2);
     address internal constant VAULT = address(0x78731D3Ca6b7E34aC0F824c42a7cC18A495cabaB);
     address internal constant ATTACKER = address(0xbADc0DE000000000000000000000000000000001);
-    uint256 internal constant DEFAULT_DATA_BUNDLE_PRICE_CAP = 1 ether;
+    uint64 internal constant DEFAULT_PRICE_CAP_USD_CENTS = 100_000;   // $1000
+
+    /// @dev A stand-in for USDC, deployed rather than a fixed address because the campaign settles
+    ///      real balances through it.
+    MockERC20 internal settlementERC20;
+    address internal settlementToken;
 
     /// @notice The address the admin role rotates onto, and back off
     /// @dev Carries a budget of its own. Every admin path reads the role out of the registry, so
@@ -57,6 +64,7 @@ contract InvariantBase is Test {
     ESIMWalletFactory internal eSIMWalletFactory;
     MockRegistry internal registry;
     MockLazyWalletRegistry internal lazyWalletRegistry;
+    PaymentAdapter internal paymentAdapter;
 
     /// @notice Deploys the system in the same order the deploy script does
     function _deployProtocol() internal {
@@ -102,7 +110,7 @@ contract InvariantBase is Test {
                     address(deviceWalletFactory),
                     address(eSIMWalletFactory),
                     IEntryPoint(address(entryPoint)),
-                    DEFAULT_DATA_BUNDLE_PRICE_CAP
+                    DEFAULT_PRICE_CAP_USD_CENTS
                 )
             )
         );
@@ -115,8 +123,44 @@ contract InvariantBase is Test {
         );
         lazyWalletRegistry = MockLazyWalletRegistry(address(lazyWalletRegistryProxy));
 
+        settlementERC20 = new MockERC20("USD Coin", "USDC", 6);
+        settlementToken = address(settlementERC20);
+
+        PaymentAdapter paymentAdapterImpl = new PaymentAdapter();
+        ERC1967Proxy paymentAdapterProxy = new ERC1967Proxy(
+            address(paymentAdapterImpl),
+            abi.encodeCall(
+                paymentAdapterImpl.initialize,
+                (address(registry), settlementToken, UPGRADE_MANAGER)
+            )
+        );
+        paymentAdapter = PaymentAdapter(address(paymentAdapterProxy));
+
         vm.startPrank(UPGRADE_MANAGER);
         registry.addOrUpdateLazyWalletRegistryAddress(address(lazyWalletRegistry));
+        registry.setPaymentAdapter(address(paymentAdapter));
+        // Every purchase spends a payment reference through the adapter, so with no currencies
+        // registered a campaign would see all of them revert before reaching anything else. ETH is
+        // the entry that needs a rate, so it is the one `quote` refuses on its own terms rather
+        // than because a run withdrew it.
+        paymentAdapter.registerAsset("USD", Asset({
+            allowed: true,
+            isDollarUnit: true,
+            decimals: 2,
+            token: address(0)
+        }));
+        paymentAdapter.registerAsset("USDC", Asset({
+            allowed: true,
+            isDollarUnit: true,
+            decimals: 6,
+            token: settlementToken
+        }));
+        paymentAdapter.registerAsset("ETH", Asset({
+            allowed: true,
+            isDollarUnit: false,
+            decimals: 18,
+            token: address(0)
+        }));
         deviceWalletFactory.addRegistryAddress(address(registry));
         eSIMWalletFactory.addRegistryAddress(address(registry));
         vm.stopPrank();

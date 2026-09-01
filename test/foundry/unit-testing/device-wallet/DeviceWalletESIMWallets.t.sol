@@ -10,9 +10,66 @@ import {DeviceWallet} from "contracts/device-wallet/DeviceWallet.sol";
 
 import {DeviceWalletFixture} from "test/foundry/unit-testing/device-wallet/base/DeviceWalletFixture.sol";
 import {ReentrantESIMWallet} from "test/utils/mocks/ReentrantESIMWallet.sol";
+import {MockDeviceWallet} from "test/utils/mocks/MockDeviceWallet.sol";
+import {MockESIMWallet} from "test/utils/mocks/MockESIMWallet.sol";
 
 /// @notice Which eSIM wallets a device wallet holds, and how one moves between devices.
 contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
+
+    /// @notice The second device wallet takes the eSIM wallet, grants it access and buys through it
+    /// @dev Shared by the two handover tests, which are otherwise long enough that their locals push
+    ///      the via-IR build over its stack limit.
+    function _handOverToSecondDeviceAndBuy() private {
+        vm.deal(address(deviceWallet2), 5 ether);
+        vm.prank(address(deviceWallet2));
+        eSIMWallet1.acceptOwnershipTransfer();
+
+        assertEq(eSIMWallet1.owner(), address(deviceWallet2), "newOwner should have accepted the ownership");
+        assertEq(eSIMWallet1.newRequestedOwner(), address(0), "newRequestedOwner should have reset to address(0)");
+
+        vm.prank(address(deviceWallet2));
+        deviceWallet2.addESIMWallet(address(eSIMWallet1), false);
+
+        _assertESIMWalletBinding(deviceWallet2, eSIMWallet1, false, address(deviceWallet2), false, true);
+        _grantAccessAndBuy();
+    }
+
+    /// @notice The second half of the handover, split so neither function overflows the IR stack
+    function _grantAccessAndBuy() private {
+        assertEq(address(deviceWallet2).balance, 5 ether, "Device wallet balance should have been the same");
+        assertEq(address(eSIMWallet1).balance, 0, "eSIM wallet balance should have decreased to 0 ETH");
+
+        vm.prank(address(deviceWallet2));
+        deviceWallet2.toggleAccessToFunds(address(eSIMWallet1), true);
+
+        assertTrue(deviceWallet2.canPullFunds(address(eSIMWallet1)), "eSIMWallet1 should be able to spend");
+
+        _buyThroughDeviceWallet(deviceWallet2, eSIMWallet1);
+    }
+
+    /// @notice Funds a device wallet and buys one bundle through the eSIM wallet it holds
+    function _buyThroughDeviceWallet(MockDeviceWallet _device, MockESIMWallet _wallet) private {
+        uint256 needed = settlementAmount(TEST_PRICE_CENTS);
+        fundSettlementToken(address(_device), needed);
+
+        vm.prank(eSIMWalletAdmin);
+        _wallet.buyDataBundleWithToken(bundle("DB_ID_0", TEST_PRICE_CENTS), ASSET_USDC, needed, nextRef());
+
+        _assertBundlePaidFor(_device, _wallet, needed);
+    }
+
+    /// @notice Split out of the caller so the via-IR build stays inside its stack limit
+    function _assertBundlePaidFor(MockDeviceWallet _device, MockESIMWallet _wallet, uint256 _needed)
+        private
+        view
+    {
+        assertEq(settlementERC20.balanceOf(address(_device)), 0, "The whole amount came from the device wallet");
+        assertEq(settlementERC20.balanceOf(vault), _needed, "The vault must hold the price");
+
+        (bytes32 id, uint64 price,) = _wallet.transactionHistory(0);
+        assertEq(id, bytes32("DB_ID_0"), "The recorded data bundle ID should have been correct");
+        assertEq(price, TEST_PRICE_CENTS, "The recorded price should have been correct");
+    }
 
     function test_deployESIMWallet() public {
         deployWallets();
@@ -100,25 +157,40 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
     }
 
     /// @notice A wallet whose logic re-enters the device wallet during its own removal must find
-    /// that it has already lost both its association and its right to pull ETH
-    function test_removeESIMWallet_reentrantCallbackCannotPullETH() public {
+    /// that it has already lost both its association and its right to spend
+    function test_removeESIMWallet_reentrantCallbackCannotPull() public {
         deployWallets();
 
-        vm.deal(address(deviceWallet), 10 ether);
+        fundSettlementToken(address(deviceWallet), 1_000e6);
 
-        ReentrantESIMWallet handlerImpl = new ReentrantESIMWallet(DeviceWallet(payable(address(deviceWallet))));
-        vm.etch(address(eSIMWallet1), address(handlerImpl).code);
-        ReentrantESIMWallet handler = ReentrantESIMWallet(payable(address(eSIMWallet1)));
+        ReentrantESIMWallet handler = _etchReentrantLogicOverESIMWallet1();
 
         vm.prank(address(deviceWallet));
         deviceWallet.removeESIMWallet(address(eSIMWallet1), true);
 
-        assertEq(address(deviceWallet).balance, 10 ether, "Device wallet must not have lost any ETH to the callback");
-        assertEq(handler.pullETHSucceededDuringRemoval(), false, "pullETH must not succeed from inside the removal");
-        assertEq(handler.wasStillValidDuringRemoval(), false, "The wallet must already be unbound when the callback runs");
-        assertEq(handler.couldStillPullETHDuringRemoval(), false, "The wallet must already have lost ETH access when the callback runs");
+        _assertCallbackReachedNothing(handler);
+    }
 
-        _assertESIMWalletBinding(deviceWallet, eSIMWallet1, true, address(deviceWallet), false, false);
+    /// @notice Puts re-entering logic behind eSIMWallet1's address, keeping its bindings
+    /// @dev Deployed through `deployCode` rather than `new`, which keeps the mock's creation code
+    ///      out of this contract. Inlined, it puts the via-IR build over its stack limit.
+    function _etchReentrantLogicOverESIMWallet1() private returns (ReentrantESIMWallet) {
+        address impl = deployCode(
+            "ReentrantESIMWallet.sol:ReentrantESIMWallet",
+            abi.encode(address(deviceWallet), settlementToken)
+        );
+        vm.etch(address(eSIMWallet1), impl.code);
+
+        return ReentrantESIMWallet(payable(address(eSIMWallet1)));
+    }
+
+    /// @notice What the re-entering wallet found, split out so the caller stays inside the IR stack
+    function _assertCallbackReachedNothing(ReentrantESIMWallet _handler) private view {
+        assertEq(settlementERC20.balanceOf(address(deviceWallet)), 1_000e6, "nothing lost to the callback");
+        assertFalse(_handler.pullSucceededDuringRemoval(), "a pull must not succeed mid-removal");
+        assertFalse(_handler.wasStillValidDuringRemoval(), "the wallet must already be unbound");
+        assertFalse(_handler.couldStillPullDuringRemoval(), "the wallet must already have lost access");
+        assertFalse(deviceWallet.isValidESIMWallet(address(eSIMWallet1)), "the wallet must be unbound after");
     }
 
     function test_addESIMWallet_unauthorised() public {
@@ -202,53 +274,8 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
         deviceWallet.removeESIMWallet(address(eSIMWallet1), true);
         vm.stopPrank();
 
-        // 3. deviceWallet2 accepts ownership of eSIMWallet1
-        vm.deal(address(deviceWallet2), 5 ether);
-        vm.startPrank(address(deviceWallet2));
-        eSIMWallet1.acceptOwnershipTransfer();
-        vm.stopPrank();
-
-        address newOwner = eSIMWallet1.owner();
-        assertEq(newOwner, address(deviceWallet2), "newOwner should have accepted the ownership");
-
-        address requestedOwner = eSIMWallet1.newRequestedOwner();
-        assertEq(requestedOwner, address(0), "newRequestedOwner should have reset to address(0)");
-
-        // 4. deviceWallet2 adds/binds eSIMWallet1
-        vm.startPrank(address(deviceWallet2));
-        deviceWallet2.addESIMWallet(address(eSIMWallet1), false);
-        vm.stopPrank();
-
-        assertEq(address(deviceWallet2).balance, 5 ether, "Device wallet balance should have been the same");
-        assertEq(address(eSIMWallet1).balance, 0, "eSIM wallet balance should have decreased to 0 ETH");
-
-        _assertESIMWalletBinding(deviceWallet2, eSIMWallet1, false, address(deviceWallet2), false, true);
-
-        // 5. deviceWallet2 grants access to eSIMWallet1 to pull ETH (This could also be done in a single step during addESIMWallet function call)
-        vm.startPrank(address(deviceWallet2));
-        deviceWallet2.toggleAccessToETH(address(eSIMWallet1), true);
-        vm.stopPrank();
-
-        assertEq(deviceWallet2.canPullETH(address(eSIMWallet1)), true, "ESIMWallet1 should have access to ETH for deviceWallet2");
-        assertEq(address(eSIMWallet1).balance, 0, "eSIMWallet1 balance should have been 0 ETH");
-
-        // 6. Add ETH to deviceWallet2, and buy data bundle for eSIMWallet1
-        DataBundleDetails memory _dataBundleDetail = DataBundleDetails(
-            "DB_ID_0",
-            1 ether
-        );
-
-        vm.startPrank(eSIMWalletAdmin);
-        eSIMWallet1.buyDataBundle(_dataBundleDetail);
-        vm.stopPrank();
-
-        assertEq(address(deviceWallet2).balance, 4 ether, "Device wallet balance should have been 4 ETH");
-        assertEq((deviceWallet2.getVaultAddress()).balance, 1 ether, "Vault balance should have increased by 1 ETH");
-
-        DataBundleDetails[] memory history = eSIMWallet1.getTransactionHistory();
-        assertEq(history.length, 1, "Transaction history should have been updated");
-        assertEq(history[0].dataBundleID, "DB_ID_0", "Transaction history's data bundle ID should have been correct");
-        assertEq(history[0].dataBundlePrice, 1 ether, "Transaction history's data bundle price should have been correct");
+        // 3. deviceWallet2 takes the wallet, grants access and buys through it
+        _handOverToSecondDeviceAndBuy();
     }
 
     /// @notice A registered device wallet cannot release an eSIM wallet another one holds
@@ -321,7 +348,7 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
         _assertESIMWalletBinding(deviceWallet, eSIMWallet1, true, address(deviceWallet), false, false);
 
         DataBundleDetails[] memory batch = new DataBundleDetails[](1);
-        batch[0] = DataBundleDetails("DB_ID_0", 1 ether);
+        batch[0] = bundle("DB_ID_0", TEST_PRICE_CENTS);
 
         vm.prank(address(lazyWalletRegistry));
         registry.populateLazyHistory(address(eSIMWallet1), batch);
@@ -357,7 +384,7 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
     /// @dev Pinned rather than prevented. It stays the associated device wallet until the new one
     ///      binds, and it is still the eSIM wallet's owner through this window, so this is the
     ///      party reversing its own release rather than a third one interfering. It buys back no
-    ///      authority: the device wallet cleared `isValidESIMWallet` and `canPullETH` on itself
+    ///      authority: the device wallet cleared `isValidESIMWallet` and `canPullFunds` on itself
     ///      when it released, and the pending owner still refuses a rebind.
     function test_toggleESIMWalletStandbyStatus_letsTheOutgoingDeviceWalletLowerTheMarker() public {
         deployWallets();
@@ -427,52 +454,7 @@ contract DeviceWalletESIMWalletsTest is DeviceWalletFixture {
         currentOwner = eSIMWallet1.owner();
         assertNotEq(address(deviceWallet3), eSIMWallet1.owner(), "Critical Error: ESIMWallet stolen");
 
-        // 4. deviceWallet2 accepts ownership of eSIMWallet1
-        vm.deal(address(deviceWallet2), 5 ether);
-        vm.startPrank(address(deviceWallet2));
-        eSIMWallet1.acceptOwnershipTransfer();
-        vm.stopPrank();
-
-        address newOwner = eSIMWallet1.owner();
-        assertEq(newOwner, address(deviceWallet2), "newOwner should have accepted the ownership");
-
-        address requestedOwner = eSIMWallet1.newRequestedOwner();
-        assertEq(requestedOwner, address(0), "newRequestedOwner should have reset to address(0)");
-
-        // 5. deviceWallet2 adds/binds eSIMWallet1
-        vm.startPrank(address(deviceWallet2));
-        deviceWallet2.addESIMWallet(address(eSIMWallet1), false);
-        vm.stopPrank();
-
-        assertEq(address(deviceWallet2).balance, 5 ether, "Device wallet balance should have been the same");
-        assertEq(address(eSIMWallet1).balance, 0, "eSIM wallet balance should have decreased to 0 ETH");
-
-        _assertESIMWalletBinding(deviceWallet2, eSIMWallet1, false, address(deviceWallet2), false, true);
-
-        // 6. deviceWallet2 grants access to eSIMWallet1 to pull ETH (This could also be done in a single step during addESIMWallet function call)
-        vm.startPrank(address(deviceWallet2));
-        deviceWallet2.toggleAccessToETH(address(eSIMWallet1), true);
-        vm.stopPrank();
-
-        assertEq(deviceWallet2.canPullETH(address(eSIMWallet1)), true, "ESIMWallet1 should have access to ETH for deviceWallet2");
-        assertEq(address(eSIMWallet1).balance, 0, "eSIMWallet1 balance should have been 0 ETH");
-
-        // 7. Add ETH to deviceWallet2, and buy data bundle for eSIMWallet1
-        DataBundleDetails memory _dataBundleDetail = DataBundleDetails(
-            "DB_ID_0",
-            1 ether
-        );
-
-        vm.startPrank(eSIMWalletAdmin);
-        eSIMWallet1.buyDataBundle(_dataBundleDetail);
-        vm.stopPrank();
-
-        assertEq(address(deviceWallet2).balance, 4 ether, "Device wallet balance should have been 4 ETH");
-        assertEq((deviceWallet2.getVaultAddress()).balance, 1 ether, "Vault balance should have increased by 1 ETH");
-
-        DataBundleDetails[] memory history = eSIMWallet1.getTransactionHistory();
-        assertEq(history.length, 1, "Transaction history should have been updated");
-        assertEq(history[0].dataBundleID, "DB_ID_0", "Transaction history's data bundle ID should have been correct");
-        assertEq(history[0].dataBundlePrice, 1 ether, "Transaction history's data bundle price should have been correct");
+        // 4. deviceWallet2 takes the wallet, grants access and buys through it
+        _handOverToSecondDeviceAndBuy();
     }
 }

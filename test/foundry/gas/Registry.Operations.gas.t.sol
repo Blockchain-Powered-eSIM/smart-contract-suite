@@ -82,10 +82,39 @@ contract RegistryOperationsGasTest is GasBase {
     }
 
     /// @notice Moving the default price cap new eSIM wallets inherit
-    function test_setDefaultDataBundlePriceCap() public {
+    function test_setDefaultPriceCapUSDCents() public {
         vm.prank(upgradeManager);
-        registry.setDefaultDataBundlePriceCap(2 ether);
-        vm.snapshotGasLastCall(NAMESPACE, "setDefaultDataBundlePriceCap");
+        registry.setDefaultPriceCapUSDCents(200_000);
+        vm.snapshotGasLastCall(NAMESPACE, "setDefaultPriceCapUSDCents");
+    }
+
+    /// @notice Recording a purchase paid for outside the protocol
+    /// @dev The counterpart to `buyDataBundle` in the eSIM wallet file. No ETH moves here, so the
+    ///      gap between the two is what the transfer and the vault payment cost. Second call as
+    ///      well, because the first one warms the adapter and the wallet and the admin's batches
+    ///      are many of these in a row.
+    function test_recordSettledPurchase() public {
+        (, MockESIMWallet eSIMWallet) = _deployDeviceWallet(customDeviceUniqueIdentifiers[0], 0, 8702);
+
+        vm.prank(eSIMWalletAdmin);
+        registry.recordSettledPurchase(
+            address(eSIMWallet),
+            bundle("DB_GAS_SETTLED_1", TEST_PRICE_CENTS),
+            ASSET_USDC,
+            1_000_000,
+            paymentRef("gas-settled-1")
+        );
+        vm.snapshotGasLastCall(NAMESPACE, "recordSettledPurchase: first for the wallet");
+
+        vm.prank(eSIMWalletAdmin);
+        registry.recordSettledPurchase(
+            address(eSIMWallet),
+            bundle("DB_GAS_SETTLED_2", TEST_PRICE_CENTS),
+            ASSET_USDC,
+            1_000_000,
+            paymentRef("gas-settled-2")
+        );
+        vm.snapshotGasLastCall(NAMESPACE, "recordSettledPurchase: second for the same wallet");
     }
 
     /// @notice Pointing every data bundle payment at a different vault
