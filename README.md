@@ -53,7 +53,7 @@ That parity depends on `bytecode_hash = "none"` in `foundry.toml` and `metadata.
 
 ## Testing
 
-804 tests across 73 suites, about eight minutes for a full run.
+819 tests across 73 suites, about eight minutes for a full run.
 
 | Suite | Files | What it covers |
 |---|---|---|
