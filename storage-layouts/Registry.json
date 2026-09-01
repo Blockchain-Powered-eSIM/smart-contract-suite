@@ -140,6 +140,13 @@
       "bytes": "20",
       "label": "paymentAdapter",
       "type": "t_address"
+    },
+    {
+      "slot": "66",
+      "offset": 0,
+      "bytes": "32",
+      "label": "usedPaymentReferences",
+      "type": "t_mapping(t_bytes32,t_bool)"
     }
   ]
 }
