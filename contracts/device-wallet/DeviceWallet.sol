@@ -334,11 +334,8 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     ) internal {
         if(_hasAccessToFunds) revert Errors.FundsAccessNotGrantableAtBind(_eSIMWalletAddress);
         if(isValidESIMWallet[_eSIMWalletAddress]) revert Errors.ESIMWalletAlreadyAdded(_eSIMWalletAddress);
-        // If the eSIM wallet is a newly deployed one, then the owner will definitely be set
-        // during initialisation. This device wallet will be the owner.
-        // If the eSIM wallet already existed, then the previous owner (device wallet)
-        // must transfer the ownership to the eSIM wallet, and mark its status as standby.
-        // And this device wallet must accept the ownership before calling the addESIMWallet function
+        // New deployment: owner is set to this wallet at initialisation.
+        // Existing wallet: the previous owner must transfer and this wallet must accept first.
         address eSIMWalletOwner = ESIMWallet(payable(_eSIMWalletAddress)).owner();
         if(eSIMWalletOwner != address(this)) {
             revert Errors.ESIMWalletNotOwnedByThisDeviceWallet(_eSIMWalletAddress, eSIMWalletOwner);

@@ -239,8 +239,6 @@ contract RegistryHelper {
         salt[0] = _salt;
         depositAmount[0] = _depositAmount;
 
-        // Deploys device smart wallet
-        // Updates device wallet info via Registry
         Wallets[] memory wallet = deviceWalletFactory.deployDeviceWalletForUsers{value: _depositAmount}(
             deviceUniqueIdentifier,
             deviceWalletOwnersKey,
@@ -252,14 +250,12 @@ contract RegistryHelper {
         address firstESIMWallet = wallet[0].eSIMWallet;
         address[] memory eSIMWallets = new address[](_eSIMUniqueIdentifiers.length);
 
-        // Tracks the eSIMWallets array index
         uint256 i = 0;
 
-        // 1st eSIM wallet will already be deployed by the deployDeviceWalletForUsers function
+        // deployDeviceWalletForUsers already deploys the 1st eSIM wallet but doesn't set its
+        // identifier, so that's the one thing left to do for it here.
         eSIMWallets[i] = firstESIMWallet;
-        // deployDeviceWalletForUsers doesn't set the eSIM identifer, hence updating it here for the 1st eSIM wallet
         _assignESIMIdentifier(firstESIMWallet, _eSIMUniqueIdentifiers[i]);
-        // Increase the index to deploy and set the identifier for the remaining _eSIMUniqueIdentifiers
         i++;
 
         for(; i<_eSIMUniqueIdentifiers.length; ++i) {

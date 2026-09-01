@@ -124,7 +124,6 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         verifier = _verifier;
         eSIMWalletFactory = ESIMWalletFactory(_eSIMWalletFactoryAddress);
 
-        // Upgradable beacon for device wallet implementation contract
         beacon = new UpgradeableBeacon(_deviceWalletImplementation, address(this));
 
         emit DeviceWalletFactoryDeployed(
@@ -210,7 +209,6 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
             revert Errors.ArrayLengthMismatch(numberOfDeviceWallets, _depositAmounts.length);
         }
 
-        // Track the available ETH to spend
         uint256 availableETH = msg.value;
         Wallets[] memory walletsDeployed = new Wallets[](numberOfDeviceWallets);
 
@@ -240,7 +238,6 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
             availableETH -= spentETH;
         }
 
-        // return unused ETH
         if(availableETH > 0) {
             (bool success,) = msg.sender.call{value: availableETH}("");
             if(!success) revert Errors.FailedToTransfer();
