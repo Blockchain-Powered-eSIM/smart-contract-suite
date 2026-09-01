@@ -14,6 +14,7 @@ import {WalletHandler} from "test/foundry/invariant-testing/handler/WalletHandle
 import {AttackerHandler} from "test/foundry/invariant-testing/handler/AttackerHandler.sol";
 import {UpgradeManagerHandler} from
     "test/foundry/invariant-testing/handler/UpgradeManagerHandler.sol";
+import {PaymentHandler} from "test/foundry/invariant-testing/handler/PaymentHandler.sol";
 
 /// @notice The campaign every invariant file runs against.
 /// @dev Each invariant function is its own campaign with its own `setUp`, so splitting the
@@ -35,8 +36,9 @@ abstract contract CampaignBase is InvariantBase {
     WalletHandler internal walletHandler;
     AttackerHandler internal attackerHandler;
     UpgradeManagerHandler internal upgradeManagerHandler;
+    PaymentHandler internal paymentHandler;
 
-    /// @notice Deploys the protocol, wires the three handlers to it and funds the campaign
+    /// @notice Deploys the protocol, wires the five handlers to it and funds the campaign
     function setUp() public virtual {
         _deployProtocol();
 
@@ -54,12 +56,19 @@ abstract contract CampaignBase is InvariantBase {
             adminSuccessor: ADMIN_SUCCESSOR,
             upgradeManager: UPGRADE_MANAGER,
             vault: VAULT,
-            attacker: ATTACKER
+            attacker: ATTACKER,
+            settlementToken: settlementToken
         });
 
         adminHandler = new AdminHandler(config);
         walletHandler = new WalletHandler(config);
         attackerHandler = new AttackerHandler(config);
+
+        bytes32[] memory symbols = new bytes32[](3);
+        symbols[0] = bytes32("USD");
+        symbols[1] = bytes32("USDC");
+        symbols[2] = bytes32("ETH");
+        paymentHandler = new PaymentHandler(config, paymentAdapter, settlementERC20, symbols);
 
         // The second implementations are built here rather than inside the handler so the beacon
         // swap starts from the same wallet logic the campaign deployed against
@@ -80,6 +89,7 @@ abstract contract CampaignBase is InvariantBase {
         targetContract(address(walletHandler));
         targetContract(address(attackerHandler));
         targetContract(address(upgradeManagerHandler));
+        targetContract(address(paymentHandler));
 
         // Several modifiers admit `address(registry)` or `address(this)`, so a random sender that
         // lands on one of these passes access control by accident and reports a violation that
@@ -94,6 +104,7 @@ abstract contract CampaignBase is InvariantBase {
         excludeSender(address(walletHandler));
         excludeSender(address(attackerHandler));
         excludeSender(address(upgradeManagerHandler));
+        excludeSender(address(paymentHandler));
 
         // The four actors are excluded for a different reason, and it is not optional. The runner
         // adjusts the balance of whichever address it picks as sender, so an actor used as a
@@ -115,6 +126,7 @@ abstract contract CampaignBase is InvariantBase {
     function _heldETH() internal view returns (uint256) {
         uint256 held = address(adminHandler).balance + address(walletHandler).balance
             + address(attackerHandler).balance + address(upgradeManagerHandler).balance
+            + address(paymentHandler).balance
             + ADMIN.balance + ADMIN_SUCCESSOR.balance
             + UPGRADE_MANAGER.balance
             + VAULT.balance + ATTACKER.balance + address(deviceWalletFactory).balance

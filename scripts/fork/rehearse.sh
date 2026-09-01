@@ -10,14 +10,14 @@
 #
 # The fork reports chain id 31337 rather than 84532. That is deliberate. The record key is built
 # from the chain id, so a fork answering 84532 would write the production
-# base-sepolia-84532-entrypoint-v8 entry into deployments/address.json from a run that deployed
-# nothing real. The forked state still carries the real EntryPoint v0.8 and the real RIP-7212
-# precompile, which is the reason to fork at all. What it does not carry is the production EIP-712
-# domain, since v0.8 folds the chain id into userOpHash; EntryPointValidation.t.sol covers that at
-# the real chain id and this does not try to.
+# base-sepolia-84532-entrypoint-v8 entry from a run that deployed nothing real. The forked state
+# still carries the real EntryPoint v0.8 and the real RIP-7212 precompile, which is the reason to
+# fork at all. What it does not carry is the production EIP-712 domain, since v0.8 folds the chain
+# id into userOpHash; EntryPointValidation.t.sol covers that at the real chain id and this does not
+# try to.
 #
-# The anvil-31337-entrypoint-v8 record this writes is a rehearsal artifact, both the address book
-# entry and the record file of the same name. Both are removed on exit.
+# The whole run writes to its own record and its own address book rather than the real ones, so
+# nothing here can reach the files that track live deployments. Both are deleted on exit.
 
 set -euo pipefail
 
@@ -26,9 +26,14 @@ cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 FORK_BLOCK="${FORK_BLOCK:-45600000}"
 CHAIN_ID=31337
 RPC="http://127.0.0.1:8545"
-RECORD="deployments/address.json"
-RECORD_KEY="anvil-${CHAIN_ID}-entrypoint-v8"
-RECORD_FILE="deployments/${RECORD_KEY}.json"
+
+# The scripts read these and write nowhere else. fs_permissions only grants them deployments/, so
+# the rehearsal's record and address book sit beside the real ones rather than in a temporary
+# directory.
+RECORD="deployments/.test-rehearsal.json"
+ADDRESS_BOOK="deployments/.test-rehearsal-addresses.json"
+export DEPLOYMENT_RECORD_PATH="$RECORD"
+export ADDRESS_BOOK_PATH="$ADDRESS_BOOK"
 LOG_DIR="$(mktemp -d)"
 ANVIL_PID=""
 
@@ -39,20 +44,9 @@ cleanup() {
     local status=$?
     [[ -n "$ANVIL_PID" ]] && kill "$ANVIL_PID" 2>/dev/null || true
 
-    # Drop the rehearsal's record however the run ended. Leaving it behind is how a fork address
-    # gets mistaken for a deployed one later.
-    rm -f "$RECORD_FILE"
-
-    if [[ -f "$RECORD" ]]; then
-        python3 - "$RECORD" "$RECORD_KEY" <<'PY' || true
-import collections, json, pathlib, sys
-path, key = pathlib.Path(sys.argv[1]), sys.argv[2]
-data = json.loads(path.read_text(), object_pairs_hook=collections.OrderedDict)
-if data.pop(key, None) is not None:
-    path.write_text(json.dumps(data, indent=2) + "\n")
-    print(f"Removed the rehearsal record entry {key}")
-PY
-    fi
+    # Drop the rehearsal's record and address book however the run ended. Leaving either behind is
+    # how a fork address gets mistaken for a deployed one later.
+    rm -f "$RECORD" "$ADDRESS_BOOK"
 
     echo "Logs kept in $LOG_DIR"
     exit $status
@@ -77,7 +71,12 @@ export DEPLOYER_PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae
 export ESIM_WALLET_ADMIN_PRIVATE_KEY=0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d
 export ESIM_WALLET_ADMIN=0x70997970C51812dc3A010C7d01b50e0d17dc79C8
 export VAULT=0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
-export DATA_BUNDLE_PRICE_CAP=1000000000000000000
+export PRICE_CAP_USD_CENTS=100000
+
+# Base Sepolia USDC, which is the chain this forks. Checked with cast on 2026-08-29: has code,
+# symbol USDC, 6 decimals.
+export SETTLEMENT_TOKEN=0x036CbD53842c5426634e7929541eC2318f3dCF7e
+
 export TIMELOCK_PROPOSERS=0x90F79bf6EB2c4f870365E785982E1f101E93b906
 export TIMELOCK_CANCELLERS=0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65
 export TIMELOCK_GUARDIANS=0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc
@@ -139,15 +138,11 @@ probe_p256() {
 probe_p256 "$RPC" "the fork"
 probe_p256 "$ALCHEMY_BASE_SEPOLIA_HTTPS" "Base Sepolia itself"
 
-# Refuse to start on a record that already exists, the same way Deploy.s.sol does. Either file
-# alone is enough: the deploy checks both.
-if [[ -f "$RECORD_FILE" ]]; then
-    fail "$RECORD_FILE exists. Remove it before rehearsing again."
-fi
-
-if python3 -c "import json,sys; sys.exit(0 if '$RECORD_KEY' in json.load(open('$RECORD')) else 1)" 2>/dev/null; then
-    fail "$RECORD already holds $RECORD_KEY. Remove it before rehearsing again."
-fi
+# Start with neither file present. DeploymentRecord.isRecorded() reads file existence as "already
+# deployed", the same as it does for a live chain, so writing an empty {} here would make
+# Deploy.s.sol refuse to start on its own rehearsal. A leftover from an interrupted run would cause
+# the exact same false positive, which is why cleanup below always removes both on exit.
+rm -f "$RECORD" "$ADDRESS_BOOK"
 
 # Forge sizes a broadcast transaction from what the simulation consumed. That is wrong for
 # handleOps: the EntryPoint checks the transaction carries the operation's whole declared gas
@@ -176,16 +171,18 @@ run_script configure scripts/deploy/Configure.s.sol:Configure
 run_script handover scripts/deploy/TransferOwnership.s.sol:TransferOwnership
 run_script rehearsal scripts/fork/ForkRehearsal.s.sol:ForkRehearsal
 
+RECORD_KEY="anvil-${CHAIN_ID}-entrypoint-v8"
+
 log "Addresses written by the rehearsal"
 python3 -c "
 import json
-print(json.dumps(json.load(open('$RECORD'))['$RECORD_KEY'], indent=2))
+print(json.dumps(json.load(open('$ADDRESS_BOOK'))['$RECORD_KEY'], indent=2))
 "
 
 log "Deployment record written by the rehearsal"
 python3 -c "
 import json
-r = json.load(open('$RECORD_FILE'))
+r = json.load(open('$RECORD'))
 print(json.dumps({k: r[k] for k in ('chain', 'external', 'admin', 'status') if k in r}, indent=2))
 print('contracts:', ', '.join(r.get('contracts', {})))
 "

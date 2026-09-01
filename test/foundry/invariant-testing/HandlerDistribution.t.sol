@@ -35,6 +35,12 @@ contract HandlerDistributionTest is CampaignBase {
     /// @notice Offset placing switch destinations outside the identifiers the lazy path populates
     uint256 internal constant SWITCH_SEEDS = 100_000;
 
+    /// @notice Width of the reference block each payment path draws from
+    /// @dev Three paths, one block each, laid out end to end. The handler wraps its seeds into a
+    ///      pool of 128, so the three blocks together have to stay inside that or one path
+    ///      re-presents a reference another already spent.
+    uint256 internal constant PAYMENT_REFERENCE_SEEDS = DRIVE_ROUNDS;
+
     /// @notice Every entry point can reach the protocol and change its state
     function test_handlersReachEveryEntryPoint() public {
         // A batch consumes up to three consecutive seeds and each seed becomes an identifier, so
@@ -71,10 +77,19 @@ contract HandlerDistributionTest is CampaignBase {
             adminHandler.deployESIMWalletForDevice(round, seed + 2000);
             // Follows the deploy so there is always a wallet still waiting for an identifier
             adminHandler.setESIMIdentifier(round, seed + 3000, false);
-            walletHandler.toggleAccessToETH(round, true);
+            walletHandler.toggleAccessToFunds(round, true);
             walletHandler.setESIMWalletPriceCap(round, round);
-            adminHandler.buyDataBundle(round, 1 gwei);
-            walletHandler.pullETH(round, 1 gwei);
+            // Each payment path is given its own block of reference seeds. Two calls presenting
+            // the same reference is a case the campaign covers, and the second one is refused,
+            // which is a revert rather than the count this drive is checking
+            paymentHandler.recordSettledPurchase(round, 100, round + PAYMENT_REFERENCE_SEEDS, 0, false);
+            paymentHandler.buyDataBundleWithToken(round, 100, 10e6, round + 2 * PAYMENT_REFERENCE_SEEDS);
+            paymentHandler.quote(0, 100);
+            // Withdrawn and put back inside the round, so the next round starts from the same
+            // currency table this one did
+            paymentHandler.updateAsset(1, false, true);
+            paymentHandler.updateAsset(1, true, true);
+            walletHandler.pullToken(round, 1_000e6, 5_000e6);
             // Removal comes before the transfer pair on purpose. Requesting a transfer detaches
             // the wallet on its way through, so a removal after it has nothing left to remove.
             //
@@ -130,9 +145,12 @@ contract HandlerDistributionTest is CampaignBase {
         _assertExercised("donateToSingleton");
         _assertExercised("deployESIMWalletForDevice");
         _assertExercised("setESIMIdentifier");
-        _assertExercised("toggleAccessToETH");
-        _assertExercised("buyDataBundle");
-        _assertExercised("pullETH");
+        _assertExercised("toggleAccessToFunds");
+        _assertExercised("buyDataBundleWithToken");
+        _assertExercised("recordSettledPurchase");
+        _assertExercised("quote");
+        _assertExercised("updateAsset");
+        _assertExercised("pullToken");
         _assertExercised("removeESIMWallet");
         _assertExercised("addESIMWallet");
         _assertExercised("requestTransferOwnership");

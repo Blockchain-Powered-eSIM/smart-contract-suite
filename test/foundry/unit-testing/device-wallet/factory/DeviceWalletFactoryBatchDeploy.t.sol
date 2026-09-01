@@ -88,7 +88,7 @@ contract DeviceWalletFactoryBatchDeployTest is DeviceWalletFactoryFixture {
             assertEq(address(deviceWallet.registry()), address(registry), "Registry should have been correct");
             assertEq(address(deviceWallet.eSIMWalletFactory()), address(eSIMWalletFactory), "eSIMWalletFactory address in device wallet should have matched");
             assertEq(deviceWallet.isValidESIMWallet(address(eSIMWallet)), true, "ESIMWallet should have been set to valid");
-            assertEq(deviceWallet.canPullETH(address(eSIMWallet)), false, "A batch deploy must not hand out ETH access");
+            assertEq(deviceWallet.canPullFunds(address(eSIMWallet)), false, "A batch deploy must not hand out ETH access");
 
             // Check storage variables in eSIM wallet
             assertEq(address(eSIMWallet.eSIMWalletFactory()), address(eSIMWalletFactory), "eSIMWalletFactory address in eSIM wallet should have matched");

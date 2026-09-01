@@ -8,6 +8,7 @@ import {Registry} from "../../contracts/Registry.sol";
 import {DeviceWallet} from "../../contracts/device-wallet/DeviceWallet.sol";
 import {DeviceWalletFactory} from "../../contracts/device-wallet/DeviceWalletFactory.sol";
 import {ESIMWalletFactory} from "../../contracts/esim-wallet/ESIMWalletFactory.sol";
+import {PaymentAdapter} from "../../contracts/payments/PaymentAdapter.sol";
 import {ProtocolAdmin} from "../../contracts/admin/ProtocolAdmin.sol";
 
 // Interfaces
@@ -81,6 +82,7 @@ contract ForkRehearsal is Script {
     Registry private registry;
     DeviceWalletFactory private deviceWalletFactory;
     ESIMWalletFactory private eSIMWalletFactory;
+    PaymentAdapter private paymentAdapter;
     address private protocolAdmin;
 
     /// @notice Runs every rehearsal step in order and reverts on the first thing that is wrong
@@ -110,6 +112,7 @@ contract ForkRehearsal is Script {
             DeviceWalletFactory(DeploymentRecord.readAddress("DeviceWalletFactoryProxy"));
         eSIMWalletFactory =
             ESIMWalletFactory(DeploymentRecord.readAddress("ESIMWalletFactoryProxy"));
+        paymentAdapter = PaymentAdapter(DeploymentRecord.readAddress("PaymentAdapterProxy"));
         protocolAdmin = DeploymentRecord.readRaw("admin.protocolAdmin");
 
         ownerKey = WebAuthnSigner.publicKey();
@@ -117,6 +120,7 @@ contract ForkRehearsal is Script {
         console.log("Registry            ", address(registry));
         console.log("DeviceWalletFactory ", address(deviceWalletFactory));
         console.log("ESIMWalletFactory   ", address(eSIMWalletFactory));
+        console.log("PaymentAdapter      ", address(paymentAdapter));
         console.log("ProtocolAdmin       ", protocolAdmin);
         console.log("");
     }
@@ -133,6 +137,9 @@ contract ForkRehearsal is Script {
         if(eSIMWalletFactory.owner() != protocolAdmin) {
             revert CheckFailed("ESIMWalletFactory owner is not the timelock");
         }
+        if(PaymentAdapter(paymentAdapter).owner() != protocolAdmin) {
+            revert CheckFailed("PaymentAdapter owner is not the timelock");
+        }
         if(registry.owner() == config.deployer) revert CheckFailed("Deployer still owns the registry");
 
         // The timelock's own floor, read back off the deployed contract rather than off the
@@ -141,7 +148,7 @@ contract ForkRehearsal is Script {
             revert CheckFailed("Timelock delay is not what the deploy configured");
         }
 
-        console.log("Ownership handover complete, all four singletons held by the timelock");
+        console.log("Ownership handover complete, all five singletons held by the timelock");
     }
 
     /// @notice Derives the wallet address offchain and checks the factory agrees

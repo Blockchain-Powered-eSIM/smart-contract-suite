@@ -38,10 +38,10 @@ mapping(address => bool) isESIMWalletDeployed
 
 Set to true if eSIM wallet address is deployed using the factory, false otherwise
 
-### ESIMWalletFactorydeployed
+### ESIMWalletFactoryDeployed
 
 ```solidity
-event ESIMWalletFactorydeployed(address _upgradeManager, address _eSIMWalletImplementation, address beacon)
+event ESIMWalletFactoryDeployed(address _upgradeManager, address _eSIMWalletImplementation, address _beacon)
 ```
 
 Emitted when the eSIM wallet factory is deployed
@@ -79,13 +79,21 @@ modifier onlyRegistryOrDeviceWalletFactoryOrDeviceWallet()
 Restricts a call to the registry, the device wallet factory or a known device wallet
 
 _The first two deploy on behalf of a device wallet during setup. A device wallet reaching
-     this directly is constrained further inside `deployESIMWallet`._
+     this directly is constrained further inside `deployESIMWallet`.
+
+     That third caller is what makes `DeviceWallet.deployESIMWallet`'s admin gate a workflow
+     convenience rather than a boundary: an owner can sign an `execute` straight at this
+     function and get the same wallet with no admin in the call. Deliberate, since a device
+     wallet reaches every external function through `execute` and no check downstream of its
+     call can tell which of its owner's intents produced it._
 
 ### constructor
 
 ```solidity
 constructor() public
 ```
+
+Disables initializers on the implementation contract
 
 _Locks the implementation contract itself. Without this, anyone can call initialize
      directly on the implementation, own it, and make it deploy a beacon it controls. The
@@ -234,4 +242,10 @@ function getCurrentESIMWalletImplementation() public view returns (address)
 ```
 
 The eSIM wallet logic contract every eSIM wallet currently runs
+
+#### Return Values
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| [0] | address | The current implementation address |
 

@@ -7,21 +7,23 @@ import "forge-std/console.sol";
 
 import "contracts/CustomStructs.sol";
 import {Errors} from "contracts/Errors.sol";
+import {Asset} from "contracts/payments/PaymentAdapter.sol";
 
 import "test/utils/DeployerBase.sol";
 import "test/utils/mocks/MockESIMWallet.sol";
 import "test/utils/mocks/MockDeviceWallet.sol";
+import {MockReenteringERC20} from "test/utils/mocks/tokens/MockReenteringERC20.sol";
 
 contract ESIMWalletTest is DeployerBase {
 
     // Redeclared so expectEmit can name it. This test contract does not inherit ESIMWallet.
-    event DataBundlePriceCapUpdated(uint256 _cap);
+    event PriceCapUSDCentsUpdated(uint64 _cap);
 
-    /// @notice A rotated admin has to reach buyDataBundle, which the factory alone does not
-    /// @dev This path pulls whatever price it is given out of the device wallet and sends it to
-    ///      the vault, so an admin address that changes only on the factory leaves the retired key
-    ///      able to drain wallets and leaves the new key unable to do its job.
-    function test_buyDataBundle_followsTheRotatedAdmin() public {
+    /// @notice A rotated admin has to reach the purchase path, which the factory alone does not
+    /// @dev This path spends out of the device wallet, so an admin address that changes only on the
+    ///      factory leaves the retired key able to charge wallets and leaves the new key unable to
+    ///      do its job.
+    function test_buyDataBundleWithToken_followsTheRotatedAdmin() public {
         deployWallets();
         address retiredAdmin = registry.eSIMWalletAdmin();
 
@@ -30,17 +32,18 @@ contract ESIMWalletTest is DeployerBase {
         vm.prank(user3);
         registry.acceptAdminUpdate();
 
-        vm.deal(address(deviceWallet), 1 ether);
+        uint256 needed = settlementAmount(TEST_PRICE_CENTS);
+        fundSettlementToken(address(deviceWallet), needed);
 
         vm.prank(retiredAdmin);
         vm.expectRevert(Errors.OnlyDeviceWalletOrESIMWalletAdmin.selector);
-        eSIMWallet1.buyDataBundle(DataBundleDetails("DB_ID_1", 1));
+        eSIMWallet1.buyDataBundleWithToken(bundle("DB_ID_1", TEST_PRICE_CENTS), ASSET_USDC, needed, nextRef());
 
         vm.prank(user3);
-        eSIMWallet1.buyDataBundle(DataBundleDetails("DB_ID_1", 1));
+        eSIMWallet1.buyDataBundleWithToken(bundle("DB_ID_1", TEST_PRICE_CENTS), ASSET_USDC, needed, nextRef());
 
-        (, uint256 price) = eSIMWallet1.transactionHistory(0);
-        assertEq(price, 1, "The purchase made by the rotated admin must be recorded");
+        (, uint64 price,) = eSIMWallet1.transactionHistory(0);
+        assertEq(price, TEST_PRICE_CENTS, "The purchase made by the rotated admin must be recorded");
     }
 
     MockDeviceWallet deviceWallet;
@@ -81,7 +84,7 @@ contract ESIMWalletTest is DeployerBase {
 
         // A bind never carries ETH access, so the owner grants it here
         vm.prank(address(deviceWallet));
-        deviceWallet.toggleAccessToETH(address(eSIMWallet1), true);
+        deviceWallet.toggleAccessToFunds(address(eSIMWallet1), true);
 
         vm.startPrank(admin);
         // eSIMWallet2 -> no access to ETH, no eSIM identifier set
@@ -113,8 +116,8 @@ contract ESIMWalletTest is DeployerBase {
         assertEq(address(deviceWallet.eSIMWalletFactory()), address(eSIMWalletFactory), "eSIMWalletFactory address in device wallet should have matched");
         assertEq(deviceWallet.isValidESIMWallet(address(eSIMWallet1)), true, "ESIMWallet1 should have been set to valid");
         assertEq(deviceWallet.isValidESIMWallet(address(eSIMWallet2)), true, "ESIMWallet2 should have been set to valid");
-        assertEq(deviceWallet.canPullETH(address(eSIMWallet1)), true, "ESIMWallet1 should be able to pull ETH");
-        assertEq(deviceWallet.canPullETH(address(eSIMWallet2)), false, "ESIMWallet2 should not be able to pull ETH");
+        assertEq(deviceWallet.canPullFunds(address(eSIMWallet1)), true, "ESIMWallet1 should be able to pull ETH");
+        assertEq(deviceWallet.canPullFunds(address(eSIMWallet2)), false, "ESIMWallet2 should not be able to pull ETH");
 
         // Check storage variables in eSIM wallet
         assertEq(address(eSIMWallet1.eSIMWalletFactory()), address(eSIMWalletFactory), "eSIMWalletFactory address in eSIM wallet1 should have matched");
@@ -210,8 +213,8 @@ contract ESIMWalletTest is DeployerBase {
         deployWallets();
 
         DataBundleDetails[] memory secondBatch = new DataBundleDetails[](2);
-        secondBatch[0] = DataBundleDetails("DB_ID_6", 61);
-        secondBatch[1] = DataBundleDetails("DB_ID_7", 71);
+        secondBatch[0] = bundle("DB_ID_6", 61);
+        secondBatch[1] = bundle("DB_ID_7", 71);
 
         vm.startPrank(address(registry));
         eSIMWallet1.populateHistory(customDataBundleDetails[0]);
@@ -222,13 +225,13 @@ contract ESIMWalletTest is DeployerBase {
         assertEq(history.length, 7, "Both batches should have landed");
 
         for (uint256 i = 0; i < customDataBundleDetails[0].length; ++i) {
-            assertEq(history[i].dataBundleID, customDataBundleDetails[0][i].dataBundleID);
-            assertEq(history[i].dataBundlePrice, customDataBundleDetails[0][i].dataBundlePrice);
+            assertEq(history[i].id, customDataBundleDetails[0][i].id);
+            assertEq(history[i].priceUSDCents, customDataBundleDetails[0][i].priceUSDCents);
         }
-        assertEq(history[5].dataBundleID, "DB_ID_6", "The second batch must start where the first ended");
-        assertEq(history[5].dataBundlePrice, 61);
-        assertEq(history[6].dataBundleID, "DB_ID_7");
-        assertEq(history[6].dataBundlePrice, 71);
+        assertEq(history[5].id, "DB_ID_6", "The second batch must start where the first ended");
+        assertEq(history[5].priceUSDCents, 61);
+        assertEq(history[6].id, "DB_ID_7");
+        assertEq(history[6].priceUSDCents, 71);
     }
 
     /// @notice The event carries the running total, which is how an indexer spots the final batch
@@ -236,7 +239,7 @@ contract ESIMWalletTest is DeployerBase {
         deployWallets();
 
         DataBundleDetails[] memory secondBatch = new DataBundleDetails[](1);
-        secondBatch[0] = DataBundleDetails("DB_ID_6", 61);
+        secondBatch[0] = bundle("DB_ID_6", 61);
 
         vm.prank(address(registry));
         eSIMWallet1.populateHistory(customDataBundleDetails[0]);
@@ -377,7 +380,7 @@ contract ESIMWalletTest is DeployerBase {
 
         assertEq(eSIMWallet1.newRequestedOwner(), address(0), "the pending request must be cleared");
         assertEq(deviceWallet.isValidESIMWallet(address(eSIMWallet1)), true, "the binding must be restored");
-        assertEq(deviceWallet.canPullETH(address(eSIMWallet1)), false, "ETH access is not restored");
+        assertEq(deviceWallet.canPullFunds(address(eSIMWallet1)), false, "ETH access is not restored");
         assertEq(registry.isESIMWalletOnStandby(address(eSIMWallet1)), false, "standby must be cleared");
         assertEq(registry.isESIMWalletValid(address(eSIMWallet1)), currentOwner, "the association is unchanged");
     }
@@ -508,15 +511,53 @@ contract ESIMWalletTest is DeployerBase {
         // The bind carries no ETH access, so the new owner grants it separately.
         vm.startPrank(address(deviceWallet2));
         deviceWallet2.addESIMWallet(address(eSIMWallet1), false);
-        deviceWallet2.toggleAccessToETH(address(eSIMWallet1), true);
+        deviceWallet2.toggleAccessToFunds(address(eSIMWallet1), true);
         vm.stopPrank();
 
         assertEq(address(deviceWallet).balance, 11 ether, "Device wallet balance should have increased to 11 ETH");
         assertEq(address(eSIMWallet1).balance, 0 ether, "eSIM wallet balance should have decreased to 0 ETH");
         assertEq(deviceWallet2.isValidESIMWallet(address(eSIMWallet1)), true, "eSIM wallet added should have been set to valid");
-        assertEq(deviceWallet2.canPullETH(address(eSIMWallet1)), true, "eSIM wallet should have ability to pull ETH");
+        assertEq(deviceWallet2.canPullFunds(address(eSIMWallet1)), true, "eSIM wallet should have ability to pull ETH");
         assertEq(registry.isESIMWalletOnStandby(address(eSIMWallet1)), false, "ESIMWallet1 should not have been on standBy");
         assertEq(registry.isESIMWalletValid(address(eSIMWallet1)), address(deviceWallet2), "Registry should have updated the eSIM wallet to the new device wallet");
+    }
+
+    /// @notice Between acceptance and the new owner binding, the registry association still names
+    ///         the old device wallet, and that stale value hands it nothing
+    /// @dev The association is a registration rather than a permission. Every gate that decides
+    ///      anything about an eSIM wallet reads `ESIMWallet.owner()`, which moved with the
+    ///      acceptance, so the association is free to lag behind it without opening a way back in
+    ///      for the device wallet that let the wallet go.
+    function test_acceptOwnershipTransfer_theStaleAssociationGrantsTheOldOwnerNothing() public {
+        test_requestTransferOwnership();
+
+        vm.prank(address(deviceWallet2));
+        eSIMWallet1.acceptOwnershipTransfer();
+
+        assertEq(registry.isESIMWalletValid(address(eSIMWallet1)), address(deviceWallet), "The association still lags behind the owner");
+        assertEq(eSIMWallet1.owner(), address(deviceWallet2), "The owner moved with the acceptance");
+
+        // Re-binding reads owner(), so the old device wallet cannot take the wallet back
+        vm.prank(address(deviceWallet));
+        vm.expectRevert(abi.encodeWithSelector(
+            Errors.ESIMWalletNotOwnedByThisDeviceWallet.selector,
+            address(eSIMWallet1),
+            address(deviceWallet2)
+        ));
+        deviceWallet.addESIMWallet(address(eSIMWallet1), false);
+
+        // The standby flag reads owner() too, so the old device wallet cannot clear the marker
+        vm.prank(address(deviceWallet));
+        vm.expectRevert(abi.encodeWithSelector(
+            Errors.NotTheESIMWalletOwnerOrItsDeviceWallet.selector,
+            address(eSIMWallet1)
+        ));
+        registry.toggleESIMWalletStandbyStatus(address(eSIMWallet1), false);
+
+        // And the wallet lost its route to the old device wallet's money on the release
+        vm.prank(address(eSIMWallet1));
+        vm.expectRevert(Errors.OnlyAssociatedESIMWallets.selector);
+        deviceWallet.pullToken(settlementToken, 1);
     }
 
     /// @notice A single ownership transfer emits exactly one OwnershipTransferred
@@ -548,121 +589,6 @@ contract ESIMWalletTest is DeployerBase {
         assertEq(eSIMWallet1.owner(), requestedOwner, "Ownership should have moved to the requested owner");
     }
 
-    function test_buyDataBundle_noFundsFromESIMWallet() public {
-        deployWallets();
-
-        DataBundleDetails memory _dataBundleDetail = DataBundleDetails(
-            "DB_ID_0",
-            100000000000000000      // 0.1 ETH
-        );
-
-        vm.startPrank(eSIMWalletAdmin);
-        // The shortfall is pulled from the device wallet, which holds nothing
-        vm.expectRevert(abi.encodeWithSelector(Errors.InsufficientBalance.selector, 0, 0.1 ether));
-        eSIMWallet1.buyDataBundle(_dataBundleDetail);
-        vm.stopPrank();
-
-        vm.deal(address(deviceWallet), 1 ether);
-        vm.startPrank(eSIMWalletAdmin);
-        eSIMWallet1.buyDataBundle(_dataBundleDetail);
-        vm.stopPrank();
-
-        assertEq(address(deviceWallet).balance, 0.9 ether, "Device wallet balance should have been 0.9 ETH");
-        assertEq((deviceWallet.getVaultAddress()).balance, 0.1 ether, "Vault balance should have increased by 0.1 ETH");
-
-        DataBundleDetails[] memory history = eSIMWallet1.getTransactionHistory();
-        assertEq(history.length, 1, "Transaction history should have been updated");
-        assertEq(history[0].dataBundleID, "DB_ID_0", "Transaction history's data bundle ID should have been correct");
-        assertEq(history[0].dataBundlePrice, 0.1 ether, "Transaction history's data bundle price should have been correct");
-    }
-
-    function test_buyDataBundle_partialFundsFromESIMWallet() public {
-        deployWallets();
-
-        DataBundleDetails memory _dataBundleDetail = DataBundleDetails(
-            "DB_ID_0",
-            100000000000000000      // 0.1 ETH
-        );
-
-        vm.deal(address(eSIMWallet1), 0.03 ether);
-        vm.startPrank(eSIMWalletAdmin);
-        // The wallet covers 0.03 of the 0.1 and pulls the rest from an empty device wallet
-        vm.expectRevert(abi.encodeWithSelector(Errors.InsufficientBalance.selector, 0, 0.07 ether));
-        eSIMWallet1.buyDataBundle(_dataBundleDetail);
-        vm.stopPrank();
-
-        vm.deal(address(deviceWallet), 1 ether);
-        vm.startPrank(eSIMWalletAdmin);
-        eSIMWallet1.buyDataBundle(_dataBundleDetail);
-        vm.stopPrank();
-
-        assertEq(address(deviceWallet).balance, 0.93 ether, "Device wallet balance should have been 0.93 ETH");
-        assertEq(address(eSIMWallet1).balance, 0 ether, "ESIM wallet balance should have been 0 ETH");
-        assertEq((deviceWallet.getVaultAddress()).balance, 0.1 ether, "Vault balance should have increased by 0.1 ETH");
-
-        DataBundleDetails[] memory history = eSIMWallet1.getTransactionHistory();
-        assertEq(history.length, 1, "Transaction history should have been updated");
-        assertEq(history[0].dataBundleID, "DB_ID_0", "Transaction history's data bundle ID should have been correct");
-        assertEq(history[0].dataBundlePrice, 0.1 ether, "Transaction history's data bundle price should have been correct");
-    }
-
-    function test_buyDataBundle_partialFundsFromUserAndESIMWallet() public {
-        deployWallets();
-
-        DataBundleDetails memory _dataBundleDetail = DataBundleDetails(
-            "DB_ID_0",
-            100000000000000000      // 0.1 ETH
-        );
-        
-        vm.deal(eSIMWalletAdmin, 0.04 ether);       // 0.04 ETH to be supplied as msg.value
-        vm.deal(address(eSIMWallet1), 0.03 ether);  // 0.03 ETH to be used from eSIM wallet
-
-        vm.startPrank(eSIMWalletAdmin);
-        // Revert from the device wallet, needed 0.03 ETH, found 0 ETH
-        vm.expectRevert(abi.encodeWithSelector(Errors.InsufficientBalance.selector, 0, 0.03 ether));
-        eSIMWallet1.buyDataBundle{value: 0.04 ether}(_dataBundleDetail);
-        vm.stopPrank();
-
-        vm.deal(address(deviceWallet), 1 ether);    // needed 0.03 ETH from Device walelt, found 1 ETH
-        vm.startPrank(eSIMWalletAdmin);
-        eSIMWallet1.buyDataBundle{value: 0.04 ether}(_dataBundleDetail);
-        vm.stopPrank();
-
-        assertEq(address(deviceWallet).balance, 0.97 ether, "Device wallet balance should have been 0.97 ETH");
-        assertEq(address(eSIMWallet1).balance, 0 ether, "ESIM wallet balance should have been 0 ETH");
-        assertEq((deviceWallet.getVaultAddress()).balance, 0.1 ether, "Vault balance should have increased by 0.1 ETH");
-
-        DataBundleDetails[] memory history = eSIMWallet1.getTransactionHistory();
-        assertEq(history.length, 1, "Transaction history should have been updated");
-        assertEq(history[0].dataBundleID, "DB_ID_0", "Transaction history's data bundle ID should have been correct");
-        assertEq(history[0].dataBundlePrice, 0.1 ether, "Transaction history's data bundle price should have been correct");
-    }
-
-    function test_buyDataBundle_allFundsFromUser() public {
-        deployWallets();
-
-        DataBundleDetails memory _dataBundleDetail = DataBundleDetails(
-            "DB_ID_0",
-            0.1 ether
-        );
-
-        vm.deal(address(deviceWallet), 2 ether);
-        vm.deal(address(eSIMWallet1), 1 ether);
-        vm.deal(eSIMWalletAdmin, 0.2 ether);        // remaining ETH should go to eSIM wallet
-        
-        vm.startPrank(eSIMWalletAdmin);
-        eSIMWallet1.buyDataBundle{value: 0.2 ether}(_dataBundleDetail);
-        vm.stopPrank();
-
-        assertEq(address(deviceWallet).balance, 2 ether, "Device wallet balance should have been 2 ETH");
-        assertEq(address(eSIMWallet1).balance, 1.1 ether, "ESIM wallet balance should have been 1 ETH");
-        assertEq((deviceWallet.getVaultAddress()).balance, 0.1 ether, "Vault balance should have increased by 0.1 ETH");
-
-        DataBundleDetails[] memory history = eSIMWallet1.getTransactionHistory();
-        assertEq(history.length, 1, "Transaction history should have been updated");
-        assertEq(history[0].dataBundleID, "DB_ID_0", "Transaction history's data bundle ID should have been correct");
-        assertEq(history[0].dataBundlePrice, 0.1 ether, "Transaction history's data bundle price should have been correct");
-    }
 
     function test_sendETHToDeviceWallet_unauthorised() public {
         deployWallets();
@@ -703,116 +629,46 @@ contract ESIMWalletTest is DeployerBase {
         assertEq(address(newDeviceWallet).balance, 1 ether, "New device wallet balance should have increased to 1 ETH");
     }
 
-    /// @notice buyDataBundle pulls whatever price it is given out of the device wallet and sends it
-    /// to the vault, on the admin's say-so alone, which is the largest ETH exit in the protocol.
-    function test_buyDataBundle_revertsWhilePaused() public {
-        deployWallets();
-        vm.deal(address(deviceWallet), 1 ether);
-
-        vm.prank(registry.eSIMWalletAdmin());
-        registry.pause();
-
-        vm.prank(eSIMWalletAdmin);
-        vm.expectRevert(Errors.ProtocolPaused.selector);
-        eSIMWallet1.buyDataBundle(DataBundleDetails("DB_ID_1", 0.1 ether));
-
-        assertEq(vault.balance, 0, "The vault must receive nothing while paused");
-        assertEq(address(deviceWallet).balance, 1 ether, "The device wallet must keep its ETH");
-
-        vm.prank(registry.owner());
-        registry.unpause();
-
-        vm.prank(eSIMWalletAdmin);
-        eSIMWallet1.buyDataBundle(DataBundleDetails("DB_ID_1", 0.1 ether));
-        assertEq(vault.balance, 0.1 ether, "The release must restore the path");
-    }
-
-    /// @notice A wallet that sets its own ceiling is held to it, whatever the admin asks for.
-    function test_buyDataBundle_revertsAboveTheWalletCap() public {
-        deployWallets();
-        vm.deal(address(deviceWallet), 5 ether);
-
-        vm.prank(address(deviceWallet));
-        eSIMWallet1.setDataBundlePriceCap(0.2 ether);
-
-        vm.prank(eSIMWalletAdmin);
-        vm.expectRevert(abi.encodeWithSelector(Errors.DataBundlePriceAboveCap.selector, 0.3 ether, 0.2 ether));
-        eSIMWallet1.buyDataBundle(DataBundleDetails("DB_ID_1", 0.3 ether));
-
-        assertEq(vault.balance, 0, "The vault must receive nothing above the cap");
-        assertEq(address(deviceWallet).balance, 5 ether, "The device wallet must keep its ETH");
-    }
-
-    /// @notice A wallet holding no ceiling of its own falls back to the registry's.
-    /// @dev This is the case that matters for wallets already deployed. They read zero, so the
-    ///      registry is the only place a limit can reach them from.
-    function test_buyDataBundle_revertsAboveTheRegistryDefault() public {
-        deployWallets();
-        vm.deal(address(deviceWallet), 5 ether);
-
-        vm.prank(registry.owner());
-        registry.setDefaultDataBundlePriceCap(0.2 ether);
-
-        assertEq(eSIMWallet1.dataBundlePriceCap(), 0, "The wallet must hold no ceiling of its own");
-
-        vm.prank(eSIMWalletAdmin);
-        vm.expectRevert(abi.encodeWithSelector(Errors.DataBundlePriceAboveCap.selector, 0.3 ether, 0.2 ether));
-        eSIMWallet1.buyDataBundle(DataBundleDetails("DB_ID_1", 0.3 ether));
-
-        assertEq(vault.balance, 0, "The vault must receive nothing above the default");
-    }
-
     /// @notice A wallet's own ceiling wins over the registry default, in both directions.
-    function test_buyDataBundle_theWalletCapOverridesTheRegistryDefault() public {
+    function test_buyDataBundleWithToken_theWalletCapOverridesTheRegistryDefault() public {
         deployWallets();
-        vm.deal(address(deviceWallet), 5 ether);
 
         vm.prank(registry.owner());
-        registry.setDefaultDataBundlePriceCap(0.1 ether);
+        registry.setDefaultPriceCapUSDCents(10_000);   // $100
 
         vm.prank(address(deviceWallet));
-        eSIMWallet1.setDataBundlePriceCap(1 ether);
+        eSIMWallet1.setPriceCapUSDCents(100_000);   // $1000
+
+        uint256 needed = settlementAmount(50_000);
+        fundSettlementToken(address(deviceWallet), needed);
 
         vm.prank(eSIMWalletAdmin);
-        eSIMWallet1.buyDataBundle(DataBundleDetails("DB_ID_1", 0.5 ether));
-        assertEq(vault.balance, 0.5 ether, "A wallet raising its own ceiling must be able to spend to it");
-
-        vm.prank(eSIMWalletAdmin);
-        vm.expectRevert(abi.encodeWithSelector(Errors.DataBundlePriceAboveCap.selector, 2 ether, 1 ether));
-        eSIMWallet1.buyDataBundle(DataBundleDetails("DB_ID_2", 2 ether));
-    }
-
-    /// @notice A wallet with no ceiling of its own is still bound by the registry default set at
-    /// deployment.
-    /// @dev `Registry.initialize` and `setDefaultDataBundlePriceCap` both refuse zero, so a wallet
-    /// that never sets its own cap is never actually uncapped, only deferring to whatever the
-    /// registry was given at deploy time.
-    function test_buyDataBundle_rejectsAPriceAboveTheRegistryDefault() public {
-        deployWallets();
-        vm.deal(address(deviceWallet), 5 ether);
-
-        assertEq(eSIMWallet1.dataBundlePriceCap(), 0, "The wallet must hold no ceiling of its own");
-
-        uint256 price = defaultDataBundlePriceCap + 1;
-
-        vm.prank(eSIMWalletAdmin);
-        vm.expectRevert(
-            abi.encodeWithSelector(Errors.DataBundlePriceAboveCap.selector, price, defaultDataBundlePriceCap)
+        eSIMWallet1.buyDataBundleWithToken(bundle("DB_ID_1", 50_000), ASSET_USDC, needed, nextRef());
+        assertEq(
+            settlementERC20.balanceOf(vault),
+            needed,
+            "A wallet raising its own ceiling must be able to spend to it"
         );
-        eSIMWallet1.buyDataBundle(DataBundleDetails("DB_ID_1", price));
 
-        assertEq(vault.balance, 0, "The vault must receive nothing above the registry default");
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(abi.encodeWithSelector(Errors.DataBundlePriceAboveCap.selector, 200_000, 100_000));
+        eSIMWallet1.buyDataBundleWithToken(
+            bundle("DB_ID_2", 200_000),
+            ASSET_USDC,
+            settlementAmount(200_000),
+            nextRef()
+        );
     }
 
     /// @notice The admin names the price, so it must not also be able to raise the ceiling.
-    function test_setDataBundlePriceCap_rejectsTheAdmin() public {
+    function test_setPriceCapUSDCents_rejectsTheAdmin() public {
         deployWallets();
 
         vm.prank(eSIMWalletAdmin);
         vm.expectRevert(Errors.OnlyDeviceWallet.selector);
-        eSIMWallet1.setDataBundlePriceCap(100 ether);
+        eSIMWallet1.setPriceCapUSDCents(100_000);
 
-        assertEq(eSIMWallet1.dataBundlePriceCap(), 0, "The admin must not be able to set a ceiling");
+        assertEq(eSIMWallet1.priceCapUSDCents(), 0, "The admin must not be able to set a ceiling");
     }
 
     /// @notice A handover clears the outgoing owner's ceiling and announces it.
@@ -824,29 +680,29 @@ contract ESIMWalletTest is DeployerBase {
 
         // Still owned by the first device wallet until the request is accepted
         vm.prank(address(deviceWallet));
-        eSIMWallet1.setDataBundlePriceCap(type(uint256).max);
+        eSIMWallet1.setPriceCapUSDCents(type(uint64).max);
 
         vm.expectEmit(false, false, false, true, address(eSIMWallet1));
-        emit DataBundlePriceCapUpdated(0);
+        emit PriceCapUSDCentsUpdated(0);
 
         vm.prank(address(deviceWallet2));
         eSIMWallet1.acceptOwnershipTransfer();
 
         assertEq(eSIMWallet1.owner(), address(deviceWallet2), "Ownership should have moved");
-        assertEq(eSIMWallet1.dataBundlePriceCap(), 0, "The new owner must start on the registry ceiling");
+        assertEq(eSIMWallet1.priceCapUSDCents(), 0, "The new owner must start on the registry ceiling");
     }
 
     /// @notice A wallet that never set a ceiling emits nothing on handover.
     function test_acceptOwnershipTransfer_emitsNoCapUpdateWhenThereWasNoCeiling() public {
         test_requestTransferOwnership();
-        assertEq(eSIMWallet1.dataBundlePriceCap(), 0, "The wallet must hold no ceiling of its own");
+        assertEq(eSIMWallet1.priceCapUSDCents(), 0, "The wallet must hold no ceiling of its own");
 
         vm.recordLogs();
         vm.prank(address(deviceWallet2));
         eSIMWallet1.acceptOwnershipTransfer();
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
-        bytes32 capUpdated = keccak256("DataBundlePriceCapUpdated(uint256)");
+        bytes32 capUpdated = keccak256("PriceCapUSDCentsUpdated(uint64)");
         for (uint256 i = 0; i < logs.length; ++i) {
             if (logs[i].emitter == address(eSIMWallet1) && logs[i].topics.length > 0) {
                 assertNotEq(logs[i].topics[0], capUpdated, "An unchanged ceiling must announce nothing");
@@ -855,50 +711,68 @@ contract ESIMWalletTest is DeployerBase {
     }
 
     /// @notice The registry default applies again once a wallet changes hands.
-    /// @dev The consequence of the clear: an inherited ceiling of type(uint256).max would leave the
+    /// @dev The consequence of the clear: an inherited ceiling of type(uint64).max would leave the
     /// new owner with no effective limit on what the admin may charge it.
     function test_buyDataBundle_theNewOwnerIsNotBoundByTheOldOwnersCeiling() public {
         test_requestTransferOwnership();
 
         vm.prank(address(deviceWallet));
-        eSIMWallet1.setDataBundlePriceCap(type(uint256).max);
+        eSIMWallet1.setPriceCapUSDCents(type(uint64).max);
 
         vm.prank(address(deviceWallet2));
         eSIMWallet1.acceptOwnershipTransfer();
         vm.prank(address(deviceWallet2));
         deviceWallet2.addESIMWallet(address(eSIMWallet1), false);
 
-        vm.deal(address(deviceWallet2), 5 ether);
-        uint256 price = defaultDataBundlePriceCap + 1;
+        uint64 price = defaultPriceCapUSDCents + 1;
+        fundSettlementToken(address(deviceWallet2), settlementAmount(price));
 
         vm.prank(eSIMWalletAdmin);
         vm.expectRevert(
-            abi.encodeWithSelector(Errors.DataBundlePriceAboveCap.selector, price, defaultDataBundlePriceCap)
+            abi.encodeWithSelector(Errors.DataBundlePriceAboveCap.selector, price, defaultPriceCapUSDCents)
         );
-        eSIMWallet1.buyDataBundle(DataBundleDetails("DB_ID_1", price));
+        eSIMWallet1.buyDataBundleWithToken(
+            bundle("DB_ID_1", price),
+            ASSET_USDC,
+            settlementAmount(price),
+            nextRef()
+        );
 
-        assertEq(vault.balance, 0, "The registry default must bind the new owner");
+        assertEq(settlementERC20.balanceOf(vault), 0, "The registry default must bind the new owner");
     }
 
-    /// @notice The purchase is already in history by the time the vault receives its ETH
-    /// @dev A vault that is a contract runs on receipt, so if the record landed after the transfer
-    /// it would see a history one entry short of the purchase that just paid it.
-    function test_buyDataBundle_recordsTheHistoryBeforeTheVaultIsPaid() public {
+    /// @notice The purchase is already in history before any token moves
+    /// @dev Read through a token that calls out mid-transfer. The first transfer is the pull from
+    /// the device wallet, so a record written after it would show a history one entry short.
+    function test_buyDataBundleWithToken_recordsTheHistoryBeforeAnythingMoves() public {
         deployWallets();
-        vm.deal(address(deviceWallet), 1 ether);
 
-        HistoryReadingVault historyReadingVault = new HistoryReadingVault(address(eSIMWallet1));
-        vm.prank(registry.owner());
-        registry.updateVaultAddress(address(historyReadingVault));
+        HistoryReadingVault historyReader = new HistoryReadingVault(address(eSIMWallet1));
+
+        MockReenteringERC20 callingToken = new MockReenteringERC20("Calling", "CALL", 6);
+
+        vm.prank(upgradeManager);
+        paymentAdapter.registerAsset(bytes32("CALL"), Asset({
+            allowed: true,
+            isDollarUnit: true,
+            decimals: 6,
+            token: address(callingToken)
+        }));
+
+        uint256 needed = settlementAmount(TEST_PRICE_CENTS);
+        callingToken.mint(address(deviceWallet), needed);
+
+        // Armed after the mint, which is itself a transfer and would otherwise spend the one callback
+        callingToken.setReentry(address(historyReader), abi.encodeWithSignature("record()"));
 
         vm.prank(eSIMWalletAdmin);
-        eSIMWallet1.buyDataBundle(DataBundleDetails("DB_ID_1", 0.1 ether));
+        eSIMWallet1.buyDataBundleWithToken(bundle("DB_ID_1", TEST_PRICE_CENTS), bytes32("CALL"), needed, nextRef());
 
-        assertEq(historyReadingVault.historyLengthSeen(), 1, "The vault must see the purchase already recorded");
+        assertEq(historyReader.historyLengthSeen(), 1, "The purchase must already be recorded before any transfer");
     }
 }
 
-/// @notice Reads back the paying wallet's transaction history length as it receives ETH
+/// @notice Reads back the paying wallet's transaction history length while a transfer is in flight
 contract HistoryReadingVault {
     MockESIMWallet private immutable eSIMWallet;
     uint256 public historyLengthSeen;
@@ -907,7 +781,7 @@ contract HistoryReadingVault {
         eSIMWallet = MockESIMWallet(payable(_eSIMWallet));
     }
 
-    receive() external payable {
+    function record() external {
         historyLengthSeen = eSIMWallet.getTransactionHistory().length;
     }
 }

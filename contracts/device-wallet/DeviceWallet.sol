@@ -4,9 +4,11 @@ pragma solidity 0.8.36;
 // Libraries
 import {FCL_Elliptic_ZZ} from "FreshCryptoLib/FCL_elliptic.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Errors} from "../Errors.sol";
 
 // Interfaces
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 
 // Contracts
@@ -20,11 +22,12 @@ import {P256Verifier} from "../P256Verifier.sol";
 
 /// @notice A user's device: an ERC-4337 account that owns the eSIM wallets bought for that device
 /// @dev A beacon proxy deployed by `DeviceWalletFactory`, owned by a P256 key the user holds. It
-///      funds its eSIM wallets, decides which of them may pull ETH, and is the only party that can
+///      funds its eSIM wallets, decides which of them may spend its money, and is the only party that can
 ///      move one to another device. Its own owner key rotates through `transferOwnership`, which
 ///      also tells the registry so the two records cannot drift apart.
 contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 {
     using Address for address;
+    using SafeERC20 for IERC20;
 
     /// @notice Registry contract instance
     Registry public registry;
@@ -38,18 +41,20 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     /// @notice Set to true if the eSIM wallet belongs to this device wallet
     mapping(address eSIMWalletAddress => bool isValid) public isValidESIMWallet;
 
-    /// @notice Tracks if an associated eSIM wallet can pull ETH or not
-    mapping(address eSIMWalletAddress => bool isAllowedToPullETH) public canPullETH;
+    /// @notice Tracks if an associated eSIM wallet may pull this wallet's tokens
+    /// @dev A wallet trusted with the funds can already drain the owner, so a second flag per
+    ///      asset would cost another signature and limit nothing.
+    mapping(address eSIMWalletAddress => bool isAllowedToPullFunds) public canPullFunds;
 
-    /// @notice Emitted when owner updates ETH access to a particular eSIM wallet
-    event ETHAccessUpdated(address indexed _eSIMWalletAddress, bool _hasAccessToETH);
+    /// @notice Emitted when owner updates an eSIM wallet's access to this wallet's money
+    event FundsAccessUpdated(address indexed _eSIMWalletAddress, bool _hasAccessToFunds);
 
-    /// @notice Emitted when ETH is sent out from the contract
-    /// @dev mostly when an eSIM wallet pulls ETH from this contract
-    event ETHSent(address indexed _eSIMWalletAddress, uint256 _amount);
+    /// @notice Emitted when an ERC-20 leaves this contract
+    /// @dev mostly when an eSIM wallet pulls tokens to pay for a data bundle
+    event TokenSent(address indexed _token, address indexed _eSIMWalletAddress, uint256 _amount);
 
     /// @notice Emitted when eSIM wallet is added to this Device Wallet
-    event ESIMWalletAdded(address indexed _eSIMWalletAddress, bool _hasAccessToETH, address indexed _caller);
+    event ESIMWalletAdded(address indexed _eSIMWalletAddress, bool _hasAccessToFunds, address indexed _caller);
 
     /// @notice Emitted when the eSIM wallet is removed from this Device Wallet
     event ESIMWalletRemoved(address indexed _eSIMWalletAddress, address indexed _deviceWalletAddress, address indexed _caller);
@@ -90,7 +95,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
 
     /// @notice Reverts unless the caller is this wallet itself or the eSIM wallet being removed
     /// @dev An eSIM wallet may only name itself. Accepting any associated wallet let one of them
-    ///      unbind a sibling, strip its ETH access, put it on standby and force its balance back to
+    ///      unbind a sibling, strip its access, put it on standby and force its balance back to
     ///      the device wallet. Association of the named wallet is still established by the caller,
     ///      which requires isValidESIMWallet before doing anything.
     function _onlySelfOrESIMWalletBeingRemoved(address _eSIMWalletAddress) private view {
@@ -132,6 +137,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     // Initialisation
     // ---------------------------------------------------------------------------------------------
 
+    /// @notice Wires the entry point and WebAuthn verifier used by this wallet
     /// @param anEntryPoint EntryPoint singleton this wallet validates against
     /// @param _verifier Contract used to verify WebAuthn assertions
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -174,36 +180,54 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     /// @dev The new wallet has no eSIM identifier yet. That arrives through
     ///      `setESIMUniqueIdentifierForAnESIMWallet` once the eSIM itself has been created.
     ///
-    ///      ETH access is granted only afterwards, by the owner, with `toggleAccessToETH`.
-    /// @param _hasAccessToETH Must be false
+    ///      Access to this wallet's money is granted only afterwards, by the owner, with
+    ///      `toggleAccessToFunds`.
+    ///
+    ///      The admin gate here is a workflow convenience, not a security boundary against this
+    ///      wallet's own owner: `ESIMWalletFactory.deployESIMWallet` also accepts a call from any
+    ///      device wallet the registry knows, so the owner can reach the same outcome directly
+    ///      through `execute` with no admin involved. Closing that would need the deployment
+    ///      triggered by the admin rather than by this wallet, since nothing downstream of a device
+    ///      wallet's own call can tell one caller's signed intent from another's.
+    /// @param _hasAccessToFunds Must be false
     /// @param _salt CREATE2 salt for the new eSIM wallet
     /// @return eSIM wallet address
     function deployESIMWallet(
-        bool _hasAccessToETH,
+        bool _hasAccessToFunds,
         uint256 _salt
     ) external onlyESIMWalletAdmin returns (address) {
         address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(address(this), _salt);
 
-        _addESIMWallet(eSIMWalletAddress, _hasAccessToETH);
+        _addESIMWallet(eSIMWalletAddress, _hasAccessToFunds);
 
         return eSIMWalletAddress;
     }
 
     // ---------------------------------------------------------------------------------------------
-    // ETH movement
+    // Money movement
     // ---------------------------------------------------------------------------------------------
 
-    /// @notice Allow the eSIM wallets associated with this device wallet to pull ETH (for data bundles)
-    /// @dev Refused while the protocol is paused, and refused for a wallet whose ETH access the
-    ///      owner has revoked.
-    /// @param _amount Amount of ETH to pull
+    /// @notice Allow an associated eSIM wallet to pull an ERC-20 (for data bundles)
+    /// @dev Refused while the protocol is paused, and refused for a wallet whose access the owner
+    ///      has revoked. It exists so the admin can charge this wallet without an owner signature
+    ///      in that transaction; an owner buying for themselves can batch the transfer and the
+    ///      purchase through `executeBatch` instead.
+    /// @param _token ERC-20 being pulled
+    /// @param _amount Amount in that token's smallest unit
     /// @return The amount pulled
-    function pullETH(uint256 _amount) external onlyAssociatedESIMWallets nonReentrant returns (uint256) {
+    function pullToken(address _token, uint256 _amount)
+        external
+        nonReentrant
+        onlyAssociatedESIMWallets
+        returns (uint256)
+    {
         registry.requireNotPaused();
+        if(_token == address(0)) revert Errors.ZeroAddress("_token");
         if(_amount == 0) revert Errors.ZeroAmount();
-        if(!canPullETH[msg.sender]) revert Errors.ETHAccessRevoked(msg.sender);
+        if(!canPullFunds[msg.sender]) revert Errors.FundsAccessRevoked(msg.sender);
 
-        _transferETH(msg.sender, _amount);
+        IERC20(_token).safeTransfer(msg.sender, _amount);
+        emit TokenSent(_token, msg.sender, _amount);
 
         return _amount;
     }
@@ -238,27 +262,27 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     // eSIM wallet management
     // ---------------------------------------------------------------------------------------------
 
-    /// @notice Allow owner to revoke or give access to any associated eSIM wallet for pulling ETH
-    /// @dev The only way ETH access is ever granted. Binding a wallet never carries it, so a
+    /// @notice Allow owner to revoke or give an associated eSIM wallet access to this wallet's money
+    /// @dev The only way that access is ever granted. Binding a wallet never carries it, so a
     ///      revocation stands until the owner signs a grant.
-    /// @param _eSIMWalletAddress Address of the eSIM wallet to toggle ETH access for
-    /// @param _hasAccessToETH Set to true to give access, false to revoke access
-    function toggleAccessToETH(address _eSIMWalletAddress, bool _hasAccessToETH) public onlySelf {
+    /// @param _eSIMWalletAddress Address of the eSIM wallet to toggle access for
+    /// @param _hasAccessToFunds Set to true to give access, false to revoke access
+    function toggleAccessToFunds(address _eSIMWalletAddress, bool _hasAccessToFunds) public onlySelf {
         if(!isValidESIMWallet[_eSIMWalletAddress]) revert Errors.UnknownESIMWallet(_eSIMWalletAddress);
 
-        canPullETH[_eSIMWalletAddress] = _hasAccessToETH;
+        canPullFunds[_eSIMWalletAddress] = _hasAccessToFunds;
 
-        emit ETHAccessUpdated(_eSIMWalletAddress, _hasAccessToETH);
+        emit FundsAccessUpdated(_eSIMWalletAddress, _hasAccessToFunds);
     }
 
     /// @notice Allow the device wallet factory or the wallet owner to add new eSIM wallet to this device wallet
     /// @param _eSIMWalletAddress Address of the eSIM wallet to be added
-    /// @param _hasAccessToETH Must be false. ETH access is granted only through `toggleAccessToETH`
+    /// @param _hasAccessToFunds Must be false. Access is granted only through `toggleAccessToFunds`
     function addESIMWallet(
         address _eSIMWalletAddress,
-        bool _hasAccessToETH
+        bool _hasAccessToFunds
     ) public onlyRegistryOrDeviceWalletFactoryOrOwner(_eSIMWalletAddress) {
-        _addESIMWallet(_eSIMWalletAddress, _hasAccessToETH);
+        _addESIMWallet(_eSIMWalletAddress, _hasAccessToFunds);
     }
 
     /// @notice Allow the device wallet owner or the eSIM wallet to remove any eSIM wallet bound with this device wallet
@@ -271,7 +295,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         if(!isValidESIMWallet[_eSIMWalletAddress]) revert Errors.UnknownESIMWallet(_eSIMWalletAddress);
 
         isValidESIMWallet[_eSIMWalletAddress] = false;
-        canPullETH[_eSIMWalletAddress] = false;
+        canPullFunds[_eSIMWalletAddress] = false;
 
         // Inform the registry that this eSIM wallet has been let go. Only the flag moves: the
         // registry keeps naming this device wallet as the last one to hold it, which is what tells
@@ -284,7 +308,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
 
         // The callback runs last. All eSIM wallets share one upgradeable beacon, so the logic
         // reached here is not fixed for the life of the protocol. By this point the wallet has
-        // already lost canPullETH and its registry association, so a handler that re-enters
+        // already lost canPullFunds and its registry association, so a handler that re-enters
         // cannot use the rights it is in the middle of losing.
         if(_callBackETH) {
             try ESIMWallet(payable(_eSIMWalletAddress)).sendETHToDeviceWallet(_eSIMWalletAddress.balance) returns (uint256 _amount) {
@@ -300,22 +324,19 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     /// @dev Refuses a wallet this device wallet does not already own, so binding cannot run ahead
     ///      of the ownership handover.
     ///
-    ///      A bind never carries ETH access. `toggleAccessToETH` is `onlySelf` and the only writer
+    ///      A bind never carries access to this wallet's money. `toggleAccessToFunds` is `onlySelf` and the only writer
     ///      of a `true`, so no bind can undo the owner's revocation. Asking for access here reverts
     ///      rather than being downgraded in silence.
     /// @param _eSIMWalletAddress Address of the eSIM wallet to bind
-    /// @param _hasAccessToETH Must be false
+    /// @param _hasAccessToFunds Must be false
     function _addESIMWallet(
         address _eSIMWalletAddress,
-        bool _hasAccessToETH
+        bool _hasAccessToFunds
     ) internal {
-        if(_hasAccessToETH) revert Errors.ETHAccessNotGrantableAtBind(_eSIMWalletAddress);
+        if(_hasAccessToFunds) revert Errors.FundsAccessNotGrantableAtBind(_eSIMWalletAddress);
         if(isValidESIMWallet[_eSIMWalletAddress]) revert Errors.ESIMWalletAlreadyAdded(_eSIMWalletAddress);
-        // If the eSIM wallet is a newly deployed one, then the owner will definitely be set
-        // during initialisation. This device wallet will be the owner.
-        // If the eSIM wallet already existed, then the previous owner (device wallet)
-        // must transfer the ownership to the eSIM wallet, and mark its status as standby.
-        // And this device wallet must accept the ownership before calling the addESIMWallet function
+        // New deployment: owner is set to this wallet at initialisation.
+        // Existing wallet: the previous owner must transfer and this wallet must accept first.
         address eSIMWalletOwner = ESIMWallet(payable(_eSIMWalletAddress)).owner();
         if(eSIMWalletOwner != address(this)) {
             revert Errors.ESIMWalletNotOwnedByThisDeviceWallet(_eSIMWalletAddress, eSIMWalletOwner);
@@ -324,7 +345,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         isValidESIMWallet[_eSIMWalletAddress] = true;
         // Already false on arrival, since `removeESIMWallet` zeroes it. Written anyway so the
         // property is readable here.
-        canPullETH[_eSIMWalletAddress] = false;
+        canPullFunds[_eSIMWalletAddress] = false;
 
         // Inform the registry that this device wallet now holds the eSIM wallet. The call writes the
         // association and, if a release was outstanding, lowers the transit marker. The two records
@@ -335,24 +356,8 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     }
 
     // ---------------------------------------------------------------------------------------------
-    // ETH transfers and key checks
+    // Key checks
     // ---------------------------------------------------------------------------------------------
-
-    /// @notice Sends ETH out of this wallet, reverting if the call fails
-    /// @dev A zero amount is a no-op rather than a revert.
-    /// @param _recipient Address receiving the ETH
-    /// @param _amount Amount in wei
-    function _transferETH(address _recipient, uint256 _amount) internal virtual {
-        uint256 balance = address(this).balance;
-        if(_amount > balance) revert Errors.InsufficientBalance(balance, _amount);
-        if(_recipient == address(0)) revert Errors.ZeroAddress("_recipient");
-
-        if (_amount > 0) {
-            (bool success,) = _recipient.call{value: _amount}("");
-            if (!success) revert Errors.FailedToTransfer();
-            else emit ETHSent(_recipient, _amount);
-        }
-    }
 
     /// @notice Rejects a P256 public key that is not a point on the curve
     /// @dev Same predicate the three deploy paths apply, repeated here because the factory holds

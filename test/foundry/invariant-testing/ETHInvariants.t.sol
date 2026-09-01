@@ -38,11 +38,12 @@ contract ETHInvariantsTest is CampaignBase {
         assertEq(address(lazyWalletRegistry).balance, 0, "Lazy wallet registry is holding ETH");
     }
 
-    /// @notice The right to pull ETH only ever comes from the device wallet owner
-    /// @dev A pair holding the right with no grant recorded is access the campaign got some other
+    /// @notice The right to spend a device wallet's money only ever comes from its owner
+    /// @dev The flag covers only tokens now, so this is the whole spending right rather than part of
+    ///      it. A pair holding it with no grant recorded is access the campaign got some other
     ///      way. Both the current device wallet and the last one are checked, since the two differ
     ///      while a transfer is outstanding.
-    function invariant_ETHAccessOnlyEverCameFromTheOwner() public view {
+    function invariant_fundsAccessOnlyEverCameFromTheOwner() public view {
         uint256 count = state.eSIMWalletCount();
         for (uint256 i = 0; i < count; ++i) {
             address wallet = state.eSIMWallets(i);
@@ -51,14 +52,14 @@ contract ETHInvariantsTest is CampaignBase {
         }
     }
 
-    /// @notice Fails if a pair may pull ETH without the owner having granted it
+    /// @notice Fails if a pair may spend without the owner having granted it
     function _assertGranted(address device, address wallet) private view {
         if (device == address(0)) return;
-        if (!MockDeviceWallet(payable(device)).canPullETH(wallet)) return;
+        if (!MockDeviceWallet(payable(device)).canPullFunds(wallet)) return;
 
         assertTrue(
             state.ghost_ethAccessGranted(device, wallet),
-            "An eSIM wallet may pull ETH without the owner ever having granted it"
+            "An eSIM wallet may spend a device wallet's money without the owner ever having granted it"
         );
     }
 }

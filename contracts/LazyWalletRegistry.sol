@@ -5,7 +5,7 @@ pragma solidity 0.8.36;
 import {Errors} from "./Errors.sol";
 
 // Types
-import {DataBundleDetails} from "./CustomStructs.sol";
+import {DataBundleDetails, Settlement} from "./CustomStructs.sol";
 
 // Contracts
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
@@ -190,6 +190,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
     // Initialisation
     // ---------------------------------------------------------------------------------------------
 
+    /// @notice Disables initializers on the implementation contract
     /// @dev Locks the implementation contract itself. Without this, anyone can call initialize
     ///      directly on the implementation and own it. The proxy is unaffected either way, but an
     ///      owned implementation is a trap for any later upgrade that adds an outward call.
@@ -257,6 +258,12 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
     ///      bought. Switching an eSIM to another device is refused for the whole time the rest are
     ///      outstanding, which `switchESIMIdentifierToNewDeviceIdentifier` already does by refusing
     ///      any device that has a wallet.
+    ///
+    ///      Refused while the protocol is paused. This is the one lazy route that moves ETH, so it
+    ///      is held for the same reason the purchase and pull paths are. Its two siblings,
+    ///      `deployMoreESIMWalletsForLazyDevice` and `setHistoryForLazyWallet`, move none and run
+    ///      through a pause deliberately, so a stopped protocol can still finish a device already
+    ///      half deployed.
     /// @param _deviceOwnerPublicKey P256 public key of the device owner
     /// @param _deviceUniqueIdentifier Unique device identifier associated with the device
     /// @param _salt Salt the whole deployment derives its eSIM wallet addresses from
@@ -276,6 +283,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         address[] memory eSIMWallets,
         uint256 remaining
     ) {
+        registry.requireNotPaused();
         if(_depositAmount != msg.value) revert Errors.DepositDoesNotMatchValue(_depositAmount, msg.value);
         if(registry.isDeviceIdentifierAlreadyUsed(_deviceUniqueIdentifier)) {
             revert Errors.LazyWalletAlreadyDeployed(_deviceUniqueIdentifier);
@@ -445,7 +453,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
     /// @param _eSIMIdentifier unique eSIM identifier that needs to be switched to a new device
     /// @param _oldDeviceIdentifier device identifier that the eSIM is currently associated with
     /// @param _newDeviceIdentifier new device identifier that the eSIM needs to be switched to
-    /// @return bool Returns `true` if the switching of eSIM was successful
+    /// @return True if the switch succeeded
     function switchESIMIdentifierToNewDeviceIdentifier(
         string calldata _eSIMIdentifier,
         string calldata _oldDeviceIdentifier,
@@ -574,12 +582,13 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
                 }
             }
 
-            DataBundleDetails[] storage dataBundleDetails = deviceIdentifierToESIMDetails[_deviceUniqueIdentifier][eSIMUniqueIdentifier];
-            // Manually add a new struct to history and then set its fields
-            dataBundleDetails.push();  // Increase the array length by one
-            DataBundleDetails storage newDataBundleDetail = dataBundleDetails[dataBundleDetails.length - 1];
-            newDataBundleDetail.dataBundleID = _dataBundleDetails[i].dataBundleID;
-            newDataBundleDetail.dataBundlePrice = _dataBundleDetails[i].dataBundlePrice;
+            // These purchases happened before the wallet existed, so no contract here saw the
+            // money move. The admin must not be able to claim otherwise.
+            if(_dataBundleDetails[i].settlement == Settlement.DeviceWallet) {
+                revert Errors.SettlementNotAsserted();
+            }
+
+            deviceIdentifierToESIMDetails[_deviceUniqueIdentifier][eSIMUniqueIdentifier].push(_dataBundleDetails[i]);
         }
 
         emit DataUpdatedForDevice(_deviceUniqueIdentifier, _eSIMUniqueIdentifiers, _dataBundleDetails);
@@ -598,7 +607,6 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         string calldata _newDeviceIdentifier
     ) internal {
         DataBundleDetails[] storage dataBundleDetails = deviceIdentifierToESIMDetails[_oldDeviceIdentifier][_eSIMIdentifier];
-        // Transfer history of the eSIM identifier to the new device identifier
         DataBundleDetails[] storage newDataBundleDetails = deviceIdentifierToESIMDetails[_newDeviceIdentifier][_eSIMIdentifier];
         // The two arrays are distinct because the caller refuses a switch to the same device, so
         // pushing onto one cannot lengthen the other and the bound can be read once.
@@ -608,7 +616,6 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         }
         emit DataBundleDetailsTransferredToNewDeviceIdentifier(_newDeviceIdentifier, newDataBundleDetails);
 
-        // delete any reference of eSIM identifier from previous device identifier
         delete deviceIdentifierToESIMDetails[_oldDeviceIdentifier][_eSIMIdentifier];
         emit DataBundleDetailsDeletedFromOldDeviceIdentifier(_oldDeviceIdentifier, _eSIMIdentifier);
     }
@@ -626,7 +633,6 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         string calldata _oldDeviceIdentifier,
         string calldata _newDeviceIdentifier
     ) internal {
-        // Remove eSIM identifier from previous device identifier
         string[] storage eSIMIdentifierOfOldDevice = eSIMIdentifiersAssociatedWithDeviceIdentifier[_oldDeviceIdentifier];
 
         uint256 i = 0;
@@ -641,12 +647,10 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         }
         if(i == associated) revert Errors.ESIMIdentifierNotFound(_eSIMIdentifier, _oldDeviceIdentifier);
 
-        // Swap element to be removed with the element at the last index, and then pop last element
         eSIMIdentifierOfOldDevice[i] = eSIMIdentifierOfOldDevice[eSIMIdentifierOfOldDevice.length - 1];
         eSIMIdentifierOfOldDevice.pop();
         emit ESIMIdentifierRemovedFromOldDeviceIdentifier(_oldDeviceIdentifier, _eSIMIdentifier, eSIMIdentifierOfOldDevice);
 
-        // Add eSIM identifier to new device identifier
         string[] storage eSIMIdentifierOfNewDevice = eSIMIdentifiersAssociatedWithDeviceIdentifier[_newDeviceIdentifier];
         eSIMIdentifierOfNewDevice.push(_eSIMIdentifier);
         emit ESIMIdentifierAddedToNewDeviceIdentifier(_newDeviceIdentifier, _eSIMIdentifier, eSIMIdentifierOfNewDevice);
@@ -720,8 +724,23 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
     /// @dev Reads through to the owner rather than holding its own copy. `_authorizeUpgrade` is
     ///      gated on `onlyOwner`, so the owner is the upgrade authority by definition and a second
     ///      copy could only ever disagree with it.
+    /// @return The address that may upgrade this contract
     function upgradeManager() public view returns (address) {
         return owner();
+    }
+
+    /// @notice How many history entries are still waiting to be copied into this eSIM's wallet
+    /// @dev Needed because the public getter on `deviceIdentifierToESIMDetails` takes an index and
+    ///      never returns a length, so nothing outside this contract can count the entries.
+    ///      Returns zero for an eSIM this contract never handled, which has nothing waiting anyway.
+    /// @param _eSIMIdentifier eSIM being asked about
+    /// @return Entries still waiting to be copied
+    function outstandingHistoryEntries(string calldata _eSIMIdentifier) external view returns (uint256) {
+        string memory deviceIdentifier = eSIMIdentifierToDeviceIdentifier[_eSIMIdentifier];
+        if(bytes(deviceIdentifier).length == 0) return 0;
+
+        return deviceIdentifierToESIMDetails[deviceIdentifier][_eSIMIdentifier].length
+            - historyEntriesCopied[_eSIMIdentifier];
     }
 
     /// @notice Whether a device identifier has purchases recorded against it here

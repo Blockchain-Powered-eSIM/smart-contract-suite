@@ -37,7 +37,7 @@ contract IdentifierCollisionTest is DeployerBase {
         DataBundleDetails[][] memory details = new DataBundleDetails[][](1);
         details[0] = new DataBundleDetails[](_eSIMIdentifiers.length);
         for(uint256 i = 0; i < _eSIMIdentifiers.length; ++i) {
-            details[0][i] = DataBundleDetails("DB_COLLISION", 1 ether);
+            details[0][i] = bundle("DB_COLLISION", TEST_PRICE_CENTS);
         }
 
         vm.prank(eSIMWalletAdmin);
@@ -225,7 +225,7 @@ contract IdentifierCollisionTest is DeployerBase {
         eSIMs[0] = _one(eSIMIdentifier);
         DataBundleDetails[][] memory details = new DataBundleDetails[][](1);
         details[0] = new DataBundleDetails[](1);
-        details[0][0] = DataBundleDetails("DB_COLLISION", 1 ether);
+        details[0][0] = bundle("DB_COLLISION", TEST_PRICE_CENTS);
 
         vm.prank(eSIMWalletAdmin);
         vm.expectRevert(

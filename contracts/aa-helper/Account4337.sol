@@ -87,6 +87,7 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
     // Initialisation
     // ---------------------------------------------------------------------------------------------
 
+    /// @notice Wires the entry point and WebAuthn verifier used by this account
     /// @param _entryPoint EntryPoint singleton this account validates against
     /// @param _verifier Contract used to verify WebAuthn assertions
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -241,6 +242,7 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
     // ---------------------------------------------------------------------------------------------
 
     /// @notice This account's gas deposit held by the EntryPoint
+    /// @return The deposited amount
     function getDeposit() public view returns (uint256) {
         return entryPoint.balanceOf(address(this));
     }

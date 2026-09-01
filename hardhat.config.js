@@ -4,7 +4,9 @@ require('@openzeppelin/hardhat-upgrades');
 require("@nomicfoundation/hardhat-foundry");
 require('solidity-docgen');
 
-const PRIV_KEY = process.env.PRIVATE_KEY_1;
+// Same key Foundry deploys with. Hardhat is kept for docgen and compile parity, so an empty list
+// is normal: without this, a missing key makes every hardhat command fail at config load.
+const accounts = process.env.DEPLOYER_PRIVATE_KEY ? [process.env.DEPLOYER_PRIVATE_KEY] : [];
 const ALCHEMY_OP_SEPOLIA_HTTPS = process.env.ALCHEMY_OP_SEPOLIA_HTTPS;
 const ALCHEMY_TENDERLY_OP_SEPOLIA_HTTPS = process.env.ALCHEMY_TENDERLY_OP_SEPOLIA_HTTPS;
 const ALCHEMY_BASE_SEPOLIA_HTTPS = process.env.ALCHEMY_BASE_SEPOLIA_HTTPS;
@@ -22,7 +24,7 @@ module.exports = {
       name: "sepolia",
       chainId: 11155111,
       url: `${ALCHEMY_SEPOLIA_HTTPS}`,
-      accounts: [PRIV_KEY],
+      accounts,
       saveDeployments: true,
       ignition: {
         maxFeePerGasLimit: 50_000_000_000n, // 50 gwei
@@ -35,7 +37,7 @@ module.exports = {
       name: "optimism-sepolia",
       chainId: 11155420,
       url: `${ALCHEMY_OP_SEPOLIA_HTTPS}`,
-      accounts: [PRIV_KEY],
+      accounts,
       saveDeployments: true,
       ignition: {
         maxFeePerGasLimit: 50_000_000_000n, // 50 gwei
@@ -48,7 +50,7 @@ module.exports = {
       name: "base-sepolia",
       chainId: 84532,
       url: `${ALCHEMY_BASE_SEPOLIA_HTTPS}`,
-      accounts: [PRIV_KEY],
+      accounts,
       saveDeployments: true,
       ignition: {
         maxFeePerGasLimit: 50_000_000_000n, // 50 gwei
@@ -61,7 +63,7 @@ module.exports = {
       name: "Kokio-OP-Sepolia",
       chainId: 1212121,
       url: `${ALCHEMY_TENDERLY_OP_SEPOLIA_HTTPS}`,
-      accounts: [PRIV_KEY],
+      accounts,
       saveDeployments: true,
       ignition: {
         maxFeePerGasLimit: 50_000_000_000n, // 50 gwei
@@ -74,7 +76,7 @@ module.exports = {
       name: "kokio-mainnet-fork",
       chainId: 1122334455,
       url: `${TENDERLY_KOKIO_MAINNET_FORK}`,
-      accounts: [PRIV_KEY],
+      accounts,
       saveDeployments: true,
       ignition: {
         maxFeePerGasLimit: 50_000_000_000n, // 50 gwei

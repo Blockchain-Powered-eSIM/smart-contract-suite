@@ -13,10 +13,13 @@ import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/acces
 import {RegistryHelper} from "./RegistryHelper.sol";
 import {LazyWalletRegistry} from "./LazyWalletRegistry.sol";
 import {DeviceWalletFactory} from "./device-wallet/DeviceWalletFactory.sol";
-import {DeviceWallet} from "./device-wallet/DeviceWallet.sol";
 import {ESIMWalletFactory} from "./esim-wallet/ESIMWalletFactory.sol";
 import {ESIMWallet} from "./esim-wallet/ESIMWallet.sol";
+import {PaymentAdapter, Asset} from "./payments/PaymentAdapter.sol";
 import {Errors} from "./Errors.sol";
+
+// Types
+import {DataBundleDetails, Settlement} from "./CustomStructs.sol";
 
 /// @notice Single source of truth for who is who in the protocol, and the switchboard the wallets
 ///         read on every guarded path
@@ -73,7 +76,7 @@ contract Registry is
     ///      that is never accepted leaves the role dormant rather than shared.
     address public newRequestedAdmin;
 
-    /// @notice True while the ETH-moving paths are stopped protocol-wide
+    /// @notice True while the protocol's guarded purchase and pull paths are stopped
     /// @dev Held here for the same reason the admin address is: device wallets and eSIM wallets are
     ///      beacon proxies tracked by a mapping with no enumerable list, so there is no way to
     ///      write a flag into each of them. Both already read this contract on their guarded paths,
@@ -87,12 +90,33 @@ contract Registry is
     ///      fast as it was suspended would leave the two sides trading transactions forever.
     bool public adminDisabled;
 
-    /// @notice Most an eSIM wallet may be charged for one data bundle unless it sets its own limit
-    /// @dev Held here rather than only on each wallet because a wallet deployed before this existed
-    ///      reads zero, and there is no enumerable list to write a value into. Never zero: `initialize`
-    ///      and `setDefaultDataBundlePriceCap` both reject it, since a zero here or on a wallet's own
-    ///      cap reads as "no ceiling" in `ESIMWallet._requirePriceWithinCap`.
-    uint256 public defaultDataBundlePriceCap;
+    /// @notice Most an eSIM wallet may be charged for one data bundle, in USD cents, unless it sets
+    ///         its own limit
+    /// @dev Held here because there is no way to list every wallet and write into each one, so one
+    ///      write here is how a change reaches all of them. Never zero: both setters reject it,
+    ///      because zero on a wallet means "follow the registry" and would mean nothing here.
+    uint64 public defaultPriceCapUSDCents;
+
+    /// @notice Contract holding the accepted currencies and the spent payment references
+    /// @dev A pointer and a setter, the same shape this registry already uses for the lazy wallet
+    ///      registry.
+    address public paymentAdapter;
+
+    /// @notice Payment references already spent, scoped per eSIM wallet
+    /// @dev Held here rather than on the payment adapter, so replay protection survives an adapter
+    ///      rotation through `setPaymentAdapter` instead of resetting with it. Keyed by
+    ///      `keccak256(abi.encode(eSIMWallet, paymentReference))` rather than by the reference
+    ///      alone, so one wallet spending a reference cannot burn it for an unrelated wallet's
+    ///      pending settlement.
+    mapping(bytes32 scopedReference => bool used) public usedPaymentReferences;
+
+    /// @notice Restricts a call to an eSIM wallet this registry has recorded
+    modifier onlyESIMWallet() {
+        if(isESIMWalletValid[msg.sender] == address(0)) {
+            revert Errors.NotAProtocolESIMWallet(msg.sender);
+        }
+        _;
+    }
 
     /// @notice Restricts a call to a device wallet this registry has recorded
     modifier onlyDeviceWallet() {
@@ -120,6 +144,7 @@ contract Registry is
     // Initialisation
     // ---------------------------------------------------------------------------------------------
 
+    /// @notice Disables initializers on the implementation contract
     /// @dev Locks the implementation contract itself. Without this, anyone can call initialize
     ///      directly on the implementation and own it. The proxy is unaffected either way, but an
     ///      owned implementation is a trap for any later upgrade that adds an outward call.
@@ -135,8 +160,9 @@ contract Registry is
     /// @param _deviceWalletFactory Factory that deploys device wallets
     /// @param _eSIMWalletFactory Factory that deploys eSIM wallets
     /// @param _entryPoint ERC-4337 EntryPoint singleton for this chain
-    /// @param _defaultDataBundlePriceCap Starting price ceiling. Must be non-zero: a zero cap, here
-    ///        or on a wallet's own, reads as "no ceiling" in `ESIMWallet._requirePriceWithinCap`.
+    /// @param _defaultPriceCapUSDCents Starting price ceiling in USD cents. Must be non-zero: a
+    ///        zero cap, here or on a wallet's own, reads as "no ceiling" in
+    ///        `ESIMWallet._requirePriceWithinCap`.
     function initialize(
         address _eSIMWalletAdmin,
         address _vault,
@@ -144,7 +170,7 @@ contract Registry is
         address _deviceWalletFactory,
         address _eSIMWalletFactory,
         IEntryPoint _entryPoint,
-        uint256 _defaultDataBundlePriceCap
+        uint64 _defaultPriceCapUSDCents
     ) external initializer {
         if(_eSIMWalletAdmin == address(0)) revert Errors.ZeroAddress("_eSIMWalletAdmin");
         if(_vault == address(0)) revert Errors.ZeroAddress("_vault");
@@ -156,12 +182,12 @@ contract Registry is
         // ESIMWalletFactory's caller check dead, recoverable only by an upgrade.
         if(_deviceWalletFactory == address(0)) revert Errors.ZeroAddress("_deviceWalletFactory");
         if(_eSIMWalletFactory == address(0)) revert Errors.ZeroAddress("_eSIMWalletFactory");
-        if(_defaultDataBundlePriceCap == 0) revert Errors.ZeroDataBundlePriceCap();
+        if(_defaultPriceCapUSDCents == 0) revert Errors.ZeroDataBundlePriceCap();
 
         adminOfRecord = _eSIMWalletAdmin;
         entryPoint = _entryPoint;
         vault = _vault;
-        defaultDataBundlePriceCap = _defaultDataBundlePriceCap;
+        defaultPriceCapUSDCents = _defaultPriceCapUSDCents;
 
         deviceWalletFactory = DeviceWalletFactory(_deviceWalletFactory);
         eSIMWalletFactory = ESIMWalletFactory(_eSIMWalletFactory);
@@ -176,14 +202,14 @@ contract Registry is
             address(deviceWalletFactory),
             address(eSIMWalletFactory)
         );
-        emit DefaultDataBundlePriceCapUpdated(_defaultDataBundlePriceCap);
+        emit DefaultPriceCapUSDCentsUpdated(_defaultPriceCapUSDCents);
     }
 
     // ---------------------------------------------------------------------------------------------
     // Admin handover
     // ---------------------------------------------------------------------------------------------
 
-    /// @notice Nominates the next eSIM wallet admin, who then has to accept
+    /// @inheritdoc IRegistryAdmin
     /// @dev Owner and not the admin, deliberately. An admin that had to nominate its own
     ///      replacement could not be removed once its key was in someone else's hands, and the
     ///      pause is the admin's own lever, so a compromised key could hold the protocol stopped
@@ -197,7 +223,6 @@ contract Registry is
     ///      Deliberately does not check for an existing request, so an unintended nomination is
     ///      overridden by calling this again. Naming the incumbent withdraws the request and hands
     ///      the powers back, which also lifts a suspension, so one call undoes either mistake.
-    /// @param _newAdmin Address of the recipient to receive the admin role
     function requestAdminUpdate(address _newAdmin) external onlyOwner {
         if(_newAdmin == address(0)) revert Errors.ZeroAddress("_newAdmin");
 
@@ -232,7 +257,7 @@ contract Registry is
         return msg.sender;
     }
 
-    /// @notice Suspends the admin's powers protocol-wide, leaving its address on the books
+    /// @inheritdoc IRegistryAdmin
     /// @dev Every gate in the protocol reads `eSIMWalletAdmin()`, which answers zero from here on,
     ///      and no transaction can arrive from the zero address, so one write closes all of them
     ///      in the same transaction. The address itself is kept so the suspension can be lifted
@@ -302,7 +327,7 @@ contract Registry is
     // Pause and price ceiling
     // ---------------------------------------------------------------------------------------------
 
-    /// @notice Stops the ETH-moving paths on every device wallet and eSIM wallet
+    /// @notice Stops the token purchase and pull paths on every device wallet and eSIM wallet
     /// @dev The admin trips this and the owner clears it. The admin key signs backend batches all
     ///      day and is the one watching, so it needs to act without waiting; giving it the release
     ///      as well would let a single hot key hold user funds indefinitely. Neither key can reach
@@ -312,7 +337,7 @@ contract Registry is
         emit Paused(msg.sender);
     }
 
-    /// @notice Releases the pause
+    /// @inheritdoc IPausable
     /// @dev Owner only, see `pause`
     function unpause() external onlyOwner {
         paused = false;
@@ -331,12 +356,134 @@ contract Registry is
     ///      letting it raise its own limit would leave the ceiling meaningless. Zero is refused:
     ///      it would read as "no ceiling" in `ESIMWallet._requirePriceWithinCap` for every wallet
     ///      that has not set its own.
-    /// @param _cap Maximum price in wei, non-zero
-    function setDefaultDataBundlePriceCap(uint256 _cap) external onlyOwner {
+    /// @param _cap Maximum price in USD cents, non-zero
+    function setDefaultPriceCapUSDCents(uint64 _cap) external onlyOwner {
         if(_cap == 0) revert Errors.ZeroDataBundlePriceCap();
 
-        defaultDataBundlePriceCap = _cap;
-        emit DefaultDataBundlePriceCapUpdated(_cap);
+        defaultPriceCapUSDCents = _cap;
+        emit DefaultPriceCapUSDCentsUpdated(_cap);
+    }
+
+    /// @notice Points this registry at the payment adapter
+    /// @dev Owner and not admin. The adapter holds the spent payment references, so an admin that
+    ///      could swap it would get an empty set back and record every purchase a second time.
+    /// @param _paymentAdapter Address of the payment adapter
+    function setPaymentAdapter(address _paymentAdapter) external onlyOwner {
+        if(_paymentAdapter == address(0)) revert Errors.ZeroAddress("_paymentAdapter");
+        if(_paymentAdapter == paymentAdapter) revert Errors.PaymentAdapterUnchanged(_paymentAdapter);
+
+        paymentAdapter = _paymentAdapter;
+        emit PaymentAdapterUpdated(_paymentAdapter);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Purchases paid for outside the protocol
+    // ---------------------------------------------------------------------------------------------
+
+    /// @notice Spends a payment reference for an eSIM wallet paying with USDC (or any other acceptable stablecoin/ERC20)
+    /// @dev Scoped to `msg.sender`, so this and `recordSettledPurchase` cannot spend the same
+    ///      reference once on each for the same wallet.
+    /// @param _paymentReference Hash tying the purchase to the offchain order behind it
+    function consumePaymentReference(bytes32 _paymentReference) external onlyESIMWallet {
+        _consumePaymentReference(msg.sender, _paymentReference);
+    }
+
+    /// @notice Records a data bundle paid for through an external wallet or a card
+    /// @dev No money moves here. Three things bound what the admin can state: the price ceiling,
+    ///      the payment reference being spendable once, and the settlement not being
+    ///      `DeviceWallet`. Written here and not by the adapter, because eSIM wallets accept
+    ///      history from this address alone.
+    /// @param _eSIMWallet Wallet the purchase belongs to
+    /// @param _dataBundleDetail The purchase, priced in USD cents like everywhere else
+    /// @param _asset Symbol of the currency the user paid in
+    /// @param _tokenAmount What the user actually paid, in that currency's smallest unit. Recorded
+    ///        for offchain matching, never checked: it and the price both come from the admin.
+    /// @param _paymentReference Hash tying this purchase to its offchain payment intent
+    function recordSettledPurchase(
+        address _eSIMWallet,
+        DataBundleDetails calldata _dataBundleDetail,
+        bytes32 _asset,
+        uint256 _tokenAmount,
+        bytes32 _paymentReference
+    ) external onlyESIMWalletAdmin {
+        if(paused) revert Errors.ProtocolPaused();
+        if(isESIMWalletValid[_eSIMWallet] == address(0)) {
+            revert Errors.NotAProtocolESIMWallet(_eSIMWallet);
+        }
+        if(_dataBundleDetail.id == bytes32(0)) revert Errors.EmptyDataBundleID();
+        if(_dataBundleDetail.priceUSDCents == 0) revert Errors.ZeroDataBundlePrice();
+
+        // This contract never sees the money move, so it must not be able to say it did.
+        if(_dataBundleDetail.settlement == Settlement.DeviceWallet) {
+            revert Errors.SettlementNotAsserted();
+        }
+
+        _requireLazyHistoryCopied(_eSIMWallet);
+
+        Asset memory asset = PaymentAdapter(_requirePaymentAdapter()).resolveAsset(_asset);
+        _consumePaymentReference(_eSIMWallet, _paymentReference);
+
+        ESIMWallet(payable(_eSIMWallet)).recordSettledPurchase(_dataBundleDetail);
+
+        emit DataBundleSettled(
+            _eSIMWallet,
+            _dataBundleDetail.id,
+            _dataBundleDetail.priceUSDCents,
+            _dataBundleDetail.settlement,
+            _asset,
+            asset.token,
+            _tokenAmount,
+            _paymentReference
+        );
+    }
+
+    /// @notice Refuses a new entry while older history is still waiting to be copied in
+    /// @dev The new entry would land first and the older ones append after it, leaving the history
+    ///      out of order. The backend retries the whole onchain step on failure, so this cannot be
+    ///      left as an ordering rule for the caller to follow. External so a wallet can run the same
+    ///      check on its own paths that see the money move; `recordSettledPurchase` uses the
+    ///      private form since it already has this contract's own state in scope.
+    /// @param _eSIMWallet Wallet being appended to
+    function requireLazyHistoryCopied(address _eSIMWallet) external view {
+        _requireLazyHistoryCopied(_eSIMWallet);
+    }
+
+    /// @notice Refuses a new entry while older history is still waiting to be copied in
+    /// @dev See `requireLazyHistoryCopied`.
+    /// @param _eSIMWallet Wallet being appended to
+    function _requireLazyHistoryCopied(address _eSIMWallet) private view {
+        if(lazyWalletRegistry == address(0)) return;
+
+        string memory eSIMIdentifier = ESIMWallet(payable(_eSIMWallet)).eSIMUniqueIdentifier();
+        if(bytes(eSIMIdentifier).length == 0) return;
+
+        uint256 outstanding = LazyWalletRegistry(lazyWalletRegistry).outstandingHistoryEntries(eSIMIdentifier);
+        if(outstanding != 0) revert Errors.HistoryNotFullyCopied(eSIMIdentifier, outstanding);
+    }
+
+    /// @notice Spends a payment reference for one eSIM wallet, refusing one already spent by it
+    /// @dev Checked and written here rather than on the payment adapter, for the two reasons
+    ///      `usedPaymentReferences` documents: this survives an adapter rotation, and scoping by
+    ///      wallet means the reference space is not shared, so nothing here can be front-run to
+    ///      burn a reference an unrelated wallet's settlement is about to spend.
+    /// @param _eSIMWallet Wallet the reference is being spent for
+    /// @param _paymentReference Hash tying this purchase to the offchain payment behind it
+    function _consumePaymentReference(address _eSIMWallet, bytes32 _paymentReference) private {
+        if(_paymentReference == bytes32(0)) revert Errors.EmptyPaymentReference();
+
+        bytes32 scopedReference = keccak256(abi.encode(_eSIMWallet, _paymentReference));
+        if(usedPaymentReferences[scopedReference]) revert Errors.PaymentReferenceAlreadyUsed(_paymentReference);
+
+        usedPaymentReferences[scopedReference] = true;
+        emit PaymentReferenceConsumed(_eSIMWallet, _paymentReference);
+    }
+
+    /// @notice The payment adapter, or a revert if none is set yet
+    function _requirePaymentAdapter() private view returns (address) {
+        address adapter = paymentAdapter;
+        if(adapter == address(0)) revert Errors.PaymentAdapterNotSet();
+
+        return adapter;
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -433,7 +580,7 @@ contract Registry is
         }
 
         isESIMWalletValid[_eSIMWalletAddress] = _deviceWalletAddress;
-        emit UpdatedDeviceWalletassociatedWithESIMWallet(_eSIMWalletAddress, _deviceWalletAddress);
+        emit UpdatedDeviceWalletAssociatedWithESIMWallet(_eSIMWalletAddress, _deviceWalletAddress);
 
         // Only written on a change, so a wallet that was never released emits nothing here
         if(isESIMWalletOnStandby[_eSIMWalletAddress]) {
@@ -518,6 +665,7 @@ contract Registry is
     /// @dev Reads through to the owner rather than holding its own copy. `_authorizeUpgrade` is
     ///      gated on `onlyOwner`, so the owner is the upgrade authority by definition and a second
     ///      copy could only ever disagree with it.
+    /// @return The address that may upgrade this contract
     function upgradeManager() public view returns (address) {
         return owner();
     }

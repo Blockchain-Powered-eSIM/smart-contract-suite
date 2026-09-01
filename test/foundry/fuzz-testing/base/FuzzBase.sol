@@ -59,7 +59,7 @@ abstract contract FuzzBase is DeployerBase {
 
         // A bind never carries ETH access, and the pull path these suites measure needs it
         vm.prank(address(fuzzDeviceWallet));
-        fuzzDeviceWallet.toggleAccessToETH(address(fuzzESIMWallet), true);
+        fuzzDeviceWallet.toggleAccessToFunds(address(fuzzESIMWallet), true);
     }
 
     /// @notice Builds a string of the requested byte length out of a repeating filler

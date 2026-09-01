@@ -1,0 +1,11 @@
+{
+  "consumePaymentReference: a reference not yet spent": "30843",
+  "quote: 2 decimals": "3342",
+  "quote: 6 decimals": "7842",
+  "registerAsset: a currency not in the table": "32911",
+  "resolveAsset": "7991",
+  "settle: funded above the price, with a refund": "40573",
+  "settle: funded to the exact price": "15358",
+  "settle: the vault's first payment in this currency": "49758",
+  "updateAsset: withdrawing a currency": "16144"
+}

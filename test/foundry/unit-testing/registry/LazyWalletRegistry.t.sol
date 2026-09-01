@@ -44,8 +44,8 @@ contract LazyWalletRegistryTest is DeployerBase {
             customESIMUniqueIdentifiers[0][1]
         );
         assertEq(storedData.length, 1, "DataBundleDetails array length should be 1");
-        assertEq(storedData[0].dataBundleID, "DB_ID_2");
-        assertEq(storedData[0].dataBundlePrice, 21);
+        assertEq(storedData[0].id, "DB_ID_2");
+        assertEq(storedData[0].priceUSDCents, 21);
     }
 
     /// @notice A rotated admin has to reach this registry, which the factory alone does not
@@ -97,9 +97,6 @@ contract LazyWalletRegistryTest is DeployerBase {
         assertEq(storedData.length, 5, "DataBundleDetails array length should be 5");
 
         string[] memory listOfESIMIdentifiers = lazyWalletRegistry.getESIMIdentifiersAssociatedWithDeviceIdentifier(customDeviceUniqueIdentifiers[0]);
-        for(uint256 i=0; i<listOfESIMIdentifiers.length; ++i) {
-            console.log(listOfESIMIdentifiers[i]);
-        }
         assertEq(listOfESIMIdentifiers.length, 1);
         assertEq(listOfESIMIdentifiers[0], duplicateESIMUniqueIdentifiers[0][1]);
     }
@@ -122,8 +119,8 @@ contract LazyWalletRegistryTest is DeployerBase {
         );
 
         assertEq(storedData.length, 2, "DataBundleDetails array length should be 2");
-        assertEq(storedData[1].dataBundleID, "DB_ID_2");
-        assertEq(storedData[1].dataBundlePrice, 21);
+        assertEq(storedData[1].id, "DB_ID_2");
+        assertEq(storedData[1].priceUSDCents, 21);
     }
 
     /// Providing eSIM identifiers that have been associated with a different device identifier
@@ -200,8 +197,8 @@ contract LazyWalletRegistryTest is DeployerBase {
             eSIMIdentifier
         );
         assertEq(newDeviceData.length, 1, "Data bundles should have been added to the new device identifier");
-        assertEq(newDeviceData[0].dataBundleID, customDataBundleDetails[1][0].dataBundleID);
-        assertEq(newDeviceData[0].dataBundlePrice, customDataBundleDetails[1][0].dataBundlePrice);
+        assertEq(newDeviceData[0].id, customDataBundleDetails[1][0].id);
+        assertEq(newDeviceData[0].priceUSDCents, customDataBundleDetails[1][0].priceUSDCents);
 
         string[] memory oldDeviceListOfESIMs = lazyWalletRegistry.getESIMIdentifiersAssociatedWithDeviceIdentifier(
             oldDeviceIdentifier
@@ -299,7 +296,7 @@ contract LazyWalletRegistryTest is DeployerBase {
 
             // Check storage variables in device wallet
             assertEq(deviceWallet.isValidESIMWallet(address(eSIMWallet)), true, "ESIMWallet should have been set to valid");
-            assertEq(deviceWallet.canPullETH(address(eSIMWallet)), false, "A lazy deploy must not hand out ETH access");
+            assertEq(deviceWallet.canPullFunds(address(eSIMWallet)), false, "A lazy deploy must not hand out ETH access");
 
             // Check storage variables in eSIM wallet
             assertEq(eSIMWallet.owner(), address(deviceWallet), "ESIMWallet owner should have been device wallet");
@@ -415,6 +412,67 @@ contract LazyWalletRegistryTest is DeployerBase {
             frontRunWallet,
             "The identifier must resolve to the adopted wallet"
         );
+    }
+
+    /// @notice The pause reaches the one lazy route that moves ETH
+    /// @dev It forwards the admin's deposit into a device wallet it creates in the same call, which
+    ///      is the same kind of movement `buyDataBundleWithToken` and `pullToken` are held for.
+    ///      Before the check it ran through a pause and the deposit landed.
+    function test_deployLazyWalletAndSetESIMIdentifier_isRefusedWhilePaused() public {
+        test_batchPopulateHistory();
+
+        vm.prank(eSIMWalletAdmin);
+        registry.pause();
+
+        vm.deal(eSIMWalletAdmin, 2 ether);
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(Errors.ProtocolPaused.selector);
+        lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier{value: 2 ether}(
+            pubKey1,
+            customDeviceUniqueIdentifiers[0],
+            5501,
+            2 ether,
+            FULL_BATCH
+        );
+
+        assertEq(eSIMWalletAdmin.balance, 2 ether, "The deposit must stay with the caller");
+        assertEq(
+            registry.uniqueIdentifierToDeviceWallet(customDeviceUniqueIdentifiers[0]),
+            address(0),
+            "No device wallet must have been created"
+        );
+    }
+
+    /// @notice A device already half deployed can still be finished while the protocol is paused
+    /// @dev Deliberate, and pinned here so the pause is not extended to these two later. Neither
+    ///      moves ETH, and a device left with some of its eSIM wallets and none of its history is
+    ///      worse for the user than one completed under a pause that stops every path to money.
+    function test_lazyFollowUpCalls_stillRunWhilePaused() public {
+        test_batchPopulateHistory();
+
+        string memory deviceIdentifier = customDeviceUniqueIdentifiers[0];
+
+        vm.prank(eSIMWalletAdmin);
+        (, address[] memory firstBatch, uint256 remaining) = lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(
+            pubKey1,
+            deviceIdentifier,
+            5601,
+            0,
+            1
+        );
+        assertGt(remaining, 0, "The device must still be waiting on eSIM wallets");
+
+        vm.prank(eSIMWalletAdmin);
+        registry.pause();
+
+        vm.prank(eSIMWalletAdmin);
+        (address[] memory secondBatch,) = lazyWalletRegistry.deployMoreESIMWalletsForLazyDevice(deviceIdentifier, 1);
+        assertEq(secondBatch.length, 1, "The next batch must still deploy");
+
+        vm.prank(eSIMWalletAdmin);
+        (uint256 copied,) = lazyWalletRegistry.setHistoryForLazyWallet(customESIMUniqueIdentifiers[0][0], 10);
+        assertGt(copied, 0, "History must still reach the first wallet");
+        assertGt(firstBatch.length, 0, "The first batch must have deployed something to copy into");
     }
 
     function test_batchPopulateHistory_afterDeployment() public {
@@ -546,7 +604,7 @@ contract LazyWalletRegistryTest is DeployerBase {
 
         for(uint256 i=0; i<_count; ++i) {
             eSIMs[0][i] = string.concat(_prefix, vm.toString(i));
-            bundles[0][i] = DataBundleDetails("DB_CAP", 1);
+            bundles[0][i] = bundle("DB_CAP", TEST_PRICE_CENTS);
         }
 
         vm.prank(eSIMWalletAdmin);
@@ -610,7 +668,7 @@ contract LazyWalletRegistryTest is DeployerBase {
         for(uint256 i=0; i<_purchases; ++i) {
             DataBundleDetails[][] memory bundles = new DataBundleDetails[][](1);
             bundles[0] = new DataBundleDetails[](1);
-            bundles[0][0] = DataBundleDetails(string.concat("DB_", vm.toString(i)), i + 1);
+            bundles[0][0] = bundle(bytes32(bytes(string.concat("DB_", vm.toString(i)))), uint64(i + 1));
 
             vm.prank(eSIMWalletAdmin);
             lazyWalletRegistry.batchPopulateHistory(devices, eSIMs, bundles);
@@ -690,7 +748,7 @@ contract LazyWalletRegistryTest is DeployerBase {
 
             assertEq(registry.isESIMWalletValid(eSIMWallets[i]), deviceWalletAddress, "Each wallet must be bound");
             assertEq(deviceWallet.isValidESIMWallet(eSIMWallets[i]), true, "Each wallet must be valid on the device");
-            assertEq(deviceWallet.canPullETH(eSIMWallets[i]), false, "No wallet may arrive with ETH access");
+            assertEq(deviceWallet.canPullFunds(eSIMWallets[i]), false, "No wallet may arrive with ETH access");
             assertEq(
                 eSIMWallet.eSIMUniqueIdentifier(),
                 string.concat("partial_", vm.toString(i)),
@@ -946,8 +1004,8 @@ contract LazyWalletRegistryTest is DeployerBase {
 
         assertEq(inWallet.length, stored.length, "The wallet must end up holding every stored entry");
         for(uint256 i=0; i<stored.length; ++i) {
-            assertEq(inWallet[i].dataBundleID, stored[i].dataBundleID);
-            assertEq(inWallet[i].dataBundlePrice, stored[i].dataBundlePrice);
+            assertEq(inWallet[i].id, stored[i].id);
+            assertEq(inWallet[i].priceUSDCents, stored[i].priceUSDCents);
         }
         assertEq(lazyWalletRegistry.historyEntriesCopied("copy_esim"), 7, "The cursor must sit at the end");
     }
@@ -1098,7 +1156,7 @@ contract LazyWalletRegistryTest is DeployerBase {
 
         DataBundleDetails[][] memory bundles = new DataBundleDetails[][](1);
         bundles[0] = new DataBundleDetails[](1);
-        bundles[0][0] = DataBundleDetails("DB_LEN", 1);
+        bundles[0][0] = bundle("DB_LEN", TEST_PRICE_CENTS);
 
         vm.prank(eSIMWalletAdmin);
         lazyWalletRegistry.batchPopulateHistory(devices, eSIMs, bundles);

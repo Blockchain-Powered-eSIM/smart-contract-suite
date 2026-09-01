@@ -127,8 +127,8 @@ contract LazyInvariantsTest is CampaignBase {
             uint256 matched = 0;
             for (uint256 j = 0; j < inWallet.length && matched < copied; ++j) {
                 if (
-                    _sameString(inWallet[j].dataBundleID, stored[matched].dataBundleID)
-                        && inWallet[j].dataBundlePrice == stored[matched].dataBundlePrice
+                    inWallet[j].id == stored[matched].id
+                        && inWallet[j].priceUSDCents == stored[matched].priceUSDCents
                 ) {
                     ++matched;
                 }

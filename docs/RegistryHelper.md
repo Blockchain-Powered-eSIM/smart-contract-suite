@@ -90,13 +90,17 @@ _This is the registration record. A non-zero entry means the protocol deployed t
 mapping(address => bool) isESIMWalletOnStandby
 ```
 
-If an existing eSIM wallet is in the process of being transferred from one device wallet to another
+True while an eSIM wallet sits between device wallets, released by one and not yet
+        taken on by another
 
-_If bool is `true`, the eSIM wallet is in a transient state. `isESIMWalletValid` still
-     points at the old device wallet. Do not use this mapping to check whether an eSIM
-     wallet belongs to the protocol; that is what `isESIMWalletValid` is for. Its job is to
-     hold transactions on this eSIM wallet until it reads false again, meaning the new
-     device wallet has accepted it._
+_A marker for offchain readers, not a gate: nothing in the protocol reads it, and no
+     purchase, pull or history path is held while it is true. Gating spend on it would brick
+     a wallet its device wallet simply removed, since `removeESIMWallet` raises it whether or
+     not a transfer follows and only a later bind lowers it again.
+
+     `isESIMWalletValid` still names the device wallet that last held the wallet while this
+     is true. Do not use this mapping to ask whether an eSIM wallet belongs to the protocol;
+     that is what `isESIMWalletValid` is for._
 
 ### claimedESIMIdentifiers
 
@@ -149,10 +153,10 @@ Emitted the first and only time an eSIM identifier is bound to an eSIM wallet
 _The identifier is carried unindexed as well as hashed, because indexing a dynamic type
      stores its hash and no consumer can read the value back out of that._
 
-### UpdatedDeviceWalletassociatedWithESIMWallet
+### UpdatedDeviceWalletAssociatedWithESIMWallet
 
 ```solidity
-event UpdatedDeviceWalletassociatedWithESIMWallet(address _eSIMWalletAddress, address _deviceWalletAddress)
+event UpdatedDeviceWalletAssociatedWithESIMWallet(address _eSIMWalletAddress, address _deviceWalletAddress)
 ```
 
 Emitted when an eSIM wallet is bound to a device wallet
@@ -230,7 +234,7 @@ Emitted when the owner points data bundle payments at a different vault
 event Paused(address _admin)
 ```
 
-Emitted when the admin stops the ETH-moving paths protocol-wide
+Emitted when the admin stops the protocol's guarded purchase and pull paths
 
 ### Unpaused
 
@@ -240,13 +244,40 @@ event Unpaused(address _owner)
 
 Emitted when the owner releases the pause
 
-### DefaultDataBundlePriceCapUpdated
+### DefaultPriceCapUSDCentsUpdated
 
 ```solidity
-event DefaultDataBundlePriceCapUpdated(uint256 _cap)
+event DefaultPriceCapUSDCentsUpdated(uint64 _cap)
 ```
 
 Emitted when the owner changes the price ceiling eSIM wallets fall back to
+
+### PaymentAdapterUpdated
+
+```solidity
+event PaymentAdapterUpdated(address _paymentAdapter)
+```
+
+Emitted when the owner points the registry at a payment adapter
+
+### PaymentReferenceConsumed
+
+```solidity
+event PaymentReferenceConsumed(address _eSIMWallet, bytes32 _paymentReference)
+```
+
+Emitted when a payment reference is spent for an eSIM wallet
+
+### DataBundleSettled
+
+```solidity
+event DataBundleSettled(address _eSIMWallet, bytes32 _dataBundleID, uint64 _priceUSDCents, enum Settlement _settlement, bytes32 _asset, address _token, uint256 _tokenAmount, bytes32 _paymentReference)
+```
+
+Emitted for a purchase paid for outside the protocol
+
+_On the registry and not the wallet, so an indexer follows one address instead of one
+     per wallet. `_tokenAmount` is unchecked: it and the price both come from the admin._
 
 ### ESIMWalletSetOnStandby
 
@@ -295,8 +326,8 @@ _Deploys the wallets and sets their identifiers only. Purchase history is copied
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| [0] | address | Return device wallet address and the eSIM wallet addresses this call deployed |
-| [1] | address[] |  |
+| [0] | address | The device wallet address |
+| [1] | address[] | The eSIM wallet addresses this call deployed |
 
 ### deployMoreLazyESIMWallets
 
@@ -377,6 +408,53 @@ _Shared by the first batch and every batch after it so the two cannot drift apar
 | Name | Type | Description |
 | ---- | ---- | ----------- |
 | [0] | address | Address of the eSIM wallet deployed |
+
+### _assignESIMIdentifier
+
+```solidity
+function _assignESIMIdentifier(address _eSIMWalletAddress, string _eSIMUniqueIdentifier) internal returns (string)
+```
+
+Records an eSIM identifier against a wallet and writes it onto the wallet
+
+_Internal on purpose. Only the admin knows which identifier a wallet is owed, and a
+     device wallet can call anything through `execute`, so an external claim let any owner
+     take a string bought by someone else. `Registry.assignESIMIdentifier` is the way in.
+
+     Both slots are written here so they cannot disagree. Claim first: the wallet's slot is
+     set once, so a claim failing after it would strand an identifier the registry never saw._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _eSIMWalletAddress | address | Wallet receiving the identifier |
+| _eSIMUniqueIdentifier | string | Identifier being assigned |
+
+#### Return Values
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| [0] | string | The identifier now on the wallet |
+
+### _claimESIMIdentifier
+
+```solidity
+function _claimESIMIdentifier(string _eSIMUniqueIdentifier, address _eSIMWalletAddress, address _deviceWallet) internal
+```
+
+Records the wallet holding an eSIM identifier, refusing a second holder
+
+_A reservation is compared against the device wallet's own identifier rather than
+     refused outright, since the lazy route claims against its own reservation._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _eSIMUniqueIdentifier | string | Identifier being claimed |
+| _eSIMWalletAddress | address | Wallet claiming it |
+| _deviceWallet | address | Device wallet holding that eSIM wallet |
 
 ### _updateDeviceWalletInfo
 

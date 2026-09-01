@@ -8,6 +8,7 @@ import {Registry} from "../../contracts/Registry.sol";
 import {LazyWalletRegistry} from "../../contracts/LazyWalletRegistry.sol";
 import {DeviceWalletFactory} from "../../contracts/device-wallet/DeviceWalletFactory.sol";
 import {ESIMWalletFactory} from "../../contracts/esim-wallet/ESIMWalletFactory.sol";
+import {PaymentAdapter} from "../../contracts/payments/PaymentAdapter.sol";
 
 // Config
 import {DeploymentRecord} from "../deploy/config/DeploymentRecord.sol";
@@ -28,7 +29,7 @@ import {TimelockOperation} from "./TimelockOperation.sol";
 ///      any canceller can stop it, which is the whole protection the timelock buys.
 contract UpgradeSingleton is TimelockOperation {
 
-    /// @notice `UPGRADE_TARGET` does not name one of the four upgradeable singletons
+    /// @notice `UPGRADE_TARGET` does not name one of the five upgradeable singletons
     error UnknownTarget(string target);
 
     /// @notice `UPGRADE_ACTION` is neither `schedule` nor `execute`
@@ -85,6 +86,7 @@ contract UpgradeSingleton is TimelockOperation {
         if(_is(target, "LazyWalletRegistryProxy")) return address(new LazyWalletRegistry());
         if(_is(target, "DeviceWalletFactoryProxy")) return address(new DeviceWalletFactory());
         if(_is(target, "ESIMWalletFactoryProxy")) return address(new ESIMWalletFactory());
+        if(_is(target, "PaymentAdapterProxy")) return address(new PaymentAdapter());
 
         revert UnknownTarget(target);
     }

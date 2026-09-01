@@ -96,31 +96,31 @@ contract RegistryTest is DeployerBase {
     /// @notice The fallback price ceiling is the owner's to set, not the admin's.
     /// @dev The admin names the price on every purchase, so an admin that could also raise the
     /// ceiling would be constrained by nothing.
-    function test_setDefaultDataBundlePriceCap_rejectsTheAdmin() public {
+    function test_setDefaultPriceCapUSDCents_rejectsTheAdmin() public {
         address admin = registry.eSIMWalletAdmin();
 
         vm.prank(admin);
         vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", admin));
-        registry.setDefaultDataBundlePriceCap(100 ether);
+        registry.setDefaultPriceCapUSDCents(100_000);
 
         assertEq(
-            registry.defaultDataBundlePriceCap(),
-            defaultDataBundlePriceCap,
+            registry.defaultPriceCapUSDCents(),
+            defaultPriceCapUSDCents,
             "The admin must not be able to change the ceiling"
         );
 
         vm.prank(registry.owner());
-        registry.setDefaultDataBundlePriceCap(2 ether);
-        assertEq(registry.defaultDataBundlePriceCap(), 2 ether, "The owner must be able to set it");
+        registry.setDefaultPriceCapUSDCents(2 ether);
+        assertEq(registry.defaultPriceCapUSDCents(), 2 ether, "The owner must be able to set it");
     }
 
     /// @notice The fallback price ceiling can never be lowered to zero.
     /// @dev A zero cap here reads as "no ceiling" in `ESIMWallet._requirePriceWithinCap` for every
     /// wallet that has not set its own, so the setter refuses it the same way `initialize` does.
-    function test_setDefaultDataBundlePriceCap_rejectsZero() public {
+    function test_setDefaultPriceCapUSDCents_rejectsZero() public {
         vm.prank(registry.owner());
         vm.expectRevert(Errors.ZeroDataBundlePriceCap.selector);
-        registry.setDefaultDataBundlePriceCap(0);
+        registry.setDefaultPriceCapUSDCents(0);
     }
 
     /// @notice Moving the vault is the owner's, not the admin's. It is the destination of every

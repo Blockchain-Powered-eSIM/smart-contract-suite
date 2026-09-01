@@ -106,6 +106,8 @@ Restricts a call to the eSIM wallet admin or the registry
 constructor() public
 ```
 
+Disables initializers on the implementation contract
+
 _Locks the implementation contract itself. Without this, anyone can call initialize
      directly on the implementation, own it, and make it deploy a beacon it controls. The
      proxy is unaffected either way, but an owned implementation is a trap for any later
@@ -352,6 +354,12 @@ _Held by the registry, which is where it is rotated, so this contract cannot fal
      registry is wired up, which no caller can match, so admin functions stay closed until
      then rather than reverting on a call into address(0)._
 
+#### Return Values
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| [0] | address | The current admin, or zero if the registry is not yet wired up |
+
 ### preCreateAccountValidation
 
 ```solidity
@@ -407,4 +415,10 @@ function getCurrentDeviceWalletImplementation() public view returns (address)
 ```
 
 The device wallet logic contract every device wallet currently runs
+
+#### Return Values
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| [0] | address | The current implementation address |
 

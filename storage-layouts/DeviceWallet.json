@@ -40,7 +40,7 @@
       "slot": "6",
       "offset": 0,
       "bytes": "32",
-      "label": "canPullETH",
+      "label": "canPullFunds",
       "type": "t_mapping(t_address,t_bool)"
     }
   ]

@@ -16,6 +16,10 @@ import {MockESIMWallet} from "test/utils/mocks/MockESIMWallet.sol";
 ///      is checking is whether that reach stops where the contracts say it stops.
 contract AdminHandler is HandlerBase {
 
+    /// @dev A reference can only be spent once, so without a fresh one per purchase the second
+    ///      call reverts on replay instead of on what is being tested.
+    uint256 private _refNonce;
+
     constructor(HandlerConfig memory config) HandlerBase(config) {}
 
     /// @notice The admin deploys a batch of device wallets, each with one eSIM wallet
@@ -143,61 +147,6 @@ contract AdminHandler is HandlerBase {
         }
     }
 
-    /// @notice The admin charges an eSIM wallet for a data bundle
-    /// @dev The price is unbounded upward on purpose. The ceiling is the only thing standing
-    ///      between the admin and a wallet's whole balance, so a run has to reach past it.
-    /// @param eSIMIndex Which eSIM wallet pays
-    /// @param price What it is charged
-    function buyDataBundle(uint256 eSIMIndex, uint256 price) external counted {
-        address wallet = _pickESIMWallet(eSIMIndex);
-        if (wallet == address(0)) {
-            state.recordRevert("buyDataBundle");
-            return;
-        }
-        price = bound(price, 1, 100 ether);
-
-        address device = registry.isESIMWalletValid(wallet);
-        uint256 vaultBefore = vault.balance;
-        uint256 walletsBefore = wallet.balance + device.balance;
-        uint256 historyBefore = MockESIMWallet(payable(wallet)).getTransactionHistory().length;
-
-        vm.prank(_currentAdmin());
-        try ESIMWallet(payable(wallet)).buyDataBundle(
-            DataBundleDetails({dataBundleID: "bundle", dataBundlePrice: price})
-        ) {
-            // Asserted here rather than as an invariant because the ceiling is a property of the
-            // charge and not of any state left behind. Both ceilings move during a run, so a
-            // purchase that was inside the ceiling when it went through can sit above the one the
-            // next invariant call would read
-            uint256 cap = ESIMWallet(payable(wallet)).dataBundlePriceCap();
-            if (cap == 0) cap = registry.defaultDataBundlePriceCap();
-            if (cap != 0) {
-                assertLe(price, cap, "A purchase went through above the ceiling that applied to it");
-            }
-
-            // The wallet pays out of its own balance and pulls the shortfall from the device
-            // wallet, so neither balance alone says what a purchase cost. Their sum does, and it
-            // has to fall by exactly what the vault gained
-            assertEq(
-                vault.balance - vaultBefore, price, "The vault received something other than the price"
-            );
-            assertEq(
-                walletsBefore - (wallet.balance + device.balance),
-                price,
-                "A purchase moved a different amount out of the wallets than it sent to the vault"
-            );
-            assertEq(
-                MockESIMWallet(payable(wallet)).getTransactionHistory().length,
-                historyBefore + 1,
-                "A purchase did not leave exactly one entry behind"
-            );
-
-            state.recordCall("buyDataBundle");
-        } catch {
-            state.recordRevert("buyDataBundle");
-        }
-    }
-
     /// @notice The admin records purchase history against a device identifier with no wallet yet
     /// @dev The reuse branch presents an identifier that already carries history. That is two
     ///      guards in one: appending to a device still waiting to be deployed has to work, and
@@ -233,7 +182,11 @@ contract AdminHandler is HandlerBase {
             eSIMIdentifiers[0][i] = contest
                 ? _contestedESIMIdentifier(seed + i)
                 : _eSIMIdentifier(seed + i);
-            bundles[0][i] = DataBundleDetails({dataBundleID: "bundle", dataBundlePrice: 1 gwei});
+            bundles[0][i] = DataBundleDetails({
+                id: "bundle",
+                priceUSDCents: 100,
+                settlement: Settlement.Fiat
+            });
         }
 
         vm.prank(_currentAdmin());

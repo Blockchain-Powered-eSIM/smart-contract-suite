@@ -10,7 +10,6 @@ import "./MockNonceManager.sol";
 contract MockEntryPoint is IEntryPoint, MockStakeManager, MockNonceManager {
     mapping(address => uint256) public nonces;
 
-    // Events for verification purposes in tests
     event MockHandleOpsCalled();
     event MockHandleAggregatedOpsCalled();
 
@@ -91,7 +90,6 @@ contract MockEntryPoint is IEntryPoint, MockStakeManager, MockNonceManager {
         return ISenderCreator(address(0));
     }
 
-    // Add mock implementations for required methods from inherited interfaces
     function incrementNonce(address user) external {
         nonces[user]++;
     }
@@ -99,6 +97,4 @@ contract MockEntryPoint is IEntryPoint, MockStakeManager, MockNonceManager {
     function getNonce(address user) external view returns (uint256) {
         return nonces[user];
     }
-
-    // Additional methods to mock IStakeManager and INonceManager methods as needed
 }

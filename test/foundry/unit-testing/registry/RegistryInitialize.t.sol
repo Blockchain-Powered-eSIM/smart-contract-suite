@@ -23,7 +23,7 @@ contract RegistryInitializeTest is DeployerBase {
                     address(0),
                     address(eSIMWalletFactory),
                     typeCastEntryPoint,
-                    defaultDataBundlePriceCap
+                    defaultPriceCapUSDCents
                 )
             )
         );
@@ -45,7 +45,7 @@ contract RegistryInitializeTest is DeployerBase {
                     address(deviceWalletFactory),
                     address(0),
                     typeCastEntryPoint,
-                    defaultDataBundlePriceCap
+                    defaultPriceCapUSDCents
                 )
             )
         );
@@ -69,7 +69,7 @@ contract RegistryInitializeTest is DeployerBase {
                     address(deviceWalletFactory),
                     address(eSIMWalletFactory),
                     typeCastEntryPoint,
-                    defaultDataBundlePriceCap
+                    defaultPriceCapUSDCents
                 )
             )
         );
@@ -103,8 +103,8 @@ contract RegistryInitializeTest is DeployerBase {
     /// @notice The price cap passed at initialization is recorded
     function test_initialize_recordsThePriceCap() public view {
         assertEq(
-            registry.defaultDataBundlePriceCap(),
-            defaultDataBundlePriceCap,
+            registry.defaultPriceCapUSDCents(),
+            defaultPriceCapUSDCents,
             "Registry should record the price cap passed at initialization"
         );
     }

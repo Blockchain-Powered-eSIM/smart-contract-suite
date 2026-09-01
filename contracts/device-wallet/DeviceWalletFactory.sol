@@ -41,7 +41,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     /// @notice Contract the device wallets verify WebAuthn assertions through
     P256Verifier public verifier;
 
-    ///@notice Registry contract instance
+    /// @notice Registry contract instance
     Registry public registry;
 
     /// @notice eSIM wallet factory contract instance
@@ -90,6 +90,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     // Initialisation
     // ---------------------------------------------------------------------------------------------
 
+    /// @notice Disables initializers on the implementation contract
     /// @dev Locks the implementation contract itself. Without this, anyone can call initialize
     ///      directly on the implementation, own it, and make it deploy a beacon it controls. The
     ///      proxy is unaffected either way, but an owned implementation is a trap for any later
@@ -124,7 +125,6 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         verifier = _verifier;
         eSIMWalletFactory = ESIMWalletFactory(_eSIMWalletFactoryAddress);
 
-        // Upgradable beacon for device wallet implementation contract
         beacon = new UpgradeableBeacon(_deviceWalletImplementation, address(this));
 
         emit DeviceWalletFactoryDeployed(
@@ -210,7 +210,6 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
             revert Errors.ArrayLengthMismatch(numberOfDeviceWallets, _depositAmounts.length);
         }
 
-        // Track the available ETH to spend
         uint256 availableETH = msg.value;
         Wallets[] memory walletsDeployed = new Wallets[](numberOfDeviceWallets);
 
@@ -240,7 +239,6 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
             availableETH -= spentETH;
         }
 
-        // return unused ETH
         if(availableETH > 0) {
             (bool success,) = msg.sender.call{value: availableETH}("");
             if(!success) revert Errors.FailedToTransfer();
@@ -401,7 +399,8 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         address deviceWalletAddress = address(deviceWallet);
 
         address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(deviceWalletAddress, _salt);
-        // No ETH access: only the owner grants that, with a signed `toggleAccessToETH`.
+        // No access to the device wallet's money: only the owner grants that, with a signed
+        // `toggleAccessToFunds`.
         DeviceWallet(payable(deviceWalletAddress)).addESIMWallet(
             eSIMWalletAddress,
             false
@@ -531,6 +530,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     ///      behind the rest of the protocol after a rotation. Answers address(0) before the
     ///      registry is wired up, which no caller can match, so admin functions stay closed until
     ///      then rather than reverting on a call into address(0).
+    /// @return The current admin, or zero if the registry is not yet wired up
     function eSIMWalletAdmin() public view returns (address) {
         if(address(registry) == address(0)) return address(0);
         return registry.eSIMWalletAdmin();
@@ -592,6 +592,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     }
 
     /// @notice The device wallet logic contract every device wallet currently runs
+    /// @return The current implementation address
     function getCurrentDeviceWalletImplementation() public view returns (address) {
         return beacon.implementation();
     }

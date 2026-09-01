@@ -19,16 +19,17 @@ upgrade one at a time. Every wallet is a beacon proxy, so one beacon call moves 
 | `RegistryHelper` | The registry's storage and lazy deployment half | Inherited by `Registry` |
 | `LazyWalletRegistry` | Holds data bundle history for users paying in fiat, keyed by device and eSIM identifier strings, until they ask for a wallet | UUPS proxy |
 | `DeviceWalletFactory` | Deploys device wallets at deterministic CREATE2 addresses and owns their beacon | UUPS proxy |
-| `DeviceWallet` | One per phone. Holds ETH, owns the eSIM wallets on that device, verifies the passkey | Beacon proxy |
+| `DeviceWallet` | One per phone. Holds ETH and tokens, owns the eSIM wallets on that device, verifies the passkey | Beacon proxy |
 | `ESIMWalletFactory` | Deploys eSIM wallets and owns their beacon | UUPS proxy |
-| `ESIMWallet` | One per eSIM. Buys data bundles, keeps purchase history, pulls ETH from its device wallet | Beacon proxy |
+| `ESIMWallet` | One per eSIM. Buys data bundles, keeps purchase history, pulls tokens from its device wallet | Beacon proxy |
+| `PaymentAdapter` | The currencies the protocol accepts, the one conversion from USD cents into a token amount, and the payment references each spendable once. Moves tokens to the vault | UUPS proxy |
 | `Account4337` | The ERC-4337 `IAccount` and `IERC1271` base that `DeviceWallet` builds on | Inherited by `DeviceWallet` |
 | `WebAuthn` | Verifies WebAuthn authentication assertions. Tries the RIP-7212 precompile first and falls back to FreshCryptoLib | Library |
 | `P256Verifier` | One immutable address for accounts to verify through, wrapping the WebAuthn library | Plain contract |
-| `ProtocolAdmin` | Timelock owning the four singletons. Adds a delay floor that `updateDelay` cannot go under, and a guardian role with exactly two powers | Plain contract |
+| `ProtocolAdmin` | Timelock meant to own the five singletons. Adds a delay floor that `updateDelay` cannot go under, and a guardian role with exactly two powers | Plain contract |
 | `Errors` | Every custom error in the suite | Library |
 | `CustomStructs` | Structs shared across contracts | Types |
-| `interfaces/` | `IPausable` and `IOwnable2Step`, the two calls `ProtocolAdmin` makes back into the protocol | Interfaces |
+| `interfaces/` | `IPausable`, `IOwnable2Step` and `IRegistryAdmin` for the calls `ProtocolAdmin` makes back into the protocol; `IPaymentRegistry` for what `PaymentAdapter` reads from the registry | Interfaces |
 
 A backend server generates the device and eSIM identifiers and writes them into the wallets. That is what ties an onchain wallet to a provisioned eSIM.
 
@@ -52,18 +53,18 @@ That parity depends on `bytecode_hash = "none"` in `foundry.toml` and `metadata.
 
 ## Testing
 
-573 tests across 57 suites, about seven minutes for a full run.
+819 tests across 73 suites, about eight minutes for a full run.
 
 | Suite | Files | What it covers |
 |---|---|---|
-| `test/foundry/unit-testing/` | 32 | Per-contract behaviour, access control, revert paths, storage layout and initialiser locks |
-| `test/foundry/fuzz-testing/` | 8 | Identifier and array shapes, ETH amounts, signature shapes, a P256 differential against the precompile |
-| `test/foundry/invariant-testing/` | 8 | Registry consistency, wallet ownership, ETH accounting, purchase history, timelock behaviour |
-| `test/foundry/gas/` | 7 | Per-operation gas with every input pinned, offchain signatures included |
+| `test/foundry/unit-testing/` | 44 | Per-contract behaviour, access control, revert paths, storage layout and initialiser locks |
+| `test/foundry/fuzz-testing/` | 10 | Identifier and array shapes, price ceilings, token settlement, signature shapes, a P256 differential against the precompile |
+| `test/foundry/invariant-testing/` | 9 | Registry consistency, wallet ownership, payment accounting, purchase history, timelock behaviour |
+| `test/foundry/gas/` | 8 | Per-operation gas with every input pinned, offchain signatures included |
 | `test/foundry/fork/` | 1 | A user operation through the deployed EntryPoint on both chains |
 
-Branch coverage is 94.27%, or 181 of 192 arms, with `WebAuthn` at 80% the lowest and
-`RegistryHelper`, `Account4337` and `ProtocolAdmin` at 100%.
+Branch coverage is 92.58%, or 237 of 256 arms, with `WebAuthn` at 80% the lowest and
+`Account4337`, `ProtocolAdmin`, `DeviceWallet` and `PaymentAdapter` at 100%.
 Measure it with `scripts/checks/branch-coverage.py` rather than reading forge's own percentage:
 `forge coverage --ir-minimum` does not count `require(cond, "string")` as a branch, so those sites
 report zero hits on both arms however often they run. The contracts use custom errors throughout, so nothing is currently excluded, but the raw number stops meaning anything the moment a `require`
@@ -84,6 +85,23 @@ The long invariant campaign is a separate profile, run before a release rather t
 FOUNDRY_PROFILE=campaign forge test --match-path "test/foundry/invariant-testing/*"
 ```
 
+The deployment scripts have their own suite, kept out of the default run:
+
+```bash
+FOUNDRY_PROFILE=scripts forge test --threads 1
+```
+
+50 tests in `test/scripts/`, exercising `Deploy.s.sol`, `Configure.s.sol` and `TransferOwnership.s.sol`
+against a scratch record. `scripts/fork/rehearse.sh` runs the same three against a Base Sepolia fork
+and checks the happy path better than any test can, but it needs an RPC key and a live anvil, so CI
+never runs it. These reach what it cannot: the resume branches and the mismatch guards, which only
+fire on a deployment that has already gone wrong.
+
+`--threads 1` is not optional. The scripts read their parameters from the process environment and
+their record from one file, and forge runs every `setUp` before any test and then runs the tests in
+parallel. Without the flag, somewhere between 2 and 12 of the 50 fail on each run, and which ones
+changes every time.
+
 Two gas baselines, measuring different things. `.gas-snapshot` is the whole-test-body figure, useful as a regression tripwire and not as a protocol gas number, since a row can include whatever that test deployed.
 `snapshots/*.json` is per operation, written by the tests under `test/foundry/gas/` and rewritten by any ordinary `forge test`.
 
@@ -91,16 +109,17 @@ Two gas baselines, measuring different things. `.gas-snapshot` is the whole-test
 
 **Audit.** Reviewed by CD Security in March 2025. The report is in [audits/2025-03-CDSecurity.pdf](./audits/2025-03-CDSecurity.pdf).
 
-**Formal verification.** Seven Certora specs, 60 rules.
+**Formal verification.** Eight Certora specs, 83 rules.
 
 | Spec | Rules | Subject |
 |---|---|---|
-| `Registry.spec` | 11 | Wallet registration and association records |
-| `ProtocolAdmin.spec` | 10 | The delay nothing gets around, and the two things a guardian can say |
-| `ESIMWallet.spec` | 9 | Ownership state machine, price ceiling, deploying factory |
-| `DeviceWalletFactory.spec` | 9 | Deterministic deployment and beacon control |
-| `ESIMWalletFactory.spec` | 9 | Registry wiring, beacon control, the record of what it deployed |
-| `DeviceWallet.spec` | 8 | Owner key, eSIM wallet set, ETH access flags |
+| `Registry.spec` | 18 | Wallet registration and association records |
+| `PaymentAdapter.spec` | 15 | The currency table, the payment references, and what a settlement moves |
+| `ProtocolAdmin.spec` | 11 | The delay nothing gets around, and the two things a guardian can say |
+| `ESIMWallet.spec` | 10 | Ownership state machine, price ceiling, deploying factory |
+| `ESIMWalletFactory.spec` | 10 | Registry wiring, beacon control, the record of what it deployed |
+| `DeviceWalletFactory.spec` | 8 | Deterministic deployment and beacon control |
+| `DeviceWallet.spec` | 7 | Owner key, eSIM wallet set, funds access flags |
 | `RegistryCrossContract.spec` | 4 | `Registry`, `DeviceWallet` and `ESIMWallet` agreeing on who holds an eSIM wallet |
 
 Three caveats attach to every proof. Loops unroll three times, so a result covers batches of at most three rather than all batches. Hashing of unbounded arguments is assumed within 224 bytes, raised to 1600 in `ESIMWalletFactory.spec` so its CREATE2 address prediction stays reachable. External calls are summarised one signature at a time.
@@ -121,6 +140,11 @@ delay, proposing is 2-of-3 or a cold key, and a 3-of-3 guardian executes. The ol
 not on that footing: one EOA still owns everything on the v0.7 Base Sepolia and OP Sepolia
 deployments, so a single key compromise reaches every wallet there in one transaction. Admin
 transactions go into the public mempool on all three, with no private relay in front of them.
+
+That v0.8 deployment predates `PaymentAdapter`, so none of the three live deployments carry it or the
+fifth singleton it adds. This branch's own protocol has not been deployed under any handover yet:
+`ProtocolAdmin` exists in the contracts and in the deploy scripts, but no `TransferOwnership.s.sol`
+run has pointed it at a `PaymentAdapter`-carrying deployment.
 
 ## Deployments
 
@@ -163,13 +187,15 @@ on one chain and a plain EOA on the other.
 - [Device Wallet](./docs/device-wallet/DeviceWallet.md)
 - [eSIM Wallet Factory](./docs/esim-wallet/ESIMWalletFactory.md)
 - [eSIM Wallet](./docs/esim-wallet/ESIMWallet.md)
+- [Payment Adapter](./docs/payments/PaymentAdapter.md)
 - [Account4337](./docs/aa-helper/Account4337.md)
 - [Upgradeable Beacon](./docs/UpgradableBeacon.md)
 - [Custom Structs](./docs/CustomStructs.md)
 - [Errors](./docs/Errors.md)
-- [eSIM Wallet Interface](./docs/interfaces/IOwnableESIMWallet.md)
 - [Ownable Two-Step Interface](./docs/interfaces/IOwnable2Step.md)
 - [Pausable Interface](./docs/interfaces/IPausable.md)
+- [Registry Admin Interface](./docs/interfaces/IRegistryAdmin.md)
+- [Payment Registry Interface](./docs/interfaces/IPaymentRegistry.md)
 - [P256 Verifier](./docs/P256Verifier.md)
 - [WebAuthn](./docs/WebAuthn.md)
 
@@ -179,9 +205,12 @@ on one chain and a plain EOA on the other.
    never leaves it.
 2. **Deploy the wallets.** For a new device, the app asks the registry for a device wallet and one
    eSIM wallet, linked at deployment.
-3. **Pick and buy a data bundle.** Paying in crypto deploys both wallets immediately. Paying in fiat
-   records the purchase in the lazy wallet registry, and the wallets are deployed later if the user
-   asks for them.
+3. **Pick and buy a data bundle.** Paying in crypto deploys both wallets immediately, in an ERC-20
+   the payment adapter has been given a price for. Paying in fiat records the purchase in the lazy
+   wallet registry, and the wallets are deployed later if the user asks for them.
+
+   Paying in ETH is not currently supported. The adapter works the amount out from the price, and
+   nothing onchain prices ETH, so it comes back when the adapter can swap into the settlement token.
 4. **Provision the eSIM.** The server generates the eSIM identifier, writes it into the eSIM wallet
    through the device wallet, and returns a QR code for activation.
 5. **Use the device wallet.** It holds ETH and ERC-20 tokens and can be used as an ordinary wallet.

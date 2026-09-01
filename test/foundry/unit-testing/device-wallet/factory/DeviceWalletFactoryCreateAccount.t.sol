@@ -352,6 +352,80 @@ contract DeviceWalletFactoryCreateAccountTest is DeviceWalletFactoryFixture {
         );
     }
 
+    /// @notice A second wallet standing at a second salt for the same identifier and key holds no
+    /// powers, so deploying one grieves nobody
+    /// @dev createAccount writes no registry state and takes no caller, so anyone can stand a twin
+    /// up against someone else's identifier and key. The key is a constructor argument, so the twin
+    /// answers to that same key rather than to whoever paid for the deployment, and every gate in
+    /// the protocol reads the registry, which will not have it.
+    function test_createAccount_anUnregisteredTwinReachesNothing() public {
+        vm.prank(user1);
+        address realWallet = address(deviceWalletFactory.createAccount(
+            customDeviceUniqueIdentifiers[0],
+            pubKey1,
+            111
+        ));
+        vm.prank(eSIMWalletAdmin);
+        deviceWalletFactory.postCreateAccount(realWallet, customDeviceUniqueIdentifiers[0], pubKey1, 111);
+
+        vm.prank(user2);
+        MockDeviceWallet twin = MockDeviceWallet(payable(deviceWalletFactory.createAccount(
+            customDeviceUniqueIdentifiers[0],
+            pubKey1,
+            222
+        )));
+        assertTrue(address(twin) != realWallet, "A second salt must reach a second address");
+
+        assertEq(twin.owner(0), pubKey1[0], "X co-ordinate should have matched the key it was deployed for");
+        assertEq(twin.owner(1), pubKey1[1], "Y co-ordinate should have matched the key it was deployed for");
+        assertEq(registry.isDeviceWalletValid(address(twin)), false, "The twin must stay unregistered");
+
+        vm.prank(address(twin));
+        vm.expectRevert(Errors.OnlyRegistryOrDeviceWalletFactoryOrDeviceWallet.selector);
+        eSIMWalletFactory.deployESIMWallet(address(twin), 333);
+    }
+
+    /// @notice Occupying the address an admin batch is about to deploy to is adopted, not refused
+    /// @dev The owner key and the identifier are proxy constructor arguments, so CREATE2 moves the
+    /// address the moment either differs. Code standing at the derived address can therefore only be
+    /// the wallet the batch was going to deploy itself, which is why adopting it is safe and why
+    /// pre-deploying it is not a way to block anyone.
+    function test_deployDeviceWalletForUsers_adoptsAWalletDeployedByAnyoneElse() public {
+        uint256 salt = 777;
+        address predicted = deviceWalletFactory.getCounterFactualAddress(
+            pubKey1,
+            customDeviceUniqueIdentifiers[0],
+            salt
+        );
+
+        vm.prank(user2);
+        deviceWalletFactory.createAccount(customDeviceUniqueIdentifiers[0], pubKey1, salt);
+        assertTrue(predicted.code.length > 0, "The address must be occupied before the batch runs");
+
+        string[] memory deviceUniqueIdentifiers = new string[](1);
+        bytes32[2][] memory listOfKeys = new bytes32[2][](1);
+        uint256[] memory salts = new uint256[](1);
+        uint256[] memory deposits = new uint256[](1);
+
+        deviceUniqueIdentifiers[0] = customDeviceUniqueIdentifiers[0];
+        listOfKeys[0] = pubKey1;
+        salts[0] = salt;
+        deposits[0] = 1 ether;
+
+        vm.deal(eSIMWalletAdmin, 1 ether);
+        vm.prank(eSIMWalletAdmin);
+        Wallets[] memory wallets = deviceWalletFactory.deployDeviceWalletForUsers{value: 1 ether}(
+            deviceUniqueIdentifiers,
+            listOfKeys,
+            salts,
+            deposits
+        );
+
+        assertEq(wallets[0].deviceWallet, predicted, "The batch must adopt the wallet already standing there");
+        assertEq(registry.isDeviceWalletValid(predicted), true, "The adopted wallet must be registered");
+        assertEq(predicted.balance, 1 ether, "The deposit must follow the wallet");
+    }
+
     /// @notice The same case reached through the P256 key rather than the identifier. A key that
     /// already resolves to a wallet must keep resolving to it.
     function test_postCreateAccount_revertsOnRegisteredOwnerKey() public {

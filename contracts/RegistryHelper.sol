@@ -5,7 +5,7 @@ pragma solidity 0.8.36;
 import {Errors} from "./Errors.sol";
 
 // Types
-import {DataBundleDetails, Wallets} from "./CustomStructs.sol";
+import {DataBundleDetails, Settlement, Wallets} from "./CustomStructs.sol";
 
 // Contracts
 import {DeviceWalletFactory} from "./device-wallet/DeviceWalletFactory.sol";
@@ -58,12 +58,16 @@ contract RegistryHelper {
     ///      is what makes the first sentence true rather than assumed.
     mapping(address eSIMWalletAddress => address deviceWalletAddress) public isESIMWalletValid;
 
-    /// @notice If an existing eSIM wallet is in the process of being transferred from one device wallet to another
-    /// @dev If bool is `true`, the eSIM wallet is in a transient state. `isESIMWalletValid` still
-    ///      points at the old device wallet. Do not use this mapping to check whether an eSIM
-    ///      wallet belongs to the protocol; that is what `isESIMWalletValid` is for. Its job is to
-    ///      hold transactions on this eSIM wallet until it reads false again, meaning the new
-    ///      device wallet has accepted it.
+    /// @notice True while an eSIM wallet sits between device wallets, released by one and not yet
+    ///         taken on by another
+    /// @dev A marker for offchain readers, not a gate: nothing in the protocol reads it, and no
+    ///      purchase, pull or history path is held while it is true. Gating spend on it would brick
+    ///      a wallet its device wallet simply removed, since `removeESIMWallet` raises it whether or
+    ///      not a transfer follows and only a later bind lowers it again.
+    ///
+    ///      `isESIMWalletValid` still names the device wallet that last held the wallet while this
+    ///      is true. Do not use this mapping to ask whether an eSIM wallet belongs to the protocol;
+    ///      that is what `isESIMWalletValid` is for.
     mapping(address eSIMWalletAddress => bool isOnStandby) public isESIMWalletOnStandby;
 
     /// @notice The eSIM wallet holding each eSIM identifier, protocol-wide
@@ -113,7 +117,7 @@ contract RegistryHelper {
     );
 
     /// @notice Emitted when an eSIM wallet is bound to a device wallet
-    event UpdatedDeviceWalletassociatedWithESIMWallet(
+    event UpdatedDeviceWalletAssociatedWithESIMWallet(
         address indexed _eSIMWalletAddress,
         address indexed _deviceWalletAddress
     );
@@ -152,14 +156,34 @@ contract RegistryHelper {
     /// @notice Emitted when the owner points data bundle payments at a different vault
     event VaultAddressUpdated(address indexed _updatedVaultAddress);
 
-    /// @notice Emitted when the admin stops the ETH-moving paths protocol-wide
+    /// @notice Emitted when the admin stops the protocol's guarded purchase and pull paths
     event Paused(address indexed _admin);
 
     /// @notice Emitted when the owner releases the pause
     event Unpaused(address indexed _owner);
 
     /// @notice Emitted when the owner changes the price ceiling eSIM wallets fall back to
-    event DefaultDataBundlePriceCapUpdated(uint256 _cap);
+    event DefaultPriceCapUSDCentsUpdated(uint64 _cap);
+
+    /// @notice Emitted when the owner points the registry at a payment adapter
+    event PaymentAdapterUpdated(address indexed _paymentAdapter);
+
+    /// @notice Emitted when a payment reference is spent for an eSIM wallet
+    event PaymentReferenceConsumed(address indexed _eSIMWallet, bytes32 indexed _paymentReference);
+
+    /// @notice Emitted for a purchase paid for outside the protocol
+    /// @dev On the registry and not the wallet, so an indexer follows one address instead of one
+    ///      per wallet. `_tokenAmount` is unchecked: it and the price both come from the admin.
+    event DataBundleSettled(
+        address indexed _eSIMWallet,
+        bytes32 _dataBundleID,
+        uint64 _priceUSDCents,
+        Settlement _settlement,
+        bytes32 indexed _asset,
+        address _token,
+        uint256 _tokenAmount,
+        bytes32 indexed _paymentReference
+    );
 
     /// @notice Emitted when an eSIM wallet's outstanding transfer is raised or settled
     event ESIMWalletSetOnStandby(
@@ -192,7 +216,8 @@ contract RegistryHelper {
     /// @param _salt CREATE2 salt the device wallet and its first eSIM wallet are deployed at
     /// @param _eSIMUniqueIdentifiers First batch of eSIM identifiers, in the order the full list holds them
     /// @param _depositAmount ETH forwarded to the new device wallet
-    /// @return Return device wallet address and the eSIM wallet addresses this call deployed
+    /// @return The device wallet address
+    /// @return The eSIM wallet addresses this call deployed
     function deployLazyWallet(
         bytes32[2] memory _deviceWalletOwnerKey,
         string calldata _deviceUniqueIdentifier,
@@ -215,8 +240,6 @@ contract RegistryHelper {
         salt[0] = _salt;
         depositAmount[0] = _depositAmount;
 
-        // Deploys device smart wallet
-        // Updates device wallet info via Registry
         Wallets[] memory wallet = deviceWalletFactory.deployDeviceWalletForUsers{value: _depositAmount}(
             deviceUniqueIdentifier,
             deviceWalletOwnersKey,
@@ -228,14 +251,12 @@ contract RegistryHelper {
         address firstESIMWallet = wallet[0].eSIMWallet;
         address[] memory eSIMWallets = new address[](_eSIMUniqueIdentifiers.length);
 
-        // Tracks the eSIMWallets array index
         uint256 i = 0;
 
-        // 1st eSIM wallet will already be deployed by the deployDeviceWalletForUsers function
+        // deployDeviceWalletForUsers already deploys the 1st eSIM wallet but doesn't set its
+        // identifier, so that's the one thing left to do for it here.
         eSIMWallets[i] = firstESIMWallet;
-        // deployDeviceWalletForUsers doesn't set the eSIM identifer, hence updating it here for the 1st eSIM wallet
         _assignESIMIdentifier(firstESIMWallet, _eSIMUniqueIdentifiers[i]);
-        // Increase the index to deploy and set the identifier for the remaining _eSIMUniqueIdentifiers
         i++;
 
         for(; i<_eSIMUniqueIdentifiers.length; ++i) {
@@ -337,7 +358,7 @@ contract RegistryHelper {
         address eSIMWallet = eSIMWalletFactory.deployESIMWallet(_deviceWallet, salt);
 
         // Updates the Device wallet storage variables as well as for the registry. No ETH access:
-        // only the owner grants that, with a signed `toggleAccessToETH`.
+        // only the owner grants that, with a signed `toggleAccessToFunds`.
         DeviceWallet(payable(_deviceWallet)).addESIMWallet(eSIMWallet, false);
 
         _assignESIMIdentifier(eSIMWallet, _eSIMUniqueIdentifier);
