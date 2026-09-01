@@ -47,10 +47,10 @@ Set to true if the eSIM wallet belongs to this device wallet
 mapping(address => bool) canPullFunds
 ```
 
-Tracks if an associated eSIM wallet may pull this wallet's ETH and tokens
+Tracks if an associated eSIM wallet may pull this wallet's tokens
 
-_One flag for both. A wallet trusted with the ETH can already drain the owner, so a
-     second flag per asset would cost another signature and limit nothing._
+_A wallet trusted with the funds can already drain the owner, so a second flag per
+     asset would cost another signature and limit nothing._
 
 ### FundsAccessUpdated
 
@@ -143,6 +143,8 @@ _Read from the registry on every call, so a rotation there takes effect immediat
 constructor(contract IEntryPoint anEntryPoint, contract P256Verifier _verifier) public
 ```
 
+Wires the entry point and WebAuthn verifier used by this wallet
+
 #### Parameters
 
 | Name | Type | Description |
@@ -183,7 +185,14 @@ _The new wallet has no eSIM identifier yet. That arrives through
      `setESIMUniqueIdentifierForAnESIMWallet` once the eSIM itself has been created.
 
      Access to this wallet's money is granted only afterwards, by the owner, with
-     `toggleAccessToFunds`._
+     `toggleAccessToFunds`.
+
+     The admin gate here is a workflow convenience, not a security boundary against this
+     wallet's own owner: `ESIMWalletFactory.deployESIMWallet` also accepts a call from any
+     device wallet the registry knows, so the owner can reach the same outcome directly
+     through `execute` with no admin involved. Closing that would need the deployment
+     triggered by the admin rather than by this wallet, since nothing downstream of a device
+     wallet's own call can tell one caller's signed intent from another's._
 
 #### Parameters
 

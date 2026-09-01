@@ -68,7 +68,7 @@ _Only the owner can request the transfer. The nominated address has to accept it
 bool paused
 ```
 
-True while the ETH-moving paths are stopped protocol-wide
+True while the protocol's guarded purchase and pull paths are stopped
 
 _Held here for the same reason the admin address is: device wallets and eSIM wallets are
      beacon proxies tracked by a mapping with no enumerable list, so there is no way to
@@ -111,6 +111,20 @@ Contract holding the accepted currencies and the spent payment references
 
 _A pointer and a setter, the same shape this registry already uses for the lazy wallet
      registry._
+
+### usedPaymentReferences
+
+```solidity
+mapping(bytes32 => bool) usedPaymentReferences
+```
+
+Payment references already spent, scoped per eSIM wallet
+
+_Held here rather than on the payment adapter, so replay protection survives an adapter
+     rotation through `setPaymentAdapter` instead of resetting with it. Keyed by
+     `keccak256(abi.encode(eSIMWallet, paymentReference))` rather than by the reference
+     alone, so one wallet spending a reference cannot burn it for an unrelated wallet's
+     pending settlement._
 
 ### onlyESIMWallet
 
@@ -155,6 +169,8 @@ _The hot key the backend signs with, not the owner. It can trip the pause but no
 constructor() public
 ```
 
+Disables initializers on the implementation contract
+
 _Locks the implementation contract itself. Without this, anyone can call initialize
      directly on the implementation and own it. The proxy is unaffected either way, but an
      owned implementation is a trap for any later upgrade that adds an outward call._
@@ -185,7 +201,7 @@ Wires the registry to the two factories and sets the protocol's addresses
 function requestAdminUpdate(address _newAdmin) external
 ```
 
-Nominates the next eSIM wallet admin, who then has to accept
+Nominates a new admin, which strips the incumbent until the nominee accepts
 
 _Owner and not the admin, deliberately. An admin that had to nominate its own
      replacement could not be removed once its key was in someone else's hands, and the
@@ -310,7 +326,7 @@ _Owner and not admin, deliberately. This is the destination of every payment the
 function pause() external
 ```
 
-Stops the ETH-moving paths on every device wallet and eSIM wallet
+Stops the token purchase and pull paths on every device wallet and eSIM wallet
 
 _The admin trips this and the owner clears it. The admin key signs backend batches all
      day and is the one watching, so it needs to act without waiting; giving it the release
@@ -323,7 +339,7 @@ _The admin trips this and the owner clears it. The admin key signs backend batch
 function unpause() external
 ```
 
-Releases the pause
+Clears the pause
 
 _Owner only, see `pause`_
 
@@ -380,10 +396,10 @@ _Owner and not admin. The adapter holds the spent payment references, so an admi
 function consumePaymentReference(bytes32 _paymentReference) external
 ```
 
-Spends a payment reference for an eSIM wallet buying with ETH
+Spends a payment reference for an eSIM wallet paying with USDC (or any other acceptable stablecoin/ERC20)
 
-_The adapter only accepts this from the registry, so the wallet has to come through
-     here. One reference then cannot be spent once on each path._
+_Scoped to `msg.sender`, so this and `recordSettledPurchase` cannot spend the same
+     reference once on each for the same wallet._
 
 #### Parameters
 
@@ -397,7 +413,7 @@ _The adapter only accepts this from the registry, so the wallet has to come thro
 function recordSettledPurchase(address _eSIMWallet, struct DataBundleDetails _dataBundleDetail, bytes32 _asset, uint256 _tokenAmount, bytes32 _paymentReference) external
 ```
 
-Records a data bundle paid for through Moonpay, a card or an external wallet
+Records a data bundle paid for through an external wallet or a card
 
 _No money moves here. Three things bound what the admin can state: the price ceiling,
      the payment reference being spendable once, and the settlement not being
@@ -412,7 +428,27 @@ _No money moves here. Three things bound what the admin can state: the price cei
 | _dataBundleDetail | struct DataBundleDetails | The purchase, priced in USD cents like everywhere else |
 | _asset | bytes32 | Symbol of the currency the user paid in |
 | _tokenAmount | uint256 | What the user actually paid, in that currency's smallest unit. Recorded        for offchain matching, never checked: it and the price both come from the admin. |
-| _paymentReference | bytes32 | Hash of the Moonpay charge or the Stripe payment intent |
+| _paymentReference | bytes32 | Hash tying this purchase to its offchain payment intent |
+
+### requireLazyHistoryCopied
+
+```solidity
+function requireLazyHistoryCopied(address _eSIMWallet) external view
+```
+
+Refuses a new entry while older history is still waiting to be copied in
+
+_The new entry would land first and the older ones append after it, leaving the history
+     out of order. The backend retries the whole onchain step on failure, so this cannot be
+     left as an ordering rule for the caller to follow. External so a wallet can run the same
+     check on its own paths that see the money move; `recordSettledPurchase` uses the
+     private form since it already has this contract's own state in scope._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _eSIMWallet | address | Wallet being appended to |
 
 ### updateDeviceWalletInfo
 
@@ -608,4 +644,10 @@ Address (owned/controlled by eSIM wallet project) that can upgrade contracts
 _Reads through to the owner rather than holding its own copy. `_authorizeUpgrade` is
      gated on `onlyOwner`, so the owner is the upgrade authority by definition and a second
      copy could only ever disagree with it._
+
+#### Return Values
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| [0] | address | The address that may upgrade this contract |
 

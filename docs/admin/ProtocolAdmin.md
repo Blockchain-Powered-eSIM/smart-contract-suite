@@ -27,7 +27,7 @@ _Replaces the single externally owned account that owns `Registry`, `LazyWalletR
      chosen by the guardian. Restoring any of the three is an owner action and waits, so the
      side taking power away always wins the race against the side handing it back. A guardian
      able to reinstate an admin would lose that, and a guardian able to appoint one would reach
-     `ESIMWallet.buyDataBundle` and every wallet holding ETH access through it.
+     `ESIMWallet.buyDataBundleWithToken` and every wallet holding funds access through it.
 
      The second one exists because without it a compromised canceller is permanent. Evicting any
      role holder means scheduling `revokeRole`, a scheduled operation can be cancelled by any
@@ -171,6 +171,8 @@ The contract was not offered ownership of this target
 ```solidity
 constructor(uint256 _initialDelay, uint256 _minDelayFloor, address[] _proposers, address[] _cancellers, address[] _guardians) public
 ```
+
+Sets up the timelock's roles and delay bounds
 
 _No admin account. The zero passed to `TimelockController` leaves this contract holding
      its own `DEFAULT_ADMIN_ROLE`, so granting or revoking any role is itself an operation
@@ -342,7 +344,15 @@ _Permissionless, and safe to be: it only takes ownership that the current owner 
 
      Each event is emitted ahead of the call it describes, so a target that emits its own
      events on handover cannot interleave them out of order. A failing handover takes the
-     whole batch down with it, so no event here can outlive the call it announced._
+     whole batch down with it, so no event here can outlive the call it announced.
+
+     `OwnershipAccepted` names an address the caller chose, and anyone can call this with a
+     contract they wrote that answers this address to `pendingOwner()` and returns quietly
+     from `acceptOwnership()`. Both answers come from the target, so no check here can tell
+     a protocol contract from one written to look like it. Read the event as a claim about
+     an address, and filter it against the contracts this one is meant to own. It costs the
+     protocol nothing beyond the log line: this contract holds no funds, and the powers it
+     does hold are gated on roles a target cannot obtain by being called._
 
 #### Parameters
 
