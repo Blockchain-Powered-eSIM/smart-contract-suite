@@ -137,6 +137,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     // Initialisation
     // ---------------------------------------------------------------------------------------------
 
+    /// @notice Wires the entry point and WebAuthn verifier used by this wallet
     /// @param anEntryPoint EntryPoint singleton this wallet validates against
     /// @param _verifier Contract used to verify WebAuthn assertions
     /// @custom:oz-upgrades-unsafe-allow constructor

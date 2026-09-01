@@ -116,6 +116,7 @@ contract PaymentAdapter is Initializable, UUPSUpgradeable, Ownable2StepUpgradeab
     // Initialisation
     // ---------------------------------------------------------------------------------------------
 
+    /// @notice Disables initializers on the implementation contract
     /// @dev Locks the implementation contract itself, so nobody can initialise and own it directly.
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -293,6 +294,7 @@ contract PaymentAdapter is Initializable, UUPSUpgradeable, Ownable2StepUpgradeab
 
     /// @notice Address that can upgrade this contract
     /// @dev Reads through to the owner rather than holding a second copy that could disagree.
+    /// @return The address that may upgrade this contract
     function upgradeManager() public view returns (address) {
         return owner();
     }

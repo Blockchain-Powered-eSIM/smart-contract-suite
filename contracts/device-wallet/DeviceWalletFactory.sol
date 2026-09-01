@@ -90,6 +90,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     // Initialisation
     // ---------------------------------------------------------------------------------------------
 
+    /// @notice Disables initializers on the implementation contract
     /// @dev Locks the implementation contract itself. Without this, anyone can call initialize
     ///      directly on the implementation, own it, and make it deploy a beacon it controls. The
     ///      proxy is unaffected either way, but an owned implementation is a trap for any later
@@ -529,6 +530,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     ///      behind the rest of the protocol after a rotation. Answers address(0) before the
     ///      registry is wired up, which no caller can match, so admin functions stay closed until
     ///      then rather than reverting on a call into address(0).
+    /// @return The current admin, or zero if the registry is not yet wired up
     function eSIMWalletAdmin() public view returns (address) {
         if(address(registry) == address(0)) return address(0);
         return registry.eSIMWalletAdmin();
@@ -590,6 +592,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     }
 
     /// @notice The device wallet logic contract every device wallet currently runs
+    /// @return The current implementation address
     function getCurrentDeviceWalletImplementation() public view returns (address) {
         return beacon.implementation();
     }

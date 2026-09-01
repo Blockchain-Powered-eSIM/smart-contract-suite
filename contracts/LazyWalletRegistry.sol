@@ -190,6 +190,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
     // Initialisation
     // ---------------------------------------------------------------------------------------------
 
+    /// @notice Disables initializers on the implementation contract
     /// @dev Locks the implementation contract itself. Without this, anyone can call initialize
     ///      directly on the implementation and own it. The proxy is unaffected either way, but an
     ///      owned implementation is a trap for any later upgrade that adds an outward call.
@@ -723,6 +724,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
     /// @dev Reads through to the owner rather than holding its own copy. `_authorizeUpgrade` is
     ///      gated on `onlyOwner`, so the owner is the upgrade authority by definition and a second
     ///      copy could only ever disagree with it.
+    /// @return The address that may upgrade this contract
     function upgradeManager() public view returns (address) {
         return owner();
     }

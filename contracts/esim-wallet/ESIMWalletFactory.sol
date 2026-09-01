@@ -80,6 +80,7 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgrad
     // Initialisation
     // ---------------------------------------------------------------------------------------------
 
+    /// @notice Disables initializers on the implementation contract
     /// @dev Locks the implementation contract itself. Without this, anyone can call initialize
     ///      directly on the implementation, own it, and make it deploy a beacon it controls. The
     ///      proxy is unaffected either way, but an owned implementation is a trap for any later
@@ -240,6 +241,7 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgrad
     {}
 
     /// @notice The eSIM wallet logic contract every eSIM wallet currently runs
+    /// @return The current implementation address
     function getCurrentESIMWalletImplementation() public view returns (address) {
         return beacon.implementation();
     }

@@ -136,6 +136,7 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     // Initialisation
     // ---------------------------------------------------------------------------------------------
 
+    /// @notice Disables initializers on the implementation contract
     /// @dev `_disableInitializers` rather than an `initializer` modifier. The modifier leaves the
     ///      version at 1, which a later `reinitializer(2)` would still accept on the implementation
     ///      itself. This pins it at the maximum so no version can ever run there.
@@ -507,6 +508,7 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
 
     /// @notice The device wallet that owns this eSIM wallet
     /// @dev Declared so subclasses and mocks have one place to override.
+    /// @return The owning device wallet address
     function owner() public view override returns (address) {
         return OwnableUpgradeable.owner();
     }

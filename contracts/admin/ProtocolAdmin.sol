@@ -102,6 +102,7 @@ contract ProtocolAdmin is TimelockController {
     /// @notice The contract was not offered ownership of this target
     error OwnershipNotOffered(address target);
 
+    /// @notice Sets up the timelock's roles and delay bounds
     /// @param _initialDelay Delay new operations wait before they can be executed
     /// @param _minDelayFloor Shortest delay `updateDelay` can ever bring the contract down to
     /// @param _proposers Accounts that may schedule operations, and that may also cancel them
