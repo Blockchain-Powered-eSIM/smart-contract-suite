@@ -138,11 +138,11 @@ probe_p256() {
 probe_p256 "$RPC" "the fork"
 probe_p256 "$ALCHEMY_BASE_SEPOLIA_HTTPS" "Base Sepolia itself"
 
-# Start from an empty record and an empty address book. A leftover from an interrupted run would
-# make Deploy.s.sol refuse to start, which is the behaviour a real deployment wants and not what a
-# rehearsal wants.
-echo '{}' > "$RECORD"
-echo '{}' > "$ADDRESS_BOOK"
+# Start with neither file present. DeploymentRecord.isRecorded() reads file existence as "already
+# deployed", the same as it does for a live chain, so writing an empty {} here would make
+# Deploy.s.sol refuse to start on its own rehearsal. A leftover from an interrupted run would cause
+# the exact same false positive, which is why cleanup below always removes both on exit.
+rm -f "$RECORD" "$ADDRESS_BOOK"
 
 # Forge sizes a broadcast transaction from what the simulation consumed. That is wrong for
 # handleOps: the EntryPoint checks the transaction carries the operation's whole declared gas
