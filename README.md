@@ -134,37 +134,37 @@ slither . --filter-paths "test/,script/,lib/,node_modules/"
 aderyn .
 ```
 
-**Trust model, as it stands.** On the v0.8 Base Sepolia deployment, `ProtocolAdmin` owns all four
-UUPS proxies and both factories that own the beacons. Every owner gated call now waits out a two day
-delay, proposing is 2-of-3 or a cold key, and a 3-of-3 guardian executes. The older deployments are
-not on that footing: one EOA still owns everything on the v0.7 Base Sepolia and OP Sepolia
-deployments, so a single key compromise reaches every wallet there in one transaction. Admin
-transactions go into the public mempool on all three, with no private relay in front of them.
+**Trust model, as it stands.** On the v0.8 Base Sepolia deployment, `ProtocolAdmin` owns all five
+UUPS proxies, `PaymentAdapter` included, and both factories that own the beacons. Every owner gated
+call now waits out a two day delay, proposing is 2-of-3 or a cold key, and a 3-of-3 guardian
+executes. The older deployments are not on that footing: one EOA still owns everything on the v0.7
+Base Sepolia and OP Sepolia deployments, so a single key compromise reaches every wallet there in one
+transaction. Admin transactions go into the public mempool on all three, with no private relay in
+front of them.
 
-That v0.8 deployment predates `PaymentAdapter`, so none of the three live deployments carry it or the
-fifth singleton it adds. This branch's own protocol has not been deployed under any handover yet:
-`ProtocolAdmin` exists in the contracts and in the deploy scripts, but no `TransferOwnership.s.sol`
-run has pointed it at a `PaymentAdapter`-carrying deployment.
+The v0.7 Base Sepolia and OP Sepolia deployments predate `PaymentAdapter`, so neither carries it or
+the fifth singleton it adds.
 
 ## Deployments
 
-Testnet only. The v0.8 column is the current deployment, from commit [`8e49dd9`](https://github.com/Blockchain-Powered-eSIM/smart-contract-suite/tree/8e49dd96eb8dfd09b95d584079e423b5ed350a7b), tagged
-`deploy/base-sepolia-entrypoint-v8`. The two older columns bind the v0.7 EntryPoint and were built
+Testnet only. The v0.8 column is the current deployment, from commit [`3397b6a`](https://github.com/Blockchain-Powered-eSIM/smart-contract-suite/tree/3397b6a268e43aa41ccf4ba3d82603a8efcccd5f),
+the first to carry `PaymentAdapter`. The two older columns bind the v0.7 EntryPoint and were built
 from an earlier commit. They were redeployed rather than upgraded, because the EntryPoint address is
 immutable in the wallets.
 
 | Contract | Base Sepolia (EP v0.8) | Base Sepolia (EP v0.7) | OP Sepolia |
 |---|---|---|---|
-| `RegistryProxy` | [`0x89e386E3251692F21a2E9048A46518AdC2A5Cb4A`](https://sepolia.basescan.org/address/0x89e386E3251692F21a2E9048A46518AdC2A5Cb4A) | `0xCa447f5C75C57f6C59027304A5Fb5A09F0E005c9` | `0x96dA9cE92D2C09f7b3ADE01260608e9079f16d12` |
-| `LazyWalletRegistryProxy` | [`0x394177c5cc4762b897c37de1820259B75993e033`](https://sepolia.basescan.org/address/0x394177c5cc4762b897c37de1820259B75993e033) | `0x8a1E53b903efcc6b252CE4bD3b255202318505Ef` | `0x3F14D060074B174B0784056bDe5e0f8970D25ff1` |
-| `DeviceWalletFactoryProxy` | [`0xB006c7066C89a5d7Bfc229e9fb0bADf96c8F979f`](https://sepolia.basescan.org/address/0xB006c7066C89a5d7Bfc229e9fb0bADf96c8F979f) | `0xB4473979ff8cE4e09161B08f74EEb66BD7718076` | `0x243cCdE6a56b0Ba740E067f39896772748E20fFD` |
-| `ESIMWalletFactoryProxy` | [`0x13998C0bb7433c51cE5101922B12EE69F459699A`](https://sepolia.basescan.org/address/0x13998C0bb7433c51cE5101922B12EE69F459699A) | `0x63005d8214533fC7209678Aa39F7b9b0b51a7bcB` | `0x8444bF9C39F01e4B092e42DC11695C61f8B93957` |
-| `DeviceWalletImpl` | [`0x8076aD3AdaeFb5A35a1ADFdE850F44A06C379DC8`](https://sepolia.basescan.org/address/0x8076aD3AdaeFb5A35a1ADFdE850F44A06C379DC8) | `0xde0dC03eF67317D4702e1d6Ef3f8cE246517e84e` | `0x22FCFa80868dc9F423873F9332817eDAe4483974` |
-| `ESIMWalletImpl` | [`0xF77FE1da39501Bb1963f08e8778242F25Bc668C2`](https://sepolia.basescan.org/address/0xF77FE1da39501Bb1963f08e8778242F25Bc668C2) | `0x59A78Cbb73e94a3fD6ada0136C89AE658BA16Dd9` | `0xf86FE9253b6ea9454abda657f47aE508B00c15C1` |
-| `DeviceWalletBeacon` | [`0x985519b60b39C630d9575911d62635A993383900`](https://sepolia.basescan.org/address/0x985519b60b39C630d9575911d62635A993383900) | not recorded | not recorded |
-| `ESIMWalletBeacon` | [`0x7D0515286Ad92953665B6ED02D4e3b3901479c19`](https://sepolia.basescan.org/address/0x7D0515286Ad92953665B6ED02D4e3b3901479c19) | not recorded | not recorded |
-| `P256Verifier` | [`0x625561429bD99d647956ccBCA4eBf762aaA142c5`](https://sepolia.basescan.org/address/0x625561429bD99d647956ccBCA4eBf762aaA142c5) | `0xF04f3b3935aD461D17d4a8a78E7ea21d4a61AEb1` | `0x3c15a78046838481788613A9F111F972B562623C` |
-| `ProtocolAdmin` | [`0x77A1D6f27462c34BF038832d9Cff6b3E94a9Fe6F`](https://sepolia.basescan.org/address/0x77A1D6f27462c34BF038832d9Cff6b3E94a9Fe6F) | not deployed | not deployed |
+| `RegistryProxy` | [`0x916b6b554119c789EF3026EDeB0E1Ba741b42A49`](https://sepolia.basescan.org/address/0x916b6b554119c789EF3026EDeB0E1Ba741b42A49) | `0xCa447f5C75C57f6C59027304A5Fb5A09F0E005c9` | `0x96dA9cE92D2C09f7b3ADE01260608e9079f16d12` |
+| `LazyWalletRegistryProxy` | [`0x5bE46Cf216186Bc2E3C220729331D6bE7d186e84`](https://sepolia.basescan.org/address/0x5bE46Cf216186Bc2E3C220729331D6bE7d186e84) | `0x8a1E53b903efcc6b252CE4bD3b255202318505Ef` | `0x3F14D060074B174B0784056bDe5e0f8970D25ff1` |
+| `DeviceWalletFactoryProxy` | [`0x0BB3BA8D9233514a4aA6D72c243a2473f9cFf0bb`](https://sepolia.basescan.org/address/0x0BB3BA8D9233514a4aA6D72c243a2473f9cFf0bb) | `0xB4473979ff8cE4e09161B08f74EEb66BD7718076` | `0x243cCdE6a56b0Ba740E067f39896772748E20fFD` |
+| `ESIMWalletFactoryProxy` | [`0x57da54e07705de17c713ec311ac193e83470D5a5`](https://sepolia.basescan.org/address/0x57da54e07705de17c713ec311ac193e83470D5a5) | `0x63005d8214533fC7209678Aa39F7b9b0b51a7bcB` | `0x8444bF9C39F01e4B092e42DC11695C61f8B93957` |
+| `PaymentAdapterProxy` | [`0xBFaA666a8074924588E96507c307b680ecCeB2c1`](https://sepolia.basescan.org/address/0xBFaA666a8074924588E96507c307b680ecCeB2c1) | not deployed | not deployed |
+| `DeviceWalletImpl` | [`0x572BF04F9Ed9b0213C127EFC0215477fa3D5CffB`](https://sepolia.basescan.org/address/0x572BF04F9Ed9b0213C127EFC0215477fa3D5CffB) | `0xde0dC03eF67317D4702e1d6Ef3f8cE246517e84e` | `0x22FCFa80868dc9F423873F9332817eDAe4483974` |
+| `ESIMWalletImpl` | [`0x06b8F9986fD15034364Fa8d98A9E959613400B07`](https://sepolia.basescan.org/address/0x06b8F9986fD15034364Fa8d98A9E959613400B07) | `0x59A78Cbb73e94a3fD6ada0136C89AE658BA16Dd9` | `0xf86FE9253b6ea9454abda657f47aE508B00c15C1` |
+| `DeviceWalletBeacon` | [`0x81Ac8133Ab32151460898D402E2f0dd0c6FfA30f`](https://sepolia.basescan.org/address/0x81Ac8133Ab32151460898D402E2f0dd0c6FfA30f) | not recorded | not recorded |
+| `ESIMWalletBeacon` | [`0xc2C09990cA54c3B0A88C9F51d540f9cf78F4D424`](https://sepolia.basescan.org/address/0xc2C09990cA54c3B0A88C9F51d540f9cf78F4D424) | not recorded | not recorded |
+| `P256Verifier` | [`0x6FA3E7E145476Dc4682734Fd845019A3872b4821`](https://sepolia.basescan.org/address/0x6FA3E7E145476Dc4682734Fd845019A3872b4821) | `0xF04f3b3935aD461D17d4a8a78E7ea21d4a61AEb1` | `0x3c15a78046838481788613A9F111F972B562623C` |
+| `ProtocolAdmin` | [`0xdDeCC2C1345BC966337B5f4Fe57EC2D5bfad751A`](https://sepolia.basescan.org/address/0xdDeCC2C1345BC966337B5f4Fe57EC2D5bfad751A) | not deployed | not deployed |
 | `EntryPoint` | [`0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108`](https://sepolia.basescan.org/address/0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108) | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` |
 
 The full list, including the Ethereum Sepolia deployment, is in
