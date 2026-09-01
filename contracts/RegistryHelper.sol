@@ -216,7 +216,8 @@ contract RegistryHelper {
     /// @param _salt CREATE2 salt the device wallet and its first eSIM wallet are deployed at
     /// @param _eSIMUniqueIdentifiers First batch of eSIM identifiers, in the order the full list holds them
     /// @param _depositAmount ETH forwarded to the new device wallet
-    /// @return Return device wallet address and the eSIM wallet addresses this call deployed
+    /// @return The device wallet address
+    /// @return The eSIM wallet addresses this call deployed
     function deployLazyWallet(
         bytes32[2] memory _deviceWalletOwnerKey,
         string calldata _deviceUniqueIdentifier,

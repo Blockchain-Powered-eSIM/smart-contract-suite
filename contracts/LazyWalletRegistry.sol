@@ -452,7 +452,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
     /// @param _eSIMIdentifier unique eSIM identifier that needs to be switched to a new device
     /// @param _oldDeviceIdentifier device identifier that the eSIM is currently associated with
     /// @param _newDeviceIdentifier new device identifier that the eSIM needs to be switched to
-    /// @return bool Returns `true` if the switching of eSIM was successful
+    /// @return True if the switch succeeded
     function switchESIMIdentifierToNewDeviceIdentifier(
         string calldata _eSIMIdentifier,
         string calldata _oldDeviceIdentifier,

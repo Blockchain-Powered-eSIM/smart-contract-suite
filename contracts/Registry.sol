@@ -208,7 +208,7 @@ contract Registry is
     // Admin handover
     // ---------------------------------------------------------------------------------------------
 
-    /// @notice Nominates the next eSIM wallet admin, who then has to accept
+    /// @inheritdoc IRegistryAdmin
     /// @dev Owner and not the admin, deliberately. An admin that had to nominate its own
     ///      replacement could not be removed once its key was in someone else's hands, and the
     ///      pause is the admin's own lever, so a compromised key could hold the protocol stopped
@@ -222,7 +222,6 @@ contract Registry is
     ///      Deliberately does not check for an existing request, so an unintended nomination is
     ///      overridden by calling this again. Naming the incumbent withdraws the request and hands
     ///      the powers back, which also lifts a suspension, so one call undoes either mistake.
-    /// @param _newAdmin Address of the recipient to receive the admin role
     function requestAdminUpdate(address _newAdmin) external onlyOwner {
         if(_newAdmin == address(0)) revert Errors.ZeroAddress("_newAdmin");
 
@@ -257,7 +256,7 @@ contract Registry is
         return msg.sender;
     }
 
-    /// @notice Suspends the admin's powers protocol-wide, leaving its address on the books
+    /// @inheritdoc IRegistryAdmin
     /// @dev Every gate in the protocol reads `eSIMWalletAdmin()`, which answers zero from here on,
     ///      and no transaction can arrive from the zero address, so one write closes all of them
     ///      in the same transaction. The address itself is kept so the suspension can be lifted
@@ -337,7 +336,7 @@ contract Registry is
         emit Paused(msg.sender);
     }
 
-    /// @notice Releases the pause
+    /// @inheritdoc IPausable
     /// @dev Owner only, see `pause`
     function unpause() external onlyOwner {
         paused = false;
