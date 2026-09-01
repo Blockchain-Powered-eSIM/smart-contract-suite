@@ -134,5 +134,492 @@
   "status": {
     "configured": true,
     "ownershipTransferred": true
+  },
+  "transactions": {
+    "Deploy": [
+      {
+        "hash": "0x4238e75362c8517f44a08b4886497984d1bd99655a6fcc920b27e1ac89c4236d",
+        "type": "CREATE",
+        "target": "ProtocolAdmin",
+        "address": "0xddecc2c1345bc966337b5f4fe57ec2d5bfad751a",
+        "arguments": [
+          "172800",
+          "3600",
+          "[0x97a2103118064820180fb3acbCBedDe6E4D9fCb9, 0xC85Da397D15827d4F15c9D380AdA4e4Abe99227e]",
+          "[]",
+          "[0xA71daa87b7C653843b177Ef296B8a7aB90DebE1A]"
+        ],
+        "blockNumber": 46246178,
+        "gasUsed": 1511681,
+        "effectiveGasPriceWei": 6000000,
+        "status": "success"
+      },
+      {
+        "hash": "0x8bb2c96edfce3e749c9da4d68222bbe5de450d108c81082f5060e5753f7d0018",
+        "type": "CREATE",
+        "target": "P256Verifier",
+        "address": "0x6fa3e7e145476dc4682734fd845019a3872b4821",
+        "arguments": [],
+        "blockNumber": 46246178,
+        "gasUsed": 2590646,
+        "effectiveGasPriceWei": 6000000,
+        "status": "success"
+      },
+      {
+        "hash": "0xbccda4843b5e84d1564b7c00822aa114283b2861f0818d51aa6ed1db2947467b",
+        "type": "CREATE",
+        "target": "ESIMWalletImplementation",
+        "address": "0x06b8f9986fd15034364fa8d98a9e959613400b07",
+        "arguments": [],
+        "blockNumber": 46246178,
+        "gasUsed": 457962,
+        "effectiveGasPriceWei": 6000000,
+        "status": "success"
+      },
+      {
+        "hash": "0xccf971bfa0579d691272a9ebf463093de03ab53cb82e4bd7a974bc42af1812e2",
+        "type": "CREATE",
+        "target": "ESIMWalletFactory",
+        "address": "0xc1b87ac654bef15498693a9cf6a6809a3b44315b",
+        "arguments": [],
+        "blockNumber": 46246178,
+        "gasUsed": 2678529,
+        "effectiveGasPriceWei": 6000000,
+        "status": "success"
+      },
+      {
+        "hash": "0x6076e1c80a9bbe13c820d37c837ad5fa46f716c63b506726e870602b9c1530bc",
+        "type": "CREATE",
+        "target": "ESIMWalletFactoryProxy",
+        "address": "0x57da54e07705de17c713ec311ac193e83470d5a5",
+        "arguments": [
+          "0xc1b87aC654BEF15498693A9Cf6a6809A3b44315b",
+          "0x485cc95500000000000000000000000006b8f9986fd15034364fa8d98a9e959613400b07000000000000000000000000749e003f324cb13e59a2a102b49c78c1e1467f29"
+        ],
+        "blockNumber": 46246178,
+        "gasUsed": 2137542,
+        "effectiveGasPriceWei": 6000000,
+        "status": "success"
+      },
+      {
+        "hash": "0x7442db6dbd42dd882b87764c56f6ec7f1c73ec2ab8152af6c52cbd620925623e",
+        "type": "CREATE",
+        "target": "DeviceWalletImplementation",
+        "address": "0x572bf04f9ed9b0213c127efc0215477fa3d5cffb",
+        "arguments": [
+          "0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108",
+          "0x6FA3E7E145476Dc4682734Fd845019A3872b4821"
+        ],
+        "blockNumber": 46246178,
+        "gasUsed": 184442,
+        "effectiveGasPriceWei": 6000000,
+        "status": "success"
+      },
+      {
+        "hash": "0x7da26f9ddbf22fe97751cbdefca49b139bc3e8b51f4825c64e02596f9c24b49f",
+        "type": "CREATE",
+        "target": "DeviceWalletFactory",
+        "address": "0x2b34f39e739d8606580de1f0cf260a3a19ce0d8e",
+        "arguments": [],
+        "blockNumber": 46246178,
+        "gasUsed": 526364,
+        "effectiveGasPriceWei": 6000000,
+        "status": "success"
+      },
+      {
+        "hash": "0x161088b9522cc38333a4676fbdb38e5b42ec295b7b8b41af71d934a125c709af",
+        "type": "CREATE",
+        "target": "DeviceWalletFactoryProxy",
+        "address": "0x0bb3ba8d9233514a4aa6d72c243a2473f9cff0bb",
+        "arguments": [
+          "0x2b34f39e739D8606580DE1F0cF260A3a19CE0D8E",
+          "0x1459457a000000000000000000000000572bf04f9ed9b0213c127efc0215477fa3d5cffb000000000000000000000000749e003f324cb13e59a2a102b49c78c1e1467f2900000000000000000000000057da54e07705de17c713ec311ac193e83470d5a50000000000000000000000004337084d9e255ff0702461cf8895ce9e3b5ff1080000000000000000000000006fa3e7e145476dc4682734fd845019a3872b4821"
+        ],
+        "blockNumber": 46246178,
+        "gasUsed": 301567,
+        "effectiveGasPriceWei": 6000000,
+        "status": "success"
+      },
+      {
+        "hash": "0x927e429038d8de763e3a46937bf89cff46dfe195983b44b3be163ba0e0225a93",
+        "type": "CREATE",
+        "target": "Registry",
+        "address": "0x3aefd65516a72eb78f2bcebbaf78c994eeedf71e",
+        "arguments": [],
+        "blockNumber": 46246178,
+        "gasUsed": 3056127,
+        "effectiveGasPriceWei": 6000000,
+        "status": "success"
+      },
+      {
+        "hash": "0x4b7cd61ade6837f8c08798037de37aac6f4a000ef67acdf0648c742d48257c7c",
+        "type": "CREATE",
+        "target": "RegistryProxy",
+        "address": "0x916b6b554119c789ef3026edeb0e1ba741b42a49",
+        "arguments": [
+          "0x3aefD65516A72Eb78f2bCEBbaf78c994eeedF71e",
+          "0xec5c85e30000000000000000000000009be9a586a2c8ee59504805f7491b1861e541fe3a0000000000000000000000009e60e1d876e0e47c410174dc4ea7f59d5e6c6d1d000000000000000000000000749e003f324cb13e59a2a102b49c78c1e1467f290000000000000000000000000bb3ba8d9233514a4aa6d72c243a2473f9cff0bb00000000000000000000000057da54e07705de17c713ec311ac193e83470d5a50000000000000000000000004337084d9e255ff0702461cf8895ce9e3b5ff108000000000000000000000000000000000000000000000000000000000000c350"
+        ],
+        "blockNumber": 46246178,
+        "gasUsed": 230955,
+        "effectiveGasPriceWei": 6000000,
+        "status": "success"
+      },
+      {
+        "hash": "0x0d9ad7b4e5cd20bd88dc05652a93e30fe077524251b0cc626c3d48b51936bfb5",
+        "type": "CREATE",
+        "target": "LazyWalletRegistry",
+        "address": "0x334a233e9913afadef59abac52b57160afeeae3c",
+        "arguments": [],
+        "blockNumber": 46246178,
+        "gasUsed": 3281842,
+        "effectiveGasPriceWei": 6000000,
+        "status": "success"
+      },
+      {
+        "hash": "0xca03c1699315aeee2237eb7e1ad3d6913ad51399fbd935e1ba1795a29766f2b3",
+        "type": "CREATE",
+        "target": "LazyWalletRegistryProxy",
+        "address": "0x5be46cf216186bc2e3c220729331d6be7d186e84",
+        "arguments": [
+          "0x334a233E9913AFAdef59abAC52B57160aFEEaE3C",
+          "0x485cc955000000000000000000000000916b6b554119c789ef3026edeb0e1ba741b42a49000000000000000000000000749e003f324cb13e59a2a102b49c78c1e1467f29"
+        ],
+        "blockNumber": 46246178,
+        "gasUsed": 1777562,
+        "effectiveGasPriceWei": 6000000,
+        "status": "success"
+      },
+      {
+        "hash": "0xef4516913197892364090349e323aa283de3b605c23a49f97ebc1fa7b3991e06",
+        "type": "CREATE",
+        "target": "PaymentAdapter",
+        "address": "0x87efa8638bf16910ff8f6a94105e329f331aa594",
+        "arguments": [],
+        "blockNumber": 46246178,
+        "gasUsed": 4579846,
+        "effectiveGasPriceWei": 6000000,
+        "status": "success"
+      },
+      {
+        "hash": "0x69d671c566ea424fa7180ee84f9dae2de18579a68a707c6af4c24bc270ed4bb5",
+        "type": "CREATE",
+        "target": "PaymentAdapterProxy",
+        "address": "0xbfaa666a8074924588e96507c307b680ecceb2c1",
+        "arguments": [
+          "0x87EFa8638bF16910FF8F6a94105E329F331aA594",
+          "0xc0c53b8b000000000000000000000000916b6b554119c789ef3026edeb0e1ba741b42a490000000000000000000000006ac3ab54dc5019a2e57eccb214337ff5bbd52897000000000000000000000000749e003f324cb13e59a2a102b49c78c1e1467f29"
+        ],
+        "blockNumber": 46246178,
+        "gasUsed": 4073187,
+        "effectiveGasPriceWei": 6000000,
+        "status": "success"
+      },
+      {
+        "hash": "0xa86c0297edaa76ee78e4ae5c9034cd288704104764275637973ff4669077d304",
+        "type": "CALL",
+        "target": "RegistryProxy",
+        "address": "0x916b6b554119c789ef3026edeb0e1ba741b42a49",
+        "function": "setPaymentAdapter(address)",
+        "arguments": [
+          "0xBFaA666a8074924588E96507c307b680ecCeB2c1"
+        ],
+        "blockNumber": 46246179,
+        "gasUsed": 53030,
+        "effectiveGasPriceWei": 6000000,
+        "status": "success"
+      }
+    ],
+    "Configure": [
+      {
+        "hash": "0x5662f07f46b6d9c77668e5d99a46400d4c63e29e58f631aee2dbe3472f779c68",
+        "type": "CALL",
+        "target": "DeviceWalletFactoryProxy",
+        "address": "0x0bb3ba8d9233514a4aa6d72c243a2473f9cff0bb",
+        "function": "addRegistryAddress(address)",
+        "arguments": [
+          "0x916b6b554119c789EF3026EDeB0E1Ba741b42A49"
+        ],
+        "blockNumber": 46246363,
+        "gasUsed": 52037,
+        "effectiveGasPriceWei": 6000000,
+        "status": "success"
+      },
+      {
+        "hash": "0xf13f1278b6076d4eed3df392d36bbd5d4f79b2e3a17c340fd242cf4f21d70db8",
+        "type": "CALL",
+        "target": "ESIMWalletFactoryProxy",
+        "address": "0x57da54e07705de17c713ec311ac193e83470d5a5",
+        "function": "addRegistryAddress(address)",
+        "arguments": [
+          "0x916b6b554119c789EF3026EDeB0E1Ba741b42A49"
+        ],
+        "blockNumber": 46246363,
+        "gasUsed": 54939,
+        "effectiveGasPriceWei": 6000000,
+        "status": "success"
+      },
+      {
+        "hash": "0x97974e67988a386f92c0f7275e434048db0643681c7e5cbf0134c2b9d460e9cf",
+        "type": "CALL",
+        "target": "RegistryProxy",
+        "address": "0x916b6b554119c789ef3026edeb0e1ba741b42a49",
+        "function": "addOrUpdateLazyWalletRegistryAddress(address)",
+        "arguments": [
+          "0x5bE46Cf216186Bc2E3C220729331D6bE7d186e84"
+        ],
+        "blockNumber": 46246363,
+        "gasUsed": 51940,
+        "effectiveGasPriceWei": 6000000,
+        "status": "success"
+      },
+      {
+        "hash": "0x4b3272d6960203e816f737da3899d125ce5ce1c5ccb53df52efa546ed7d4572b",
+        "type": "CALL",
+        "target": "PaymentAdapterProxy",
+        "address": "0xbfaa666a8074924588e96507c307b680ecceb2c1",
+        "function": "registerAsset(bytes32,(bool,bool,uint8,address))",
+        "arguments": [
+          "0x5553440000000000000000000000000000000000000000000000000000000000",
+          "(true, true, 2, 0x0000000000000000000000000000000000000000)"
+        ],
+        "blockNumber": 46246363,
+        "gasUsed": 54687,
+        "effectiveGasPriceWei": 6000000,
+        "status": "success"
+      },
+      {
+        "hash": "0x8b399163adab1863523aeded7e579d62a71dfe8fabc062a98f4e7115c4dc00a4",
+        "type": "CALL",
+        "target": "PaymentAdapterProxy",
+        "address": "0xbfaa666a8074924588e96507c307b680ecceb2c1",
+        "function": "registerAsset(bytes32,(bool,bool,uint8,address))",
+        "arguments": [
+          "0x5553444300000000000000000000000000000000000000000000000000000000",
+          "(true, true, 6, 0x6Ac3aB54Dc5019A2e57eCcb214337FF5bbD52897)"
+        ],
+        "blockNumber": 46246363,
+        "gasUsed": 51979,
+        "effectiveGasPriceWei": 6000000,
+        "status": "success"
+      }
+    ],
+    "TransferOwnership": [
+      {
+        "hash": "0xa6db87831bf80a618a655220cc411a03a4db8720096728c23953b3425a39c79e",
+        "type": "CALL",
+        "target": "RegistryProxy",
+        "address": "0x916b6b554119c789ef3026edeb0e1ba741b42a49",
+        "function": "transferOwnership(address)",
+        "arguments": [
+          "0xdDeCC2C1345BC966337B5f4Fe57EC2D5bfad751A"
+        ],
+        "blockNumber": 46246378,
+        "gasUsed": 52708,
+        "effectiveGasPriceWei": 6000000,
+        "status": "success"
+      },
+      {
+        "hash": "0xfe70a3eb305c0ea6bc893bfe10ae07f66c7baaf9c26061b1dbf78774540747f3",
+        "type": "CALL",
+        "target": "LazyWalletRegistryProxy",
+        "address": "0x5be46cf216186bc2e3c220729331d6be7d186e84",
+        "function": "transferOwnership(address)",
+        "arguments": [
+          "0xdDeCC2C1345BC966337B5f4Fe57EC2D5bfad751A"
+        ],
+        "blockNumber": 46246378,
+        "gasUsed": 52890,
+        "effectiveGasPriceWei": 6000000,
+        "status": "success"
+      },
+      {
+        "hash": "0xe2eb8112f47355c4ae4287360ffe0d766637d62f2985b5f62ecab5f0ee9ec89e",
+        "type": "CALL",
+        "target": "DeviceWalletFactoryProxy",
+        "address": "0x0bb3ba8d9233514a4aa6d72c243a2473f9cff0bb",
+        "function": "transferOwnership(address)",
+        "arguments": [
+          "0xdDeCC2C1345BC966337B5f4Fe57EC2D5bfad751A"
+        ],
+        "blockNumber": 46246378,
+        "gasUsed": 52648,
+        "effectiveGasPriceWei": 6000000,
+        "status": "success"
+      },
+      {
+        "hash": "0x6a1fdfed63d9466f700542bfd692b9303be77ae64e97eba0201cfa5857dcf49b",
+        "type": "CALL",
+        "target": "ESIMWalletFactoryProxy",
+        "address": "0x57da54e07705de17c713ec311ac193e83470d5a5",
+        "function": "transferOwnership(address)",
+        "arguments": [
+          "0xdDeCC2C1345BC966337B5f4Fe57EC2D5bfad751A"
+        ],
+        "blockNumber": 46246378,
+        "gasUsed": 52796,
+        "effectiveGasPriceWei": 6000000,
+        "status": "success"
+      },
+      {
+        "hash": "0xdc4ff2904ed7c4943f4cccfed3ffbafc1c7facf4fad659d62d533ed6fcc9f54c",
+        "type": "CALL",
+        "target": "PaymentAdapterProxy",
+        "address": "0xbfaa666a8074924588e96507c307b680ecceb2c1",
+        "function": "transferOwnership(address)",
+        "arguments": [
+          "0xdDeCC2C1345BC966337B5f4Fe57EC2D5bfad751A"
+        ],
+        "blockNumber": 46246378,
+        "gasUsed": 113174,
+        "effectiveGasPriceWei": 6000000,
+        "status": "success"
+      },
+      {
+        "hash": "0x953119430e23f1e463ff965b69cb4a37fbfa5578404ca0e71bfce5ad28121cdc",
+        "type": "CALL",
+        "target": "ProtocolAdmin",
+        "address": "0xddecc2c1345bc966337b5f4fe57ec2d5bfad751a",
+        "function": "acceptOwnershipBatch(address[])",
+        "arguments": [
+          "[0x916b6b554119c789EF3026EDeB0E1Ba741b42A49, 0x5bE46Cf216186Bc2E3C220729331D6bE7d186e84, 0x0BB3BA8D9233514a4aA6D72c243a2473f9cFf0bb, 0x57da54e07705de17c713ec311ac193e83470D5a5, 0xBFaA666a8074924588E96507c307b680ecCeB2c1]"
+        ],
+        "blockNumber": 46246378,
+        "gasUsed": 53445,
+        "effectiveGasPriceWei": 6000000,
+        "status": "success"
+      }
+    ]
+  },
+  "cost": {
+    "totalGasUsed": 28084525,
+    "totalWeiSpent": 168507150000000,
+    "totalEthSpent": "0.00016850715"
+  },
+  "create2": {
+    "deviceWalletDeployer": "0x0BB3BA8D9233514a4aA6D72c243a2473f9cFf0bb",
+    "eSIMWalletDeployer": "0x57da54e07705de17c713ec311ac193e83470D5a5",
+    "beaconProxyCreationCodeHash": "0xc571dd76379a732e12f1973fa9f4cbbaeb1702bb0ace06e5beb7e2b56cd03c6b",
+    "beaconProxyCreationCode": "0x60a0806040526104e480380380916100178285610292565b833981016040828203126101eb5761002e826102c9565b602083015190926001600160401b0382116101eb57019080601f830112156101eb57815161005b816102dd565b926100696040519485610292565b8184526020840192602083830101116101eb57815f926020809301855e84010152823b15610274577fa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d5080546001600160a01b0319166001600160a01b038516908117909155604051635c60da1b60e01b8152909190602081600481865afa9081156101f7575f9161023a575b50803b1561021a5750817f1cf3b03a6cf19fa2baba4df148e9dcabedea7f8a5c07840e207e5c089be95d3e5f80a282511561020257602060049260405193848092635c60da1b60e01b82525afa9182156101f7575f926101ae575b505f809161018a945190845af43d156101a6573d9161016e836102dd565b9261017c6040519485610292565b83523d5f602085013e6102f8565b505b60805260405161018d908161035782396080518160460152f35b6060916102f8565b9291506020833d6020116101ef575b816101ca60209383610292565b810103126101eb575f80916101e161018a956102c9565b9394509150610150565b5f80fd5b3d91506101bd565b6040513d5f823e3d90fd5b505050341561018c5763b398979f60e01b5f5260045ffd5b634c9c8ce360e01b5f9081526001600160a01b0391909116600452602490fd5b90506020813d60201161026c575b8161025560209383610292565b810103126101eb57610266906102c9565b5f6100f5565b3d9150610248565b631933b43b60e21b5f9081526001600160a01b038416600452602490fd5b601f909101601f19168101906001600160401b038211908210176102b557604052565b634e487b7160e01b5f52604160045260245ffd5b51906001600160a01b03821682036101eb57565b6001600160401b0381116102b557601f01601f191660200190565b9061031c575080511561030d57602081519101fd5b63d6bda27560e01b5f5260045ffd5b8151158061034d575b61032d575090565b639996b31560e01b5f9081526001600160a01b0391909116600452602490fd5b50803b1561032556fe60806040527f5c60da1b000000000000000000000000000000000000000000000000000000006080526020608060048173ffffffffffffffffffffffffffffffffffffffff7f0000000000000000000000000000000000000000000000000000000000000000165afa8015610107575f9015610163575060203d602011610100575b7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0601f820116608001906080821067ffffffffffffffff8311176100d3576100ce91604052608001610112565b610163565b7f4e487b71000000000000000000000000000000000000000000000000000000005f52604160045260245ffd5b503d610081565b6040513d5f823e3d90fd5b7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff80602091011261015f5760805173ffffffffffffffffffffffffffffffffffffffff8116810361015f5790565b5f80fd5b5f8091368280378136915af43d5f803e1561017c573d5ff35b3d5ffdfea164736f6c6343000824000a",
+    "deviceWalletInitSignature": "init(address,bytes32[2],string,address)",
+    "deviceWalletInitArgs": [
+      "registry",
+      "ownerKey",
+      "deviceUniqueIdentifier",
+      "eSIMWalletFactory"
+    ],
+    "verifiedExample": {
+      "note": "Derived offchain and checked against getCounterFactualAddress on the deployed factory. Nothing was deployed at this address.",
+      "ownerKeyX": "0x1111111111111111111111111111111111111111111111111111111111111111",
+      "ownerKeyY": "0x2222222222222222222222222222222222222222222222222222222222222222",
+      "deviceUniqueIdentifier": "record-example-device-1",
+      "salt": 1,
+      "initCodeHash": "0x04b4beefb824f86955f093f0e739c9420bc823fbb526984d618a7ae120f3b12c",
+      "address": "0x38D72f4280ceB15176A95e3FD57D080e9FC15153"
+    }
+  },
+  "verification": {
+    "explorer": "https://sepolia.basescan.org",
+    "verifier": "etherscan v2, chainid 84532",
+    "checkedAt": "2026-09-01",
+    "method": "forge script --verify submitted every deployed contract to the Etherscan v2 API at broadcast time; each returned Pass - Verified (fresh bytecode) or Already Verified (bytecode Etherscan already had, e.g. the shared OZ proxy/beacon)",
+    "contracts": {
+      "ProtocolAdmin": {
+        "address": "0xdDeCC2C1345BC966337B5f4Fe57EC2D5bfad751A",
+        "verifiedAs": "ProtocolAdmin",
+        "status": "verified",
+        "url": "https://sepolia.basescan.org/address/0xdDeCC2C1345BC966337B5f4Fe57EC2D5bfad751A#code"
+      },
+      "P256Verifier": {
+        "address": "0x6FA3E7E145476Dc4682734Fd845019A3872b4821",
+        "verifiedAs": "P256Verifier",
+        "status": "verified",
+        "url": "https://sepolia.basescan.org/address/0x6FA3E7E145476Dc4682734Fd845019A3872b4821#code"
+      },
+      "DeviceWalletImplementation": {
+        "address": "0x572BF04F9Ed9b0213C127EFC0215477fa3D5CffB",
+        "verifiedAs": "DeviceWallet",
+        "status": "verified",
+        "url": "https://sepolia.basescan.org/address/0x572BF04F9Ed9b0213C127EFC0215477fa3D5CffB#code"
+      },
+      "ESIMWalletImplementation": {
+        "address": "0x06b8F9986fD15034364Fa8d98A9E959613400B07",
+        "verifiedAs": "ESIMWallet",
+        "status": "verified",
+        "url": "https://sepolia.basescan.org/address/0x06b8F9986fD15034364Fa8d98A9E959613400B07#code"
+      },
+      "RegistryImplementation": {
+        "address": "0x3aefD65516A72Eb78f2bCEBbaf78c994eeedF71e",
+        "verifiedAs": "Registry",
+        "status": "verified",
+        "url": "https://sepolia.basescan.org/address/0x3aefD65516A72Eb78f2bCEBbaf78c994eeedF71e#code"
+      },
+      "RegistryProxy": {
+        "address": "0x916b6b554119c789EF3026EDeB0E1Ba741b42A49",
+        "verifiedAs": "ERC1967Proxy",
+        "status": "verified",
+        "url": "https://sepolia.basescan.org/address/0x916b6b554119c789EF3026EDeB0E1Ba741b42A49#code"
+      },
+      "LazyWalletRegistryImplementation": {
+        "address": "0x334a233E9913AFAdef59abAC52B57160aFEEaE3C",
+        "verifiedAs": "LazyWalletRegistry",
+        "status": "verified",
+        "url": "https://sepolia.basescan.org/address/0x334a233E9913AFAdef59abAC52B57160aFEEaE3C#code"
+      },
+      "LazyWalletRegistryProxy": {
+        "address": "0x5bE46Cf216186Bc2E3C220729331D6bE7d186e84",
+        "verifiedAs": "ERC1967Proxy",
+        "status": "verified",
+        "url": "https://sepolia.basescan.org/address/0x5bE46Cf216186Bc2E3C220729331D6bE7d186e84#code"
+      },
+      "DeviceWalletFactoryImplementation": {
+        "address": "0x2b34f39e739D8606580DE1F0cF260A3a19CE0D8E",
+        "verifiedAs": "DeviceWalletFactory",
+        "status": "verified",
+        "url": "https://sepolia.basescan.org/address/0x2b34f39e739D8606580DE1F0cF260A3a19CE0D8E#code"
+      },
+      "DeviceWalletFactoryProxy": {
+        "address": "0x0BB3BA8D9233514a4aA6D72c243a2473f9cFf0bb",
+        "verifiedAs": "ERC1967Proxy",
+        "status": "verified",
+        "url": "https://sepolia.basescan.org/address/0x0BB3BA8D9233514a4aA6D72c243a2473f9cFf0bb#code"
+      },
+      "ESIMWalletFactoryImplementation": {
+        "address": "0xc1b87aC654BEF15498693A9Cf6a6809A3b44315b",
+        "verifiedAs": "ESIMWalletFactory",
+        "status": "verified",
+        "url": "https://sepolia.basescan.org/address/0xc1b87aC654BEF15498693A9Cf6a6809A3b44315b#code"
+      },
+      "ESIMWalletFactoryProxy": {
+        "address": "0x57da54e07705de17c713ec311ac193e83470D5a5",
+        "verifiedAs": "ERC1967Proxy",
+        "status": "verified",
+        "url": "https://sepolia.basescan.org/address/0x57da54e07705de17c713ec311ac193e83470D5a5#code"
+      },
+      "DeviceWalletBeacon": {
+        "address": "0x81Ac8133Ab32151460898D402E2f0dd0c6FfA30f",
+        "verifiedAs": "UpgradeableBeacon",
+        "status": "verified",
+        "url": "https://sepolia.basescan.org/address/0x81Ac8133Ab32151460898D402E2f0dd0c6FfA30f#code"
+      },
+      "ESIMWalletBeacon": {
+        "address": "0xc2C09990cA54c3B0A88C9F51d540f9cf78F4D424",
+        "verifiedAs": "UpgradeableBeacon",
+        "status": "verified",
+        "url": "https://sepolia.basescan.org/address/0xc2C09990cA54c3B0A88C9F51d540f9cf78F4D424#code"
+      },
+      "PaymentAdapterImplementation": {
+        "address": "0x87EFa8638bF16910FF8F6a94105E329F331aA594",
+        "verifiedAs": "PaymentAdapter",
+        "status": "verified",
+        "url": "https://sepolia.basescan.org/address/0x87EFa8638bF16910FF8F6a94105E329F331aA594#code"
+      },
+      "PaymentAdapterProxy": {
+        "address": "0xBFaA666a8074924588E96507c307b680ecCeB2c1",
+        "verifiedAs": "ERC1967Proxy",
+        "status": "verified",
+        "url": "https://sepolia.basescan.org/address/0xBFaA666a8074924588E96507c307b680ecCeB2c1#code"
+      }
+    }
   }
 }
