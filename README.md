@@ -29,7 +29,7 @@ upgrade one at a time. Every wallet is a beacon proxy, so one beacon call moves 
 | `ProtocolAdmin` | Timelock meant to own the five singletons. Adds a delay floor that `updateDelay` cannot go under, and a guardian role with exactly two powers | Plain contract |
 | `Errors` | Every custom error in the suite | Library |
 | `CustomStructs` | Structs shared across contracts | Types |
-| `interfaces/` | `IPausable` and `IOwnable2Step`, the two calls `ProtocolAdmin` makes back into the protocol | Interfaces |
+| `interfaces/` | `IPausable`, `IOwnable2Step` and `IRegistryAdmin` for the calls `ProtocolAdmin` makes back into the protocol; `IPaymentRegistry` for what `PaymentAdapter` reads from the registry | Interfaces |
 
 A backend server generates the device and eSIM identifiers and writes them into the wallets. That is what ties an onchain wallet to a provisioned eSIM.
 
@@ -187,13 +187,15 @@ on one chain and a plain EOA on the other.
 - [Device Wallet](./docs/device-wallet/DeviceWallet.md)
 - [eSIM Wallet Factory](./docs/esim-wallet/ESIMWalletFactory.md)
 - [eSIM Wallet](./docs/esim-wallet/ESIMWallet.md)
+- [Payment Adapter](./docs/payments/PaymentAdapter.md)
 - [Account4337](./docs/aa-helper/Account4337.md)
 - [Upgradeable Beacon](./docs/UpgradableBeacon.md)
 - [Custom Structs](./docs/CustomStructs.md)
 - [Errors](./docs/Errors.md)
-- [eSIM Wallet Interface](./docs/interfaces/IOwnableESIMWallet.md)
 - [Ownable Two-Step Interface](./docs/interfaces/IOwnable2Step.md)
 - [Pausable Interface](./docs/interfaces/IPausable.md)
+- [Registry Admin Interface](./docs/interfaces/IRegistryAdmin.md)
+- [Payment Registry Interface](./docs/interfaces/IPaymentRegistry.md)
 - [P256 Verifier](./docs/P256Verifier.md)
 - [WebAuthn](./docs/WebAuthn.md)
 
