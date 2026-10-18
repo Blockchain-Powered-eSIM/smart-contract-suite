@@ -25,6 +25,7 @@ interface Errors {
     error NotTheAssociatedDeviceWallet(address eSIMWallet, address associatedDeviceWallet);
     error AdminAlreadyDisabled();
     error AdminNotDisabled();
+    error OwnerKeyNotHeldByWallet(address deviceWallet);
 
     // Registry, DeviceWallet and ESIMWallet
     error ProtocolPaused();

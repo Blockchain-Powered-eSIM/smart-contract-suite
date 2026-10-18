@@ -186,6 +186,76 @@ contract DeviceWalletOwnerKeyTest is DeviceWalletFixture {
         _assertStillOnDeploymentKey();
     }
 
+    /// @notice Calls the registry from the wallet without rotating, which an owner can sign for
+    function _registerKeyWithoutRotating(MockDeviceWallet _wallet, bytes32[2] memory _key) internal {
+        vm.prank(address(entryPoint));
+        _wallet.execute(Call({
+            dest: address(registry),
+            value: 0,
+            data: abi.encodeCall(registry.updateDeviceWalletOwnerKey, (_key))
+        }));
+    }
+
+    /// @notice A wallet cannot register a key it does not hold. Without this, any owner could
+    /// claim a stranger's public key in the registry and that stranger could never be registered.
+    function test_updateDeviceWalletOwnerKey_rejectsAKeyTheWalletDoesNotHold() public {
+        deployWallets();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(Errors.OwnerKeyNotHeldByWallet.selector, address(deviceWallet))
+        );
+        _registerKeyWithoutRotating(deviceWallet, pubKey4);
+
+        _assertStillOnDeploymentKey();
+        assertEq(
+            registry.registeredP256Keys(_keyHash(pubKey4)),
+            address(0),
+            "The key the wallet named must stay unregistered"
+        );
+    }
+
+    /// @notice The key the wallet tried to take is still free for its real holder
+    function test_updateDeviceWalletOwnerKey_leavesTheNamedKeyFreeForItsHolder() public {
+        deployWallets();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(Errors.OwnerKeyNotHeldByWallet.selector, address(deviceWallet))
+        );
+        _registerKeyWithoutRotating(deviceWallet, pubKey4);
+
+        deployCustomWallet("Device_KeyHolder", pubKey4[0], pubKey4[1], 4343);
+
+        assertEq(
+            registry.registeredP256Keys(_keyHash(pubKey4)),
+            address(userDeviceWallet),
+            "The key's real holder must be able to register it"
+        );
+    }
+
+    /// @notice Naming the key the wallet already holds is accepted and changes nothing
+    function test_updateDeviceWalletOwnerKey_acceptsTheKeyTheWalletHolds() public {
+        deployWallets();
+
+        _registerKeyWithoutRotating(deviceWallet, pubKey1);
+
+        _assertStillOnDeploymentKey();
+        bytes32[2] memory recorded = registry.getDeviceWalletToOwner(address(deviceWallet));
+        assertEq(recorded[0], pubKey1[0], "The registry must still record the X co-ordinate");
+        assertEq(recorded[1], pubKey1[1], "The registry must still record the Y co-ordinate");
+    }
+
+    /// @notice Matching only one co-ordinate is not enough
+    function test_updateDeviceWalletOwnerKey_rejectsAKeyMatchingOnlyX() public {
+        deployWallets();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(Errors.OwnerKeyNotHeldByWallet.selector, address(deviceWallet))
+        );
+        _registerKeyWithoutRotating(deviceWallet, [pubKey1[0], pubKey4[1]]);
+
+        _assertStillOnDeploymentKey();
+    }
+
     /// @notice The zero key is the point at infinity, which the deploy paths already reject. It is
     /// worth its own case because it is what an empty calldata slot decodes to.
     function test_transferOwnership_rejectsTheZeroKey() public {

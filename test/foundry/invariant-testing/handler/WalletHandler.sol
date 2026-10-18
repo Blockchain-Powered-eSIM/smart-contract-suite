@@ -40,6 +40,30 @@ contract WalletHandler is HandlerBase {
         }
     }
 
+    /// @notice A device wallet tells the registry about a key without rotating to it
+    /// @dev The owner can sign an `execute` that calls the registry directly. The registry must
+    ///      refuse any key the wallet does not hold, so this is expected to revert every time and is
+    ///      left out of `HandlerDistribution`. If one ever lands, the wallet keeps its old key and
+    ///      `invariant_registryKeyIsTheKeyTheWalletHolds` reports the split.
+    /// @param deviceIndex Which device wallet calls
+    /// @param seed Drives the key it names
+    function registerKeyWithoutRotating(uint256 deviceIndex, uint256 seed) external counted {
+        address device = _pickDeviceWallet(deviceIndex);
+        if (device == address(0)) {
+            state.recordRevert("registerKeyWithoutRotating");
+            return;
+        }
+        // Built before the prank: building it calls a precompile, which would use the prank up
+        bytes32[2] memory key = _ownerKey(seed);
+
+        vm.prank(device);
+        try registry.updateDeviceWalletOwnerKey(key) {
+            state.recordCall("registerKeyWithoutRotating");
+        } catch {
+            state.recordRevert("registerKeyWithoutRotating");
+        }
+    }
+
     /// @notice An eSIM wallet is detached from its device wallet
     /// @dev The caller alternates between the owning device wallet and the eSIM wallet itself,
     ///      which is the pair the removal gate admits. A sibling eSIM wallet attempting the same

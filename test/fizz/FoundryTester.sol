@@ -96,8 +96,10 @@ contract FoundryTester is Test, Handlers {
         _expectRefused(abi.encodeCall(this.eSIMWalletFactory_deployESIMWallet_forStranger, (0, 1, 2)));
         _expectRefused(abi.encodeCall(this.eSIMWallet_buyDataBundleWithToken_unsettleableAsset, (0, 7, true)));
         _expectRefused(abi.encodeCall(this.eSIMWallet_buyDataBundleWithToken_unsettleableAsset, (0, 8, false)));
+        _expectRefused(abi.encodeCall(this.deviceWallet_secondary, (2, 0, 9_999_999))); // register an unused key without rotating
 
         assertTrue(property_noUnauthorizedCallSucceeded(), "a refused call went through");
+        assertTrue(property_ownerKeysAreUniqueAndAgree(), "GL-07/08");
         assertTrue(property_onlyThePurchasePathClaimsSettlement(), "GL-13");
         assertTrue(property_theCeilingAlwaysBinds(), "GL-11");
     }

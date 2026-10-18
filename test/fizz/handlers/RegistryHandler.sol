@@ -116,12 +116,9 @@ abstract contract RegistryHandler is Properties {
     }
 
     /// @notice The config surface, sequenced against whatever else is in flight
-    /// @dev Owner-key rotation is deliberately not here. `updateDeviceWalletOwnerKey` is one half of
-    ///      a two-sided write: the real path is `DeviceWallet.transferOwnership`, which sets the
-    ///      wallet's own key and then tells the registry in the same call. Reaching the registry
-    ///      alone leaves the two copies naming different keys, which is a state no caller can
-    ///      produce and which every key property would then report. The rotation is exercised
-    ///      through `DeviceWalletHandler` instead.
+    /// @dev Owner-key rotation is not here. `updateDeviceWalletOwnerKey` only accepts a device
+    ///      wallet as caller, so both the real rotation and a wallet calling the registry directly
+    ///      live in `DeviceWalletHandler`.
     function registry_secondary(uint8 selector, uint256 arg) public {
         selector = uint8(selector % 10);
 

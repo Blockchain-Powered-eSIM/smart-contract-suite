@@ -6,5 +6,6 @@
   "pullToken: first pull, the wallet holds none of it": "30838",
   "pullToken: the wallet already holds some": "8938",
   "toggleAccessToFunds: grant": "23507",
-  "toggleAccessToFunds: revoke": "3607"
+  "toggleAccessToFunds: revoke": "3607",
+  "transferOwnership: rotate onto an unused key": "38377"
 }

@@ -12,6 +12,7 @@ import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/U
 import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 import {RegistryHelper} from "./RegistryHelper.sol";
 import {LazyWalletRegistry} from "./LazyWalletRegistry.sol";
+import {DeviceWallet} from "./device-wallet/DeviceWallet.sol";
 import {DeviceWalletFactory} from "./device-wallet/DeviceWalletFactory.sol";
 import {ESIMWalletFactory} from "./esim-wallet/ESIMWalletFactory.sol";
 import {ESIMWallet} from "./esim-wallet/ESIMWallet.sol";
@@ -509,8 +510,17 @@ contract Registry is
     ///      rather than a parameter. Without this the registry keeps naming the retired key after
     ///      a rotation, and the key taking over stays unregistered and can be claimed by a second
     ///      wallet, which breaks the one key to one wallet rule the deploy paths enforce.
+    ///
+    ///      The key must be the one the wallet already holds. A wallet reaches this through
+    ///      `execute` as well as through its own rotation, and without the check it could register
+    ///      someone else's key and block that person from ever being registered.
     /// @param _newOwnerKey X,Y co-ordinates of the P256 key taking over
     function updateDeviceWalletOwnerKey(bytes32[2] memory _newOwnerKey) external onlyDeviceWallet {
+        DeviceWallet wallet = DeviceWallet(payable(msg.sender));
+        if(wallet.owner(0) != _newOwnerKey[0] || wallet.owner(1) != _newOwnerKey[1]) {
+            revert Errors.OwnerKeyNotHeldByWallet(msg.sender);
+        }
+
         _updateDeviceWalletOwnerKey(msg.sender, _newOwnerKey);
     }
 

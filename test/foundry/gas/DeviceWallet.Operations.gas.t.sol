@@ -90,6 +90,16 @@ contract DeviceWalletOperationsGasTest is GasBase {
         vm.snapshotGasLastCall(NAMESPACE, "pullToken: the wallet already holds some");
     }
 
+    /// @notice Rotating the owner key, which also moves the registry's record of it
+    /// @dev Includes the registry reading the key back from the wallet before it writes.
+    function test_transferOwnership() public {
+        _deploy();
+
+        vm.prank(address(wallet));
+        wallet.transferOwnership(pubKey4);
+        vm.snapshotGasLastCall(NAMESPACE, "transferOwnership: rotate onto an unused key");
+    }
+
     /// @notice Funding the wallet's entry point deposit
     function test_addDeposit() public {
         _deploy();

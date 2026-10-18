@@ -99,9 +99,10 @@ abstract contract DeviceWalletHandler is Properties {
     }
 
     function deviceWallet_secondary(uint8 selector, uint256 walletSeed, uint256 arg) public {
-        selector = uint8(selector % 2);
+        selector = uint8(selector % 3);
         if (selector == 0) _deviceWallet_transferOwnership(walletSeed, arg);
-        else _deviceWallet_pullTokenAsStranger(walletSeed, arg);
+        else if (selector == 1) _deviceWallet_pullTokenAsStranger(walletSeed, arg);
+        else _deviceWallet_registerKeyDirectly(walletSeed, arg);
     }
 
     // ―――――――――――――――――――――――― Unclamped ―――――――――――――――――――――――――
@@ -164,6 +165,20 @@ abstract contract DeviceWalletHandler is Properties {
 
         vm.prank(deviceWallet);
         MockDeviceWallet(payable(deviceWallet)).transferOwnership(_ownerKey(keySeed));
+    }
+
+    /// @notice A device wallet telling the registry about a key without rotating to it
+    /// @dev An owner can sign an `execute` that calls the registry directly, so this is reachable.
+    ///      If it ever succeeds, the registry and the wallet name different keys, and
+    ///      `property_ownerKeysAreUniqueAndAgree` reports it.
+    function _deviceWallet_registerKeyDirectly(uint256 walletSeed, uint256 keySeed) internal {
+        address deviceWallet = _pickDeviceWallet(walletSeed);
+        if (deviceWallet == address(0)) return;
+        // Built before the prank: building it calls a precompile, which would use the prank up
+        bytes32[2] memory key = _ownerKey(keySeed);
+
+        vm.prank(deviceWallet);
+        registry.updateDeviceWalletOwnerKey(key);
     }
 
     /// @notice An eSIM wallet reaching for a device wallet that does not hold it
