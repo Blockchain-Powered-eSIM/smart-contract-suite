@@ -638,6 +638,35 @@ contract DeployScriptsTest is ScriptBase {
         handover.run();
     }
 
+    /// @notice A record pointing the handover at an account with no code is refused before any offer
+    function test_transferOwnership_refusesATimelockAddressWithNoCode() public {
+        _deploy();
+        _configure();
+        address nobody = makeAddr("notTheTimelock");
+        vm.writeJson(string.concat('"', vm.toString(nobody), '"'), scratchRecord, ".admin.protocolAdmin");
+
+        TransferOwnership handover = new TransferOwnership();
+        vm.expectRevert(abi.encodeWithSelector(TransferOwnership.NotTheTimelock.selector, nobody));
+        handover.run();
+
+        assertEq(_registry().owner(), deployer, "the deployer must still own the registry");
+        assertEq(_registry().pendingOwner(), address(0), "nothing may have been offered");
+    }
+
+    /// @notice A record pointing at some other contract is refused too
+    function test_transferOwnership_refusesAContractThatIsNotTheTimelock() public {
+        _deploy();
+        _configure();
+        address impostor = address(_adapter());
+        vm.writeJson(string.concat('"', vm.toString(impostor), '"'), scratchRecord, ".admin.protocolAdmin");
+
+        TransferOwnership handover = new TransferOwnership();
+        vm.expectRevert(abi.encodeWithSelector(TransferOwnership.NotTheTimelock.selector, impostor));
+        handover.run();
+
+        assertEq(_registry().owner(), deployer, "the deployer must still own the registry");
+    }
+
     /// @dev The timelock is what every owner gated call waits on afterwards, so the delay it comes
     ///      up with is part of the deployment rather than something set later.
     function test_transferOwnership_leavesTheTimelockHoldingItsConfiguredDelay() public {
