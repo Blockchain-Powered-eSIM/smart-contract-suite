@@ -51,8 +51,10 @@ library DeployConfig {
 
     /// @notice Shortest delay `updateDelay` can ever bring the timelock down to
     /// @dev Immutable in the deployed contract. Without it one scheduled operation turns the
-    ///      timelock into a plain multisig and nothing after it ever waits again.
-    uint256 internal constant TIMELOCK_DELAY_FLOOR = 1 hours;
+    ///      timelock into a plain multisig and nothing after it ever waits again. A day rather than
+    ///      an hour: a single scheduled `updateDelay(0)` lowers every later operation to the floor,
+    ///      and an hour is too short for anyone to notice and cancel a hostile upgrade.
+    uint256 internal constant TIMELOCK_DELAY_FLOOR = 1 days;
 
     Vm private constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
 

@@ -651,4 +651,28 @@ contract DeployScriptsTest is ScriptBase {
         assertTrue(admin.hasRole(admin.PROPOSER_ROLE(), proposer), "proposer");
         assertTrue(admin.hasRole(admin.CANCELLER_ROLE(), canceller), "canceller");
     }
+
+    /// @dev Written as a literal rather than read from the config, so lowering the constant fails
+    ///      here instead of passing along with it.
+    function test_deploy_givesTheTimelockAFloorOfADay() public {
+        _deploy();
+
+        ProtocolAdmin admin = ProtocolAdmin(payable(_recordedAddress("ProtocolAdmin")));
+        assertEq(admin.minDelayFloor(), 1 days, "floor");
+        assertEq(DeploymentRecord.readUint("admin.minDelayFloor"), 1 days, "recorded floor");
+    }
+
+    /// @notice A scheduled `updateDelay(0)` still leaves every later operation waiting a day
+    function test_deploy_aZeroDelayUpdateStillWaitsTheFloor() public {
+        _deploy();
+        ProtocolAdmin admin = ProtocolAdmin(payable(_recordedAddress("ProtocolAdmin")));
+
+        bytes memory data = abi.encodeCall(admin.updateDelay, (0));
+        vm.prank(proposer);
+        admin.schedule(address(admin), 0, data, bytes32(0), bytes32(0), DeployConfig.TIMELOCK_DELAY);
+        vm.warp(block.timestamp + DeployConfig.TIMELOCK_DELAY);
+        admin.execute(address(admin), 0, data, bytes32(0), bytes32(0));
+
+        assertEq(admin.getMinDelay(), 1 days, "the floor holds the delay at a day");
+    }
 }
