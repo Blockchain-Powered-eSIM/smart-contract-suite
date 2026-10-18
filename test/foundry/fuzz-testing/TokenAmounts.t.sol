@@ -169,6 +169,7 @@ contract TokenAmountsTest is FuzzBase {
         vm.stopPrank();
 
         uint256 charged;
+        uint256 paid;
         for (uint256 i = 0; i < _prices.length; ++i) {
             uint64 price = uint64(bound(_prices[i], 1, MAX_FUZZED_CENTS));
             uint64 before = fuzzESIMWallet.adminAllowanceUSDCents();
@@ -180,6 +181,7 @@ contract TokenAmountsTest is FuzzBase {
             ) {
                 assertLe(price, before, "A charge above what was left went through");
                 charged += price;
+                paid += settlementAmount(price);
             } catch {
                 assertGt(price, before, "A charge within the allowance was refused");
             }
@@ -191,7 +193,7 @@ contract TokenAmountsTest is FuzzBase {
             allowance,
             "Charged plus left must equal what the owner allowed"
         );
-        assertEq(settlementERC20.balanceOf(vault), settlementAmount(uint64(charged)), "The vault holds exactly what was charged");
+        assertEq(settlementERC20.balanceOf(vault), paid, "The vault holds exactly what was charged");
     }
 
     /// @notice A purchase the owner signs never moves the allowance, whatever the price
