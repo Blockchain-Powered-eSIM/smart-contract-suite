@@ -2,6 +2,7 @@
 pragma solidity 0.8.36;
 
 // Contracts
+import {Script} from "forge-std/Script.sol";
 import {ScriptBase} from "./base/ScriptBase.sol";
 import {Registry} from "contracts/Registry.sol";
 import {LazyWalletRegistry} from "contracts/LazyWalletRegistry.sol";
@@ -36,6 +37,18 @@ contract RecordReader {
 /// @notice A contract with code that answers nothing, for the token checks
 contract NotAToken {
     fallback() external { revert(); }
+}
+
+/// @notice Calls all four record writers, so a test can run it as a real `forge script` dry run
+/// @dev A dry run is a context only the `forge script` command enters, so the test launches it
+///      as a separate process rather than calling it.
+contract RecordWriteProbe is Script {
+    function run() external {
+        DeploymentRecord.writeStatus("probe", true);
+        DeploymentRecord.writeObject("probeObject", "{\"written\":true}");
+        DeploymentRecord.writeAddressBook("{\"Probe\":\"0x0000000000000000000000000000000000000001\"}");
+        DeploymentRecord.writeRecord("{\"overwritten\":true}");
+    }
 }
 
 /// @notice The three deployment scripts, run against a scratch record
@@ -214,6 +227,37 @@ contract DeployScriptsTest is ScriptBase {
 
     /// @dev `writeStatus` passes the bool as JSON text rather than serializing it, so the value
     ///      lands where the bool goes instead of as an object wrapping it.
+    /// @notice A `forge script` run without `--broadcast` leaves both files exactly as they were
+    /// @dev Otherwise a rehearsal writes a mainnet record, the real deploy then refuses to run, and
+    ///      the status flags claim a handover that never happened.
+    function test_dryRun_writesNeitherTheRecordNorTheAddressBook() public {
+        _resetRecord();
+        string memory seeded = "{\"status\":{\"probe\":false}}";
+        vm.writeFile(scratchRecord, seeded);
+
+        string[] memory command = new string[](3);
+        command[0] = "forge";
+        command[1] = "script";
+        command[2] = "test/scripts/DeployScripts.t.sol:RecordWriteProbe";
+        string memory output = string(vm.ffi(command));
+
+        assertTrue(vm.indexOf(output, "Dry run: status.probe not written") != type(uint256).max, "the probe ran as a dry run");
+        assertEq(vm.readFile(scratchRecord), seeded, "the record must be untouched");
+        assertFalse(vm.isFile(scratchAddressBook), "the address book must not be created");
+    }
+
+    /// @notice The same writers do write outside a dry run, so the test above is not passing vacuously
+    function test_recordWriters_writeOutsideADryRun() public {
+        _resetRecord();
+        vm.writeFile(scratchRecord, "{\"status\":{\"probe\":false}}");
+
+        RecordWriteProbe probe = new RecordWriteProbe();
+        probe.run();
+
+        assertTrue(vm.isFile(scratchAddressBook), "the address book must be written");
+        assertTrue(vm.parseJsonBool(vm.readFile(scratchRecord), ".overwritten"), "the record must be written");
+    }
+
     function test_writeStatus_writesABoolAndNotAnObject() public {
         _deploy();
 
