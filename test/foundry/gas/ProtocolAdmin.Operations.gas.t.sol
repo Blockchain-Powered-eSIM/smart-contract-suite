@@ -86,6 +86,18 @@ contract ProtocolAdminOperationsGasTest is AdminBase {
         vm.snapshotGasLastCall(NAMESPACE, "revokeCancellersInstantly: three accounts");
     }
 
+    /// @notice Replacing the admin once the delay is served
+    /// @dev Includes the read of the incumbent that refuses a nomination naming it.
+    function test_disableAndNominate() public {
+        bytes memory data = abi.encodeCall(protocolAdmin.disableAndNominate, (address(registry), outsider));
+        _schedule(address(protocolAdmin), data, bytes32(uint256(3)));
+        vm.warp(block.timestamp + DELAY);
+
+        vm.prank(outsider);
+        protocolAdmin.execute(address(protocolAdmin), 0, data, bytes32(0), bytes32(uint256(3)));
+        vm.snapshotGasLastCall(NAMESPACE, "execute: disableAndNominate, delay served");
+    }
+
     /// @notice Calling off something already announced
     function test_cancel() public {
         bytes memory data = abi.encodeCall(registry.setDefaultPriceCapUSDCents, (1 ether));

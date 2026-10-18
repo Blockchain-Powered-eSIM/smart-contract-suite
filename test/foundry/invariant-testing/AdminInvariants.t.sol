@@ -35,6 +35,14 @@ contract AdminInvariantsTest is AdminBase {
         targetContract(address(handler));
     }
 
+    /// @notice A scheduled replacement never hands a suspended admin its powers back
+    function invariant_aReplacementNeverLiftsASuspension() public view {
+        assertFalse(
+            handler.ghost_suspensionLiftedByNomination(),
+            "A scheduled replacement named the suspended admin and gave it its powers back"
+        );
+    }
+
     /// @notice The admin contract never stops owning the four contracts it was given
     /// @dev Nothing the handler can call moves ownership, so this failing means a path exists that
     ///      reaches `transferOwnership` without going through a scheduled operation.

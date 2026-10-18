@@ -515,4 +515,28 @@ contract GuardianPowersTest is AdminBase {
 
         assertEq(registry.eSIMWalletAdmin(), outsider, "the nominee holds the role once it accepts");
     }
+
+    /// @dev Naming the incumbent would read as a withdrawn nomination on the registry, which lifts
+    ///      a suspension, so a call named for disabling would have re-enabled the suspended key.
+    function test_disableAndNominate_refusesToNominateTheIncumbent() public {
+        vm.prank(guardian);
+        protocolAdmin.disableAdminInstantly(address(registry));
+        assertTrue(registry.adminDisabled(), "the admin starts suspended");
+
+        bytes memory data = abi.encodeCall(
+            protocolAdmin.disableAndNominate, (address(registry), eSIMWalletAdmin)
+        );
+        bytes32 salt = bytes32(uint256(9));
+        _schedule(address(protocolAdmin), data, salt);
+        vm.warp(block.timestamp + protocolAdmin.getMinDelay());
+
+        vm.prank(outsider);
+        vm.expectRevert(
+            abi.encodeWithSelector(ProtocolAdmin.NomineeIsTheIncumbent.selector, address(registry), eSIMWalletAdmin)
+        );
+        protocolAdmin.execute(address(protocolAdmin), 0, data, bytes32(0), salt);
+
+        assertTrue(registry.adminDisabled(), "the suspension must still stand");
+        assertEq(registry.eSIMWalletAdmin(), address(0), "the suspended key must still have no powers");
+    }
 }

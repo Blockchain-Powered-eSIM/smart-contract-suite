@@ -54,6 +54,9 @@ contract ProtocolAdminHandler is Test {
     uint256 public cancellersRevoked;
     uint256 public rejections;
 
+    /// @notice Set when a scheduled replacement named the suspended incumbent and lifted the suspension
+    bool public ghost_suspensionLiftedByNomination;
+
     constructor(
         ProtocolAdmin _admin,
         Registry _registry,
@@ -124,6 +127,42 @@ contract ProtocolAdminHandler is Test {
             expectedCap = operation.cap;
             ++executed;
         } catch {}
+    }
+
+    /// @notice A guardian suspends the admin, then a scheduled replacement names the same admin
+    /// @dev The registry reads that nomination as a withdrawal, which lifts the suspension, so
+    ///      `disableAndNominate` has to refuse it. Whatever happens, the admin is restored through
+    ///      the owner's own scheduled `enableAdmin` at the end, so the rest of the campaign keeps a
+    ///      working hot key.
+    /// @param _salt Salt for the two scheduled operations
+    function nominateTheSuspendedIncumbent(bytes32 _salt) external {
+        address incumbent = registry.adminOfRecord();
+        if(registry.newRequestedAdmin() != address(0)) return;
+
+        if(!registry.adminDisabled()) {
+            vm.prank(guardian);
+            try admin.disableAdminInstantly(address(registry)) {} catch { return; }
+        }
+
+        bytes memory data = abi.encodeCall(admin.disableAndNominate, (address(registry), incumbent));
+        uint256 delay = admin.getMinDelay();
+        vm.prank(proposer);
+        try admin.schedule(address(admin), 0, data, bytes32(0), _salt, delay) {} catch { return; }
+        vm.warp(block.timestamp + delay);
+
+        try admin.execute(address(admin), 0, data, bytes32(0), _salt) {} catch {}
+        if(!registry.adminDisabled()) ghost_suspensionLiftedByNomination = true;
+
+        // Put the admin back through the path that is meant to do it
+        if(registry.adminDisabled()) {
+            bytes memory enable = abi.encodeCall(registry.enableAdmin, ());
+            bytes32 enableSalt = keccak256(abi.encode(_salt, "enable"));
+            vm.prank(proposer);
+            try admin.schedule(address(registry), 0, enable, bytes32(0), enableSalt, delay) {
+                vm.warp(block.timestamp + delay);
+                try admin.execute(address(registry), 0, enable, bytes32(0), enableSalt) {} catch {}
+            } catch {}
+        }
     }
 
     /// @notice The hot key trips the pause, which is the only way one ever appears

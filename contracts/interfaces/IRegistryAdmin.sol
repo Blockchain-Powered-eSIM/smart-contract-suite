@@ -3,7 +3,7 @@
 pragma solidity 0.8.36;
 
 /// @notice Minimal view of the admin role the protocol owner controls
-/// @dev Holds only the two calls `ProtocolAdmin` makes. `enableAdmin` is deliberately absent: the
+/// @dev Holds only what `ProtocolAdmin` calls. `enableAdmin` is deliberately absent: the
 ///      owner reaches it as an ordinary scheduled payload, and putting it here would invite a
 ///      named function beside the guardian's, which is the one place a fast path could be added by
 ///      accident. Suspending is instant and restoring waits, and the split is what stops a
@@ -15,4 +15,7 @@ interface IRegistryAdmin {
     /// @notice Nominates a new admin, which strips the incumbent until the nominee accepts
     /// @param _newAdmin Address of the recipient to receive the admin role
     function requestAdminUpdate(address _newAdmin) external;
+
+    /// @notice The admin address on the books, whether or not its powers are live
+    function adminOfRecord() external view returns (address);
 }

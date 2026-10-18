@@ -1,6 +1,7 @@
 {
-  "acceptOwnershipBatch: four contracts": "36747",
+  "acceptOwnershipBatch: four contracts": "36879",
   "cancel": "4694",
+  "execute: disableAndNominate, delay served": "31845",
   "execute: one call, delay served": "23591",
   "executeBatch: both wallet beacons": "69122",
   "executeBatch: four calls, delay served": "45774",

@@ -102,6 +102,9 @@ contract ProtocolAdmin is TimelockController {
     /// @notice The contract was not offered ownership of this target
     error OwnershipNotOffered(address target);
 
+    /// @notice A replacement nomination named the admin already on the books
+    error NomineeIsTheIncumbent(address target, address admin);
+
     /// @notice Sets up the timelock's roles and delay bounds
     /// @param _initialDelay Delay new operations wait before they can be executed
     /// @param _minDelayFloor Shortest delay `updateDelay` can ever bring the contract down to
@@ -286,11 +289,15 @@ contract ProtocolAdmin is TimelockController {
     ///
     ///      The nominee still has to accept, so this cannot hand the role to an address that
     ///      cannot act, and the role stays dormant until it does.
+    ///
+    ///      Nominating the incumbent is refused. The target reads that as withdrawing a
+    ///      nomination, which also lifts a suspension, the opposite of what this function says.
     /// @param target Contract whose admin is being replaced
     /// @param newAdmin Address nominated to take the role
     function disableAndNominate(address target, address newAdmin) external {
         address sender = _msgSender();
         if(sender != address(this)) revert TimelockUnauthorizedCaller(sender);
+        if(newAdmin == IRegistryAdmin(target).adminOfRecord()) revert NomineeIsTheIncumbent(target, newAdmin);
 
         emit AdminDisabledAndNominated(target, newAdmin);
 

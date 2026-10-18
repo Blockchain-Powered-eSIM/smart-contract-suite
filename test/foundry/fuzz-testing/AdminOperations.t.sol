@@ -241,6 +241,33 @@ contract AdminOperationsFuzzTest is AdminBase {
         assertEq(registry.owner(), address(protocolAdmin));
     }
 
+    /// @notice A scheduled replacement either names someone new and leaves the old key stripped,
+    ///         or names the incumbent and is refused, and a suspension never lifts either way
+    /// forge-config: default.fuzz.runs = 512
+    function testFuzz_disableAndNominate_neverLiftsASuspension(address _nominee, bool _nameTheIncumbent) public {
+        vm.assume(_nominee != address(0));
+        address incumbent = registry.adminOfRecord();
+        address nominee = _nameTheIncumbent ? incumbent : _nominee;
+        vm.assume(_nameTheIncumbent || nominee != incumbent);
+
+        vm.prank(guardian);
+        protocolAdmin.disableAdminInstantly(address(registry));
+
+        bytes memory data = abi.encodeCall(protocolAdmin.disableAndNominate, (address(registry), nominee));
+        _schedule(address(protocolAdmin), data, bytes32(0));
+        vm.warp(block.timestamp + DELAY);
+
+        if (nominee == incumbent) {
+            vm.expectRevert(
+                abi.encodeWithSelector(ProtocolAdmin.NomineeIsTheIncumbent.selector, address(registry), incumbent)
+            );
+        }
+        protocolAdmin.execute(address(protocolAdmin), 0, data, bytes32(0), bytes32(0));
+
+        assertTrue(registry.adminDisabled(), "The suspension must still stand");
+        assertEq(registry.eSIMWalletAdmin(), address(0), "Nobody may hold the role until a nominee accepts");
+    }
+
     /// @dev Split out because building the arrays and asserting on them together runs the stack up.
     function _capBatch(
         uint64[] memory _caps,
