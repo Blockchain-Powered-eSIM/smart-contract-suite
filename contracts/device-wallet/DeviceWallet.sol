@@ -241,22 +241,16 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     /// @dev The registry holds its own record of which key owns this wallet, and the deploy paths
     ///      keep one key to one wallet. Rotating without telling it leaves the retired key named
     ///      as the owner and leaves the key taking over unregistered, free for a second wallet to
-    ///      claim. `super` runs after the key check because it carries the `onlySelf` guard and
-    ///      because the registry call is an external one, so the local write has to land before it.
+    ///      claim. The registry is told after the local write, because it reads the key back from
+    ///      this wallet and refuses one the wallet does not hold.
     ///
-    ///      A key that cannot verify a signature bricks the wallet for good: this function is
-    ///      reachable only through `execute`, which needs a signature, so there is no rotating
-    ///      back and no reaching the balance. The deploy paths reject such a key and this path
-    ///      writes the same storage, so it has to reject it too.
-    function transferOwnership(
-        bytes32[2] memory newOwner
-    ) public override returns (bytes32[2] memory) {
+    ///      An off-curve key is refused before the signature check, matching the deploy paths. It
+    ///      could never sign, so the proof would fail anyway, but the clearer error comes first.
+    function _transferOwnership(bytes32[2] memory newOwner, bytes calldata newOwnerSignature) internal override {
         _requireValidOwnerKey(newOwner);
 
-        bytes32[2] memory updatedOwner = super.transferOwnership(newOwner);
+        super._transferOwnership(newOwner, newOwnerSignature);
         registry.updateDeviceWalletOwnerKey(newOwner);
-
-        return updatedOwner;
     }
 
     // ---------------------------------------------------------------------------------------------

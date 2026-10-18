@@ -10,6 +10,7 @@ import {Account4337} from "contracts/aa-helper/Account4337.sol";
 
 import {DeviceWalletFixture} from "test/foundry/unit-testing/device-wallet/base/DeviceWalletFixture.sol";
 import {MockDeviceWallet} from "test/utils/mocks/MockDeviceWallet.sol";
+import {WebAuthnSigner} from "test/utils/WebAuthnSigner.sol";
 
 /// @notice Rotating the P256 key a device wallet answers to.
 /// @dev The registry is the only onchain record of which key owns which wallet, and the deploy
@@ -21,13 +22,19 @@ contract DeviceWalletOwnerKeyTest is DeviceWalletFixture {
     /// wallet calling itself
     /// @dev The entry point address is read from the fixture rather than from the wallet, because
     ///      a call to the wallet here would absorb any vm.expectRevert set by the caller.
-    function _rotateOwnerKey(MockDeviceWallet _wallet, bytes32[2] memory _newOwnerKey) internal {
+    function _rotateOwnerKey(MockDeviceWallet _wallet, bytes32[2] memory _newOwnerKey, bytes memory _signature) internal {
         vm.prank(address(entryPoint));
         _wallet.execute(Call({
             dest: address(_wallet),
             value: 0,
-            data: abi.encodeCall(Account4337.transferOwnership, (_newOwnerKey))
+            data: abi.encodeCall(Account4337.transferOwnership, (_newOwnerKey, _signature))
         }));
+    }
+
+    /// @notice The new key's signature over the wallet's rotation challenge
+    /// @dev The fixture's keys are k times the generator, so private key k signs for pubKey k.
+    function _proof(MockDeviceWallet _wallet, uint256 _privateKey) internal view returns (bytes memory) {
+        return WebAuthnSigner.signWith(_privateKey, _wallet.rotationChallenge(WebAuthnSigner.publicKeyOf(_privateKey)));
     }
 
     function _keyHash(bytes32[2] memory _ownerKey) internal pure returns (bytes32) {
@@ -64,7 +71,7 @@ contract DeviceWalletOwnerKeyTest is DeviceWalletFixture {
             "The wallet must start registered under its deployment key"
         );
 
-        _rotateOwnerKey(deviceWallet, pubKey4);
+        _rotateOwnerKey(deviceWallet, pubKey4, _proof(deviceWallet, 4));
 
         assertEq(
             registry.registeredP256Keys(_keyHash(pubKey4)),
@@ -98,10 +105,12 @@ contract DeviceWalletOwnerKeyTest is DeviceWalletFixture {
             "The second wallet must hold the key this test tries to take"
         );
 
+        // A real proof by the key's holder, so the registry's own refusal is what is tested
+        bytes memory proof = _proof(deviceWallet, 2);
         vm.expectRevert(
             abi.encodeWithSelector(Errors.OwnerKeyAlreadyRegistered.selector, _keyHash(pubKey2))
         );
-        _rotateOwnerKey(deviceWallet, pubKey2);
+        _rotateOwnerKey(deviceWallet, pubKey2, proof);
 
         bytes32[2] memory held = deviceWallet.getOwner();
         assertEq(held[0], pubKey1[0], "The rejected rotation must leave the wallet on its own key");
@@ -117,7 +126,7 @@ contract DeviceWalletOwnerKeyTest is DeviceWalletFixture {
     /// and nothing can ever register it again.
     function test_transferOwnership_freesTheRetiredKeyForANewWallet() public {
         deployWallets();
-        _rotateOwnerKey(deviceWallet, pubKey4);
+        _rotateOwnerKey(deviceWallet, pubKey4, _proof(deviceWallet, 4));
 
         deployCustomWallet("Device_Rotated", pubKey1[0], pubKey1[1], 4242);
 
@@ -134,7 +143,7 @@ contract DeviceWalletOwnerKeyTest is DeviceWalletFixture {
     function test_transferOwnership_acceptsARotationOntoTheSameKey() public {
         deployWallets();
 
-        _rotateOwnerKey(deviceWallet, pubKey1);
+        _rotateOwnerKey(deviceWallet, pubKey1, _proof(deviceWallet, 1));
 
         assertEq(
             registry.registeredP256Keys(_keyHash(pubKey1)),
@@ -152,9 +161,10 @@ contract DeviceWalletOwnerKeyTest is DeviceWalletFixture {
     function test_transferOwnership_rejectsACallerOtherThanTheWalletItself() public {
         deployWallets();
 
+        bytes memory proof = _proof(deviceWallet, 4);
         vm.prank(user1);
         vm.expectRevert(Errors.OnlySelf.selector);
-        deviceWallet.transferOwnership(pubKey4);
+        deviceWallet.transferOwnership(pubKey4, proof);
 
         assertEq(
             registry.registeredP256Keys(_keyHash(pubKey1)),
@@ -170,7 +180,7 @@ contract DeviceWalletOwnerKeyTest is DeviceWalletFixture {
         deployWallets();
 
         vm.expectRevert(Errors.InvalidDeviceWalletOwnerKey.selector);
-        _rotateOwnerKey(deviceWallet, _offCurveKey());
+        _rotateOwnerKey(deviceWallet, _offCurveKey(), "");
 
         _assertStillOnDeploymentKey();
     }
@@ -181,9 +191,83 @@ contract DeviceWalletOwnerKeyTest is DeviceWalletFixture {
         deployWallets();
 
         vm.expectRevert(Errors.InvalidDeviceWalletOwnerKey.selector);
-        _rotateOwnerKey(deviceWallet, [bytes32(type(uint256).max), pubKey1[1]]);
+        _rotateOwnerKey(deviceWallet, [bytes32(type(uint256).max), pubKey1[1]], "");
 
         _assertStillOnDeploymentKey();
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // The new key's proof
+    // ---------------------------------------------------------------------------------------------
+
+    /// @notice The attack the proof closes: rotating onto a stranger's public key without them
+    /// @dev Without the proof the wallet would be lost and the stranger could never register their
+    ///      own key. Here the stranger is pubKey4 and has not deployed anything yet.
+    function test_transferOwnership_refusesAStrangersKeyWithoutTheirProof() public {
+        deployWallets();
+
+        vm.expectRevert(Errors.NewOwnerKeyCannotSign.selector);
+        _rotateOwnerKey(deviceWallet, pubKey4, "");
+
+        _assertStillOnDeploymentKey();
+        deployCustomWallet("Device_Stranger", pubKey4[0], pubKey4[1], 4444);
+        assertEq(
+            registry.registeredP256Keys(_keyHash(pubKey4)),
+            address(userDeviceWallet),
+            "The stranger must still be able to register their own key"
+        );
+    }
+
+    function test_transferOwnership_refusesAProofByADifferentKey() public {
+        deployWallets();
+        bytes memory signedByFive = WebAuthnSigner.signWith(5, deviceWallet.rotationChallenge(pubKey4));
+
+        vm.expectRevert(Errors.NewOwnerKeyCannotSign.selector);
+        _rotateOwnerKey(deviceWallet, pubKey4, signedByFive);
+
+        _assertStillOnDeploymentKey();
+    }
+
+    /// @notice A proof the key made for another wallet does not carry over
+    function test_transferOwnership_refusesAProofMadeForAnotherWallet() public {
+        deployWallets();
+        bytes memory madeForWalletTwo = WebAuthnSigner.signWith(4, deviceWallet2.rotationChallenge(pubKey4));
+
+        vm.expectRevert(Errors.NewOwnerKeyCannotSign.selector);
+        _rotateOwnerKey(deviceWallet, pubKey4, madeForWalletTwo);
+
+        _assertStillOnDeploymentKey();
+    }
+
+    /// @notice Wallets sit at the same address on every chain, so the chain id is in the challenge
+    function test_transferOwnership_refusesAProofMadeOnAnotherChain() public {
+        deployWallets();
+        bytes memory otherChainChallenge = abi.encodePacked(keccak256(abi.encodePacked(
+            "\x19Ethereum Signed Message:\n", "116", block.chainid + 1, address(deviceWallet), pubKey4[0], pubKey4[1]
+        )));
+        bytes memory homeChallenge = deviceWallet.rotationChallenge(pubKey4);
+        assertTrue(keccak256(otherChainChallenge) != keccak256(homeChallenge), "the chain id must change the challenge");
+        bytes memory madeElsewhere = WebAuthnSigner.signWith(4, otherChainChallenge);
+
+        vm.expectRevert(Errors.NewOwnerKeyCannotSign.selector);
+        _rotateOwnerKey(deviceWallet, pubKey4, madeElsewhere);
+
+        _assertStillOnDeploymentKey();
+    }
+
+    /// @notice A rotation signed the way a browser signs, through the repo's WebAuthn harness
+    /// @dev The other tests build assertions in Solidity. This one goes through the node signer the
+    ///      user operation tests use, so a real clientDataJSON layout is covered too.
+    function test_transferOwnership_acceptsAProofFromTheWebAuthnHarness() public {
+        deployWallets();
+        bytes32[2] memory harnessKey = WebAuthnSigner.publicKey();
+        bytes memory proof = WebAuthnSigner.sign(deviceWallet.rotationChallenge(harnessKey));
+
+        _rotateOwnerKey(deviceWallet, harnessKey, proof);
+
+        bytes32[2] memory held = deviceWallet.getOwner();
+        assertEq(held[0], harnessKey[0], "The wallet must hold the harness key");
+        assertEq(registry.registeredP256Keys(_keyHash(harnessKey)), address(deviceWallet), "The registry must follow");
     }
 
     /// @notice Calls the registry from the wallet without rotating, which an owner can sign for
@@ -262,7 +346,7 @@ contract DeviceWalletOwnerKeyTest is DeviceWalletFixture {
         deployWallets();
 
         vm.expectRevert(Errors.InvalidDeviceWalletOwnerKey.selector);
-        _rotateOwnerKey(deviceWallet, [bytes32(0), bytes32(0)]);
+        _rotateOwnerKey(deviceWallet, [bytes32(0), bytes32(0)], "");
 
         _assertStillOnDeploymentKey();
     }

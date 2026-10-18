@@ -247,7 +247,7 @@ abstract contract Properties is PropertiesAsserts, Snapshots {
     ///      call, and a reverted call is thrown away rather than reported.
     function property_noUnauthorizedCallSucceeded() public view returns (bool) {
         return !ghosts.unauthorizedBind && !ghosts.unauthorizedStandby && !ghosts.unauthorizedPull
-            && !ghosts.unauthorizedForeignDeploy && !ghosts.pausedCallSucceeded;
+            && !ghosts.unauthorizedForeignDeploy && !ghosts.pausedCallSucceeded && !ghosts.rotatedWithoutTheNewKey;
     }
 
     /// @notice Every global property, as one assertion

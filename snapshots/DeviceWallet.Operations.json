@@ -1,11 +1,11 @@
 {
   "addDeposit: 1 ether": "35060",
-  "deployESIMWallet: second wallet on the device": "384216",
+  "deployESIMWallet: second wallet on the device": "384238",
   "execute: ETH transfer to an EOA": "36317",
   "executeBatch: 3 ETH transfers": "79993",
   "pullToken: first pull, the wallet holds none of it": "30882",
   "pullToken: the wallet already holds some": "8982",
-  "toggleAccessToFunds: grant": "23507",
-  "toggleAccessToFunds: revoke": "3607",
-  "transferOwnership: rotate onto an unused key": "38443"
+  "toggleAccessToFunds: grant": "23529",
+  "toggleAccessToFunds: revoke": "3629",
+  "transferOwnership: rotate onto an unused key": "66762"
 }

@@ -43,6 +43,10 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
     ///      version (1) + validUntil (6) + chain id (32) + wallet (20) + message hash (32).
     string private constant ERC1271_PRECURSOR_LENGTH = "91";
 
+    /// @dev Byte length of the key rotation precursor:
+    ///      chain id (32) + wallet (20) + new key (64).
+    string private constant ROTATION_PRECURSOR_LENGTH = "116";
+
     /// @dev The fixed header on every signature this account accepts.
     ///      version (uint8) + validUntil (uint48)
     uint256 private constant SIGNATURE_HEADER_LENGTH = 7;
@@ -226,15 +230,56 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
 
     /// @notice Replaces the P256 key that owns this account
     /// @dev Reachable only through `execute` or `executeBatch` with this account as the target, so
-    ///      the current owner has to sign for it. Nothing outside this contract is told: a
-    ///      subclass holding its own record of the owner has to override this and keep that record
-    ///      in step.
+    ///      the current owner has to sign for it.
+    ///
+    ///      The new key has to sign too, over `rotationChallenge(newOwner)`. Without that an owner
+    ///      could rotate onto a stranger's public key: the wallet would be lost, and the stranger
+    ///      could no longer be registered with their own key.
     /// @param newOwner X,Y co-ordinates of the P256 key taking over
+    /// @param newOwnerSignature ABI-encoded WebAuthn assertion by the new key over the challenge
     /// @return The owner key now in force
-    function transferOwnership(bytes32[2] memory newOwner) onlySelf public virtual returns (bytes32[2] memory) {
+    function transferOwnership(bytes32[2] memory newOwner, bytes calldata newOwnerSignature)
+        onlySelf
+        public
+        returns (bytes32[2] memory)
+    {
+        _transferOwnership(newOwner, newOwnerSignature);
+        return owner;
+    }
+
+    /// @notice Moves ownership to a new key once that key has proved it can sign
+    /// @dev The one place rotation happens, so any later route to it, such as a recovery path that
+    ///      runs when the current key is lost, gets the same checks without repeating them. A
+    ///      subclass with its own record of the owner overrides this to keep that record in step.
+    /// @param newOwner X,Y co-ordinates of the P256 key taking over
+    /// @param newOwnerSignature ABI-encoded WebAuthn assertion by the new key over the challenge
+    function _transferOwnership(bytes32[2] memory newOwner, bytes calldata newOwnerSignature) internal virtual {
+        if(!_verifyWebAuthn(rotationChallenge(newOwner), newOwnerSignature, newOwner)) {
+            revert Errors.NewOwnerKeyCannotSign();
+        }
+
         owner = newOwner;
         emit AccountOwnershipTransferred(newOwner);
-        return owner;
+    }
+
+    /// @notice The challenge a new owner key signs to accept this account
+    /// @dev The EIP-191 digest over the chain id, this address and the new key, so a proof made for
+    ///      one wallet or chain is refused by every other. Its length differs from the user
+    ///      operation and ERC-1271 precursors, so the three can never be mistaken for each other.
+    /// @param newOwner X,Y co-ordinates of the P256 key taking over
+    /// @return The raw challenge bytes the WebAuthn assertion must carry
+    function rotationChallenge(bytes32[2] memory newOwner) public view returns (bytes memory) {
+        bytes32 digest = keccak256(
+            abi.encodePacked(
+                EIP191_PREFIX,
+                ROTATION_PRECURSOR_LENGTH,
+                block.chainid,
+                address(this),
+                newOwner[0],
+                newOwner[1]
+            )
+        );
+        return abi.encodePacked(digest);
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -360,6 +405,19 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
         bytes memory challenge,
         bytes calldata webAuthnSignatureBytes
     ) private view returns (bool) {
+        return _verifyWebAuthn(challenge, webAuthnSignatureBytes, owner);
+    }
+
+    /// @notice Verifies a WebAuthn assertion against any P256 key
+    /// @param challenge Raw bytes that must appear, Base64Url encoded, in the assertion's challenge
+    /// @param webAuthnSignatureBytes ABI-encoded WebAuthn assertion
+    /// @param key X,Y co-ordinates of the key that must have signed
+    /// @return True when the assertion is valid for that key
+    function _verifyWebAuthn(
+        bytes memory challenge,
+        bytes calldata webAuthnSignatureBytes,
+        bytes32[2] memory key
+    ) private view returns (bool) {
         // Decoded rather than abi.decode'd, because a malformed body has to be rejected here and
         // not reverted on. This runs inside ERC-4337 validation, where a revert fails the whole
         // bundle rather than the one operation, and behind isValidSignature, where it reaches the
@@ -371,8 +429,8 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
             message: challenge,
             requireUserVerification: true,
             webAuthnSignature: sig,
-            x: uint256(owner[0]),
-            y: uint256(owner[1])
+            x: uint256(key[0]),
+            y: uint256(key[1])
         });
     }
 

@@ -78,6 +78,11 @@ contract RegistryInvariantsTest is CampaignBase {
         }
     }
 
+    /// @notice No wallet ever rotates onto a key that did not sign for it
+    function invariant_aRotationNeedsTheNewKeysProof() public view {
+        assertFalse(walletHandler.ghost_rotatedWithoutTheNewKey(), "A wallet rotated onto a key that never signed");
+    }
+
     /// @notice A retired owner key never keeps its reservation
     /// @dev The rotation deletes the old hash before writing the new one. If it stopped doing
     ///      that, the retired key would stay reserved and the wallet that once held it could never

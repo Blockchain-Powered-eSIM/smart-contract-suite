@@ -7,6 +7,7 @@ import {ESIMWallet} from "contracts/esim-wallet/ESIMWallet.sol";
 
 import {HandlerBase, HandlerConfig} from "test/foundry/invariant-testing/handler/HandlerBase.sol";
 import {MockERC20} from "test/utils/mocks/tokens/MockERC20.sol";
+import {WebAuthnSigner} from "test/utils/WebAuthnSigner.sol";
 
 /// @notice Everything a wallet does on its owner's behalf.
 /// @dev Every entry point here impersonates a wallet rather than a person. That is the whole
@@ -15,6 +16,12 @@ import {MockERC20} from "test/utils/mocks/tokens/MockERC20.sol";
 ///      Signing is a unit test concern, so the campaign starts from the point a valid signature
 ///      would have reached.
 contract WalletHandler is HandlerBase {
+
+    /// @dev Order of the P256 curve, the range rotation private keys are drawn from
+    uint256 private constant P256_N = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551;
+
+    /// @notice Set when a rotation went through on a proof the new key did not sign
+    bool public ghost_rotatedWithoutTheNewKey;
 
     /// @notice Set when the owner of an eSIM wallet with a request outstanding could not cancel it
     bool public ghost_cancelRefused;
@@ -56,14 +63,42 @@ contract WalletHandler is HandlerBase {
             state.recordRevert("rotateOwnerKey");
             return;
         }
-        bytes32[2] memory newKey = _ownerKey(seed);
+        // Built from a private key rather than `_ownerKey`, because the new key has to sign
+        uint256 privateKey = bound(uint256(keccak256(abi.encode("rotationKey", seed))), 1, P256_N - 1);
+        bytes32[2] memory newKey = WebAuthnSigner.publicKeyOf(privateKey);
+        bytes memory proof = WebAuthnSigner.signWith(privateKey, DeviceWallet(payable(device)).rotationChallenge(newKey));
 
         vm.prank(device);
-        try DeviceWallet(payable(device)).transferOwnership(newKey) returns (bytes32[2] memory) {
+        try DeviceWallet(payable(device)).transferOwnership(newKey, proof) returns (bytes32[2] memory) {
             state.recordKey(device, newKey);
             state.recordCall("rotateOwnerKey");
         } catch {
             state.recordRevert("rotateOwnerKey");
+        }
+    }
+
+    /// @notice A device wallet tries to rotate onto a key with a proof signed by a different key
+    /// @dev The stranger's-key case. Expected to be refused every time, so it is left out of
+    ///      `HandlerDistribution`.
+    /// @param deviceIndex Which device wallet tries
+    /// @param seed Drives the key it names and the key that signs instead
+    function rotateWithAForeignProof(uint256 deviceIndex, uint256 seed) external counted {
+        address device = _pickDeviceWallet(deviceIndex);
+        if (device == address(0)) {
+            state.recordRevert("rotateWithAForeignProof");
+            return;
+        }
+        uint256 target = bound(uint256(keccak256(abi.encode("rotationKey", seed))), 1, P256_N - 1);
+        uint256 signer = target == P256_N - 1 ? 1 : target + 1;
+        bytes32[2] memory newKey = WebAuthnSigner.publicKeyOf(target);
+        bytes memory proof = WebAuthnSigner.signWith(signer, DeviceWallet(payable(device)).rotationChallenge(newKey));
+
+        vm.prank(device);
+        try DeviceWallet(payable(device)).transferOwnership(newKey, proof) returns (bytes32[2] memory) {
+            ghost_rotatedWithoutTheNewKey = true;
+            state.recordCall("rotateWithAForeignProof");
+        } catch {
+            state.recordRevert("rotateWithAForeignProof");
         }
     }
 

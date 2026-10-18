@@ -7,6 +7,7 @@ import "contracts/CustomStructs.sol";
 import {GasBase} from "test/foundry/gas/base/GasBase.sol";
 import {MockDeviceWallet} from "test/utils/mocks/MockDeviceWallet.sol";
 import {MockESIMWallet} from "test/utils/mocks/MockESIMWallet.sol";
+import {WebAuthnSigner} from "test/utils/WebAuthnSigner.sol";
 
 /// @notice Gas for what a device wallet does once it exists.
 /// @dev `execute` and `executeBatch` are measured from the entry point rather than through
@@ -91,12 +92,14 @@ contract DeviceWalletOperationsGasTest is GasBase {
     }
 
     /// @notice Rotating the owner key, which also moves the registry's record of it
-    /// @dev Includes the registry reading the key back from the wallet before it writes.
+    /// @dev Includes verifying the new key's proof and the registry reading the key back from the
+    ///      wallet before it writes. pubKey4 is 4 times the generator, so private key 4 signs for it.
     function test_transferOwnership() public {
         _deploy();
+        bytes memory proof = WebAuthnSigner.signWith(4, wallet.rotationChallenge(pubKey4));
 
         vm.prank(address(wallet));
-        wallet.transferOwnership(pubKey4);
+        wallet.transferOwnership(pubKey4, proof);
         vm.snapshotGasLastCall(NAMESPACE, "transferOwnership: rotate onto an unused key");
     }
 

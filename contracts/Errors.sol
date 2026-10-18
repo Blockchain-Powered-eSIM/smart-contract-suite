@@ -86,6 +86,7 @@ interface Errors {
 
     // Account4337, and so DeviceWallet through it
     error OnlySelf();
+    error NewOwnerKeyCannotSign();
     error OnlyEntryPointOrSelf();
 
     // ESIMWallet and DeviceWallet

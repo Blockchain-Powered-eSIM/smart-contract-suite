@@ -111,7 +111,12 @@ abstract contract Base is StringUtils, Clamp, Deployer, Math {
         bool adminAllowanceBroken;
         // GL-17: set when an owner could not withdraw its own outstanding transfer request
         bool cancelRefused;
+        // Set when a key rotation went through on a proof signed by a key other than the new one
+        bool rotatedWithoutTheNewKey;
     }
+
+    /// @notice Order of the P256 curve, the range rotation private keys are drawn from
+    uint256 internal constant P256_ORDER = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551;
 
     Ghosts internal ghosts;
 

@@ -9,6 +9,7 @@ import {Errors} from "contracts/Errors.sol";
 import {Account4337} from "contracts/aa-helper/Account4337.sol";
 
 import {FuzzBase} from "test/foundry/fuzz-testing/base/FuzzBase.sol";
+import {WebAuthnSigner} from "test/utils/WebAuthnSigner.sol";
 
 /// @notice The registry's record of a wallet's owner key, over arbitrary keys.
 /// @dev The registry keeps one key to one wallet, and the deploy paths rely on that. The record
@@ -28,9 +29,15 @@ contract OwnerKeyBindingTest is FuzzBase {
         return keccak256(abi.encode(_key[0], _key[1]));
     }
 
-    function _publicKey(uint256 _privateKey) internal pure returns (bytes32[2] memory key) {
-        (uint256 x, uint256 y) = vm.publicKeyP256(bound(_privateKey, 1, P256_N - 1));
-        key = [bytes32(x), bytes32(y)];
+    function _privateKey(uint256 _seed) internal pure returns (uint256) {
+        return bound(_seed, 1, P256_N - 1);
+    }
+
+    /// @notice Rotates the fuzz wallet onto the key for a private key, with a real proof by it
+    function _rotateTo(uint256 _key) internal returns (bytes32[2] memory newKey) {
+        newKey = WebAuthnSigner.publicKeyOf(_key);
+        bytes memory proof = WebAuthnSigner.signWith(_key, fuzzDeviceWallet.rotationChallenge(newKey));
+        _callFromWallet(address(fuzzDeviceWallet), abi.encodeCall(Account4337.transferOwnership, (newKey, proof)));
     }
 
     function _callFromWallet(address _target, bytes memory _data) internal {
@@ -62,11 +69,12 @@ contract OwnerKeyBindingTest is FuzzBase {
 
     /// @notice After a real rotation, the registry holds exactly the key the wallet holds
     /// forge-config: default.fuzz.runs = 1000
-    function testFuzz_transferOwnership_registryMatchesTheWallet(uint256 _privateKey) public {
-        bytes32[2] memory newKey = _publicKey(_privateKey);
+    function testFuzz_transferOwnership_registryMatchesTheWallet(uint256 _seed) public {
+        uint256 key = _privateKey(_seed);
+        bytes32[2] memory newKey = WebAuthnSigner.publicKeyOf(key);
         vm.assume(registry.registeredP256Keys(_keyHash(newKey)) == address(0) || newKey[0] == pubKey1[0]);
 
-        _callFromWallet(address(fuzzDeviceWallet), abi.encodeCall(Account4337.transferOwnership, (newKey)));
+        _rotateTo(key);
 
         bytes32[2] memory recorded = registry.getDeviceWalletToOwner(address(fuzzDeviceWallet));
         assertEq(recorded[0], fuzzDeviceWallet.owner(0), "The registry must record the X the wallet holds");
@@ -80,11 +88,12 @@ contract OwnerKeyBindingTest is FuzzBase {
 
     /// @notice Once a wallet has rotated away from a key, it cannot name that key again
     /// forge-config: default.fuzz.runs = 1000
-    function testFuzz_updateDeviceWalletOwnerKey_refusesTheRetiredKey(uint256 _privateKey) public {
-        bytes32[2] memory newKey = _publicKey(_privateKey);
+    function testFuzz_updateDeviceWalletOwnerKey_refusesTheRetiredKey(uint256 _seed) public {
+        uint256 key = _privateKey(_seed);
+        bytes32[2] memory newKey = WebAuthnSigner.publicKeyOf(key);
         vm.assume(newKey[0] != pubKey1[0] && registry.registeredP256Keys(_keyHash(newKey)) == address(0));
 
-        _callFromWallet(address(fuzzDeviceWallet), abi.encodeCall(Account4337.transferOwnership, (newKey)));
+        _rotateTo(key);
 
         vm.expectRevert(
             abi.encodeWithSelector(Errors.OwnerKeyNotHeldByWallet.selector, address(fuzzDeviceWallet))
@@ -92,5 +101,41 @@ contract OwnerKeyBindingTest is FuzzBase {
         _callFromWallet(address(registry), abi.encodeCall(registry.updateDeviceWalletOwnerKey, (pubKey1)));
 
         assertEq(registry.registeredP256Keys(_keyHash(pubKey1)), address(0), "The retired key must stay free");
+    }
+
+    /// @notice A rotation is refused unless the new key itself signed the challenge
+    /// @dev The signer is any key but the one being rotated onto, which is the stranger's-key case.
+    /// forge-config: default.fuzz.runs = 1000
+    function testFuzz_transferOwnership_refusesAProofByAnyOtherKey(uint256 _targetSeed, uint256 _signerSeed) public {
+        uint256 target = _privateKey(_targetSeed);
+        uint256 signer = _privateKey(_signerSeed);
+        vm.assume(target != signer);
+
+        bytes32[2] memory newKey = WebAuthnSigner.publicKeyOf(target);
+        vm.assume(registry.registeredP256Keys(_keyHash(newKey)) == address(0));
+        bytes memory proof = WebAuthnSigner.signWith(signer, fuzzDeviceWallet.rotationChallenge(newKey));
+
+        vm.expectRevert(Errors.NewOwnerKeyCannotSign.selector);
+        _callFromWallet(address(fuzzDeviceWallet), abi.encodeCall(Account4337.transferOwnership, (newKey, proof)));
+
+        assertEq(fuzzDeviceWallet.owner(0), pubKey1[0], "The wallet must keep its key");
+        assertEq(registry.registeredP256Keys(_keyHash(newKey)), address(0), "The named key must stay free");
+    }
+
+    /// @notice A proof made for one wallet is refused by another, even by the right key
+    /// forge-config: default.fuzz.runs = 1000
+    function testFuzz_transferOwnership_refusesAProofMadeForAnotherWallet(uint256 _seed, address _otherWallet) public {
+        vm.assume(_otherWallet != address(fuzzDeviceWallet));
+        uint256 key = _privateKey(_seed);
+        bytes32[2] memory newKey = WebAuthnSigner.publicKeyOf(key);
+
+        // The challenge the other wallet would issue, computed the same way the contract does
+        bytes memory foreignChallenge = abi.encodePacked(keccak256(abi.encodePacked(
+            "\x19Ethereum Signed Message:\n", "116", block.chainid, _otherWallet, newKey[0], newKey[1]
+        )));
+        bytes memory proof = WebAuthnSigner.signWith(key, foreignChallenge);
+
+        vm.expectRevert(Errors.NewOwnerKeyCannotSign.selector);
+        _callFromWallet(address(fuzzDeviceWallet), abi.encodeCall(Account4337.transferOwnership, (newKey, proof)));
     }
 }

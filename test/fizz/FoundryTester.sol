@@ -161,6 +161,15 @@ contract FoundryTester is Test, Handlers {
         assertTrue(property_aTransferRequestCanAlwaysBeCancelled(), "GL-17");
     }
 
+    /// @notice A rotation goes through on the new key's proof and is refused on anyone else's
+    function test_smoke_aRotationNeedsTheNewKeysProof() public {
+        deviceWallet_secondary(0, 0, 2); // an even seed signs with the new key itself
+        assertTrue(property_ownerKeysAreUniqueAndAgree(), "GL-07/08");
+
+        _expectRefused(abi.encodeCall(this.deviceWallet_secondary, (0, 0, 3))); // an odd seed signs with another key
+        assertTrue(property_noUnauthorizedCallSucceeded(), "a rotation went through without the new key");
+    }
+
     /// @notice Runs a handler that is expected to revert, and fails if it did not
     /// @dev Through an external self-call so the revert unwinds only the handler. A handler that
     ///      quietly returned instead of reverting would otherwise read as a pass.
