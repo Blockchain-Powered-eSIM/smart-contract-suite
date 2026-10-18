@@ -66,21 +66,22 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     event ETHCalledBack(uint256 _amount);
 
     /// @notice Reverts unless the caller is the registry, the device wallet factory, this wallet
-    ///         itself, or the eSIM wallet the registry still names this device wallet as holding
+    ///         itself, or a protocol eSIM wallet re-adding itself
     /// @dev Private rather than inline in the modifier, so the check is emitted once instead of at
     ///      every use site. Keep each of these next to the modifier that calls it.
     ///
-    ///      The eSIM wallet branch is checked against the registry's own association rather than
-    ///      the caller's own owner(), because a caller naming itself as `_eSIMWalletAddress`
-    ///      controls what its own owner() returns. The registry association can only reach this
-    ///      device wallet's address through a prior bindESIMWallet call, which already required
-    ///      real ownership at that time and is not something a caller can forge.
+    ///      The eSIM wallet branch asks the factory whether it deployed the caller. That is what
+    ///      makes the caller's own `owner()` trustworthy: an arbitrary contract could answer it
+    ///      with anything, a factory-deployed eSIM wallet cannot. `_addESIMWallet` then requires
+    ///      that owner to be this device wallet. The registry's association is not used, because
+    ///      it still names the previous device wallet after a handover that was accepted but not
+    ///      yet bound, and that blocked the new owner from cancelling an onward request.
     function _onlyRegistryOrDeviceWalletFactoryOrOwner(address _eSIMWalletAddress) private view {
         if(
             msg.sender != address(registry) &&
             msg.sender != address(registry.deviceWalletFactory()) &&
             msg.sender != address(this) &&
-            !(msg.sender == _eSIMWalletAddress && registry.isESIMWalletValid(_eSIMWalletAddress) == address(this))
+            !(msg.sender == _eSIMWalletAddress && eSIMWalletFactory.isESIMWalletDeployed(_eSIMWalletAddress))
         ) {
             revert Errors.OnlyRegistryOrDeviceWalletFactoryOrOwner();
         }

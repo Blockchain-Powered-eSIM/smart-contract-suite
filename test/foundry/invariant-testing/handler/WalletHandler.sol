@@ -16,7 +16,34 @@ import {MockERC20} from "test/utils/mocks/tokens/MockERC20.sol";
 ///      would have reached.
 contract WalletHandler is HandlerBase {
 
+    /// @notice Set when the owner of an eSIM wallet with a request outstanding could not cancel it
+    bool public ghost_cancelRefused;
+
     constructor(HandlerConfig memory config) HandlerBase(config) {}
+
+    /// @notice The owner of an eSIM wallet withdraws an outstanding transfer request
+    /// @dev Cancelling has to work from every state a request can be in, including after an
+    ///      accept the new owner never bound. A refusal is recorded rather than asserted here,
+    ///      since a failed assertion inside a handler is a revert the runner discards.
+    /// @param eSIMIndex Where the scan for a wallet with a request outstanding starts
+    function cancelTransferRequest(uint256 eSIMIndex) external counted {
+        address wallet = _pickESIMWallet(eSIMIndex);
+        if (wallet == address(0) || ESIMWallet(payable(wallet)).newRequestedOwner() == address(0)) {
+            state.recordRevert("cancelTransferRequest");
+            return;
+        }
+        address currentOwner = ESIMWallet(payable(wallet)).owner();
+
+        vm.prank(currentOwner);
+        try ESIMWallet(payable(wallet)).requestTransferOwnership(currentOwner) {
+            if (!DeviceWallet(payable(currentOwner)).isValidESIMWallet(wallet)) ghost_cancelRefused = true;
+            state.setESIMOwner(wallet, registry.isESIMWalletValid(wallet));
+            state.recordCall("cancelTransferRequest");
+        } catch {
+            ghost_cancelRefused = true;
+            state.recordRevert("cancelTransferRequest");
+        }
+    }
 
     /// @notice A device wallet rotates the P256 key that owns it
     /// @dev Keys come from the same generator the deploy paths use, so a rotation onto a key

@@ -199,10 +199,11 @@ abstract contract ESIMWalletHandler is Properties {
     }
 
     function eSIMWallet_secondary(uint8 selector, uint256 walletSeed, uint256 arg) public {
-        selector = uint8(selector % 3);
+        selector = uint8(selector % 4);
         if (selector == 0) _eSIMWallet_setPriceCapUSDCents(walletSeed, arg);
         else if (selector == 1) _eSIMWallet_donateETHToAdapter(arg);
-        else _eSIMWallet_setAdminAllowanceUSDCents(walletSeed, arg);
+        else if (selector == 2) _eSIMWallet_setAdminAllowanceUSDCents(walletSeed, arg);
+        else _eSIMWallet_cancelTransferRequest(walletSeed);
     }
 
     // ―――――――――――――――――――――――― Unclamped ―――――――――――――――――――――――――
@@ -292,6 +293,23 @@ abstract contract ESIMWalletHandler is Properties {
 
         vm.prank(deviceWallet);
         MockESIMWallet(payable(eSIMWallet)).setAdminAllowanceUSDCents(value);
+    }
+
+    /// @notice The owner withdraws an outstanding transfer request
+    /// @dev Caught rather than left to revert, since a reverted call is discarded and the refusal
+    ///      is the finding.
+    function _eSIMWallet_cancelTransferRequest(uint256 walletSeed) internal {
+        address eSIMWallet = _pickESIMWallet(walletSeed);
+        if (eSIMWallet == address(0)) return;
+        if (MockESIMWallet(payable(eSIMWallet)).newRequestedOwner() == address(0)) return;
+
+        address owner = MockESIMWallet(payable(eSIMWallet)).owner();
+        vm.prank(owner);
+        try MockESIMWallet(payable(eSIMWallet)).requestTransferOwnership(owner) {
+            if (!MockDeviceWallet(payable(owner)).isValidESIMWallet(eSIMWallet)) ghosts.cancelRefused = true;
+        } catch {
+            ghosts.cancelRefused = true;
+        }
     }
 
     /// @notice Flags an admin charge that did not come off the allowance exactly, or an owner

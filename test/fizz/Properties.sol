@@ -200,6 +200,11 @@ abstract contract Properties is PropertiesAsserts, Snapshots {
         return true;
     }
 
+    /// @notice GL-17: an owner can always withdraw its own transfer request and keep the wallet
+    function property_aTransferRequestCanAlwaysBeCancelled() public view returns (bool) {
+        return !ghosts.cancelRefused;
+    }
+
     /// @notice GL-15: the admin never charges a wallet past what its owner allowed
     function property_adminChargesStayInsideTheAllowance() public view returns (bool) {
         return !ghosts.adminAllowanceBroken;
@@ -262,6 +267,7 @@ abstract contract Properties is PropertiesAsserts, Snapshots {
         t(property_theCeilingAlwaysBinds(), "GL-11 the price ceiling stopped binding");
         t(property_adminChargesStayInsideTheAllowance(), "GL-15 the admin charged past the allowance");
         t(property_aLazyESIMIdentifierGoesOnlyToItsLazyWallet(), "GL-16 a lazy identifier went to another wallet");
+        t(property_aTransferRequestCanAlwaysBeCancelled(), "GL-17 an owner could not cancel its transfer request");
         t(property_settlementTokenIsConserved(), "GL-12 settlement token was created or destroyed");
         t(property_onlyThePurchasePathClaimsSettlement(), "GL-13 something else claimed settlement");
         t(property_noUnauthorizedCallSucceeded(), "a call the protocol should have refused ran");

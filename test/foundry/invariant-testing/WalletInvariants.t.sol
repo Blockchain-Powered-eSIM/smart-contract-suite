@@ -13,6 +13,13 @@ import "test/utils/mocks/MockDeviceWallet.sol";
 ///      same transaction. That is exactly the kind of agreement a long sequence breaks.
 contract WalletInvariantsTest is CampaignBase {
 
+    /// @notice An owner can always withdraw a transfer request it made, and keeps the wallet
+    /// @dev A request that cannot be withdrawn hands the wallet, and anything left in it, to
+    ///      whoever was nominated by mistake.
+    function invariant_aTransferRequestCanAlwaysBeCancelled() public view {
+        assertFalse(walletHandler.ghost_cancelRefused(), "An owner could not cancel its own transfer request");
+    }
+
     /// @notice A registration, once made, is never withdrawn
     /// @dev Zero is how the registry spells an address it has never heard of, so an eSIM wallet the
     ///      protocol deployed must never read it. This is the property that lets every other reader

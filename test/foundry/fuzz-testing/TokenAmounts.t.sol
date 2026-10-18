@@ -249,6 +249,21 @@ contract TokenAmountsTest is FuzzBase {
     // Who gets access to the money
     // ---------------------------------------------------------------------------------------------
 
+    /// @notice No address the factory did not deploy can add itself to a device wallet
+    /// @dev The self-add branch trusts the caller's own `owner()` only because the factory vouches
+    ///      for the caller, so any other address has to be turned away before that is read.
+    /// forge-config: default.fuzz.runs = 2000
+    function testFuzz_addESIMWallet_refusesASelfAddTheFactoryCannotVouchFor(address _caller) public {
+        vm.assume(!eSIMWalletFactory.isESIMWalletDeployed(_caller));
+        vm.assume(
+            _caller != address(registry) && _caller != address(deviceWalletFactory) && _caller != address(fuzzDeviceWallet)
+        );
+
+        vm.prank(_caller);
+        vm.expectRevert(Errors.OnlyRegistryOrDeviceWalletFactoryOrOwner.selector);
+        fuzzDeviceWallet.addESIMWallet(_caller, false);
+    }
+
     /// @notice No caller binds a wallet with the right to spend, whoever they are
     /// @dev Access control runs first, so an unauthorised caller is turned away before the flag is
     ///      read, and an authorised one is refused on the flag itself. Either way the wallet ends

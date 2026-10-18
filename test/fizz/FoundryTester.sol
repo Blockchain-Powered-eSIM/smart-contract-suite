@@ -4,6 +4,7 @@ pragma solidity >=0.6.2 <0.9.0;
 import {Test} from "forge-std/Test.sol";
 import {console} from "forge-std/console.sol";
 import {Handlers} from "./handlers/Handlers.sol";
+import {MockESIMWallet} from "test/utils/mocks/MockESIMWallet.sol";
 
 /// @notice Contract to be used for quick testing with Foundry
 contract FoundryTester is Test, Handlers {
@@ -77,6 +78,7 @@ contract FoundryTester is Test, Handlers {
         assertTrue(property_theCeilingAlwaysBinds(), "GL-11");
         assertTrue(property_adminChargesStayInsideTheAllowance(), "GL-15");
         assertTrue(property_aLazyESIMIdentifierGoesOnlyToItsLazyWallet(), "GL-16");
+        assertTrue(property_aTransferRequestCanAlwaysBeCancelled(), "GL-17");
         assertTrue(property_settlementTokenIsConserved(), "GL-12");
         assertTrue(property_onlyThePurchasePathClaimsSettlement(), "GL-13");
         assertTrue(property_noUnauthorizedCallSucceeded(), "unauthorized call");
@@ -139,6 +141,24 @@ contract FoundryTester is Test, Handlers {
 
         _expectRefused(abi.encodeCall(this.lazyWalletRegistry_assignReservedOnLazyDevice, (5, 0)));
         assertTrue(property_aLazyESIMIdentifierGoesOnlyToItsLazyWallet(), "GL-16");
+    }
+
+    /// @notice A new owner that never bound the wallet can still withdraw an onward request
+    function test_smoke_aTransferRequestCanBeCancelledBeforeBinding() public {
+        require(deviceWallets.length >= 3, "the setup must deploy three device wallets");
+        address wallet = eSIMWallets[0];
+        address firstOwner = MockESIMWallet(payable(wallet)).owner();
+        address newOwner = deviceWallets[1] == firstOwner ? deviceWallets[2] : deviceWallets[1];
+        address mistaken = deviceWallets[0] == firstOwner ? deviceWallets[2] : deviceWallets[0];
+        if (mistaken == newOwner) mistaken = deviceWallets[2] == newOwner ? deviceWallets[1] : deviceWallets[2];
+
+        eSIMWallet_requestTransferOwnership(firstOwner, wallet, newOwner);
+        eSIMWallet_acceptOwnershipTransfer(newOwner, wallet);
+        eSIMWallet_requestTransferOwnership(newOwner, wallet, mistaken);
+
+        eSIMWallet_secondary(3, 0, 0); // the owner cancels
+        assertEq(MockESIMWallet(payable(wallet)).newRequestedOwner(), address(0), "the request must be withdrawn");
+        assertTrue(property_aTransferRequestCanAlwaysBeCancelled(), "GL-17");
     }
 
     /// @notice Runs a handler that is expected to revert, and fails if it did not

@@ -109,6 +109,8 @@ abstract contract Base is StringUtils, Clamp, Deployer, Math {
         // exactly, or when an owner's own purchase moved it. Read at write time for the same
         // reason as the ceiling: owners and handovers change the allowance between charges.
         bool adminAllowanceBroken;
+        // GL-17: set when an owner could not withdraw its own outstanding transfer request
+        bool cancelRefused;
     }
 
     Ghosts internal ghosts;
