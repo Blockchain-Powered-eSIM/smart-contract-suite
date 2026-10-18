@@ -39,6 +39,11 @@ import {TimelockController} from "@openzeppelin/contracts/governance/TimelockCon
 ///      able to appoint one would reach `ESIMWallet.buyDataBundleWithToken` and every wallet
 ///      holding funds access through it.
 ///
+///      Known limit: a rogue guardian working with a rogue proposer can strip every canceller and
+///      let a scheduled operation run unvetoed. The strip power stays because it is what recovers
+///      from a compromised canceller or proposer. Keep the guardian and proposer Safes on disjoint
+///      signers, and alert on every `CancellerRevoked`.
+///
 ///      The second one exists because without it a compromised canceller is permanent. Evicting any
 ///      role holder means scheduling `revokeRole`, a scheduled operation can be cancelled by any
 ///      canceller, and so a compromised canceller cancels its own eviction forever. Nothing else can
