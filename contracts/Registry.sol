@@ -624,6 +624,10 @@ contract Registry is
     ///      bought, and no onchain check replaces that: a device wallet reaches every external
     ///      function through `execute`, and any fact it could present about its own wallets is one
     ///      it writes itself. The lazy route shares the same internal claim.
+    ///
+    ///      A reserved identifier is refused outright, even on the device it was reserved for. The
+    ///      lazy route assigns those itself; taking one here leaves its lazy batch, its history copy
+    ///      and the receiving wallet's purchases stuck for good.
     /// @param _eSIMWalletAddress Wallet receiving the identifier
     /// @param _eSIMUniqueIdentifier Identifier being assigned
     /// @return The identifier now on the wallet
@@ -631,6 +635,11 @@ contract Registry is
         address _eSIMWalletAddress,
         string calldata _eSIMUniqueIdentifier
     ) external onlyESIMWalletAdmin returns (string memory) {
+        address lazy = lazyWalletRegistry;
+        if(lazy != address(0) && LazyWalletRegistry(lazy).isESIMIdentifierReserved(_eSIMUniqueIdentifier)) {
+            revert Errors.ESIMIdentifierReservedForLazyWallet(_eSIMUniqueIdentifier);
+        }
+
         return _assignESIMIdentifier(_eSIMWalletAddress, _eSIMUniqueIdentifier);
     }
 

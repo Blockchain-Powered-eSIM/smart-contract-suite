@@ -79,6 +79,9 @@ stay O(n) in the population and never O(n squared).
 - [x] **GL-15 — the admin never charges a wallet past what its owner allowed.**
   Every admin purchase that goes through comes off `adminAllowanceUSDCents` by exactly its price, and none goes through for more than was left. A purchase the owner signs for itself leaves the allowance alone. SHOULD-HOLD: `_spendAdminAllowance` runs on every admin purchase and only the owner sets the figure. Checked at write time, like GL-11, because owners and handovers change the allowance between charges.
 
+- [x] **GL-16 — a lazy user's eSIM identifier goes only to the wallet the lazy route deployed for it.**
+  For every reachable lazy eSIM identifier that is still reserved and has a holder, the holder is `lazyDeployedESIMWallet` for it. SHOULD-HOLD: `Registry.assignESIMIdentifier` refuses any reserved identifier, and the lazy registry refuses to reserve one already claimed.
+
 ## Specific
 
 Asserted inside the handler that makes the call, where a before-and-after comparison is the point.

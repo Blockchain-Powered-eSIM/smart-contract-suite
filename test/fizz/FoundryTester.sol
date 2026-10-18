@@ -76,6 +76,7 @@ contract FoundryTester is Test, Handlers {
         assertTrue(property_identifiersAreClaimedOnce(), "GL-09/10");
         assertTrue(property_theCeilingAlwaysBinds(), "GL-11");
         assertTrue(property_adminChargesStayInsideTheAllowance(), "GL-15");
+        assertTrue(property_aLazyESIMIdentifierGoesOnlyToItsLazyWallet(), "GL-16");
         assertTrue(property_settlementTokenIsConserved(), "GL-12");
         assertTrue(property_onlyThePurchasePathClaimsSettlement(), "GL-13");
         assertTrue(property_noUnauthorizedCallSucceeded(), "unauthorized call");
@@ -128,6 +129,16 @@ contract FoundryTester is Test, Handlers {
         eSIMWallet_buyDataBundleWithToken_clamped(0, 1, 100, 51, false); // the owner still buys
 
         assertTrue(property_adminChargesStayInsideTheAllowance(), "GL-15");
+    }
+
+    /// @notice A spare wallet on a lazy device cannot take an identifier still waiting for its batch
+    function test_smoke_aReservedIdentifierStaysWithTheLazyRoute() public {
+        lazyWalletRegistry_batchPopulateHistory_clamped(5, 10, 1, 100, false);
+        lazyWalletRegistry_batchPopulateHistory_clamped(5, 11, 1, 100, false);
+        lazyWalletRegistry_deployLazyWalletAndSetESIMIdentifier_clamped(5, 777, 0, 1, false); // first batch only
+
+        _expectRefused(abi.encodeCall(this.lazyWalletRegistry_assignReservedOnLazyDevice, (5, 0)));
+        assertTrue(property_aLazyESIMIdentifierGoesOnlyToItsLazyWallet(), "GL-16");
     }
 
     /// @notice Runs a handler that is expected to revert, and fails if it did not

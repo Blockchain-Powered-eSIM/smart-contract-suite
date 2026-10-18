@@ -209,6 +209,35 @@ contract IdentifierCollisionTest is DeployerBase {
         );
     }
 
+    /// @notice Not even a wallet on the lazy device itself can be given an identifier still waiting
+    ///         for a lazy batch
+    /// @dev The reservation used to be compared against the device only, so this case got through
+    ///      and left the remaining batch, the history copy and the wallet's purchases stuck for good.
+    function test_assignESIMIdentifier_refusesAReservedIdentifierOnTheLazyDeviceItself() public {
+        string memory device = customDeviceUniqueIdentifiers[0];
+        string[] memory eSIMs = new string[](2);
+        eSIMs[0] = customESIMUniqueIdentifiers[0][0];
+        eSIMs[1] = customESIMUniqueIdentifiers[0][1];
+        _populate(device, eSIMs);
+
+        vm.startPrank(eSIMWalletAdmin);
+        (address deviceWallet,,) = lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier(pubKey1, device, 9451, 0, 1);
+        address extra = DeviceWallet(payable(deviceWallet)).deployESIMWallet(false, 9459);
+
+        vm.expectRevert(abi.encodeWithSelector(Errors.ESIMIdentifierReservedForLazyWallet.selector, eSIMs[1]));
+        registry.assignESIMIdentifier(extra, eSIMs[1]);
+
+        // The lazy device can still finish: the batch, the history copy, and the extra wallet is not stuck
+        (address[] memory rest, uint256 remaining) = lazyWalletRegistry.deployMoreESIMWalletsForLazyDevice(device, 1);
+        lazyWalletRegistry.setHistoryForLazyWallet(eSIMs[1], 50);
+        vm.stopPrank();
+
+        assertEq(remaining, 0, "The last lazy batch must deploy");
+        assertEq(registry.eSIMWalletForIdentifier(eSIMs[1]), rest[0], "The identifier must go to its lazy wallet");
+        registry.requireLazyHistoryCopied(rest[0]);
+        registry.requireLazyHistoryCopied(extra);
+    }
+
     /// @notice A lazy record cannot form under an eSIM identifier a wallet already holds
     /// @dev The other direction of the same collision. Purchases recorded here would be unreachable
     ///      for good, since the deployment refuses to hand a second wallet the same identifier.

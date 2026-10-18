@@ -360,6 +360,22 @@ contract IdentifiersAndArraysTest is FuzzBase {
         );
     }
 
+    /// @notice An identifier a lazy user is waiting on is refused on the admin's assign path,
+    ///         whichever identifier it is
+    /// forge-config: default.fuzz.runs = 1000
+    function testFuzz_assignESIMIdentifier_refusesAnyReservedIdentifier(uint256 _length) public {
+        string memory identifier = _stringOfLength(bound(_length, 1, MAX_IDENTIFIER_LENGTH));
+        _populateOne(customDeviceUniqueIdentifiers[0], identifier, TEST_PRICE_CENTS);
+
+        (, address eSIMWallet) = _deployPair(customDeviceUniqueIdentifiers[3], 7781);
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(abi.encodeWithSelector(Errors.ESIMIdentifierReservedForLazyWallet.selector, identifier));
+        registry.assignESIMIdentifier(eSIMWallet, identifier);
+
+        assertEq(registry.eSIMWalletForIdentifier(identifier), address(0), "A refused claim must leave it unheld");
+    }
+
     /// @notice Deploys one device wallet and its first eSIM wallet
     function _deployPair(
         string memory _deviceIdentifier,

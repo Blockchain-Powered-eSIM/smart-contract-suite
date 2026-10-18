@@ -1078,21 +1078,19 @@ contract LazyWalletRegistryTest is DeployerBase {
 
         MockESIMWallet impostor = MockESIMWallet(payable(impostorWallets.eSIMWallet));
 
-        // Its owner cannot write the slot, and the admin route refuses a claimed identifier, so
-        // there is no way for a second wallet to answer to the same string.
+        // Its owner cannot write the slot, and the admin route refuses a lazy user's identifier
+        // before it even reaches the claim, so there is no way for a second wallet to answer to
+        // the same string.
         vm.prank(impostorWallets.deviceWallet);
         vm.expectRevert(Errors.OnlyRegistry.selector);
         impostor.setESIMUniqueIdentifier("victim_esim");
 
         vm.prank(eSIMWalletAdmin);
         vm.expectRevert(
-            abi.encodeWithSelector(
-                Errors.ESIMIdentifierAlreadyClaimed.selector,
-                "victim_esim",
-                address(victim)
-            )
+            abi.encodeWithSelector(Errors.ESIMIdentifierReservedForLazyWallet.selector, "victim_esim")
         );
         registry.assignESIMIdentifier(address(impostor), "victim_esim");
+        assertEq(registry.eSIMWalletForIdentifier("victim_esim"), address(victim), "the lazy wallet keeps the claim");
 
         vm.prank(eSIMWalletAdmin);
         lazyWalletRegistry.setHistoryForLazyWallet("victim_esim", 50);

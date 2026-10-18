@@ -179,6 +179,25 @@ contract LazyInvariantsTest is CampaignBase {
         }
     }
 
+    /// @notice A lazy user's eSIM identifier is held by the wallet the lazy route deployed for it,
+    ///         or by nobody yet
+    /// @dev Any other holder means the admin's assign path took it first, which leaves that lazy
+    ///      batch, its history copy and the holder's purchases stuck for good.
+    function invariant_aLazyESIMIdentifierGoesOnlyToItsLazyWallet() public view {
+        uint256 count = state.lazyESIMIdentifierCount();
+        for (uint256 i = 0; i < count; ++i) {
+            string memory eSIM = state.lazyESIMIdentifiers(i);
+            address holder = registry.eSIMWalletForIdentifier(eSIM);
+            if (holder == address(0)) continue;
+
+            assertEq(
+                holder,
+                lazyWalletRegistry.lazyDeployedESIMWallet(eSIM),
+                "A lazy user's eSIM identifier is held by a wallet the lazy route did not deploy"
+            );
+        }
+    }
+
     /// @notice The deploy cursor never runs past the list it walks
     /// @dev The cursor is where the next batch starts reading, so a cursor beyond the list length
     ///      would underflow the outstanding count and take the continuation down permanently for

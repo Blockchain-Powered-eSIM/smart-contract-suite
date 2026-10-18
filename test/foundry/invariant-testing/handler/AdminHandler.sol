@@ -119,6 +119,55 @@ contract AdminHandler is HandlerBase {
         }
     }
 
+    /// @notice The admin tries to give a spare wallet on a lazy device one of that device's
+    ///         identifiers still waiting for a lazy batch
+    /// @dev Random draws almost never line those three things up, so this sets the case up on
+    ///      purpose. The registry must refuse it every time, so it is left out of
+    ///      `HandlerDistribution`. If it ever lands, `invariant_aLazyESIMIdentifierGoesOnlyToItsLazyWallet`
+    ///      reports it.
+    /// @param deviceSeed Picks the lazy device
+    /// @param salt CREATE2 salt for the spare wallet
+    function assignReservedIdentifierOnLazyDevice(uint256 deviceSeed, uint256 salt) external counted {
+        uint256 lazyDevices = state.lazyDeviceIdentifierCount();
+        if (lazyDevices == 0) {
+            state.recordRevert("assignReservedOnLazyDevice");
+            return;
+        }
+        string memory deviceIdentifier = state.lazyDeviceIdentifiers(deviceSeed % lazyDevices);
+        address device = registry.uniqueIdentifierToDeviceWallet(deviceIdentifier);
+        if (device == address(0)) {
+            state.recordRevert("assignReservedOnLazyDevice");
+            return;
+        }
+
+        // The next identifier the lazy route has not deployed yet, if there is one
+        uint256 deployed = lazyWalletRegistry.eSIMWalletsDeployed(deviceIdentifier);
+        string memory waiting;
+        try lazyWalletRegistry.eSIMIdentifiersAssociatedWithDeviceIdentifier(deviceIdentifier, deployed) returns (
+            string memory identifier
+        ) {
+            waiting = identifier;
+        } catch {
+            state.recordRevert("assignReservedOnLazyDevice");
+            return;
+        }
+
+        vm.prank(_currentAdmin());
+        try DeviceWallet(payable(device)).deployESIMWallet(false, bound(salt, 5000, 6000)) returns (address spare) {
+            state.recordESIMWallet(spare, device);
+            state.clearETHAccessGrant(device, spare);
+
+            vm.prank(_currentAdmin());
+            try registry.assignESIMIdentifier(spare, waiting) returns (string memory) {
+                state.recordCall("assignReservedOnLazyDevice");
+            } catch {
+                state.recordRevert("assignReservedOnLazyDevice");
+            }
+        } catch {
+            state.recordRevert("assignReservedOnLazyDevice");
+        }
+    }
+
     /// @notice The admin writes an eSIM identifier onto a wallet deployed the ordinary way
     /// @dev The lazy route sets its identifiers inside the deployment, so without this the campaign
     ///      only ever saw one of the two paths that claim one. The contested pool is what makes the
