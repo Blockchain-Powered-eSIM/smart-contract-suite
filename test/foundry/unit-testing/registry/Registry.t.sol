@@ -17,21 +17,24 @@ contract RegistryTest is DeployerBase {
     event VaultAddressUpdated(address indexed _updatedVaultAddress);
 
     /// @notice The admin trips the pause, so an operator watching the backend can act without
-    /// waiting on the upgrade key. Nobody else can, including the owner.
-    function test_pause_onlyTheAdminCanTripIt() public {
-        vm.prank(registry.owner());
-        vm.expectRevert(Errors.OnlyAdmin.selector);
-        registry.pause();
-
+    /// waiting on the upgrade key. Nobody else can except the owner.
+    function test_pause_onlyTheAdminOrTheOwnerCanTripIt() public {
         vm.prank(user1);
         vm.expectRevert(Errors.OnlyAdmin.selector);
         registry.pause();
 
-        assertEq(registry.paused(), false, "The rejected calls must leave the protocol running");
+        assertEq(registry.paused(), false, "The rejected call must leave the protocol running");
 
         vm.prank(registry.eSIMWalletAdmin());
         registry.pause();
         assertEq(registry.paused(), true, "The admin's call must have tripped the pause");
+    }
+
+    /// @notice The owner can trip it too, which is what still works while the admin is suspended
+    function test_pause_theOwnerCanTripIt() public {
+        vm.prank(registry.owner());
+        registry.pause();
+        assertEq(registry.paused(), true, "The owner's call must have tripped the pause");
     }
 
     /// @notice Release is the owner's, not the admin's. The admin key signs backend batches all

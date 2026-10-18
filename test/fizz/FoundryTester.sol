@@ -173,6 +173,15 @@ contract FoundryTester is Test, Handlers {
         assertTrue(property_noUnauthorizedCallSucceeded(), "a rotation went through without the new key");
     }
 
+    /// @notice The owner can still pause while the admin key is suspended
+    function test_smoke_theOwnerCanPauseWhileTheAdminIsSuspended() public {
+        registry_secondary(5, 0); // suspend the admin
+        assertEq(registry.eSIMWalletAdmin(), address(0), "the admin must be suspended");
+
+        registry_secondary(10, 0); // the owner pauses
+        assertTrue(registry.paused(), "the owner's pause must apply");
+    }
+
     /// @notice Runs a handler that is expected to revert, and fails if it did not
     /// @dev Through an external self-call so the revert unwinds only the handler. A handler that
     ///      quietly returned instead of reverting would otherwise read as a pass.

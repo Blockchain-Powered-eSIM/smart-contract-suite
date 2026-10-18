@@ -176,6 +176,13 @@ contract ProtocolAdminOperationsGasTest is AdminBase {
         vm.snapshotGasLastCall(NAMESPACE, "unpauseInstantly: release a protocol wide pause");
     }
 
+    /// @notice A guardian raising a pause, the route that works while the hot key is suspended
+    function test_pauseInstantly() public {
+        vm.prank(guardian);
+        protocolAdmin.pauseInstantly(address(registry));
+        vm.snapshotGasLastCall(NAMESPACE, "pauseInstantly: raise a protocol wide pause");
+    }
+
     /// @dev Four calls at the same target, so the batch rows measure the batch machinery rather
     ///      than four different pieces of protocol logic.
     function _fourCapCalls()

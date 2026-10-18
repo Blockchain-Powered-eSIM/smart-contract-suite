@@ -120,9 +120,10 @@ abstract contract RegistryHandler is Properties {
     ///      wallet as caller, so both the real rotation and a wallet calling the registry directly
     ///      live in `DeviceWalletHandler`.
     function registry_secondary(uint8 selector, uint256 arg) public {
-        selector = uint8(selector % 10);
+        selector = uint8(selector % 11);
 
         if (selector == 0) _registry_pause();
+        else if (selector == 10) _registry_pauseAsOwner();
         else if (selector == 1) _registry_unpause();
         else if (selector == 2) _registry_setDefaultPriceCapUSDCents(arg);
         else if (selector == 3) _registry_setPaymentAdapter(arg);
@@ -187,6 +188,11 @@ abstract contract RegistryHandler is Properties {
     }
 
     function _registry_pause() internal asAdmin {
+        registry.pause();
+    }
+
+    /// @notice The owner's pause, the route a guardian reaches through ProtocolAdmin
+    function _registry_pauseAsOwner() internal asOwner {
         registry.pause();
     }
 

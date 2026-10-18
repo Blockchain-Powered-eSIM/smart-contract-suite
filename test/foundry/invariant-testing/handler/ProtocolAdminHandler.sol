@@ -51,8 +51,13 @@ contract ProtocolAdminHandler is Test {
     uint256 public executed;
     uint256 public cancelled;
     uint256 public unpaused;
+    uint256 public pausedByGuardian;
     uint256 public cancellersRevoked;
     uint256 public rejections;
+
+    /// @notice Set when a guardian's pause was refused, which would leave nobody able to pause
+    ///         while the hot key is suspended
+    bool public ghost_guardianPauseRefused;
 
     /// @notice Set when a scheduled replacement named the suspended incumbent and lifted the suspension
     bool public ghost_suspensionLiftedByNomination;
@@ -165,13 +170,36 @@ contract ProtocolAdminHandler is Test {
         }
     }
 
-    /// @notice The hot key trips the pause, which is the only way one ever appears
+    /// @notice The hot key trips the pause
     /// @dev Not a role on the admin contract at all. It is here because the guardian's release is
     ///      only reachable from a paused state, and a campaign that never paused would leave that
     ///      half of the role untested.
     function pauseProtocol() external {
         vm.prank(walletAdmin);
         try registry.pause() {} catch {}
+    }
+
+    /// @notice A guardian raises the pause without waiting, the route that works while the hot key
+    ///         is suspended
+    function pauseInstantly() external {
+        vm.prank(guardian);
+        try admin.pauseInstantly(address(registry)) {
+            ++pausedByGuardian;
+        } catch {
+            ghost_guardianPauseRefused = true;
+        }
+    }
+
+    /// @notice Nobody outside the guardian set may raise a pause through the admin contract
+    function rejectsAnUnauthorisedPause(address _caller) external {
+        if(_caller == guardian) return;
+
+        vm.prank(_caller);
+        try admin.pauseInstantly(address(registry)) {
+            revert("an account outside the guardian set raised a pause");
+        } catch {
+            ++rejections;
+        }
     }
 
     /// @notice A guardian releases the pause without waiting

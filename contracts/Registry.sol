@@ -344,7 +344,13 @@ contract Registry is
     ///      day and is the one watching, so it needs to act without waiting; giving it the release
     ///      as well would let a single hot key hold user funds indefinitely. Neither key can reach
     ///      an owner's own `execute`, so a pause never stops someone spending their own ETH.
-    function pause() external onlyESIMWalletAdmin {
+    ///
+    ///      The owner can trip it too. That is the route `ProtocolAdmin.pauseInstantly` takes, and
+    ///      the one that still works while the admin is suspended or being replaced, when
+    ///      `eSIMWalletAdmin()` answers zero.
+    /// @inheritdoc IPausable
+    function pause() external {
+        if(msg.sender != eSIMWalletAdmin() && msg.sender != owner()) revert Errors.OnlyAdmin();
         paused = true;
         emit Paused(msg.sender);
     }

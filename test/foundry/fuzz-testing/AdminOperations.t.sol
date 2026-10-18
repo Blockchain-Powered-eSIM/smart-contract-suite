@@ -48,6 +48,22 @@ contract AdminOperationsFuzzTest is AdminBase {
         protocolAdmin.unpauseInstantly(address(registry));
     }
 
+    /// @notice Only a guardian may raise a pause through the admin contract, whoever else asks
+    /// forge-config: default.fuzz.runs = 2000
+    function testFuzz_pauseInstantly_turnsAwayEveryAccountOutsideTheGuardianSet(address _caller) public {
+        vm.assume(_caller != guardian);
+
+        bytes32 role = protocolAdmin.GUARDIAN_ROLE();
+
+        vm.prank(_caller);
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, _caller, role)
+        );
+        protocolAdmin.pauseInstantly(address(registry));
+
+        assertFalse(registry.paused(), "a refused call must leave the protocol running");
+    }
+
     /// @notice Only a guardian may strip a canceller, whoever else asks
     /// forge-config: default.fuzz.runs = 2000
     function testFuzz_revokeCancellers_turnsAwayEveryAccountOutsideTheGuardianSet(address _caller) public {

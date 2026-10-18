@@ -20,21 +20,24 @@ import {TimelockController} from "@openzeppelin/contracts/governance/TimelockCon
 ///      announcement is what the delay buys, and once the wait is served there is no reason to make
 ///      the protocol depend on one key still being available to press the button.
 ///
-///      A guardian does not get a general fast path. It can say exactly three things, and each is
-///      written here as its own function rather than as a payload, so no fourth sentence is
+///      A guardian does not get a general fast path. It can say exactly four things, and each is
+///      written here as its own function rather than as a payload, so no fifth sentence is
 ///      expressible however the role is held:
 ///
-///      1. Release a pause. An upgrade that waits is reviewable; an outage that waits is an outage.
-///      2. Take `CANCELLER_ROLE` away from an account.
-///      3. Suspend the protocol's admin key.
+///      1. Raise a pause. The hot admin key can too, but not while it is suspended or being
+///         replaced, which is exactly when one may be needed.
+///      2. Release a pause. An upgrade that waits is reviewable; an outage that waits is an outage.
+///      3. Take `CANCELLER_ROLE` away from an account.
+///      4. Suspend the protocol's admin key.
 ///
-///      All three take something away and none of them grants anything, which is what keeps the
-///      role away from user funds. Releasing a pause cannot move ETH, stripping a canceller cannot,
-///      and a suspended admin is an admin that has stopped being able to spend rather than one
-///      chosen by the guardian. Restoring any of the three is an owner action and waits, so the
-///      side taking power away always wins the race against the side handing it back. A guardian
-///      able to reinstate an admin would lose that, and a guardian able to appoint one would reach
-///      `ESIMWallet.buyDataBundleWithToken` and every wallet holding funds access through it.
+///      All four take something away or put back what a pause took, and none of them grants
+///      anything, which is what keeps the role away from user funds. A pause cannot move ETH,
+///      stripping a canceller cannot, and a suspended admin is an admin that has stopped being
+///      able to spend rather than one chosen by the guardian. Restoring a canceller or an admin is
+///      an owner action and waits, so the side taking power away always wins the race against the
+///      side handing it back. A guardian able to reinstate an admin would lose that, and a guardian
+///      able to appoint one would reach `ESIMWallet.buyDataBundleWithToken` and every wallet
+///      holding funds access through it.
 ///
 ///      The second one exists because without it a compromised canceller is permanent. Evicting any
 ///      role holder means scheduling `revokeRole`, a scheduled operation can be cancelled by any
@@ -53,7 +56,8 @@ import {TimelockController} from "@openzeppelin/contracts/governance/TimelockCon
 ///      trust to whoever can upgrade it, and there is no delay left to protect that step.
 contract ProtocolAdmin is TimelockController {
 
-    /// @notice Releases a pause and strips a canceller, both without waiting for the delay
+    /// @notice Raises and releases a pause, strips a canceller and suspends the admin, all without
+    ///         waiting for the delay
     /// @dev Always granted `EXECUTOR_ROLE` alongside it, which keeps the role useful if open
     ///      execution is ever closed off. Deliberately not granted `CANCELLER_ROLE`; see the note on
     ///      the contract for why that pairing is what makes a guardian un-evictable.
@@ -65,6 +69,9 @@ contract ProtocolAdmin is TimelockController {
     ///      timelock into a plain multisig and nothing after it ever waits again. Read through
     ///      `getMinDelay`, which is what `schedule` measures against.
     uint256 public immutable minDelayFloor;
+
+    /// @notice A guardian raised a pause
+    event PauseRaised(address indexed target, address indexed guardian);
 
     /// @notice A guardian released a pause
     event PauseReleased(address indexed target, address indexed guardian);
@@ -225,6 +232,17 @@ contract ProtocolAdmin is TimelockController {
     // ---------------------------------------------------------------------------------------------
     // Guardian powers
     // ---------------------------------------------------------------------------------------------
+
+    /// @notice Raises a pause on a protocol contract immediately
+    /// @dev The selector is fixed in the interface, as with `unpauseInstantly`. The worst a rogue
+    ///      guardian reaches is a stopped protocol, which the hot admin key could already cause, and
+    ///      an honest guardian can release it again at once.
+    /// @param target Contract to pause
+    function pauseInstantly(address target) external onlyRole(GUARDIAN_ROLE) {
+        emit PauseRaised(target, _msgSender());
+
+        IPausable(target).pause();
+    }
 
     /// @notice Releases a pause on a protocol contract immediately
     /// @dev The selector is fixed in the interface rather than passed in, so this cannot be pointed
