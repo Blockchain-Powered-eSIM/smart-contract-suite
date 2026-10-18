@@ -247,6 +247,132 @@ contract DeployConfigTest is ScriptBase {
     }
 
     // ---------------------------------------------------------------------------------------------
+    // Hot keys kept out of the timelock
+    // ---------------------------------------------------------------------------------------------
+
+    function test_validate_revertsWhenTheDeployerIsAProposer() public {
+        DeployConfig.Config memory config = _validConfig();
+        config.proposers = _list(deployer);
+
+        vm.expectRevert(abi.encodeWithSelector(DeployConfig.HotKeyInTimelockRole.selector, deployer));
+        loader.validate(config);
+    }
+
+    /// @dev A hot key that can cancel can cancel its own eviction
+    function test_validate_revertsWhenTheAdminKeyIsACanceller() public {
+        DeployConfig.Config memory config = _validConfig();
+        config.cancellers = _list(eSIMWalletAdmin);
+
+        vm.expectRevert(abi.encodeWithSelector(DeployConfig.HotKeyInTimelockRole.selector, eSIMWalletAdmin));
+        loader.validate(config);
+    }
+
+    function test_validate_revertsWhenTheAdminKeyIsAGuardian() public {
+        DeployConfig.Config memory config = _validConfig();
+        config.guardians = _list(eSIMWalletAdmin);
+
+        vm.expectRevert(abi.encodeWithSelector(DeployConfig.HotKeyInTimelockRole.selector, eSIMWalletAdmin));
+        loader.validate(config);
+    }
+
+    /// forge-config: default.fuzz.runs = 500
+    function testFuzz_validate_findsAHotKeyAnywhereInARoleList(uint8 _position, uint8 _length, bool _useAdmin) public {
+        uint256 length = bound(_length, 1, 8);
+        uint256 position = bound(_position, 0, length - 1);
+        address hotKey = _useAdmin ? eSIMWalletAdmin : deployer;
+
+        DeployConfig.Config memory config = _validConfig();
+        config.cancellers = new address[](length);
+        for(uint256 i = 0; i < length; ++i) {
+            config.cancellers[i] = makeAddr(string.concat("canceller", vm.toString(i)));
+        }
+        config.cancellers[position] = hotKey;
+
+        vm.expectRevert(abi.encodeWithSelector(DeployConfig.HotKeyInTimelockRole.selector, hotKey));
+        loader.validate(config);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Base mainnet
+    // ---------------------------------------------------------------------------------------------
+
+    /// @notice A configuration that passes every Base mainnet check
+    /// @dev Proposers and guardians are given code, as the Safes they stand for would have.
+    function _baseMainnetConfig() private returns (DeployConfig.Config memory config) {
+        // Loaded before the switch, since `load` validates and the environment holds a mock token
+        config = _validConfig();
+        vm.chainId(DeployConfig.BASE_CHAIN_ID);
+        config.settlementToken = DeployConfig.BASE_USDC;
+        vm.etch(proposer, hex"00");
+        vm.etch(guardian, hex"00");
+    }
+
+    function test_validate_acceptsABaseMainnetConfigWithSafesAndUSDC() public {
+        loader.validate(_baseMainnetConfig());
+    }
+
+    /// @dev Bridged USDbC has six decimals too, so nothing but the address tells the two apart
+    function test_validate_revertsOnBaseWhenTheSettlementTokenIsNotUSDC() public {
+        DeployConfig.Config memory config = _baseMainnetConfig();
+        config.settlementToken = address(settlementToken);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(DeployConfig.WrongSettlementToken.selector, DeployConfig.BASE_USDC, address(settlementToken))
+        );
+        loader.validate(config);
+    }
+
+    /// @dev A testnet Safe copied over has no code on mainnet, and nobody could ever sign for it
+    function test_validate_revertsOnBaseWhenAProposerIsNotAContract() public {
+        DeployConfig.Config memory config = _baseMainnetConfig();
+        vm.etch(proposer, "");
+
+        vm.expectRevert(
+            abi.encodeWithSelector(DeployConfig.RoleHolderNotAContract.selector, "TIMELOCK_PROPOSERS", proposer)
+        );
+        loader.validate(config);
+    }
+
+    function test_validate_revertsOnBaseWhenAGuardianIsNotAContract() public {
+        DeployConfig.Config memory config = _baseMainnetConfig();
+        vm.etch(guardian, "");
+
+        vm.expectRevert(
+            abi.encodeWithSelector(DeployConfig.RoleHolderNotAContract.selector, "TIMELOCK_GUARDIANS", guardian)
+        );
+        loader.validate(config);
+    }
+
+    /// @dev Cancellers are meant to be the single keys behind a proposer Safe
+    function test_validate_acceptsAnEOACancellerOnBase() public {
+        DeployConfig.Config memory config = _baseMainnetConfig();
+        assertEq(canceller.code.length, 0, "the canceller must be an EOA here");
+
+        loader.validate(config);
+    }
+
+    /// @dev The Base checks stay on Base, so a testnet deploy with EOA roles and a mock token passes
+    function test_validate_leavesOtherChainsAlone() public view {
+        DeployConfig.Config memory config = _validConfig();
+        assertTrue(block.chainid != DeployConfig.BASE_CHAIN_ID, "the test chain must not be Base");
+        assertEq(proposer.code.length, 0, "the proposer must be an EOA here");
+
+        loader.validate(config);
+    }
+
+    /// forge-config: default.fuzz.runs = 1000
+    function testFuzz_validate_refusesAnyOtherSettlementTokenOnBase(address _token) public {
+        vm.assume(_token != DeployConfig.BASE_USDC && _token != address(0));
+        DeployConfig.Config memory config = _baseMainnetConfig();
+        config.settlementToken = _token;
+
+        vm.expectRevert(
+            abi.encodeWithSelector(DeployConfig.WrongSettlementToken.selector, DeployConfig.BASE_USDC, _token)
+        );
+        loader.validate(config);
+    }
+
+    // ---------------------------------------------------------------------------------------------
     // The record key
     // ---------------------------------------------------------------------------------------------
 

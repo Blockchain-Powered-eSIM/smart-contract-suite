@@ -37,6 +37,15 @@ library DeployConfig {
     ///      before the chain id was added.
     string internal constant ENTRY_POINT_TAG = "entrypoint-v8";
 
+    /// @notice Base mainnet chain id
+    uint256 internal constant BASE_CHAIN_ID = 8453;
+
+    /// @notice Circle's native USDC on Base mainnet, the only settlement token accepted there
+    /// @dev Checked with cast on 2026-10-18: has code, symbol USDC, name USD Coin, 6 decimals.
+    ///      Pinned because bridged USDbC also answers `decimals()` with 6 and would pass every
+    ///      other check, and `PaymentAdapter.settlementToken` has no setter.
+    address internal constant BASE_USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
+
     /// @notice Delay every scheduled admin operation waits before it can be executed
     uint256 internal constant TIMELOCK_DELAY = 2 days;
 
@@ -77,6 +86,15 @@ library DeployConfig {
 
     /// @notice An account appears in two role lists the timelock requires to stay separate
     error RolesMustNotOverlap(address account);
+
+    /// @notice The deployer or the hot admin key was named in a timelock role list
+    error HotKeyInTimelockRole(address account);
+
+    /// @notice The settlement token is not the one this chain must use
+    error WrongSettlementToken(address expected, address actual);
+
+    /// @notice A proposer or guardian on a production chain is not a contract
+    error RoleHolderNotAContract(string variable, address account);
 
     /// @notice Reads every deployment parameter from the environment and checks it
     /// @dev Reading and checking are separate so the checks can be reached with a configuration
@@ -138,6 +156,50 @@ library DeployConfig {
         _requireDisjoint(config.proposers, config.cancellers);
         _requireDisjoint(config.proposers, config.guardians);
         _requireDisjoint(config.cancellers, config.guardians);
+
+        // The deployer owns everything until the handover, and the admin key signs backend calls
+        // all day. Either one holding a timelock role undoes what the timelock is for: a hot key
+        // that can cancel can cancel its own eviction.
+        _requireNotInRoles(config, config.deployer);
+        _requireNotInRoles(config, config.eSIMWalletAdmin);
+
+        if(block.chainid == BASE_CHAIN_ID) _validateBaseMainnet(config);
+    }
+
+    /// @notice Checks that only matter where real money moves
+    /// @dev Testnet Safes have no code on mainnet, so a testnet value copied over would hand every
+    ///      contract to a timelock nobody can sign for. Requiring code catches that and a typo alike.
+    ///      Cancellers are left out on purpose: they are meant to be single keys.
+    function _validateBaseMainnet(Config memory config) private view {
+        if(config.settlementToken != BASE_USDC) {
+            revert WrongSettlementToken(BASE_USDC, config.settlementToken);
+        }
+
+        _requireContracts("TIMELOCK_PROPOSERS", config.proposers);
+        _requireContracts("TIMELOCK_GUARDIANS", config.guardians);
+    }
+
+    /// @notice Reverts if the account holds any timelock role
+    function _requireNotInRoles(Config memory config, address account) private pure {
+        if(
+            _contains(config.proposers, account)
+                || _contains(config.cancellers, account)
+                || _contains(config.guardians, account)
+        ) revert HotKeyInTimelockRole(account);
+    }
+
+    /// @notice Reverts if any account in the list has no code
+    function _requireContracts(string memory variable, address[] memory accounts) private view {
+        for(uint256 i = 0; i < accounts.length; ++i) {
+            if(accounts[i].code.length == 0) revert RoleHolderNotAContract(variable, accounts[i]);
+        }
+    }
+
+    function _contains(address[] memory list, address account) private pure returns (bool) {
+        for(uint256 i = 0; i < list.length; ++i) {
+            if(list[i] == account) return true;
+        }
+        return false;
     }
 
     /// @notice Reverts if any account appears in both lists
