@@ -262,6 +262,10 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     ///      the wrong address just calls this again. Nominating the current owner cancels the
     ///      request and re-binds the wallet to its device wallet in the same call, with ETH access
     ///      left off since the flag it had before the removal is not recorded anywhere.
+    ///
+    ///      Only ETH goes back to the outgoing owner. Any ERC-20 still here goes to whoever accepts,
+    ///      because this wallet cannot list the tokens it holds. Sweep each one with
+    ///      `sendTokenToDeviceWallet` in the same `executeBatch` as this call.
     /// @param _newOwner Address of the new device wallet to transfer ownership of this wallet
     function requestTransferOwnership(address _newOwner) external onlyDeviceWallet nonReentrant {
         Registry registry = deviceWallet.registry();
