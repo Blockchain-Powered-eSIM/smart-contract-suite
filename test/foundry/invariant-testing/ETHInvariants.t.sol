@@ -20,6 +20,11 @@ contract ETHInvariantsTest is CampaignBase {
         assertEq(_heldETH(), state.accountedETH(), "ETH left the accounted set");
     }
 
+    /// @notice No deploy that forwards ETH runs while the protocol is paused
+    function invariant_noDeployForwardsETHWhilePaused() public view {
+        assertFalse(adminHandler.ghost_deployedWhilePaused(), "A deploy that forwards ETH ran while paused");
+    }
+
     /// @notice None of the four singletons ever holds ETH between transactions
     /// @dev Exactly zero, not merely small. None of them has a withdrawal path, so any balance is
     ///      stranded for good. The factory forwards or refunds everything it is sent, both

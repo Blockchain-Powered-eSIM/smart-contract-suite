@@ -37,6 +37,36 @@ contract DeviceWalletFactoryBatchDeployTest is DeviceWalletFactoryFixture {
         vm.stopPrank();
     }
 
+    /// @notice The batch forwards ETH, so it is held by the pause like every other path that does
+    function test_deployDeviceWalletForUsers_refusesWhilePaused() public {
+        string[] memory identifiers = new string[](1);
+        bytes32[2][] memory keys = new bytes32[2][](1);
+        uint256[] memory salts = new uint256[](1);
+        uint256[] memory deposits = new uint256[](1);
+        identifiers[0] = customDeviceUniqueIdentifiers[0];
+        keys[0] = listOfOwnerKeys[0];
+        salts[0] = 7001;
+        deposits[0] = 1 ether;
+
+        vm.prank(eSIMWalletAdmin);
+        registry.pause();
+
+        vm.deal(eSIMWalletAdmin, 1 ether);
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(Errors.ProtocolPaused.selector);
+        deviceWalletFactory.deployDeviceWalletForUsers{value: 1 ether}(identifiers, keys, salts, deposits);
+
+        assertEq(registry.uniqueIdentifierToDeviceWallet(identifiers[0]), address(0), "Nothing may be deployed");
+        assertEq(eSIMWalletAdmin.balance, 1 ether, "The deposit must stay with the caller");
+
+        vm.prank(upgradeManager);
+        registry.unpause();
+
+        vm.prank(eSIMWalletAdmin);
+        deviceWalletFactory.deployDeviceWalletForUsers{value: 1 ether}(identifiers, keys, salts, deposits);
+        assertTrue(registry.uniqueIdentifierToDeviceWallet(identifiers[0]) != address(0), "It works again once unpaused");
+    }
+
     function test_deployDeviceWalletForUsers() public {
         uint256[] memory salts = new uint256[](5);
         uint256[] memory deposits = new uint256[](5);

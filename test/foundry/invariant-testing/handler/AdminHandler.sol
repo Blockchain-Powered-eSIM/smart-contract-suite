@@ -20,6 +20,9 @@ contract AdminHandler is HandlerBase {
     ///      call reverts on replay instead of on what is being tested.
     uint256 private _refNonce;
 
+    /// @notice Set when a deploy that forwards ETH went through while the protocol was paused
+    bool public ghost_deployedWhilePaused;
+
     constructor(HandlerConfig memory config) HandlerBase(config) {}
 
     /// @notice The admin deploys a batch of device wallets, each with one eSIM wallet
@@ -49,10 +52,13 @@ contract AdminHandler is HandlerBase {
             deposits[i] = perWallet;
         }
 
+        bool wasPaused = registry.paused();
+
         vm.prank(_currentAdmin());
         try deviceWalletFactory.deployDeviceWalletForUsers{value: deposit}(
             identifiers, ownerKeys, salts, deposits
         ) returns (Wallets[] memory deployed) {
+            if (wasPaused) ghost_deployedWhilePaused = true;
             for (uint256 i = 0; i < deployed.length; ++i) {
                 state.recordDeviceWallet(deployed[i].deviceWallet, identifiers[i], ownerKeys[i]);
                 state.recordESIMWallet(deployed[i].eSIMWallet, deployed[i].deviceWallet);
@@ -270,11 +276,13 @@ contract AdminHandler is HandlerBase {
         maxWallets = bound(maxWallets, 0, lazyWalletRegistry.MAX_ESIM_WALLETS_PER_CALL() + 5);
 
         bytes32[2] memory ownerKey = _ownerKey(uint256(keccak256(bytes(deviceIdentifier))));
+        bool wasPaused = registry.paused();
 
         vm.prank(_currentAdmin());
         try lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier{value: deposit}(
             ownerKey, deviceIdentifier, salt, deposit, maxWallets
         ) returns (address device, address[] memory wallets, uint256) {
+            if (wasPaused) ghost_deployedWhilePaused = true;
             state.recordDeviceWallet(device, deviceIdentifier, ownerKey);
             for (uint256 i = 0; i < wallets.length; ++i) {
                 state.recordESIMWallet(wallets[i], device);

@@ -129,9 +129,14 @@ abstract contract DeviceWalletFactoryHandler is Properties {
         uint256[] memory _depositAmounts,
         uint256 value
     ) public asAdmin {
+        bool wasPaused = registry.paused();
+
         Wallets[] memory deployed = deviceWalletFactory.deployDeviceWalletForUsers{value: value}(
             _deviceUniqueIdentifiers, _deviceWalletOwnersKey, _salts, _depositAmounts
         );
+
+        // The batch forwards ETH, so it must not run while paused
+        if (wasPaused) ghosts.pausedCallSucceeded = true;
 
         for (uint256 i; i < deployed.length; ++i) {
             _trackDeviceWallet(deployed[i].deviceWallet);

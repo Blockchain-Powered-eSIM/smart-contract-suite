@@ -119,6 +119,9 @@ contract FoundryTester is Test, Handlers {
         _expectRefused(
             abi.encodeCall(this.lazyWalletRegistry_deployLazyWalletAndSetESIMIdentifier_clamped, (2, 88, 1 ether, 5, false))
         );
+        _expectRefused(
+            abi.encodeCall(this.deviceWalletFactory_deployDeviceWalletForUsers_clamped, (61, 62, 1, 0.1 ether, false))
+        );
 
         assertTrue(property_noUnauthorizedCallSucceeded(), "a guarded path ran while paused");
     }

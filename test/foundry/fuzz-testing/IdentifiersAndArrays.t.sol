@@ -376,6 +376,33 @@ contract IdentifiersAndArraysTest is FuzzBase {
         assertEq(registry.eSIMWalletForIdentifier(identifier), address(0), "A refused claim must leave it unheld");
     }
 
+    /// @notice No batch shape or deposit gets an admin deploy past the pause
+    /// forge-config: default.fuzz.runs = 500
+    function testFuzz_deployDeviceWalletForUsers_refusesAnyBatchWhilePaused(uint8 _count, uint96 _deposit) public {
+        uint256 count = bound(_count, 1, 5);
+        string[] memory identifiers = new string[](count);
+        bytes32[2][] memory keys = new bytes32[2][](count);
+        uint256[] memory salts = new uint256[](count);
+        uint256[] memory deposits = new uint256[](count);
+        for (uint256 i = 0; i < count; ++i) {
+            identifiers[i] = customDeviceUniqueIdentifiers[i];
+            keys[i] = listOfOwnerKeys[i];
+            salts[i] = 8800 + i;
+            deposits[i] = _deposit;
+        }
+        uint256 total = uint256(_deposit) * count;
+
+        vm.prank(eSIMWalletAdmin);
+        registry.pause();
+        vm.deal(eSIMWalletAdmin, total);
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(Errors.ProtocolPaused.selector);
+        deviceWalletFactory.deployDeviceWalletForUsers{value: total}(identifiers, keys, salts, deposits);
+
+        assertEq(eSIMWalletAdmin.balance, total, "No ETH may leave the caller");
+    }
+
     /// @notice Deploys one device wallet and its first eSIM wallet
     function _deployPair(
         string memory _deviceIdentifier,

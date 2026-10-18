@@ -187,6 +187,9 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     /// @notice To deploy multiple device wallets at once
     /// @dev Each entry deploys a device wallet, its first eSIM wallet and the registry records in
     ///      one go. ETH left over once the batch has been funded is returned to the caller.
+    ///
+    ///      Refused while the protocol is paused, because it forwards ETH. The lazy deploy that
+    ///      reaches this through the registry is held by the same rule on its own side.
     /// @param _deviceUniqueIdentifiers Array of unique device identifiers for each device wallet
     /// @param _deviceWalletOwnersKey Array of P256 public keys of owners of the respective device wallets
     /// @param _salts Array of CREATE2 salts, one per device wallet
@@ -198,6 +201,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         uint256[] calldata _salts,
         uint256[] calldata _depositAmounts
     ) external payable onlyAdminOrRegistry returns (Wallets[] memory) {
+        registry.requireNotPaused();
         uint256 numberOfDeviceWallets = _deviceUniqueIdentifiers.length;
         if(numberOfDeviceWallets == 0) revert Errors.EmptyBatch();
         if(numberOfDeviceWallets != _deviceWalletOwnersKey.length) {
