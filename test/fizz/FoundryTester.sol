@@ -130,7 +130,8 @@ contract FoundryTester is Test, Handlers {
         // prank outlives the revert. Left running, it makes every later call here revert on
         // "cannot override an ongoing prank" instead of on the guard it is meant to test. Pranks
         // belong to a call depth, so it is cleared from the same depth the handler ran at.
-        address(this).call(abi.encodeCall(this.clearLeftoverPrank, ()));
+        (bool cleared,) = address(this).call(abi.encodeCall(this.clearLeftoverPrank, ()));
+        assertTrue(cleared, "clearing a leftover prank must not fail");
     }
 
     /// @notice Stops a prank a reverted handler left running at this call depth
