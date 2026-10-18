@@ -76,6 +76,9 @@ stay O(n) in the population and never O(n squared).
   Every registered asset has decimals in `[2, 36]`, and a symbol once registered never returns to
   unregistered. SHOULD-HOLD: I-2, I-3, `_writeAsset` is the sole writer.
 
+- [x] **GL-15 — the admin never charges a wallet past what its owner allowed.**
+  Every admin purchase that goes through comes off `adminAllowanceUSDCents` by exactly its price, and none goes through for more than was left. A purchase the owner signs for itself leaves the allowance alone. SHOULD-HOLD: `_spendAdminAllowance` runs on every admin purchase and only the owner sets the figure. Checked at write time, like GL-11, because owners and handovers change the allowance between charges.
+
 ## Specific
 
 Asserted inside the handler that makes the call, where a before-and-after comparison is the point.

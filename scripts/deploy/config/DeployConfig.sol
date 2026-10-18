@@ -56,6 +56,7 @@ library DeployConfig {
         address eSIMWalletAdmin;
         address vault;
         uint64 priceCapUSDCents;
+        uint64 adminAllowanceUSDCents;
         address settlementToken;
         address[] proposers;
         address[] cancellers;
@@ -92,6 +93,9 @@ library DeployConfig {
         config.eSIMWalletAdmin = vm.envAddress("ESIM_WALLET_ADMIN");
         config.vault = vm.envAddress("VAULT");
         config.priceCapUSDCents = uint64(vm.envUint("PRICE_CAP_USD_CENTS"));
+        // Required rather than defaulted: zero is a legal value that stops every admin charge, so
+        // a missing variable must not quietly become it
+        config.adminAllowanceUSDCents = uint64(vm.envUint("ADMIN_ALLOWANCE_USD_CENTS"));
         config.settlementToken = vm.envAddress("SETTLEMENT_TOKEN");
         config.entryPoint = IEntryPoint(ENTRY_POINT_V08);
 

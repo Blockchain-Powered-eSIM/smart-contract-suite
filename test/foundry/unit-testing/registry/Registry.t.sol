@@ -123,6 +123,51 @@ contract RegistryTest is DeployerBase {
         registry.setDefaultPriceCapUSDCents(0);
     }
 
+    event DefaultAdminAllowanceUSDCentsUpdated(uint64 _allowance);
+
+    /// @notice The default admin allowance is the owner's to set. The admin is the party it
+    /// limits, so an admin that could raise it would be limited by nothing.
+    function test_setDefaultAdminAllowanceUSDCents_rejectsTheAdmin() public {
+        address admin = registry.eSIMWalletAdmin();
+
+        vm.prank(admin);
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", admin));
+        registry.setDefaultAdminAllowanceUSDCents(type(uint64).max);
+
+        assertEq(
+            registry.defaultAdminAllowanceUSDCents(),
+            defaultAdminAllowanceUSDCents,
+            "The admin must not be able to change the default"
+        );
+    }
+
+    function test_setDefaultAdminAllowanceUSDCents_ownerSetsItAndItIsAnnounced() public {
+        vm.expectEmit(true, true, true, true, address(registry));
+        emit DefaultAdminAllowanceUSDCentsUpdated(10_000);
+
+        vm.prank(registry.owner());
+        registry.setDefaultAdminAllowanceUSDCents(10_000);
+
+        assertEq(registry.defaultAdminAllowanceUSDCents(), 10_000, "The owner must be able to set it");
+    }
+
+    /// @notice Zero is a legal default: new wallets take no admin charges until their owner says so
+    function test_setDefaultAdminAllowanceUSDCents_acceptsZero() public {
+        vm.prank(registry.owner());
+        registry.setDefaultAdminAllowanceUSDCents(0);
+
+        assertEq(registry.defaultAdminAllowanceUSDCents(), 0, "Zero must be accepted");
+    }
+
+    /// @notice `initialize` stores the default it was handed
+    function test_initialize_storesTheDefaultAdminAllowance() public view {
+        assertEq(
+            registry.defaultAdminAllowanceUSDCents(),
+            defaultAdminAllowanceUSDCents,
+            "The registry must hold the allowance it was initialised with"
+        );
+    }
+
     /// @notice Moving the vault is the owner's, not the admin's. It is the destination of every
     /// payment the protocol collects, so it belongs behind the same delay as an upgrade.
     function test_updateVaultAddress_rejectsTheAdmin() public {

@@ -11,6 +11,16 @@ contract PaymentInvariantsTest is CampaignBase {
 
     bytes32[3] private symbols = [bytes32("USD"), bytes32("USDC"), bytes32("ETH")];
 
+    /// @notice Every admin charge comes off the wallet's allowance, and none goes past it
+    /// @dev Checked in the handler around each charge, since the allowance is also set by owners and
+    ///      reset on handovers, so no single total can be compared at the end of a run.
+    function invariant_adminChargesStayInsideTheAllowance() public view {
+        assertFalse(
+            paymentHandler.ghost_adminAllowanceBroken(),
+            "An admin charge passed the wallet's allowance or did not come off it"
+        );
+    }
+
     /// @notice One payment reference pays for one purchase on one wallet, whichever path spends it
     /// @dev A reference is one offchain payment. The backend retries the whole onchain step on any
     ///      failure, so a reference that could be spent a second time on the same wallet is a user

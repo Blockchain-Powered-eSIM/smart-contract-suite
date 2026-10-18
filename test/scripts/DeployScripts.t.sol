@@ -181,6 +181,11 @@ contract DeployScriptsTest is ScriptBase {
             "price cap"
         );
         assertEq(
+            DeploymentRecord.readUint("params.adminAllowanceUSDCents"),
+            ADMIN_ALLOWANCE_CENTS,
+            "admin allowance"
+        );
+        assertEq(
             DeploymentRecord.readUint("admin.initialDelay"),
             DeployConfig.TIMELOCK_DELAY,
             "timelock delay"
@@ -282,6 +287,7 @@ contract DeployScriptsTest is ScriptBase {
         assertEq(registry.eSIMWalletAdmin(), eSIMWalletAdmin, "admin");
         assertEq(registry.vault(), vault, "vault");
         assertEq(registry.defaultPriceCapUSDCents(), PRICE_CAP_CENTS, "price cap");
+        assertEq(registry.defaultAdminAllowanceUSDCents(), ADMIN_ALLOWANCE_CENTS, "admin allowance");
         assertEq(_adapter().settlementToken(), address(settlementToken), "settlement token");
     }
 
@@ -434,6 +440,19 @@ contract DeployScriptsTest is ScriptBase {
             address(_registry()),
             "still bound after a second run"
         );
+    }
+
+    /// @dev Covers a changed figure, and a registry upgraded from before the allowance existed,
+    ///      which reads zero until this runs.
+    function test_configure_bringsTheAdminAllowanceInLineWithTheEnvironment() public {
+        _deploy();
+
+        vm.setEnv("ADMIN_ALLOWANCE_USD_CENTS", "4321");
+        _configure();
+        // The environment is process wide, so it is put back before anything else reads it
+        vm.setEnv("ADMIN_ALLOWANCE_USD_CENTS", vm.toString(uint256(ADMIN_ALLOWANCE_CENTS)));
+
+        assertEq(_registry().defaultAdminAllowanceUSDCents(), 4321, "admin allowance");
     }
 
     function test_configure_revertsWhenAFactoryIsBoundToADifferentRegistry() public {

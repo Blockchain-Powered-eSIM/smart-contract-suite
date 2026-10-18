@@ -165,6 +165,9 @@ contract RegistryHelper {
     /// @notice Emitted when the owner changes the price ceiling eSIM wallets fall back to
     event DefaultPriceCapUSDCentsUpdated(uint64 _cap);
 
+    /// @notice Emitted when the admin allowance new eSIM wallets start with is set
+    event DefaultAdminAllowanceUSDCentsUpdated(uint64 _allowance);
+
     /// @notice Emitted when the owner points the registry at a payment adapter
     event PaymentAdapterUpdated(address indexed _paymentAdapter);
 

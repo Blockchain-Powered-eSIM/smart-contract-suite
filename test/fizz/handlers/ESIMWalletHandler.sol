@@ -199,9 +199,10 @@ abstract contract ESIMWalletHandler is Properties {
     }
 
     function eSIMWallet_secondary(uint8 selector, uint256 walletSeed, uint256 arg) public {
-        selector = uint8(selector % 2);
+        selector = uint8(selector % 3);
         if (selector == 0) _eSIMWallet_setPriceCapUSDCents(walletSeed, arg);
-        else _eSIMWallet_donateETHToAdapter(arg);
+        else if (selector == 1) _eSIMWallet_donateETHToAdapter(arg);
+        else _eSIMWallet_setAdminAllowanceUSDCents(walletSeed, arg);
     }
 
     // ―――――――――――――――――――――――― Unclamped ―――――――――――――――――――――――――
@@ -220,6 +221,7 @@ abstract contract ESIMWalletHandler is Properties {
 
         bool wasPaused = registry.paused();
         uint256 capAtCallTime = _effectiveCap(eSIMWallet);
+        uint64 allowanceBefore = MockESIMWallet(payable(eSIMWallet)).adminAllowanceUSDCents();
 
         vm.prank(caller);
         MockESIMWallet(payable(eSIMWallet)).buyDataBundleWithToken(
@@ -229,6 +231,7 @@ abstract contract ESIMWalletHandler is Properties {
         // Everything below runs only when the call went through
         if (wasPaused) ghosts.pausedCallSucceeded = true;
         if (_dataBundleDetail.priceUSDCents > capAtCallTime) ghosts.purchaseAboveCap = true;
+        _checkAllowanceSpend(caller == owningDeviceWallet, eSIMWallet, allowanceBefore, _dataBundleDetail.priceUSDCents);
 
         snapshotAfter();
         ghosts.witnessedPurchases[eSIMWallet] += 1;
@@ -275,6 +278,32 @@ abstract contract ESIMWalletHandler is Properties {
 
         vm.prank(deviceWallet);
         MockESIMWallet(payable(eSIMWallet)).setPriceCapUSDCents(uint64(clampBetween(cap, 0, type(uint64).max)));
+    }
+
+    /// @notice The owner sets what the admin may still charge this wallet in total
+    /// @dev Half the draws land on zero or a small figure, so the admin runs into it often.
+    function _eSIMWallet_setAdminAllowanceUSDCents(uint256 walletSeed, uint256 allowance) internal {
+        (address eSIMWallet, address deviceWallet) = _pickOwnedPair(walletSeed);
+        if (eSIMWallet == address(0)) return;
+
+        uint64 value = allowance % 2 == 0
+            ? uint64(clampBetween(allowance, 0, 20_000))
+            : uint64(clampBetween(allowance, 0, type(uint64).max));
+
+        vm.prank(deviceWallet);
+        MockESIMWallet(payable(eSIMWallet)).setAdminAllowanceUSDCents(value);
+    }
+
+    /// @notice Flags an admin charge that did not come off the allowance exactly, or an owner
+    ///         purchase that moved it
+    function _checkAllowanceSpend(bool byOwner, address eSIMWallet, uint64 before, uint64 price) internal {
+        uint64 afterwards = MockESIMWallet(payable(eSIMWallet)).adminAllowanceUSDCents();
+
+        if (byOwner) {
+            if (afterwards != before) ghosts.adminAllowanceBroken = true;
+        } else if (price > before || afterwards != before - price) {
+            ghosts.adminAllowanceBroken = true;
+        }
     }
 
     /// @notice Leaves settlement token sitting on the adapter with no purchase behind it

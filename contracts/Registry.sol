@@ -111,6 +111,12 @@ contract Registry is
     ///      pending settlement.
     mapping(bytes32 scopedReference => bool used) public usedPaymentReferences;
 
+    /// @notice What a new eSIM wallet lets the admin charge it in total, in USD cents
+    /// @dev Copied into each wallet when it is deployed or changes hands, so changing it here
+    ///      never changes an existing wallet's allowance. Zero is allowed and means new wallets
+    ///      take no admin charges until their owner sets an allowance.
+    uint64 public defaultAdminAllowanceUSDCents;
+
     /// @notice Restricts a call to an eSIM wallet this registry has recorded
     modifier onlyESIMWallet() {
         if(isESIMWalletValid[msg.sender] == address(0)) {
@@ -164,6 +170,8 @@ contract Registry is
     /// @param _defaultPriceCapUSDCents Starting price ceiling in USD cents. Must be non-zero: a
     ///        zero cap, here or on a wallet's own, reads as "no ceiling" in
     ///        `ESIMWallet._requirePriceWithinCap`.
+    /// @param _defaultAdminAllowanceUSDCents Total the admin may charge each new eSIM wallet, in
+    ///        USD cents, until its owner sets a different figure
     function initialize(
         address _eSIMWalletAdmin,
         address _vault,
@@ -171,7 +179,8 @@ contract Registry is
         address _deviceWalletFactory,
         address _eSIMWalletFactory,
         IEntryPoint _entryPoint,
-        uint64 _defaultPriceCapUSDCents
+        uint64 _defaultPriceCapUSDCents,
+        uint64 _defaultAdminAllowanceUSDCents
     ) external initializer {
         if(_eSIMWalletAdmin == address(0)) revert Errors.ZeroAddress("_eSIMWalletAdmin");
         if(_vault == address(0)) revert Errors.ZeroAddress("_vault");
@@ -189,6 +198,7 @@ contract Registry is
         entryPoint = _entryPoint;
         vault = _vault;
         defaultPriceCapUSDCents = _defaultPriceCapUSDCents;
+        defaultAdminAllowanceUSDCents = _defaultAdminAllowanceUSDCents;
 
         deviceWalletFactory = DeviceWalletFactory(_deviceWalletFactory);
         eSIMWalletFactory = ESIMWalletFactory(_eSIMWalletFactory);
@@ -204,6 +214,7 @@ contract Registry is
             address(eSIMWalletFactory)
         );
         emit DefaultPriceCapUSDCentsUpdated(_defaultPriceCapUSDCents);
+        emit DefaultAdminAllowanceUSDCentsUpdated(_defaultAdminAllowanceUSDCents);
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -363,6 +374,15 @@ contract Registry is
 
         defaultPriceCapUSDCents = _cap;
         emit DefaultPriceCapUSDCentsUpdated(_cap);
+    }
+
+    /// @notice Sets the admin allowance new eSIM wallets start with
+    /// @dev Owner and not admin, since the admin is the party this limits. Existing wallets keep
+    ///      what they have; each owner changes their own.
+    /// @param _allowance Total the admin may charge each new eSIM wallet, in USD cents
+    function setDefaultAdminAllowanceUSDCents(uint64 _allowance) external onlyOwner {
+        defaultAdminAllowanceUSDCents = _allowance;
+        emit DefaultAdminAllowanceUSDCentsUpdated(_allowance);
     }
 
     /// @notice Points this registry at the payment adapter

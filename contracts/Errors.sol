@@ -99,6 +99,7 @@ interface Errors {
     error OnlyRegistry();
     error OnlyDeviceWalletOrESIMWalletAdmin();
     error DataBundlePriceAboveCap(uint64 priceUSDCents, uint64 cap);
+    error AdminAllowanceExceeded(uint64 priceUSDCents, uint64 remaining);
     error ESIMIdentifierAlreadySet(string eSIMUniqueIdentifier);
     error EmptyDataBundleID();
     error ZeroDataBundlePrice();

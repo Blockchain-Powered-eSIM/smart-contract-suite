@@ -53,6 +53,10 @@ contract PaymentHandler is HandlerBase {
     /// @notice Set when a reference was spent by a second call that went through
     bool public ghost_referenceSpentTwice;
 
+    /// @notice Set when an admin charge went through without coming off the wallet's allowance
+    ///         exactly, or went through for more than was left
+    bool public ghost_adminAllowanceBroken;
+
     /// @notice Set when `quote` answered for a currency the table had already withdrawn
     bool public ghost_withdrawnCurrencyQuoted;
 
@@ -133,6 +137,7 @@ contract PaymentHandler is HandlerBase {
 
         uint256 needed = (uint256(priceUSDCents) * 10 ** SETTLEMENT_DECIMALS) / 100;
         settlementERC20.mint(wallet, bound(fundingSeed, 0, needed * 2));
+        uint64 allowanceBefore = ESIMWallet(payable(wallet)).adminAllowanceUSDCents();
 
         vm.prank(_currentAdmin());
         try ESIMWallet(payable(wallet)).buyDataBundleWithToken(
@@ -147,6 +152,12 @@ contract PaymentHandler is HandlerBase {
         ) {
             _recordSpend(wallet, paymentReference);
             ghost_settledToVault += needed;
+            if (
+                priceUSDCents > allowanceBefore
+                    || ESIMWallet(payable(wallet)).adminAllowanceUSDCents() != allowanceBefore - priceUSDCents
+            ) {
+                ghost_adminAllowanceBroken = true;
+            }
             state.recordCall("buyDataBundleWithToken");
         } catch {
             state.recordRevert("buyDataBundleWithToken");

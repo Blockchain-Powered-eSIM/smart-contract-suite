@@ -63,6 +63,7 @@ contract DeployConfigTest is ScriptBase {
         assertEq(config.eSIMWalletAdmin, eSIMWalletAdmin, "esim admin");
         assertEq(config.vault, vault, "vault");
         assertEq(config.priceCapUSDCents, PRICE_CAP_CENTS, "price cap");
+        assertEq(config.adminAllowanceUSDCents, ADMIN_ALLOWANCE_CENTS, "admin allowance");
         assertEq(config.settlementToken, address(settlementToken), "settlement token");
     }
 

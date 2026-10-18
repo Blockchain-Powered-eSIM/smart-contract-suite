@@ -150,6 +150,70 @@ contract TokenAmountsTest is FuzzBase {
     }
 
     // ---------------------------------------------------------------------------------------------
+    // What the admin may charge in total
+    // ---------------------------------------------------------------------------------------------
+
+    /// @notice Over any run of admin charges, the total reaching the vault never passes the allowance
+    /// @dev Prices are drawn freely, so some charges are refused partway. What must hold is that
+    ///      what was charged plus what is left always equals what the owner allowed.
+    /// forge-config: default.fuzz.runs = 2000
+    function testFuzz_buyDataBundleWithToken_adminChargesNeverPassTheAllowance(
+        uint64 _allowance,
+        uint64[6] memory _prices
+    ) public {
+        uint64 allowance = uint64(bound(_allowance, 0, MAX_FUZZED_CENTS));
+
+        vm.startPrank(address(fuzzDeviceWallet));
+        fuzzESIMWallet.setPriceCapUSDCents(MAX_FUZZED_CENTS);
+        fuzzESIMWallet.setAdminAllowanceUSDCents(allowance);
+        vm.stopPrank();
+
+        uint256 charged;
+        for (uint256 i = 0; i < _prices.length; ++i) {
+            uint64 price = uint64(bound(_prices[i], 1, MAX_FUZZED_CENTS));
+            uint64 before = fuzzESIMWallet.adminAllowanceUSDCents();
+            fundSettlementToken(address(fuzzDeviceWallet), settlementAmount(price));
+
+            vm.prank(eSIMWalletAdmin);
+            try fuzzESIMWallet.buyDataBundleWithToken(
+                bundle("DB_FUZZ", price), ASSET_USDC, settlementAmount(price), nextRef()
+            ) {
+                assertLe(price, before, "A charge above what was left went through");
+                charged += price;
+            } catch {
+                assertGt(price, before, "A charge within the allowance was refused");
+            }
+        }
+
+        assertLe(charged, allowance, "The admin charged more than the owner allowed");
+        assertEq(
+            charged + fuzzESIMWallet.adminAllowanceUSDCents(),
+            allowance,
+            "Charged plus left must equal what the owner allowed"
+        );
+        assertEq(settlementERC20.balanceOf(vault), settlementAmount(uint64(charged)), "The vault holds exactly what was charged");
+    }
+
+    /// @notice A purchase the owner signs never moves the allowance, whatever the price
+    /// forge-config: default.fuzz.runs = 2000
+    function testFuzz_buyDataBundleWithToken_ownerPurchasesNeverSpendTheAllowance(
+        uint64 _allowance,
+        uint64 _price
+    ) public {
+        uint64 allowance = uint64(bound(_allowance, 0, MAX_FUZZED_CENTS));
+        uint64 price = uint64(bound(_price, 1, defaultPriceCapUSDCents));
+
+        vm.prank(address(fuzzDeviceWallet));
+        fuzzESIMWallet.setAdminAllowanceUSDCents(allowance);
+        fundSettlementToken(address(fuzzDeviceWallet), settlementAmount(price));
+
+        vm.prank(address(fuzzDeviceWallet));
+        fuzzESIMWallet.buyDataBundleWithToken(bundle("DB_FUZZ", price), ASSET_USDC, settlementAmount(price), nextRef());
+
+        assertEq(fuzzESIMWallet.adminAllowanceUSDCents(), allowance, "The owner's purchase must not touch it");
+    }
+
+    // ---------------------------------------------------------------------------------------------
     // What a pull moves
     // ---------------------------------------------------------------------------------------------
 

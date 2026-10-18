@@ -75,6 +75,7 @@ contract FoundryTester is Test, Handlers {
         assertTrue(property_ownerKeysAreUniqueAndAgree(), "GL-07/08");
         assertTrue(property_identifiersAreClaimedOnce(), "GL-09/10");
         assertTrue(property_theCeilingAlwaysBinds(), "GL-11");
+        assertTrue(property_adminChargesStayInsideTheAllowance(), "GL-15");
         assertTrue(property_settlementTokenIsConserved(), "GL-12");
         assertTrue(property_onlyThePurchasePathClaimsSettlement(), "GL-13");
         assertTrue(property_noUnauthorizedCallSucceeded(), "unauthorized call");
@@ -117,6 +118,16 @@ contract FoundryTester is Test, Handlers {
         );
 
         assertTrue(property_noUnauthorizedCallSucceeded(), "a guarded path ran while paused");
+    }
+
+    /// @notice An owner setting the allowance to zero stops the admin, and only the admin
+    function test_smoke_aZeroAllowanceStopsOnlyTheAdmin() public {
+        eSIMWallet_secondary(2, 0, 0); // owner sets the allowance to zero
+
+        _expectRefused(abi.encodeCall(this.eSIMWallet_buyDataBundleWithToken_clamped, (0, 1, 100, 50, true)));
+        eSIMWallet_buyDataBundleWithToken_clamped(0, 1, 100, 51, false); // the owner still buys
+
+        assertTrue(property_adminChargesStayInsideTheAllowance(), "GL-15");
     }
 
     /// @notice Runs a handler that is expected to revert, and fails if it did not

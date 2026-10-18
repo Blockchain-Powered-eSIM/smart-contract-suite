@@ -42,7 +42,7 @@ contract RegistryGuardsTest is DeployerBase {
             address(implementation),
             abi.encodeCall(
                 implementation.initialize,
-                (_admin, _vault, _upgradeManager, deviceFactory, eSIMFactory, _entryPoint, defaultPriceCapUSDCents)
+                (_admin, _vault, _upgradeManager, deviceFactory, eSIMFactory, _entryPoint, defaultPriceCapUSDCents, defaultAdminAllowanceUSDCents)
             )
         );
     }

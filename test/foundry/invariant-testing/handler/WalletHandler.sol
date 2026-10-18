@@ -279,6 +279,27 @@ contract WalletHandler is HandlerBase {
         }
     }
 
+    /// @notice The wallet owner sets what the admin may still charge this eSIM wallet in total
+    /// @dev Read off a ladder so zero and the maximum are both reached. Pranked as the live owner
+    ///      rather than the registry's association, which can lag behind a handover.
+    /// @param eSIMIndex Which eSIM wallet gets the allowance
+    /// @param seed Chooses the allowance
+    function setAdminAllowance(uint256 eSIMIndex, uint256 seed) external counted {
+        address wallet = _pickESIMWallet(eSIMIndex);
+        if (wallet == address(0)) {
+            state.recordRevert("setAdminAllowance");
+            return;
+        }
+        uint64[4] memory ladder = [uint64(0), 1, 10_000, type(uint64).max];
+
+        vm.prank(ESIMWallet(payable(wallet)).owner());
+        try ESIMWallet(payable(wallet)).setAdminAllowanceUSDCents(ladder[bound(seed, 0, 3)]) {
+            state.recordCall("setAdminAllowance");
+        } catch {
+            state.recordRevert("setAdminAllowance");
+        }
+    }
+
     /// @notice The wallet owner sets the most this eSIM wallet may be charged for one bundle
     /// @dev The ceiling comes off a ladder, so zero is reached. Zero is the value that hands the
     ///      wallet back to the registry's fallback rather than a ceiling of zero, and a range wide

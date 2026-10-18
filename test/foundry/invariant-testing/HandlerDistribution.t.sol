@@ -79,6 +79,8 @@ contract HandlerDistributionTest is CampaignBase {
             adminHandler.setESIMIdentifier(round, seed + 3000, false);
             walletHandler.toggleAccessToFunds(round, true);
             walletHandler.setESIMWalletPriceCap(round, round);
+            // Index 2 on the ladder is the mainnet default, so the purchases below still fit
+            walletHandler.setAdminAllowance(round, 2);
             // Each payment path is given its own block of reference seeds. Two calls presenting
             // the same reference is a case the campaign covers, and the second one is refused,
             // which is a revert rather than the count this drive is checking
@@ -163,6 +165,7 @@ contract HandlerDistributionTest is CampaignBase {
         _assertExercised("unpauseProtocol");
         _assertExercised("setDefaultPriceCap");
         _assertExercised("setESIMWalletPriceCap");
+        _assertExercised("setAdminAllowance");
         _assertExercised("upgradeDeviceWalletBeacon");
         _assertExercised("upgradeESIMWalletBeacon");
     }

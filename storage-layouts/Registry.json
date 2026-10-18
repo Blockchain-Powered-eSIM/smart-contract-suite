@@ -147,6 +147,13 @@
       "bytes": "32",
       "label": "usedPaymentReferences",
       "type": "t_mapping(t_bytes32,t_bool)"
+    },
+    {
+      "slot": "67",
+      "offset": 0,
+      "bytes": "8",
+      "label": "defaultAdminAllowanceUSDCents",
+      "type": "t_uint64"
     }
   ]
 }

@@ -79,6 +79,7 @@ contract Configure is Script {
         _bindRegistryToFactory("ESIMWalletFactory", eSIMWalletFactory, registryAddress);
         _bindLazyWalletRegistry(registryAddress, lazyWalletRegistry);
         _setPriceCap(registryAddress, config.priceCapUSDCents);
+        _setAdminAllowance(registryAddress, config.adminAllowanceUSDCents);
         _registerCurrencies(paymentAdapter, config.settlementToken, settlementDecimals);
 
         vm.stopBroadcast();
@@ -136,6 +137,19 @@ contract Configure is Script {
 
         Registry(registryAddress).setDefaultPriceCapUSDCents(cap);
         console.log("Registry: price cap set to", cap);
+    }
+
+    /// @notice Brings the admin allowance new eSIM wallets start with in line with the config
+    /// @dev `Registry.initialize` already set it on a fresh deployment. This covers a later change,
+    ///      and a registry upgraded from before the allowance existed, which reads zero.
+    function _setAdminAllowance(address registryAddress, uint64 allowance) private {
+        if(Registry(registryAddress).defaultAdminAllowanceUSDCents() == allowance) {
+            console.log("Registry: admin allowance already set, skipping");
+            return;
+        }
+
+        Registry(registryAddress).setDefaultAdminAllowanceUSDCents(allowance);
+        console.log("Registry: admin allowance set to", allowance);
     }
 
     /// @notice The settlement token's own decimals, checked to be a token at all

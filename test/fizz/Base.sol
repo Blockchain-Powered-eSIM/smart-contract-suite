@@ -51,6 +51,8 @@ abstract contract Base is StringUtils, Clamp, Deployer, Math {
 
     /// @dev $1000. Matches the unit suite so a price that trips the ceiling here trips it there.
     uint64 internal constant DEFAULT_PRICE_CAP_CENTS = 100_000;
+    // The mainnet figure, so the campaign runs allowances down to zero and back
+    uint64 internal constant DEFAULT_ADMIN_ALLOWANCE_CENTS = 10_000;
 
     /// @dev Enough settlement token that no run ends because a wallet went broke, and small enough
     ///      that the balance still moves visibly when a purchase lands.
@@ -103,6 +105,10 @@ abstract contract Base is StringUtils, Clamp, Deployer, Math {
         // at write time because a later reduction of the cap does not make an earlier purchase
         // illegal, and comparing history against today's cap would report every one of them.
         bool purchaseAboveCap;
+        // GL-15: set when an admin charge went past the wallet's allowance or did not come off it
+        // exactly, or when an owner's own purchase moved it. Read at write time for the same
+        // reason as the ceiling: owners and handovers change the allowance between charges.
+        bool adminAllowanceBroken;
     }
 
     Ghosts internal ghosts;
@@ -247,7 +253,8 @@ abstract contract Base is StringUtils, Clamp, Deployer, Math {
                             address(deviceWalletFactory),
                             address(eSIMWalletFactory),
                             IEntryPoint(address(entryPoint)),
-                            DEFAULT_PRICE_CAP_CENTS
+                            DEFAULT_PRICE_CAP_CENTS,
+                            DEFAULT_ADMIN_ALLOWANCE_CENTS
                         )
                     )
                 )

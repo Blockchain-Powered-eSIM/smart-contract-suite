@@ -17,6 +17,7 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import {DeviceWallet} from "../device-wallet/DeviceWallet.sol";
+import {ESIMWalletFactory} from "./ESIMWalletFactory.sol";
 import {PaymentAdapter, Asset} from "../payments/PaymentAdapter.sol";
 import {Registry} from "../Registry.sol";
 
@@ -50,6 +51,12 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     ///      declaration order, so moving this line costs that slot. A handover clears both, which
     ///      is then one write instead of two. Zero means "follow the registry", not "no ceiling".
     uint64 public priceCapUSDCents;
+
+    /// @notice What the eSIM wallet admin may still charge this wallet in total, in USD cents
+    /// @dev The price cap bounds one charge, this bounds all of them together. Starts at the
+    ///      registry default, goes down with every charge the admin makes, and only the owner can
+    ///      set it again. Purchases the owner signs for itself do not touch it.
+    uint64 public adminAllowanceUSDCents;
 
     /// @notice Emitted when the eSIM wallet is deployed
     event ESIMWalletDeployed(
@@ -99,6 +106,9 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
 
     /// @notice Emitted when the owner sets this wallet's own price ceiling
     event PriceCapUSDCentsUpdated(uint64 _cap);
+
+    /// @notice Emitted whenever what the admin may still charge changes: set, spent or reset
+    event AdminAllowanceUSDCentsUpdated(uint64 _allowance);
 
     /// @notice Restricts a call to the device wallet that owns this eSIM wallet
     /// @dev Reaching this means the owner signed for it, since a device wallet only calls out
@@ -163,7 +173,12 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         __Ownable_init(_deviceWalletAddress);
         __ReentrancyGuard_init();
 
+        // Read through the factory, which is the caller here and is always wired to the registry
+        uint64 allowance = ESIMWalletFactory(_eSIMWalletFactoryAddress).registry().defaultAdminAllowanceUSDCents();
+        adminAllowanceUSDCents = allowance;
+
         emit ESIMWalletDeployed(address(this), _deviceWalletAddress, _deviceWalletAddress);
+        emit AdminAllowanceUSDCentsUpdated(allowance);
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -194,13 +209,21 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     ///      price. Setting zero hands the wallet back to the registry's ceiling. A handover clears
     ///      it, so an incoming owner starts on the registry ceiling.
     ///
-    ///      The ceiling bounds one charge and not what the admin can charge in total. Nothing limits
-    ///      how many purchases it makes, so a wallet holding `canPullFunds` is an open allowance over
-    ///      the device wallet's balance in that asset rather than a capped one.
+    ///      The ceiling bounds one charge. What the admin can charge in total is bounded separately
+    ///      by `adminAllowanceUSDCents`.
     /// @param _cap Maximum price in USD cents, or zero to follow the registry
     function setPriceCapUSDCents(uint64 _cap) external onlyDeviceWallet {
         priceCapUSDCents = _cap;
         emit PriceCapUSDCentsUpdated(_cap);
+    }
+
+    /// @notice Sets what the eSIM wallet admin may still charge this wallet in total
+    /// @dev Only the owning device wallet, so only the person holding its P256 key. Zero stops
+    ///      admin charges altogether; the owner can still buy for itself.
+    /// @param _allowance Total the admin may charge from now on, in USD cents
+    function setAdminAllowanceUSDCents(uint64 _allowance) external onlyDeviceWallet {
+        adminAllowanceUSDCents = _allowance;
+        emit AdminAllowanceUSDCentsUpdated(_allowance);
     }
 
     /// @notice Appends pre-deployment purchase history, one batch at a time, on behalf of the lazy
@@ -331,6 +354,7 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         if(_dataBundleDetail.id == bytes32(0)) revert Errors.EmptyDataBundleID();
         if(_dataBundleDetail.priceUSDCents == 0) revert Errors.ZeroDataBundlePrice();
         _requirePriceWithinCap(_dataBundleDetail.priceUSDCents, registry);
+        if(msg.sender != address(deviceWallet)) _spendAdminAllowance(_dataBundleDetail.priceUSDCents);
         registry.requireLazyHistoryCopied(address(this));
 
         // The money moves through this contract, so this path can say the protocol saw it.
@@ -446,7 +470,8 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         revert Errors.OwnershipCannotBeRenounced();
     }
 
-    /// @notice Completes a handover, moving `deviceWallet`, `owner()` and the price ceiling together
+    /// @notice Completes a handover, moving `deviceWallet`, `owner()`, the price ceiling and the
+    ///         admin allowance together
     /// @dev Clears the request before it writes anything, so a second acceptance finds nothing.
     ///      The ceiling is the owner's own limit and only the owner can set it, so it goes with the
     ///      owner rather than binding the incoming one to a figure it never chose.
@@ -461,6 +486,11 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
             priceCapUSDCents = 0;
             emit PriceCapUSDCentsUpdated(0);
         }
+
+        // The allowance was the outgoing owner's choice, so the incoming one starts on the default
+        uint64 allowance = ESIMWalletFactory(eSIMWalletFactory).registry().defaultAdminAllowanceUSDCents();
+        adminAllowanceUSDCents = allowance;
+        emit AdminAllowanceUSDCentsUpdated(allowance);
 
         // Transfer ownership to the request address
         // _transferOwnership emits OwnershipTransferred, so this function must not emit it again
@@ -504,6 +534,20 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         if (cap != 0 && _priceUSDCents > cap) {
             revert Errors.DataBundlePriceAboveCap(_priceUSDCents, cap);
         }
+    }
+
+    /// @notice Takes an admin charge out of what the admin may still charge this wallet
+    /// @param _priceUSDCents Price being charged, in USD cents
+    function _spendAdminAllowance(uint64 _priceUSDCents) private {
+        uint64 remaining = adminAllowanceUSDCents;
+        if(_priceUSDCents > remaining) revert Errors.AdminAllowanceExceeded(_priceUSDCents, remaining);
+
+        unchecked {
+            // checked just above: the price is at most what remains
+            remaining -= _priceUSDCents;
+        }
+        adminAllowanceUSDCents = remaining;
+        emit AdminAllowanceUSDCentsUpdated(remaining);
     }
 
     /// @notice The device wallet that owns this eSIM wallet

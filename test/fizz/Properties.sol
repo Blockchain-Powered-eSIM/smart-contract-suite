@@ -182,6 +182,11 @@ abstract contract Properties is PropertiesAsserts, Snapshots {
         return !ghosts.purchaseAboveCap;
     }
 
+    /// @notice GL-15: the admin never charges a wallet past what its owner allowed
+    function property_adminChargesStayInsideTheAllowance() public view returns (bool) {
+        return !ghosts.adminAllowanceBroken;
+    }
+
     /// @notice GL-12: settlement token is never created or destroyed
     function property_settlementTokenIsConserved() public view returns (bool) {
         uint256 tracked = settlementERC20.balanceOf(address(this)) + sumActorsERC20Balances(settlementToken)
@@ -237,6 +242,7 @@ abstract contract Properties is PropertiesAsserts, Snapshots {
         t(property_ownerKeysAreUniqueAndAgree(), "GL-07/08 owner keys disagree or are shared");
         t(property_identifiersAreClaimedOnce(), "GL-09/10 an identifier names the wrong wallet");
         t(property_theCeilingAlwaysBinds(), "GL-11 the price ceiling stopped binding");
+        t(property_adminChargesStayInsideTheAllowance(), "GL-15 the admin charged past the allowance");
         t(property_settlementTokenIsConserved(), "GL-12 settlement token was created or destroyed");
         t(property_onlyThePurchasePathClaimsSettlement(), "GL-13 something else claimed settlement");
         t(property_noUnauthorizedCallSucceeded(), "a call the protocol should have refused ran");

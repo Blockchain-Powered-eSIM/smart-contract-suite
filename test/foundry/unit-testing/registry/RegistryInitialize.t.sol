@@ -23,7 +23,8 @@ contract RegistryInitializeTest is DeployerBase {
                     address(0),
                     address(eSIMWalletFactory),
                     typeCastEntryPoint,
-                    defaultPriceCapUSDCents
+                    defaultPriceCapUSDCents,
+                    defaultAdminAllowanceUSDCents
                 )
             )
         );
@@ -45,7 +46,8 @@ contract RegistryInitializeTest is DeployerBase {
                     address(deviceWalletFactory),
                     address(0),
                     typeCastEntryPoint,
-                    defaultPriceCapUSDCents
+                    defaultPriceCapUSDCents,
+                    defaultAdminAllowanceUSDCents
                 )
             )
         );
@@ -69,7 +71,8 @@ contract RegistryInitializeTest is DeployerBase {
                     address(deviceWalletFactory),
                     address(eSIMWalletFactory),
                     typeCastEntryPoint,
-                    defaultPriceCapUSDCents
+                    defaultPriceCapUSDCents,
+                    defaultAdminAllowanceUSDCents
                 )
             )
         );
@@ -94,7 +97,8 @@ contract RegistryInitializeTest is DeployerBase {
                     address(deviceWalletFactory),
                     address(eSIMWalletFactory),
                     typeCastEntryPoint,
-                    0
+                    0,
+                    defaultAdminAllowanceUSDCents
                 )
             )
         );

@@ -42,6 +42,13 @@
       "bytes": "8",
       "label": "priceCapUSDCents",
       "type": "t_uint64"
+    },
+    {
+      "slot": "5",
+      "offset": 0,
+      "bytes": "8",
+      "label": "adminAllowanceUSDCents",
+      "type": "t_uint64"
     }
   ]
 }
