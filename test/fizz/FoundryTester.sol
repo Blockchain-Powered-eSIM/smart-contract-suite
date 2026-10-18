@@ -123,6 +123,17 @@ contract FoundryTester is Test, Handlers {
     function _expectRefused(bytes memory call) private {
         (bool ok,) = address(this).call(call);
         assertFalse(ok, "a call the protocol should have refused went through");
+
+        // A handler that starts a prank and then reverts never reaches its stopPrank, and the
+        // prank outlives the revert. Left running, it makes every later call here revert on
+        // "cannot override an ongoing prank" instead of on the guard it is meant to test. Pranks
+        // belong to a call depth, so it is cleared from the same depth the handler ran at.
+        address(this).call(abi.encodeCall(this.clearLeftoverPrank, ()));
+    }
+
+    /// @notice Stops a prank a reverted handler left running at this call depth
+    function clearLeftoverPrank() external {
+        try vm.stopPrank() {} catch {}
     }
 
     /// @notice The config surface, which every other handler reads its permissions from
