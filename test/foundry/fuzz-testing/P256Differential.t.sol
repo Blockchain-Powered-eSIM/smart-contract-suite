@@ -5,6 +5,10 @@ pragma solidity 0.8.36;
 import "forge-std/Test.sol";
 import {FCL_ecdsa} from "FreshCryptoLib/FCL_ecdsa.sol";
 
+import {WebAuthnSignature} from "contracts/CustomStructs.sol";
+import {P256Verifier} from "contracts/P256Verifier.sol";
+import {WebAuthnSigner} from "test/utils/WebAuthnSigner.sol";
+
 /// @notice Holds the RIP-7212 precompile and FreshCryptoLib to the same verdict over random input.
 /// @dev WebAuthn.verifySignature tries the precompile first and falls back to the library without
 ///      recording which one answered. The protocol deploys to chains that differ on whether the
@@ -121,5 +125,34 @@ contract P256DifferentialTest is Test {
 
         assertFalse(answered && precompileVerdict, "The precompile accepted a corrupted signature");
         assertFalse(fallbackVerdict, "The fallback accepted a corrupted signature");
+    }
+
+    /// @notice The test signer agrees with Foundry's own P256 and with the protocol's verifier
+    /// @dev Every rotation test signs through WebAuthnSigner, which is built on FreshCryptoLib so the
+    ///      Medusa harness can use it. A wrong key or a bad signature there would make those tests
+    ///      pass or fail for the wrong reason, so the signer is checked against the cheatcode and
+    ///      against the verifier the wallets actually use.
+    /// forge-config: default.fuzz.runs = 300
+    function testFuzz_testSigner_matchesTheCheatcodeAndVerifies(uint256 _privateKey, bytes32 _challenge) public {
+        uint256 privateKey = bound(_privateKey, 1, N - 1);
+
+        bytes32[2] memory key = WebAuthnSigner.publicKeyOf(privateKey);
+        (uint256 x, uint256 y) = vm.publicKeyP256(privateKey);
+        assertEq(uint256(key[0]), x, "X must match the cheatcode");
+        assertEq(uint256(key[1]), y, "Y must match the cheatcode");
+
+        bytes memory challenge = abi.encodePacked(_challenge);
+        WebAuthnSignature memory signature = abi.decode(WebAuthnSigner.signWith(privateKey, challenge), (WebAuthnSignature));
+        assertTrue(
+            new P256Verifier().verifySignature(challenge, true, signature, x, y),
+            "The signer's assertion must verify"
+        );
+
+        // The RIP-7212 precompile must accept it on its own, since that is the path tried first
+        bytes32 messageHash = sha256(
+            abi.encodePacked(signature.authenticatorData, sha256(bytes(signature.clientDataJSON)))
+        );
+        (bool ok, bytes memory ret) = VERIFIER.staticcall(abi.encode(messageHash, signature.r, signature.s, x, y));
+        assertTrue(ok && ret.length == 32 && abi.decode(ret, (uint256)) == 1, "The precompile must accept it");
     }
 }

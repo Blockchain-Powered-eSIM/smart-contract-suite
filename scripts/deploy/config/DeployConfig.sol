@@ -37,13 +37,31 @@ library DeployConfig {
     ///      before the chain id was added.
     string internal constant ENTRY_POINT_TAG = "entrypoint-v8";
 
+    /// @notice Base mainnet chain id
+    uint256 internal constant BASE_CHAIN_ID = 8453;
+
+    /// @notice Circle's native USDC on Base mainnet, the only settlement token accepted there
+    /// @dev Verified with cast on 2026-10-18. Pinned because bridged USDbC also has 6 decimals,
+    ///      and `PaymentAdapter.settlementToken` has no setter.
+    address internal constant BASE_USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
+
+    /// @notice USDT on Base, minted by Base's standard bridge against Ethereum USDT
+    /// @dev Verified with cast on 2026-10-19: USDT, 6 decimals, l1Token 0xdAC17F958D2ee523a2206206994597C13D831ec7,
+    ///      bridge 0x4200000000000000000000000000000000000010. Tether issues no native USDT on Base.
+    address internal constant BASE_USDT = 0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2;
+
+    /// @notice DAI on Base, minted by Base's standard bridge against Ethereum DAI
+    /// @dev Verified with cast on 2026-10-19: DAI, 18 decimals, remoteToken
+    ///      0x6B175474E89094C44Da98b954EedeAC495271d0F, bridge 0x4200000000000000000000000000000000000010.
+    address internal constant BASE_DAI = 0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb;
+
     /// @notice Delay every scheduled admin operation waits before it can be executed
     uint256 internal constant TIMELOCK_DELAY = 2 days;
 
     /// @notice Shortest delay `updateDelay` can ever bring the timelock down to
-    /// @dev Immutable in the deployed contract. Without it one scheduled operation turns the
-    ///      timelock into a plain multisig and nothing after it ever waits again.
-    uint256 internal constant TIMELOCK_DELAY_FLOOR = 1 hours;
+    /// @dev Immutable, and one `updateDelay(0)` drops every later operation to it, so it must be long
+    ///      enough to notice and cancel a hostile upgrade. An hour was not.
+    uint256 internal constant TIMELOCK_DELAY_FLOOR = 1 days;
 
     Vm private constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
@@ -56,6 +74,7 @@ library DeployConfig {
         address eSIMWalletAdmin;
         address vault;
         uint64 priceCapUSDCents;
+        uint64 adminAllowanceUSDCents;
         address settlementToken;
         address[] proposers;
         address[] cancellers;
@@ -77,6 +96,15 @@ library DeployConfig {
     /// @notice An account appears in two role lists the timelock requires to stay separate
     error RolesMustNotOverlap(address account);
 
+    /// @notice The deployer or the hot admin key was named in a timelock role list
+    error HotKeyInTimelockRole(address account);
+
+    /// @notice The settlement token is not the one this chain must use
+    error WrongSettlementToken(address expected, address actual);
+
+    /// @notice A proposer or guardian on a production chain is not a contract
+    error RoleHolderNotAContract(string variable, address account);
+
     /// @notice Reads every deployment parameter from the environment and checks it
     /// @dev Reading and checking are separate so the checks can be reached with a configuration
     ///      built by hand. Environment variables are process wide and forge does not restore them
@@ -92,6 +120,8 @@ library DeployConfig {
         config.eSIMWalletAdmin = vm.envAddress("ESIM_WALLET_ADMIN");
         config.vault = vm.envAddress("VAULT");
         config.priceCapUSDCents = uint64(vm.envUint("PRICE_CAP_USD_CENTS"));
+        // Required: zero is legal and stops admin charges, so a missing value must not become it
+        config.adminAllowanceUSDCents = uint64(vm.envUint("ADMIN_ALLOWANCE_USD_CENTS"));
         config.settlementToken = vm.envAddress("SETTLEMENT_TOKEN");
         config.entryPoint = IEntryPoint(ENTRY_POINT_V08);
 
@@ -134,6 +164,60 @@ library DeployConfig {
         _requireDisjoint(config.proposers, config.cancellers);
         _requireDisjoint(config.proposers, config.guardians);
         _requireDisjoint(config.cancellers, config.guardians);
+
+        // A hot key in a timelock role defeats it: one that can cancel can cancel its own eviction
+        _requireNotInRoles(config, config.deployer);
+        _requireNotInRoles(config, config.eSIMWalletAdmin);
+
+        if(block.chainid == BASE_CHAIN_ID) _validateBaseMainnet(config);
+    }
+
+    /// @notice Checks that only matter where real money moves
+    /// @dev A testnet Safe has no code on mainnet; requiring code stops ownership going to a
+    ///      timelock nobody can sign for. Cancellers are single keys by design.
+    function _validateBaseMainnet(Config memory config) private view {
+        if(config.settlementToken != BASE_USDC) {
+            revert WrongSettlementToken(BASE_USDC, config.settlementToken);
+        }
+
+        _requireContracts("TIMELOCK_PROPOSERS", config.proposers);
+        _requireContracts("TIMELOCK_GUARDIANS", config.guardians);
+    }
+
+    /// @notice Stablecoins accepted on this chain besides the settlement token
+    /// @dev Only Base mainnet has any. Testnets have no real USDT or DAI to point at.
+    /// @return symbols Symbol each token is registered under in the payment adapter
+    /// @return tokens Token address for each symbol
+    function extraStablecoins() internal view returns (bytes32[] memory symbols, address[] memory tokens) {
+        if(block.chainid != BASE_CHAIN_ID) return (symbols, tokens);
+
+        symbols = new bytes32[](2);
+        tokens = new address[](2);
+        (symbols[0], tokens[0]) = (bytes32("USDT"), BASE_USDT);
+        (symbols[1], tokens[1]) = (bytes32("DAI"), BASE_DAI);
+    }
+
+    /// @notice Reverts if the account holds any timelock role
+    function _requireNotInRoles(Config memory config, address account) private pure {
+        if(
+            _contains(config.proposers, account)
+                || _contains(config.cancellers, account)
+                || _contains(config.guardians, account)
+        ) revert HotKeyInTimelockRole(account);
+    }
+
+    /// @notice Reverts if any account in the list has no code
+    function _requireContracts(string memory variable, address[] memory accounts) private view {
+        for(uint256 i = 0; i < accounts.length; ++i) {
+            if(accounts[i].code.length == 0) revert RoleHolderNotAContract(variable, accounts[i]);
+        }
+    }
+
+    function _contains(address[] memory list, address account) private pure returns (bool) {
+        for(uint256 i = 0; i < list.length; ++i) {
+            if(list[i] == account) return true;
+        }
+        return false;
     }
 
     /// @notice Reverts if any account appears in both lists

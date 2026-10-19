@@ -1,30 +1,31 @@
 #!/usr/bin/env bash
 #
-# Deployment rehearsal against a local fork of Base Sepolia.
+# Deployment rehearsal against a local fork of Base Sepolia or Base mainnet.
 #
 # Runs the three real deploy scripts, in order, against an anvil fork, then exercises the protocol
 # they left behind. Nothing here reimplements a deploy step: a rehearsal of different code
 # rehearses nothing.
 #
-#   ./scripts/fork/rehearse.sh
+#   ./scripts/fork/rehearse.sh                        # Base Sepolia, anvil keys for every role
+#   NETWORK=base-mainnet ./scripts/fork/rehearse.sh   # Base mainnet, real role addresses
 #
-# The fork reports chain id 31337 rather than 84532. That is deliberate. The record key is built
-# from the chain id, so a fork answering 84532 would write the production
-# base-sepolia-84532-entrypoint-v8 entry from a run that deployed nothing real. The forked state
-# still carries the real EntryPoint v0.8 and the real RIP-7212 precompile, which is the reason to
-# fork at all. What it does not carry is the production EIP-712 domain, since v0.8 folds the chain
-# id into userOpHash; EntryPointValidation.t.sol covers that at the real chain id and this does not
-# try to.
+# Base Sepolia mode reports chain id 31337 rather than 84532, so the run is never mistaken for the
+# live testnet deployment. Base mainnet mode keeps 8453, because the mainnet-only checks in
+# DeployConfig (USDC pin, Safes for proposers and guardians, USDT and DAI) only run on that id.
+#
+# Base mainnet mode takes ESIM_WALLET_ADMIN, VAULT and the three TIMELOCK_* lists from .env. It
+# never needs their keys: the fork impersonates the admin, and the deployer is still anvil's
+# public key. Point BASE_MAINNET_RPC at a private endpoint if the public one rate limits.
 #
 # The whole run writes to its own record and its own address book rather than the real ones, so
-# nothing here can reach the files that track live deployments. Both are deleted on exit.
+# nothing here can reach the files that track live deployments. Both are deleted on exit, as are
+# forge's broadcast and cache logs for chain 8453 in mainnet mode.
 
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 
-FORK_BLOCK="${FORK_BLOCK:-45600000}"
-CHAIN_ID=31337
+NETWORK="${NETWORK:-base-sepolia}"
 RPC="http://127.0.0.1:8545"
 
 # The scripts read these and write nowhere else. fs_permissions only grants them deployments/, so
@@ -36,6 +37,8 @@ export DEPLOYMENT_RECORD_PATH="$RECORD"
 export ADDRESS_BOOK_PATH="$ADDRESS_BOOK"
 LOG_DIR="$(mktemp -d)"
 ANVIL_PID=""
+FORGE_LOGS_TO_DROP=()
+ANVIL_NETWORK_ARGS=()
 
 log()  { printf '\n\033[1m== %s\033[0m\n' "$1"; }
 fail() { printf '\n\033[31mRehearsal failed: %s\033[0m\n' "$1" >&2; exit 1; }
@@ -47,48 +50,83 @@ cleanup() {
     # Drop the rehearsal's record and address book however the run ended. Leaving either behind is
     # how a fork address gets mistaken for a deployed one later.
     rm -f "$RECORD" "$ADDRESS_BOOK"
+    for dir in ${FORGE_LOGS_TO_DROP[@]+"${FORGE_LOGS_TO_DROP[@]}"}; do rm -rf "$dir"; done
 
     echo "Logs kept in $LOG_DIR"
     exit $status
 }
 trap cleanup EXIT
 
-# ------------------------------------------------------------------------------------------------
-# Fork parameters, read out of the existing .env rather than asked for again
-# ------------------------------------------------------------------------------------------------
-
-[[ -f .env ]] || fail ".env not found. ALCHEMY_BASE_SEPOLIA_HTTPS has to come from somewhere."
+[[ -f .env ]] || fail ".env not found."
 set -a; . ./.env; set +a
 
-[[ -n "${ALCHEMY_BASE_SEPOLIA_HTTPS:-}" ]] || fail "ALCHEMY_BASE_SEPOLIA_HTTPS is unset."
-
-# Anvil's default mnemonic, so every key here is public and worthless by construction. A rehearsal
+# Anvil's first account, so the deployer key is public and worthless by construction. A rehearsal
 # must never be able to reach for a key that controls anything.
-#
-# The three timelock lists have to stay disjoint: ProtocolAdmin's constructor rejects an overlap
-# and DeployConfig checks the same thing before broadcasting.
 export DEPLOYER_PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
-export ESIM_WALLET_ADMIN_PRIVATE_KEY=0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d
-export ESIM_WALLET_ADMIN=0x70997970C51812dc3A010C7d01b50e0d17dc79C8
-export VAULT=0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
+DEPLOYER=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
 export PRICE_CAP_USD_CENTS=100000
+export ADMIN_ALLOWANCE_USD_CENTS=10000
 
-# Base Sepolia USDC, which is the chain this forks. Checked with cast on 2026-08-29: has code,
-# symbol USDC, 6 decimals.
-export SETTLEMENT_TOKEN=0x036CbD53842c5426634e7929541eC2318f3dCF7e
+case "$NETWORK" in
+    base-sepolia)
+        [[ -n "${ALCHEMY_BASE_SEPOLIA_HTTPS:-}" ]] || fail "ALCHEMY_BASE_SEPOLIA_HTTPS is unset."
+        FORK_RPC="$ALCHEMY_BASE_SEPOLIA_HTTPS"
+        FORK_BLOCK="${FORK_BLOCK:-45600000}"
+        CHAIN_ID=31337
 
-export TIMELOCK_PROPOSERS=0x90F79bf6EB2c4f870365E785982E1f101E93b906
-export TIMELOCK_CANCELLERS=0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65
-export TIMELOCK_GUARDIANS=0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc
+        # The three timelock lists have to stay disjoint: ProtocolAdmin's constructor rejects an
+        # overlap and DeployConfig checks the same thing before broadcasting.
+        export ESIM_WALLET_ADMIN=0x70997970C51812dc3A010C7d01b50e0d17dc79C8
+        export VAULT=0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
+        export TIMELOCK_PROPOSERS=0x90F79bf6EB2c4f870365E785982E1f101E93b906
+        export TIMELOCK_CANCELLERS=0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65
+        export TIMELOCK_GUARDIANS=0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc
+
+        # Base Sepolia USDC. Checked with cast on 2026-08-29: has code, symbol USDC, 6 decimals.
+        export SETTLEMENT_TOKEN=0x036CbD53842c5426634e7929541eC2318f3dCF7e
+        ;;
+    base-mainnet)
+        FORK_RPC="${BASE_MAINNET_RPC:-https://mainnet.base.org}"
+        FORK_BLOCK="${FORK_BLOCK:-}"
+        CHAIN_ID=8453
+        # Without it anvil runs chain 8453 on Ethereum rules and drops the P256 precompile Base has
+        ANVIL_NETWORK_ARGS=(--network optimism)
+
+        for var in ESIM_WALLET_ADMIN VAULT TIMELOCK_PROPOSERS TIMELOCK_GUARDIANS; do
+            [[ -n "${!var:-}" ]] || fail "$var is unset in .env."
+        done
+
+        # DeployConfig.BASE_USDC. DeployConfig refuses anything else on 8453.
+        export SETTLEMENT_TOKEN=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
+
+        # Forge logs runs under broadcast/ and forge-cache/ by chain id. Refuse to start over a
+        # real mainnet log, and drop the rehearsal's own on exit so it is never mistaken for one.
+        for script in Deploy Configure TransferOwnership ForkRehearsal; do
+            for dir in "broadcast/$script.s.sol/$CHAIN_ID" "forge-cache/$script.s.sol/$CHAIN_ID"; do
+                [[ -e "$dir" ]] && fail "$dir already exists. Move it aside if it is a real deployment log."
+                FORGE_LOGS_TO_DROP+=("$dir")
+            done
+        done
+        ;;
+    *)
+        fail "NETWORK must be base-sepolia or base-mainnet, got '$NETWORK'."
+        ;;
+esac
 
 # ------------------------------------------------------------------------------------------------
 
-log "Starting anvil, forking Base Sepolia at block $FORK_BLOCK"
+log "Starting anvil, forking $NETWORK at block ${FORK_BLOCK:-latest}"
 
+FORK_BLOCK_ARGS=()
+[[ -n "$FORK_BLOCK" ]] && FORK_BLOCK_ARGS=(--fork-block-number "$FORK_BLOCK")
+
+# Auto impersonation lets the admin step send as whatever address ESIM_WALLET_ADMIN names
 anvil \
-    --fork-url "$ALCHEMY_BASE_SEPOLIA_HTTPS" \
-    --fork-block-number "$FORK_BLOCK" \
+    --fork-url "$FORK_RPC" \
+    ${FORK_BLOCK_ARGS[@]+"${FORK_BLOCK_ARGS[@]}"} \
+    ${ANVIL_NETWORK_ARGS[@]+"${ANVIL_NETWORK_ARGS[@]}"} \
     --chain-id "$CHAIN_ID" \
+    --auto-impersonate \
     --silent \
     > "$LOG_DIR/anvil.log" 2>&1 &
 ANVIL_PID=$!
@@ -101,6 +139,34 @@ cast block-number --rpc-url "$RPC" >/dev/null 2>&1 || fail "anvil did not come u
 
 echo "anvil up, chain id $(cast chain-id --rpc-url "$RPC"), forked at block $(cast block-number --rpc-url "$RPC")"
 
+# The admin pays for postCreateAccount, and a real address may hold nothing on the fork
+cast rpc anvil_setBalance "$ESIM_WALLET_ADMIN" 0xDE0B6B3A7640000 --rpc-url "$RPC" >/dev/null
+
+if [[ "$NETWORK" == base-mainnet ]]; then
+    # DeployConfig requires code at every proposer and guardian on 8453. Checked here too, so a
+    # testnet Safe missing on mainnet is named before forge starts. Printed by position only.
+    missing=0
+    for var in TIMELOCK_PROPOSERS TIMELOCK_GUARDIANS; do
+        IFS=',' read -ra accounts <<< "${!var}"
+        for i in "${!accounts[@]}"; do
+            if [[ "$(cast code "${accounts[$i]}" --rpc-url "$RPC")" == "0x" ]]; then
+                echo "$var entry $i has no code on Base mainnet"
+                missing=1
+                # Rehearsal only: lets the rest run with these addresses. A real deploy still refuses.
+                [[ "${STUB_MISSING_SAFES:-0}" == 1 ]] \
+                    && cast rpc anvil_setCode "${accounts[$i]}" 0x00 --rpc-url "$RPC" >/dev/null
+            fi
+        done
+    done
+    if [[ "$missing" == 1 && "${STUB_MISSING_SAFES:-0}" == 1 ]]; then
+        printf '\033[33mSTUB_MISSING_SAFES=1: placeholder code put on the fork. Not deployable as is.\033[0m\n'
+    elif [[ "$missing" == 1 ]]; then
+        fail "Deploy the Safes on Base mainnet first, or rerun with STUB_MISSING_SAFES=1 to rehearse the rest."
+    else
+        echo "Every proposer and guardian carries code on Base mainnet"
+    fi
+fi
+
 # The whole reason for forking rather than using a bare anvil.
 ENTRY_POINT=0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108
 [[ "$(cast code "$ENTRY_POINT" --rpc-url "$RPC" | wc -c)" -gt 2 ]] \
@@ -109,11 +175,8 @@ echo "EntryPoint v0.8 present at $ENTRY_POINT"
 
 # RIP-7212, asked over RPC and not from inside a forge script.
 #
-# This cannot be checked in solidity here. foundry.toml sets evm_version = "osaka", so forge's own
-# EVM carries the precompile whether or not the target chain does, and a staticcall to 0x100 inside
-# a script answers out of that EVM rather than out of the chain. `cast code 0x100` is no good
-# either: a precompile holds no bytecode and returns empty on every chain. A call with a known-good
-# vector is the only thing that distinguishes the two, and it has to go over the wire.
+# Forge's own EVM is osaka and carries the precompile whatever the chain does, and a precompile
+# holds no bytecode, so only a call with a known-good vector over the wire tells them apart.
 #
 # It decides the cost of verification: 7,270 gas through the precompile against 227,256 through
 # FreshCryptoLib, a factor of 31, which is what verificationGasLimit has to respect.
@@ -136,32 +199,31 @@ probe_p256() {
 }
 
 probe_p256 "$RPC" "the fork"
-probe_p256 "$ALCHEMY_BASE_SEPOLIA_HTTPS" "Base Sepolia itself"
+probe_p256 "$FORK_RPC" "$NETWORK itself"
 
 # Start with neither file present. DeploymentRecord.isRecorded() reads file existence as "already
-# deployed", the same as it does for a live chain, so writing an empty {} here would make
-# Deploy.s.sol refuse to start on its own rehearsal. A leftover from an interrupted run would cause
-# the exact same false positive, which is why cleanup below always removes both on exit.
+# deployed", so an empty {} here would make Deploy.s.sol refuse to start on its own rehearsal.
 rm -f "$RECORD" "$ADDRESS_BOOK"
 
 # Forge sizes a broadcast transaction from what the simulation consumed. That is wrong for
 # handleOps: the EntryPoint checks the transaction carries the operation's whole declared gas
 # before it starts and reverts AA95 out of gas when it does not, however little the operation goes
-# on to use. A UserOp declaring 410k while consuming 100k therefore ships in a 130k transaction and
-# fails. The multiplier covers the gap. Unused gas is refunded, so the only cost is a larger
-# balance reserved during the run.
+# on to use. The multiplier covers the gap. Unused gas is refunded.
 GAS_MULTIPLIER=600
 
 run_script() {
     local name="$1" path="$2"
     log "$name"
+    # --unlocked sends every transaction through anvil, which holds the deployer and impersonates
+    # the admin
     if ! forge script "$path" --rpc-url "$RPC" --broadcast --via-ir -vv \
+        --unlocked --sender "$DEPLOYER" \
         --gas-estimate-multiplier "$GAS_MULTIPLIER" \
         > "$LOG_DIR/$name.log" 2>&1; then
         tail -40 "$LOG_DIR/$name.log" >&2
         fail "$name failed. Full log at $LOG_DIR/$name.log"
     fi
-    grep -E '^\s+(Registry|DeviceWalletFactory|ESIMWalletFactory|ProtocolAdmin|Wallet|initCode|Counterfactual|Ownership|UserOperation|Offchain)' \
+    grep -E '^\s+(Registry|DeviceWalletFactory|ESIMWalletFactory|PaymentAdapter|ProtocolAdmin|Wallet|initCode|Counterfactual|Ownership|UserOperation|Offchain|Extra)' \
         "$LOG_DIR/$name.log" || true
     echo "ok"
 }
@@ -171,9 +233,12 @@ run_script configure scripts/deploy/Configure.s.sol:Configure
 run_script handover scripts/deploy/TransferOwnership.s.sol:TransferOwnership
 run_script rehearsal scripts/fork/ForkRehearsal.s.sol:ForkRehearsal
 
-RECORD_KEY="anvil-${CHAIN_ID}-entrypoint-v8"
+case "$CHAIN_ID" in
+    31337) RECORD_KEY="anvil-31337-entrypoint-v8" ;;
+    8453)  RECORD_KEY="base-8453-entrypoint-v8" ;;
+esac
 
-log "Addresses written by the rehearsal"
+log "Contract addresses written by the rehearsal"
 python3 -c "
 import json
 print(json.dumps(json.load(open('$ADDRESS_BOOK'))['$RECORD_KEY'], indent=2))
@@ -183,9 +248,9 @@ log "Deployment record written by the rehearsal"
 python3 -c "
 import json
 r = json.load(open('$RECORD'))
-print(json.dumps({k: r[k] for k in ('chain', 'external', 'admin', 'status') if k in r}, indent=2))
+print(json.dumps({k: r[k] for k in ('chain', 'status') if k in r}, indent=2))
 print('contracts:', ', '.join(r.get('contracts', {})))
 "
 
 log "Rehearsal passed"
-echo "Full suite deployed to the fork, all four scripts clean, representative transactions executed."
+echo "Full suite deployed to the $NETWORK fork, all four scripts clean, representative transactions executed."

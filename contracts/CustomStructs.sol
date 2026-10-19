@@ -2,8 +2,8 @@
 pragma solidity 0.8.36;
 
 /// @notice Which contract, if any, saw the money for a data bundle move
-/// @dev Only `DeviceWallet` can be proven onchain. The other two are the admin's word, so the
-///      price cap is the only check on them.
+/// @dev `DeviceWallet` means the money moved through the purchase path, not that the price matches
+///      an order. The other two are the admin's word, bounded only by the price cap.
 enum Settlement {
     DeviceWallet,
     ExternalWallet,
@@ -11,9 +11,8 @@ enum Settlement {
 }
 
 /// @notice Data Bundle related details stored in the eSIM wallet
-/// @dev Two slots: `id`, then `priceUSDCents` and `settlement` packed together. `id` is
-///      `bytes32` because the provider's ids fit in 32 bytes and a `string` would cost an extra
-///      slot on every entry. No timestamp field: the event log already has one.
+/// @dev Two slots. `id` is `bytes32` since provider ids fit and a `string` costs an extra slot per
+///      entry. No timestamp: the event log already has one.
 struct DataBundleDetails {
     bytes32 id;
     uint64 priceUSDCents;   // 123456 reads as $1234.56

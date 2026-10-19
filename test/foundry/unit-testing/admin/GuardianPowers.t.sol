@@ -17,20 +17,83 @@ contract MockPausable {
 
     bool public paused = true;
 
+    function pause() external {
+        paused = true;
+    }
+
     function unpause() external {
         paused = false;
     }
 }
 
 /// @notice Everything a guardian can do, and the much longer list of what it cannot.
-/// @dev The role holds three powers and no general fast path. Half of this file is the second half
+/// @dev The role holds four powers and no general fast path. Half of this file is the second half
 ///      of that sentence: a guardian that could schedule, cancel, or run an arbitrary payload would
 ///      make every other guarantee in the contract advisory.
 ///
-///      All three powers take something away, and the tests below check the matching negative for
-///      each: releasing a pause cannot apply one, stripping a canceller cannot grant one, and
-///      suspending the admin cannot reinstate it or choose its replacement.
+///      None of the four grants anything, and the tests below check the matching negative for
+///      each: stripping a canceller cannot grant one, and suspending the admin cannot reinstate it
+///      or choose its replacement.
 contract GuardianPowersTest is AdminBase {
+
+    /// @dev The case the power exists for: the admin key is suspended, so it cannot pause, and the
+    ///      owner's own route waits out the delay.
+    function test_pauseInstantly_pausesWhileTheAdminIsSuspended() public {
+        vm.prank(guardian);
+        protocolAdmin.disableAdminInstantly(address(registry));
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(Errors.OnlyAdmin.selector);
+        registry.pause();
+
+        uint256 before = block.timestamp;
+        vm.prank(guardian);
+        protocolAdmin.pauseInstantly(address(registry));
+
+        assertTrue(registry.paused(), "the guardian must be able to pause");
+        assertEq(block.timestamp, before, "no time may have passed");
+    }
+
+    function test_pauseInstantly_emitsThePause() public {
+        vm.expectEmit(true, true, false, true, address(protocolAdmin));
+        emit ProtocolAdmin.PauseRaised(address(registry), guardian);
+
+        vm.prank(guardian);
+        protocolAdmin.pauseInstantly(address(registry));
+    }
+
+    /// @dev A pause the guardian raised can be lifted at once, by the same role, so the worst a
+    ///      rogue guardian reaches is an outage an honest one ends.
+    function test_pauseInstantly_canBeReleasedInstantly() public {
+        vm.prank(guardian);
+        protocolAdmin.pauseInstantly(address(registry));
+
+        vm.prank(guardian);
+        protocolAdmin.unpauseInstantly(address(registry));
+
+        assertFalse(registry.paused(), "the pause must lift");
+    }
+
+    function test_pauseInstantly_rejectsEveryoneButAGuardian() public {
+        bytes32 role = protocolAdmin.GUARDIAN_ROLE();
+        address[3] memory callers = [outsider, proposer, canceller];
+
+        for (uint256 i = 0; i < callers.length; ++i) {
+            vm.prank(callers[i]);
+            vm.expectRevert(
+                abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, callers[i], role)
+            );
+            protocolAdmin.pauseInstantly(address(registry));
+        }
+
+        assertFalse(registry.paused(), "the rejected calls must leave the protocol running");
+    }
+
+    function test_pauseInstantly_revertsOnATargetWithNoCode() public {
+        vm.prank(guardian);
+        vm.expectRevert();
+        protocolAdmin.pauseInstantly(outsider);
+    }
 
     /// @dev The reason the role exists. The admin key trips the pause and the owner clears it, so
     ///      without a way around the delay a release would be a two day outage.
@@ -514,5 +577,29 @@ contract GuardianPowersTest is AdminBase {
         registry.acceptAdminUpdate();
 
         assertEq(registry.eSIMWalletAdmin(), outsider, "the nominee holds the role once it accepts");
+    }
+
+    /// @dev Naming the incumbent would read as a withdrawn nomination on the registry, which lifts
+    ///      a suspension, so a call named for disabling would have re-enabled the suspended key.
+    function test_disableAndNominate_refusesToNominateTheIncumbent() public {
+        vm.prank(guardian);
+        protocolAdmin.disableAdminInstantly(address(registry));
+        assertTrue(registry.adminDisabled(), "the admin starts suspended");
+
+        bytes memory data = abi.encodeCall(
+            protocolAdmin.disableAndNominate, (address(registry), eSIMWalletAdmin)
+        );
+        bytes32 salt = bytes32(uint256(9));
+        _schedule(address(protocolAdmin), data, salt);
+        vm.warp(block.timestamp + protocolAdmin.getMinDelay());
+
+        vm.prank(outsider);
+        vm.expectRevert(
+            abi.encodeWithSelector(ProtocolAdmin.NomineeIsTheIncumbent.selector, address(registry), eSIMWalletAdmin)
+        );
+        protocolAdmin.execute(address(protocolAdmin), 0, data, bytes32(0), salt);
+
+        assertTrue(registry.adminDisabled(), "the suspension must still stand");
+        assertEq(registry.eSIMWalletAdmin(), address(0), "the suspended key must still have no powers");
     }
 }

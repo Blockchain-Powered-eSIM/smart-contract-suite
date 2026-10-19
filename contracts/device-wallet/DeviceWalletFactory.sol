@@ -24,15 +24,13 @@ import {ESIMWalletFactory} from "../esim-wallet/ESIMWalletFactory.sol";
 import {P256Verifier} from "../P256Verifier.sol";
 
 /// @notice Deploys device wallets at deterministic addresses and owns the beacon they all point at
-/// @dev A UUPS singleton with two deployment routes. The admin batch route deploys a wallet, its
-///      first eSIM wallet and the registry records together. The EntryPoint route, `createAccount`,
-///      writes no external storage at all, so a wallet created that way is registered afterwards
-///      through `postCreateAccount`. Both land on the same CREATE2 address for the same inputs.
+/// @dev The admin batch route deploys and registers in one go. `createAccount` runs inside ERC-4337
+///      validation and writes no external storage, so `postCreateAccount` registers it afterwards.
+///      Both routes give the same CREATE2 address for the same inputs.
 contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable {
 
-    /// @notice Upgradeable beacon that points to correct Device wallet implementation
-    /// @dev Every device wallet is a beacon proxy reading its implementation from here, so one
-    ///      update moves all of them at once and none can decline it.
+    /// @notice Beacon every device wallet proxy reads its implementation from
+    /// @dev One update moves every wallet at once, and none can decline it.
     UpgradeableBeacon public beacon;
 
     /// @notice ERC-4337 EntryPoint singleton passed into every device wallet implementation
@@ -71,8 +69,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     event AddedRegistry(address indexed registry);
 
     /// @notice Reverts unless the caller is the eSIM wallet admin or the registry
-    /// @dev Private rather than inline in the modifier, so the check is emitted once instead of at
-    ///      every use site. Keep each of these next to the modifier that calls it.
+    /// @dev A function rather than inline in the modifier, so the check is compiled once.
     function _onlyAdminOrRegistry() private view {
         if (
             msg.sender != eSIMWalletAdmin() &&
@@ -91,19 +88,17 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     // ---------------------------------------------------------------------------------------------
 
     /// @notice Disables initializers on the implementation contract
-    /// @dev Locks the implementation contract itself. Without this, anyone can call initialize
-    ///      directly on the implementation, own it, and make it deploy a beacon it controls. The
-    ///      proxy is unaffected either way, but an owned implementation is a trap for any later
-    ///      upgrade that adds an outward call.
+    /// @dev Otherwise anyone could initialize and own the implementation itself. The proxy is
+    ///      unaffected, but an owned implementation is a trap for a later upgrade that adds an
+    ///      outward call.
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
     }
 
     /// @notice Deploys the beacon and hands ownership of this factory to the upgrade manager
-    /// @dev Neither the admin nor the vault is taken here. Both come from the registry, which is
-    ///      added afterwards through addRegistryAddress, so admin functions stay closed until that
-    ///      is done and every payment reads one address.
+    /// @dev The admin and the vault are read from the registry, set later by addRegistryAddress,
+    ///      so there is one source for each. Admin functions stay closed until then.
     /// @param _deviceWalletImplementation First device wallet logic contract the beacon points at
     /// @param _upgradeManager Admin address responsible for upgrading contracts
     /// @param _eSIMWalletFactoryAddress Factory the device wallets deploy their eSIM wallets through
@@ -142,10 +137,9 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     // Registry wiring and beacon
     // ---------------------------------------------------------------------------------------------
 
-    /// @notice Allow the owner to add the registry contract after it has been deployed
-    /// @dev Write-once, and the owner rather than the admin, because the admin is read from the
-    ///      registry and there is no admin to check against until this call lands. Matches
-    ///      ESIMWalletFactory, which has always gated its own version on the owner.
+    /// @notice Sets the registry, once, after it has been deployed
+    /// @dev Gated on the owner because the admin is read from the registry, so there is no admin
+    ///      to check until this lands. Same as ESIMWalletFactory.
     /// @param _registryContractAddress Address of the registry
     /// @return The registry address now in force
     function addRegistryAddress(
@@ -160,9 +154,8 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         return address(registry);
     }
 
-    /// @notice Function to update the device wallet implementation
-    /// @dev Moves every device wallet in the protocol at once. Treat any change here as a
-    ///      protocol-wide upgrade, since no wallet can decline it.
+    /// @notice Points the beacon at a new device wallet implementation
+    /// @dev A protocol-wide upgrade: every device wallet moves at once and none can decline it.
     /// @param _newDeviceImpl Address of the new device implementation contract
     /// @return The implementation now in force
     function updateDeviceWalletImplementation(
@@ -184,20 +177,20 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     // Device wallet deployment
     // ---------------------------------------------------------------------------------------------
 
-    /// @notice To deploy multiple device wallets at once
-    /// @dev Each entry deploys a device wallet, its first eSIM wallet and the registry records in
-    ///      one go. ETH left over once the batch has been funded is returned to the caller.
-    /// @param _deviceUniqueIdentifiers Array of unique device identifiers for each device wallet
-    /// @param _deviceWalletOwnersKey Array of P256 public keys of owners of the respective device wallets
-    /// @param _salts Array of CREATE2 salts, one per device wallet
-    /// @param _depositAmounts Array of all the ETH to be deposited into each of the device wallets
-    /// @return Array of deployed device wallet address
+    /// @notice Deploys device wallets, each with its first eSIM wallet and registry records
+    /// @dev Unspent ETH is returned to the caller. Refused while paused, since it moves ETH.
+    /// @param _deviceUniqueIdentifiers Device identifier per wallet
+    /// @param _deviceWalletOwnersKey Owner P256 public key per wallet
+    /// @param _salts CREATE2 salt per wallet
+    /// @param _depositAmounts ETH to deposit per wallet
+    /// @return The deployed device and eSIM wallet addresses
     function deployDeviceWalletForUsers(
         string[] calldata _deviceUniqueIdentifiers,
         bytes32[2][] calldata _deviceWalletOwnersKey,
         uint256[] calldata _salts,
         uint256[] calldata _depositAmounts
     ) external payable onlyAdminOrRegistry returns (Wallets[] memory) {
+        registry.requireNotPaused();
         uint256 numberOfDeviceWallets = _deviceUniqueIdentifiers.length;
         if(numberOfDeviceWallets == 0) revert Errors.EmptyBatch();
         if(numberOfDeviceWallets != _deviceWalletOwnersKey.length) {
@@ -213,8 +206,8 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         uint256 availableETH = msg.value;
         Wallets[] memory walletsDeployed = new Wallets[](numberOfDeviceWallets);
 
-        // The lazy route reaches this through the registry and is deploying against its own
-        // reservation, so only a direct admin batch is checked. Read once rather than per entry.
+        // The registry calls this to deploy against its own reservation, so only a direct admin
+        // batch is checked against reservations.
         bool checkReservations = msg.sender != address(registry);
 
         for (uint256 i = 0; i < numberOfDeviceWallets; ++i) {
@@ -234,8 +227,8 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
                 _depositAmounts[i]
             );
 
-            // Charge the budget for what was forwarded, not what was requested. An entry that
-            // resolves to an existing wallet forwards nothing, and that ETH must stay refundable.
+            // Charge what was forwarded, not what was requested. An entry that resolves to an
+            // already registered wallet forwards nothing, and that ETH must stay refundable.
             availableETH -= spentETH;
         }
 
@@ -248,12 +241,8 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     }
 
     /// @notice Records a wallet the EntryPoint deployed through createAccount
-    /// @dev Not needed on the admin batch route, which writes the registry itself. Callable by the
-    ///      admin directly and by the registry on the lazy deployment path.
-    ///
-    ///      The wallet was not deployed in this call, so nothing binds the arguments to it. The
-    ///      re-derivation does: the key and the identifier are proxy constructor arguments, so an
-    ///      address matching the derivation and holding code was deployed here with exactly those.
+    /// @dev The key and identifier are proxy constructor arguments, so an address that matches the
+    ///      derivation and holds code was deployed by this factory with exactly those arguments.
     /// @param _deviceWallet Wallet that was deployed
     /// @param _deviceUniqueIdentifier Identifier the device is reached by
     /// @param _deviceWalletOwnerKey X,Y co-ordinates of the P256 key owning the wallet
@@ -268,9 +257,8 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         if(bytes(_deviceUniqueIdentifier).length == 0) revert Errors.EmptyDeviceIdentifier();
         _requireValidOwnerKey(_deviceWalletOwnerKey);
 
-        // Same reason as the batch route: only a direct admin call is claiming a fresh identifier.
-        // This is also where the permissionless `createAccount` route gets checked, since that one
-        // runs inside ERC-4337 validation and may not read another contract's storage.
+        // Only a direct admin call claims a fresh identifier. This is also the reservation check for
+        // `createAccount`, which runs in ERC-4337 validation and may not read other contracts.
         if(msg.sender != address(registry)) {
             registry.requireDeviceIdentifierNotReserved(_deviceUniqueIdentifier);
         }
@@ -282,13 +270,11 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         );
         if(derived != _deviceWallet) revert Errors.DeviceWalletMismatch(_deviceWallet, derived);
 
-        // The derivation answers for an address whether or not anything stands there, so the code
-        // check is what separates a wallet from a slot someone could still deploy into.
+        // The derivation matches whether or not anything is deployed there yet.
         if(_deviceWallet.code.length == 0) revert Errors.DeviceWalletNotDeployed(_deviceWallet);
 
-        // Flag set before the call so a second pass through here cannot reach the registry at all.
-        // The registry already rejects a duplicate identifier or key, so this closes the window
-        // rather than being the only thing holding it shut.
+        // Set before the call so a reentrant pass cannot reach the registry. The registry also
+        // rejects duplicates, so this is a second guard, not the only one.
         deviceWalletInfoAdded[_deviceWallet] = true;
         registry.updateDeviceWalletInfo(_deviceWallet, _deviceUniqueIdentifier, _deviceWalletOwnerKey);
     }
@@ -298,14 +284,9 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     // ---------------------------------------------------------------------------------------------
 
     /// @notice Deploys a device wallet, returning the existing one if that address already holds it
-    /// @dev Called by the EntryPoint during a user operation, so it must not read or write any
-    ///      other contract's storage: that is barred by the ERC-4337 validation rules. The registry
-    ///      is therefore not consulted here and not written, and `postCreateAccount` records the
-    ///      wallet afterwards. Validation the registry would have done happens offchain, through
-    ///      `preCreateAccountValidation`.
-    ///
-    ///      Returning an existing address rather than reverting is what makes
-    ///      `entryPoint.getSenderAddress()` keep working once the account has been created.
+    /// @dev Runs in ERC-4337 validation, so it leaves the registry to `postCreateAccount`. Reading
+    ///      its own and the beacon's storage needs a staked factory. Returning an existing wallet
+    ///      instead of reverting keeps `entryPoint.getSenderAddress()` working after creation.
     /// @param _deviceUniqueIdentifier Identifier the device is reached by
     /// @param _deviceWalletOwnerKey X,Y co-ordinates of the P256 key owning the wallet
     /// @param _salt CREATE2 salt for the wallet
@@ -326,8 +307,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
 
         uint256 codeSize = addr.code.length;
         if (codeSize > 0) {
-            // The wallet is already deployed, so the ETH has to follow it. Keeping it here would
-            // strand it in the factory, which has no way to send it anywhere.
+            // Forward the ETH, since the factory has no way to send on anything left here
             if (msg.value > 0) {
                 _fundDeviceWallet(addr, msg.value);
             }
@@ -347,7 +327,6 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
             )
         );
 
-        // Funding has to come after deployment, since the wallet does not exist before this point
         if (msg.value > 0) {
             _fundDeviceWallet(address(deviceWallet), msg.value);
         }
@@ -358,9 +337,8 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     // ---------------------------------------------------------------------------------------------
 
     /// @notice Ownership of this contract is never renounced
-    /// @dev The owner is the only caller _authorizeUpgrade accepts, and this contract owns the
-    ///      beacon, so it is also the only route to updateDeviceWalletImplementation. Renouncing
-    ///      would freeze every device wallet on its current logic permanently.
+    /// @dev The owner alone upgrades this factory and the beacon, so renouncing would freeze every
+    ///      device wallet on its current logic for good.
     function renounceOwnership() public pure override {
         revert Errors.OwnershipCannotBeRenounced();
     }
@@ -378,12 +356,12 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     // ---------------------------------------------------------------------------------------------
 
     /// @notice Deploys one device wallet, its first eSIM wallet and the binding between them
-    /// @param _deviceUniqueIdentifier Unique device identifier for the device wallet
-    /// @param _deviceWalletOwnerKey User's P256 public key (owner of the device wallet and respective eSIM wallets)
+    /// @param _deviceUniqueIdentifier Identifier the device is reached by
+    /// @param _deviceWalletOwnerKey Owner P256 public key of the device and eSIM wallets
     /// @param _salt CREATE2 salt for both wallets
-    /// @param _depositAmount Amount of ETH to be deposited into the device wallet
-    /// @return Deployed device wallet address
-    /// @return ETH actually forwarded to the wallet, zero if an existing wallet was returned
+    /// @param _depositAmount ETH to deposit into the device wallet
+    /// @return The device and eSIM wallet addresses
+    /// @return ETH actually forwarded, zero if an already registered wallet was returned
     function _deployDeviceWallet(
         string memory _deviceUniqueIdentifier,
         bytes32[2] memory _deviceWalletOwnerKey,
@@ -399,7 +377,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         address deviceWalletAddress = address(deviceWallet);
 
         address eSIMWalletAddress = eSIMWalletFactory.deployESIMWallet(deviceWalletAddress, _salt);
-        // No access to the device wallet's money: only the owner grants that, with a signed
+        // No access to the device wallet's funds. Only the owner grants that, by signing
         // `toggleAccessToFunds`.
         DeviceWallet(payable(deviceWalletAddress)).addESIMWallet(
             eSIMWalletAddress,
@@ -412,9 +390,8 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     }
 
     /// @notice Deploys a device wallet and writes its registry records, or adopts one that already exists
-    /// @dev Returns the ETH actually forwarded to the wallet, which is zero whenever an existing
-    ///      wallet is returned instead of a new one being deployed. Callers holding a budget must
-    ///      decrement by this value, not by the requested deposit.
+    /// @dev Callers holding a budget must charge `spentETH`, not the requested deposit. It is zero
+    ///      for an already registered wallet, and the full deposit for a new or adopted one.
     /// @param _deviceUniqueIdentifier Identifier the device is reached by
     /// @param _deviceWalletOwnerKey X,Y co-ordinates of the P256 key owning the wallet
     /// @param _salt CREATE2 salt for the wallet
@@ -436,14 +413,12 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
             _salt
         );
 
-        // Check if the device identifier is actually unique
         address wallet = registry.uniqueIdentifierToDeviceWallet(_deviceUniqueIdentifier);
         if(wallet != address(0)) {
             if(wallet != addr) revert Errors.DeviceWalletAlreadyExists(_deviceUniqueIdentifier, wallet);
             return (DeviceWallet(payable(wallet)), 0);
         }
 
-        // Check if P256 public key is actually unique
         bytes32 keyHash = keccak256(abi.encode(_deviceWalletOwnerKey[0], _deviceWalletOwnerKey[1]));
         wallet = registry.registeredP256Keys(keyHash);
         if(wallet != address(0)) {
@@ -453,16 +428,13 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
 
         uint256 codeSize = addr.code.length;
         if (codeSize > 0) {
-            // The wallet exists but holds no registry record, which is the state createAccount
-            // leaves behind. Anyone can put a wallet into it, so adopt it here rather than
-            // returning an unregistered address that later registry writes would reject.
+            // Deployed but unregistered, as createAccount leaves it, and anyone can do that. Adopt
+            // it rather than return an address that later registry writes would reject.
             deviceWalletInfoAdded[addr] = true;
             registry.updateDeviceWalletInfo(addr, _deviceUniqueIdentifier, _deviceWalletOwnerKey);
 
-            // The deposit follows the wallet instead of staying behind to be refunded. Adoption is
-            // the one existing-wallet case where the deposit was still meant for the wallet the
-            // caller asked for, and leaving it behind hands anyone who deploys that address first
-            // a way to force the refund through a caller that cannot receive ETH.
+            // The deposit was meant for this wallet, so it goes there. Refunding it instead would
+            // let whoever deployed the address first force a refund to a caller that rejects ETH.
             if (_depositAmount > 0) {
                 _fundDeviceWallet(addr, _depositAmount);
             }
@@ -493,10 +465,9 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     }
 
     /// @notice Rejects a P256 public key that is not a point on the curve
-    /// @dev This is the same predicate FCL_ecdsa.ecdsa_verify applies before it does anything else,
-    ///      so a key rejected here is one that could never have verified a signature. A wallet
-    ///      deployed with such a key is unusable for its whole life and it consumes its device
-    ///      identifier and key hash, neither of which the protocol can release.
+    /// @dev Same check FCL_ecdsa.ecdsa_verify runs first, so a rejected key could never sign. A
+    ///      wallet with such a key is dead for life and still uses up its identifier and key hash,
+    ///      which the protocol cannot release.
     /// @param _deviceWalletOwnerKey X,Y co-ordinates of the P256 key to check
     function _requireValidOwnerKey(bytes32[2] memory _deviceWalletOwnerKey) private pure {
         if(
@@ -508,12 +479,8 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     }
 
     /// @notice Sends ETH to a device wallet so that it lands in the wallet's own balance
-    /// @dev No EntryPoint deposit is created. A wallet holding no deposit still transacts: the
-    ///      EntryPoint reports the whole prefund as missing during validation and the account pays
-    ///      it out of this balance. Until an operation needs it, the ETH is spendable for anything
-    ///      else the owner wants to do. Gas the EntryPoint does not consume is refunded into the
-    ///      wallet's EntryPoint deposit rather than back here, so the balance drains slowly and
-    ///      the owner reclaims it with withdrawDepositTo.
+    /// @dev No EntryPoint deposit is made, so the ETH stays spendable. The account pays any missing
+    ///      prefund from this balance; unused gas lands in its EntryPoint deposit (withdrawDepositTo).
     /// @param _deviceWallet Wallet to receive the ETH
     /// @param _amount Amount of ETH to send
     function _fundDeviceWallet(address _deviceWallet, uint256 _amount) private {
@@ -526,21 +493,19 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     // ---------------------------------------------------------------------------------------------
 
     /// @notice Admin address of the eSIM wallet project
-    /// @dev Held by the registry, which is where it is rotated, so this contract cannot fall
-    ///      behind the rest of the protocol after a rotation. Answers address(0) before the
-    ///      registry is wired up, which no caller can match, so admin functions stay closed until
-    ///      then rather than reverting on a call into address(0).
+    /// @dev Read from the registry so a rotation there applies here too. Returns address(0), which
+    ///      no caller matches, until the registry is set, rather than calling into address(0).
     /// @return The current admin, or zero if the registry is not yet wired up
     function eSIMWalletAdmin() public view returns (address) {
         if(address(registry) == address(0)) return address(0);
         return registry.eSIMWalletAdmin();
     }
 
-    /// @notice Checks that all the input params needed for deploying a fresh device wallet are valid
-    /// @dev This is needed when deploying the device wallet via the EntryPoint using userops
-    /// @param _deviceUniqueIdentifier Unique device identifier for the device wallet
-    /// @param _deviceWalletOwnerKey User's P256 public key (owner of the device wallet and respective eSIM wallets)
-    /// @return wallet address(0) if valid. device wallet address for any existing wallet
+    /// @notice Checks the inputs for a fresh device wallet against the registry
+    /// @dev For use before `createAccount`, which cannot read the registry itself
+    /// @param _deviceUniqueIdentifier Identifier the device is reached by
+    /// @param _deviceWalletOwnerKey Owner P256 public key of the device and eSIM wallets
+    /// @return wallet address(0) if both are free, else the wallet already holding one of them
     function preCreateAccountValidation(
         string memory _deviceUniqueIdentifier,
         bytes32[2] memory _deviceWalletOwnerKey
@@ -548,13 +513,11 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
         if(bytes(_deviceUniqueIdentifier).length == 0) revert Errors.EmptyDeviceIdentifier();
         _requireValidOwnerKey(_deviceWalletOwnerKey);
 
-        // Check if the device identifier is actually unique
         wallet = registry.uniqueIdentifierToDeviceWallet(_deviceUniqueIdentifier);
         if(wallet != address(0)) {
             return wallet;
         }
 
-        // Check if P256 public key is actually unique
         bytes32 keyHash = keccak256(abi.encode(_deviceWalletOwnerKey[0], _deviceWalletOwnerKey[1]));
         wallet = registry.registeredP256Keys(keyHash);
         if(wallet != address(0)) {
@@ -563,8 +526,8 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     }
 
     /// @notice The address createAccount would deploy to for these inputs
-    /// @dev The owner key and the device identifier are part of the proxy's constructor arguments,
-    ///      so they are folded into the address alongside the salt. Changing any of them moves it.
+    /// @dev The key and identifier are proxy constructor arguments, so changing either, or the
+    ///      salt, moves the address.
     /// @param _deviceWalletOwnerKey X,Y co-ordinates of the P256 key owning the wallet
     /// @param _deviceUniqueIdentifier Identifier the device is reached by
     /// @param _salt CREATE2 salt

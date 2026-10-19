@@ -1,15 +1,15 @@
 {
   "acceptAdminUpdate": "4964",
-  "assignESIMIdentifier: first time": "64810",
-  "pause": "13963",
-  "recordSettledPurchase: first for the wallet": "122013",
-  "recordSettledPurchase: second for the same wallet": "87113",
-  "requestAdminUpdate": "10538",
-  "setDefaultPriceCapUSDCents": "13346",
-  "toggleESIMWalletStandbyStatus: off standby": "5365",
-  "toggleESIMWalletStandbyStatus: onto standby": "25265",
+  "assignESIMIdentifier: first time": "67244",
+  "pause": "14027",
+  "recordSettledPurchase: first for the wallet": "122220",
+  "recordSettledPurchase: second for the same wallet": "87320",
+  "requestAdminUpdate": "10582",
+  "setDefaultPriceCapUSDCents": "13379",
+  "toggleESIMWalletStandbyStatus: off standby": "5475",
+  "toggleESIMWalletStandbyStatus: onto standby": "25375",
   "unpause": "4102",
   "updateDeviceWalletInfo: first device, cold storage": "122096",
   "updateDeviceWalletInfo: second device, warm storage": "115596",
-  "updateVaultAddress": "14338"
+  "updateVaultAddress": "14404"
 }

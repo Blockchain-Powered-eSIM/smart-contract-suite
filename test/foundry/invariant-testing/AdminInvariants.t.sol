@@ -35,6 +35,19 @@ contract AdminInvariantsTest is AdminBase {
         targetContract(address(handler));
     }
 
+    /// @notice A guardian can always pause, whatever state the hot admin key is in
+    function invariant_aGuardianCanAlwaysPause() public view {
+        assertFalse(handler.ghost_guardianPauseRefused(), "A guardian's pause was refused");
+    }
+
+    /// @notice A scheduled replacement never hands a suspended admin its powers back
+    function invariant_aReplacementNeverLiftsASuspension() public view {
+        assertFalse(
+            handler.ghost_suspensionLiftedByNomination(),
+            "A scheduled replacement named the suspended admin and gave it its powers back"
+        );
+    }
+
     /// @notice The admin contract never stops owning the four contracts it was given
     /// @dev Nothing the handler can call moves ownership, so this failing means a path exists that
     ///      reaches `transferOwnership` without going through a scheduled operation.
@@ -208,6 +221,11 @@ contract AdminInvariantsTest is AdminBase {
         assertEq(handler.unpaused(), 1, "the guardian could not release the pause");
         assertFalse(registry.paused());
 
+        handler.pauseInstantly();
+        assertEq(handler.pausedByGuardian(), 1, "the guardian could not raise the pause");
+        assertTrue(registry.paused());
+        handler.unpauseInstantly();
+
         uint256 before = handler.cancellerCount();
         handler.revokeCanceller(0);
         assertEq(handler.cancellersRevoked(), 1, "the guardian could not strip a canceller");
@@ -218,11 +236,12 @@ contract AdminInvariantsTest is AdminBase {
     function _assertEveryRejectionPathFires() private {
         handler.rejectsAnUnauthorisedSchedule(outsider, 1 ether);
         handler.rejectsAnUnauthorisedUnpause(outsider);
+        handler.rejectsAnUnauthorisedPause(outsider);
         handler.rejectsAnUnauthorisedCancellerRevocation(outsider, 0);
         handler.rejectsAGuardianReachingAnotherRole(0);
         handler.rejectsADirectCallToTheRegistry(outsider, 1 ether);
         handler.rejectsADirectRoleGrant(outsider, outsider);
 
-        assertEq(handler.rejections(), 6, "an unauthorised call was not turned away");
+        assertEq(handler.rejections(), 7, "an unauthorised call was not turned away");
     }
 }

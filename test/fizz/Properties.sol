@@ -182,6 +182,34 @@ abstract contract Properties is PropertiesAsserts, Snapshots {
         return !ghosts.purchaseAboveCap;
     }
 
+    /// @notice GL-16: a lazy user's eSIM identifier is held by the wallet the lazy route deployed
+    ///         for it, or by nobody yet
+    /// @dev Needs no ghost. A reserved identifier cannot have been claimed before the reservation,
+    ///      since the lazy registry refuses to reserve a claimed one, so any other holder took it
+    ///      afterwards.
+    function property_aLazyESIMIdentifierGoesOnlyToItsLazyWallet() public view returns (bool) {
+        string[] memory identifiers = _allLazyESIMIdentifiers();
+        for (uint256 i; i < identifiers.length; ++i) {
+            if (!lazyWalletRegistry.isESIMIdentifierReserved(identifiers[i])) continue;
+
+            address holder = registry.eSIMWalletForIdentifier(identifiers[i]);
+            if (holder != address(0) && holder != lazyWalletRegistry.lazyDeployedESIMWallet(identifiers[i])) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// @notice GL-17: an owner can always withdraw its own transfer request and keep the wallet
+    function property_aTransferRequestCanAlwaysBeCancelled() public view returns (bool) {
+        return !ghosts.cancelRefused;
+    }
+
+    /// @notice GL-15: the admin never charges a wallet past what its owner allowed
+    function property_adminChargesStayInsideTheAllowance() public view returns (bool) {
+        return !ghosts.adminAllowanceBroken;
+    }
+
     /// @notice GL-12: settlement token is never created or destroyed
     function property_settlementTokenIsConserved() public view returns (bool) {
         uint256 tracked = settlementERC20.balanceOf(address(this)) + sumActorsERC20Balances(settlementToken)
@@ -219,7 +247,8 @@ abstract contract Properties is PropertiesAsserts, Snapshots {
     ///      call, and a reverted call is thrown away rather than reported.
     function property_noUnauthorizedCallSucceeded() public view returns (bool) {
         return !ghosts.unauthorizedBind && !ghosts.unauthorizedStandby && !ghosts.unauthorizedPull
-            && !ghosts.unauthorizedForeignDeploy && !ghosts.pausedCallSucceeded;
+            && !ghosts.unauthorizedForeignDeploy && !ghosts.pausedCallSucceeded && !ghosts.rotatedWithoutTheNewKey
+            && !ghosts.unauthorizedRecovery;
     }
 
     /// @notice Every global property, as one assertion
@@ -237,6 +266,9 @@ abstract contract Properties is PropertiesAsserts, Snapshots {
         t(property_ownerKeysAreUniqueAndAgree(), "GL-07/08 owner keys disagree or are shared");
         t(property_identifiersAreClaimedOnce(), "GL-09/10 an identifier names the wrong wallet");
         t(property_theCeilingAlwaysBinds(), "GL-11 the price ceiling stopped binding");
+        t(property_adminChargesStayInsideTheAllowance(), "GL-15 the admin charged past the allowance");
+        t(property_aLazyESIMIdentifierGoesOnlyToItsLazyWallet(), "GL-16 a lazy identifier went to another wallet");
+        t(property_aTransferRequestCanAlwaysBeCancelled(), "GL-17 an owner could not cancel its transfer request");
         t(property_settlementTokenIsConserved(), "GL-12 settlement token was created or destroyed");
         t(property_onlyThePurchasePathClaimsSettlement(), "GL-13 something else claimed settlement");
         t(property_noUnauthorizedCallSucceeded(), "a call the protocol should have refused ran");

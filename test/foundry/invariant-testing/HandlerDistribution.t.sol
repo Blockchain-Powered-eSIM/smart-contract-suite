@@ -79,12 +79,15 @@ contract HandlerDistributionTest is CampaignBase {
             adminHandler.setESIMIdentifier(round, seed + 3000, false);
             walletHandler.toggleAccessToFunds(round, true);
             walletHandler.setESIMWalletPriceCap(round, round);
+            // Index 2 on the ladder is the mainnet default, so the purchases below still fit
+            walletHandler.setAdminAllowance(round, 2);
             // Each payment path is given its own block of reference seeds. Two calls presenting
             // the same reference is a case the campaign covers, and the second one is refused,
             // which is a revert rather than the count this drive is checking
             paymentHandler.recordSettledPurchase(round, 100, round + PAYMENT_REFERENCE_SEEDS, 0, false);
             paymentHandler.buyDataBundleWithToken(round, 100, 10e6, round + 2 * PAYMENT_REFERENCE_SEEDS);
             paymentHandler.quote(0, 100);
+            paymentHandler.recoverTokens(uint128(round + 1));
             // Withdrawn and put back inside the round, so the next round starts from the same
             // currency table this one did
             paymentHandler.updateAsset(1, false, true);
@@ -149,6 +152,7 @@ contract HandlerDistributionTest is CampaignBase {
         _assertExercised("buyDataBundleWithToken");
         _assertExercised("recordSettledPurchase");
         _assertExercised("quote");
+        _assertExercised("recoverTokens");
         _assertExercised("updateAsset");
         _assertExercised("pullToken");
         _assertExercised("removeESIMWallet");
@@ -163,6 +167,7 @@ contract HandlerDistributionTest is CampaignBase {
         _assertExercised("unpauseProtocol");
         _assertExercised("setDefaultPriceCap");
         _assertExercised("setESIMWalletPriceCap");
+        _assertExercised("setAdminAllowance");
         _assertExercised("upgradeDeviceWalletBeacon");
         _assertExercised("upgradeESIMWalletBeacon");
     }

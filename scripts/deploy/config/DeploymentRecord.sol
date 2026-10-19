@@ -2,7 +2,8 @@
 pragma solidity 0.8.36;
 
 // Contracts
-import {Vm} from "forge-std/Vm.sol";
+import {Vm, VmSafe} from "forge-std/Vm.sol";
+import {console} from "forge-std/console.sol";
 
 // Config
 import {DeployConfig} from "./DeployConfig.sol";
@@ -28,6 +29,9 @@ import {DeployConfig} from "./DeployConfig.sol";
 ///      does can reach the files that track a live deployment. Nothing here is hand edited outside
 ///      of that override: a hand edited address is indistinguishable from a deployed one to every
 ///      reader of this file.
+///
+///      A run without `--broadcast` writes nothing, so a rehearsal cannot pose as a deployment. A
+///      broadcast that stops partway still leaves a full record: rerun it, every step skips what is done.
 library DeploymentRecord {
 
     /// @notice Flat name to address map, one entry per deployment, unless overridden
@@ -139,12 +143,14 @@ library DeploymentRecord {
     /// @dev Whole file at once, so a rerun leaves no field behind from the run before it.
     /// @param json Serialized record
     function writeRecord(string memory json) internal {
+        if(_isDryRun("record")) return;
         vm.writeJson(json, recordPath());
     }
 
     /// @notice Adds this chain's entry to the flat address book
     /// @param json Serialized name to address map
     function writeAddressBook(string memory json) internal {
+        if(_isDryRun("address book")) return;
         vm.writeJson(json, addressBookPath(), string.concat(".", DeployConfig.recordKey()));
     }
 
@@ -154,6 +160,7 @@ library DeploymentRecord {
     /// @param key Name of the step, for example `configured`
     /// @param done Whether the step finished
     function writeStatus(string memory key, bool done) internal {
+        if(_isDryRun(string.concat("status.", key))) return;
         // `writeJson` takes the value as JSON text, so a bool is the literal word rather than a
         // serialized object. Serializing here would write `{"configured":true}` where the bool goes.
         vm.writeJson(done ? "true" : "false", recordPath(), string.concat(".status.", key));
@@ -167,6 +174,7 @@ library DeploymentRecord {
     /// @param path Dotted path into the record
     /// @param json Serialized object to write there
     function writeObject(string memory path, string memory json) internal {
+        if(_isDryRun(path)) return;
         vm.writeJson(json, recordPath(), string.concat(".", path));
     }
 
@@ -193,6 +201,13 @@ library DeploymentRecord {
         if(!vm.isFile(book)) return false;
 
         deployed = vm.keyExistsJson(vm.readFile(book), string.concat(".", DeployConfig.recordKey()));
+    }
+
+    /// @notice True for `forge script` without `--broadcast`, logging what was not written
+    /// @dev Only the dry run skips. Tests still write, which is how they read results back.
+    function _isDryRun(string memory what) private view returns (bool dryRun) {
+        dryRun = vm.isContext(VmSafe.ForgeContext.ScriptDryRun);
+        if(dryRun) console.log(string.concat("Dry run: ", what, " not written"));
     }
 
     /// @notice Reads the record file, failing with the path when there is none

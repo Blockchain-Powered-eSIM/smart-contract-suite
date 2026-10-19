@@ -51,11 +51,11 @@ contract Configure is Script {
     /// @notice A currency is registered against a different token than the one configured
     error AssetBoundElsewhere(bytes32 symbol, address expected, address actual);
 
-    /// @notice The settlement token address holds no code on this chain
-    error SettlementTokenNotDeployed(address token, uint256 chainId);
+    /// @notice A token address holds no code on this chain
+    error TokenNotDeployed(address token, uint256 chainId);
 
-    /// @notice The settlement token did not answer `decimals()`
-    error SettlementTokenNotTokenLike(address token);
+    /// @notice A token did not answer `decimals()`
+    error NotTokenLike(address token);
 
     /// @notice Wires the protocol together and records that it is configured
     /// @dev Broadcasts as the deployer, which is still the owner of all five singletons.
@@ -71,7 +71,10 @@ contract Configure is Script {
         // Read before anything is broadcast. The settlement token address is per chain, and the
         // one for the wrong chain can still hold code, so asking it for its decimals is what tells
         // the two apart.
-        uint8 settlementDecimals = _settlementTokenDecimals(config.settlementToken);
+        uint8 settlementDecimals = _tokenDecimals(config.settlementToken);
+
+        (bytes32[] memory extraSymbols, address[] memory extraTokens) = DeployConfig.extraStablecoins();
+        uint8[] memory extraDecimals = _tokensDecimals(extraTokens);
 
         vm.startBroadcast(config.deployerPrivateKey);
 
@@ -79,12 +82,15 @@ contract Configure is Script {
         _bindRegistryToFactory("ESIMWalletFactory", eSIMWalletFactory, registryAddress);
         _bindLazyWalletRegistry(registryAddress, lazyWalletRegistry);
         _setPriceCap(registryAddress, config.priceCapUSDCents);
+        _setAdminAllowance(registryAddress, config.adminAllowanceUSDCents);
         _registerCurrencies(paymentAdapter, config.settlementToken, settlementDecimals);
+        _registerStablecoins(paymentAdapter, extraSymbols, extraTokens, extraDecimals);
 
         vm.stopBroadcast();
 
         _verify(registryAddress, lazyWalletRegistry, deviceWalletFactory, eSIMWalletFactory);
         _verifyCurrencies(paymentAdapter, config.settlementToken);
+        _verifyStablecoins(paymentAdapter, extraSymbols, extraTokens);
         DeploymentRecord.writeStatus("configured", true);
 
         console.log("");
@@ -138,19 +144,60 @@ contract Configure is Script {
         console.log("Registry: price cap set to", cap);
     }
 
-    /// @notice The settlement token's own decimals, checked to be a token at all
-    /// @dev Read from the token rather than assumed to be six. USDC is at a different address on
-    ///      every chain and the address for the wrong one can still hold code, so a copied value
-    ///      has to fail here rather than register a currency nothing can be paid in. Runs before
-    ///      the broadcast, since a revert inside one leaves the earlier calls of the run sent.
-    function _settlementTokenDecimals(address token) private view returns (uint8) {
-        if(token.code.length == 0) revert SettlementTokenNotDeployed(token, block.chainid);
+    /// @notice Brings the admin allowance new eSIM wallets start with in line with the config
+    /// @dev Covers a changed figure, and a registry upgraded from before the allowance existed.
+    function _setAdminAllowance(address registryAddress, uint64 allowance) private {
+        if(Registry(registryAddress).defaultAdminAllowanceUSDCents() == allowance) {
+            console.log("Registry: admin allowance already set, skipping");
+            return;
+        }
+
+        Registry(registryAddress).setDefaultAdminAllowanceUSDCents(allowance);
+        console.log("Registry: admin allowance set to", allowance);
+    }
+
+    /// @notice A token's own decimals, checked to be a token at all
+    /// @dev Read from the token rather than assumed. A token sits at a different address on every
+    ///      chain and the address for the wrong one can still hold code, so a copied value has to
+    ///      fail here rather than register a currency nothing can be paid in. Runs before the
+    ///      broadcast, since a revert inside one leaves the earlier calls of the run sent.
+    function _tokenDecimals(address token) private view returns (uint8) {
+        if(token.code.length == 0) revert TokenNotDeployed(token, block.chainid);
 
         try IERC20Metadata(token).decimals() returns (uint8 decimals) {
             return decimals;
         } catch {
-            revert SettlementTokenNotTokenLike(token);
+            revert NotTokenLike(token);
         }
+    }
+
+    function _tokensDecimals(address[] memory tokens) private view returns (uint8[] memory decimals) {
+        decimals = new uint8[](tokens.length);
+        for(uint256 i = 0; i < tokens.length; ++i) decimals[i] = _tokenDecimals(tokens[i]);
+    }
+
+    /// @notice Adds the dollar stablecoins accepted besides the settlement token
+    function _registerStablecoins(
+        address paymentAdapter,
+        bytes32[] memory symbols,
+        address[] memory tokens,
+        uint8[] memory decimals
+    ) private {
+        for(uint256 i = 0; i < tokens.length; ++i) {
+            _registerCurrency(paymentAdapter, symbols[i], Asset({
+                allowed: true,
+                isDollarUnit: true,
+                decimals: decimals[i],
+                token: tokens[i]
+            }));
+        }
+    }
+
+    function _verifyStablecoins(address paymentAdapter, bytes32[] memory symbols, address[] memory tokens)
+        private
+        view
+    {
+        for(uint256 i = 0; i < tokens.length; ++i) _verifyCurrency(paymentAdapter, symbols[i], tokens[i]);
     }
 
     /// @notice Puts the two currencies the protocol prices in into the adapter's table
@@ -202,9 +249,14 @@ contract Configure is Script {
             revert NotWired("PaymentAdapter.assets(USD)", address(0), usdToken);
         }
 
-        (bool usdcAllowed,,, address usdcToken) = PaymentAdapter(paymentAdapter).assets(ASSET_USDC);
-        if(!usdcAllowed || usdcToken != settlementToken) {
-            revert NotWired("PaymentAdapter.assets(USDC)", settlementToken, usdcToken);
+        _verifyCurrency(paymentAdapter, ASSET_USDC, settlementToken);
+    }
+
+    /// @notice Reverts unless the symbol is allowed and bound to this token
+    function _verifyCurrency(address paymentAdapter, bytes32 symbol, address expected) private view {
+        (bool allowed,,, address token) = PaymentAdapter(paymentAdapter).assets(symbol);
+        if(!allowed || token != expected) {
+            revert NotWired(string.concat("PaymentAdapter.assets(", _symbolName(symbol), ")"), expected, token);
         }
     }
 

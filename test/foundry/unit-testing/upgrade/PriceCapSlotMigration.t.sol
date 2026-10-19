@@ -95,6 +95,10 @@ contract PriceCapSlotMigrationTest is DeployerBase {
         uint256 needed = settlementAmount(type(uint64).max);
         fundSettlementToken(address(eSIMWallet), needed);
 
+        // The admin allowance would refuse this on its own, so it is lifted to isolate the ceiling
+        vm.prank(address(deviceWallet));
+        eSIMWallet.setAdminAllowanceUSDCents(type(uint64).max);
+
         vm.prank(eSIMWalletAdmin);
         eSIMWallet.buyDataBundleWithToken(bundle("DB_UNCAPPED", type(uint64).max), ASSET_USDC, needed, nextRef());
 

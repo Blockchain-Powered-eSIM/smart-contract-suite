@@ -98,4 +98,14 @@ contract PaymentAdapterOperationsGasTest is GasBase {
         paymentAdapter.consumePaymentReference(paymentRef("gas-consume"));
         vm.snapshotGasLastCall(NAMESPACE, "consumePaymentReference: a reference not yet spent");
     }
+
+    /// @notice Sending back tokens sent to the adapter by mistake
+    function test_recoverTokens() public {
+        fundSettlementToken(address(paymentAdapter), 10e6);
+        address to = makeAddr("gas-recover");
+
+        vm.prank(upgradeManager);
+        paymentAdapter.recoverTokens(settlementToken, to, 10e6);
+        vm.snapshotGasLastCall(NAMESPACE, "recoverTokens: the whole stray balance");
+    }
 }

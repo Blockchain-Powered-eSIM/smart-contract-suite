@@ -124,6 +124,26 @@ abstract contract LazyWalletRegistryHandler is Properties {
         );
     }
 
+    /// @notice The admin gives a spare wallet on a lazy device one of that device's identifiers
+    ///         still waiting for a lazy batch
+    /// @dev Random draws rarely line those up, so this builds the case on purpose. The registry
+    ///      must refuse it; if it lands, GL-16 reports it.
+    function lazyWalletRegistry_assignReservedOnLazyDevice(uint256 deviceSeed, uint256 salt) public {
+        string memory deviceIdentifier = _lazyDeviceIdentifier(deviceSeed % LAZY_DEVICES);
+        address device = registry.uniqueIdentifierToDeviceWallet(deviceIdentifier);
+        if (device == address(0)) return;
+
+        uint256 deployed = lazyWalletRegistry.eSIMWalletsDeployed(deviceIdentifier);
+        string memory waiting = lazyWalletRegistry.eSIMIdentifiersAssociatedWithDeviceIdentifier(deviceIdentifier, deployed);
+
+        vm.prank(registry.eSIMWalletAdmin());
+        address spare = MockDeviceWallet(payable(device)).deployESIMWallet(false, ++saltNonce + (salt % 8));
+        _trackESIMWallet(spare);
+
+        vm.prank(registry.eSIMWalletAdmin());
+        registry.assignESIMIdentifier(spare, waiting);
+    }
+
     // ―――――――――――――――――――――――― Unclamped ―――――――――――――――――――――――――
 
     function lazyWalletRegistry_batchPopulateHistory(

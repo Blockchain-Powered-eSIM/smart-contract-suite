@@ -23,44 +23,37 @@ import {TokenCallbackHandler} from "@account-abstraction/contracts/accounts/call
 import {P256Verifier} from "../P256Verifier.sol";
 
 /// @notice ERC-4337 account owned by a P256 key rather than by an address
-/// @dev    The owner never sends a transaction itself. It signs a WebAuthn assertion, and either
-///         the EntryPoint or this account calling into itself turns that into a call. Two entry
-///         points read signatures, `validateUserOp` for user operations and `isValidSignature` for
-///         ERC-1271, and each hashes a different precursor, so a signature made for one is not
-///         accepted by the other.
+/// @dev    `validateUserOp` and `isValidSignature` each hash a different precursor, so a signature
+///         made for one is never accepted by the other.
 contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 {
     using UserOperationLib for PackedUserOperation;
 
-    /// @dev The EIP-191 prefix, "\x19Ethereum Signed Message:\n"
     string private constant EIP191_PREFIX = "\x19Ethereum Signed Message:\n";
 
-    /// @dev Byte length of the user operation precursor:
-    ///      version (1) + validUntil (6) + userOpHash (32).
-    ///      A string because it is concatenated after the prefix before hashing.
+    /// @dev version (1) + validUntil (6) + userOpHash (32). A string because it is hashed as
+    ///      text after the EIP-191 prefix.
     string private constant USEROP_PRECURSOR_LENGTH = "39";
 
-    /// @dev Byte length of the ERC-1271 precursor:
-    ///      version (1) + validUntil (6) + chain id (32) + wallet (20) + message hash (32).
+    /// @dev version (1) + validUntil (6) + chain id (32) + wallet (20) + message hash (32)
     string private constant ERC1271_PRECURSOR_LENGTH = "91";
 
-    /// @dev The fixed header on every signature this account accepts.
-    ///      version (uint8) + validUntil (uint48)
+    /// @dev chain id (32) + wallet (20) + new key (64)
+    string private constant ROTATION_PRECURSOR_LENGTH = "116";
+
+    /// @dev version (uint8) + validUntil (uint48), at the front of every signature
     uint256 private constant SIGNATURE_HEADER_LENGTH = 7;
 
     /// @notice The ERC-4337 EntryPoint singleton this account answers to
-    /// @dev    Immutable to keep validation cheap, which means moving to a new EntryPoint version
-    ///         is a new implementation rather than a setter call.
+    /// @dev    Immutable to keep validation cheap, so a new EntryPoint needs a new implementation.
     IEntryPoint public immutable entryPoint;
 
     /// @notice Contract that verifies every WebAuthn assertion for this account
     P256Verifier public immutable verifier;
 
     /// @notice X and Y co-ordinates of the P256 key that owns this account
-    /// @dev DeviceWallet inherits this contract, and base storage comes first, so its own
-    ///      variables begin immediately after this one. A state variable added here moves all of
-    ///      them on wallets that are already deployed, which then read back as zero. Anything
-    ///      this contract needs later belongs in its own ERC-7201 namespace, not in a slot
-    ///      following `owner`.
+    /// @dev DeviceWallet's storage starts right after this slot. A new state variable here would
+    ///      shift it on deployed wallets, which then read zeros. Put new state in an ERC-7201
+    ///      namespace instead.
     bytes32[2] public owner;
 
     /// @notice Emitted once, when the account's owner key is first set
@@ -70,8 +63,7 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
     event AccountOwnershipTransferred(bytes32[2] newOwner);
 
     /// @notice Restricts a call to the account itself
-    /// @dev The only way to satisfy this from outside is `execute` or `executeBatch` targeting this
-    ///      address, which the owner key has to have signed for.
+    /// @dev Reached from outside only by an owner-signed `execute` or `executeBatch` to this address
     modifier onlySelf() {
         if(msg.sender != address(this)) revert Errors.OnlySelf();
         _;
@@ -101,17 +93,14 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
     }
 
     /// @notice Sets the owner key on a freshly deployed account
-    /// @dev Internal on purpose. A public setup function guarded only by `initializer` names no
-    ///      caller, so a proxy created without its init call in the same transaction could be
-    ///      claimed by anyone with an owner key of their choosing and none of the protocol wiring.
-    ///      Internal keeps the subclass path working and leaves no other way in.
+    /// @dev Internal so a proxy deployed without its init call cannot be claimed by anyone with a
+    ///      key of their choosing. Only a subclass initializer can reach it.
     /// @param anOwner X,Y co-ordinates of the P256 key taking ownership
     function initialize(bytes32[2] memory anOwner) internal virtual initializer {
         _initialize(anOwner);
     }
 
     /// @notice Writes the owner key without the initializer guard
-    /// @dev Split out so a subclass can reuse the write from its own initializer.
     /// @param anOwner X,Y co-ordinates of the P256 key taking ownership
     function _initialize(bytes32[2] memory anOwner) internal virtual {
         owner = anOwner;
@@ -123,8 +112,8 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
     // ---------------------------------------------------------------------------------------------
 
     /// @notice Makes one call from this account
-    /// @dev Callable by the EntryPoint or by this account. There is no path here for the P256 key
-    ///      directly: it holds no address, so it reaches this only by signing a user operation.
+    /// @dev Callable by the EntryPoint or this account. The P256 key has no address, so it reaches
+    ///      this only through a signed user operation.
     /// @param call Target, value and calldata of the call to make
     function execute(
         Call calldata call
@@ -134,8 +123,7 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
     }
 
     /// @notice Makes a sequence of calls from this account, reverting all of them if one fails
-    /// @dev Same callers as `execute`. Each entry carries its own value, so a batch that moves no
-    ///      ETH simply leaves every value at zero.
+    /// @dev Same callers as `execute`
     /// @param calls Targets, values and calldata, executed in order
     function executeBatch(
         Call[] calldata calls
@@ -152,10 +140,8 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
     // ---------------------------------------------------------------------------------------------
 
     /// @notice Validates a signature over an arbitrary message, per ERC-1271
-    /// @dev The challenge inside `clientDataJSON` is not `_messageHash`. It is the EIP-191 digest
-    ///      over version, validUntil, chain id, this address and `_messageHash`, so an offchain
-    ///      signer needs all five. Signature layout is version (1 byte) then validUntil (6 bytes)
-    ///      then the ABI-encoded WebAuthn assertion.
+    /// @dev The signed challenge is not `_messageHash` but the EIP-191 digest over version,
+    ///      validUntil, chain id, this address and `_messageHash`, so a signer needs all five.
     /// @param _messageHash EIP-191 digest of the original message
     /// @param _signature Packed version, validUntil and WebAuthn assertion
     /// @return magicValue `0x1626ba7e` when the signature is valid and unexpired, `0xffffffff` otherwise
@@ -176,12 +162,9 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
                 return 0xffffffff;
             }
 
-            // Everything the caller can see has to be inside what was signed, otherwise it can be
-            // edited after the fact. validUntil is checked just above but was not part of the
-            // challenge, so an expired signature could be revived by rewriting those six bytes.
-            // The chain id and this address are here because neither is implied by the message:
-            // wallets sit at the same CREATE2 address on every chain, and createAccount will deploy
-            // a second wallet at another salt holding the same owner key.
+            // validUntil is signed so an expired signature cannot be revived by rewriting it.
+            // Chain id and address are signed because a wallet has the same address on every
+            // chain, and createAccount can deploy a second wallet with the same key at another salt.
             bytes memory precursorBytes = abi.encodePacked(
                 version,
                 validUntil,
@@ -196,7 +179,6 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
                     precursorBytes
                 )
             );
-            // WebAuthn.sol expects the challenge as bytes
             bytes memory challengeBytes = abi.encodePacked(challengeDigest);
             if(_validateSignature(challengeBytes, webAuthnSignatureBytes)) {
                 return IERC1271(this).isValidSignature.selector;    // magic value: `0x1626ba7e`
@@ -206,9 +188,8 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
     }
 
     /// @inheritdoc IAccount
-    /// @dev Must stay within the ERC-4337 validation rules: no banned opcodes, no external calls
-    ///      to other contracts, no TIMESTAMP. Expiry is handed to the EntryPoint through the packed
-    ///      return value instead of being checked here.
+    /// @dev TIMESTAMP is banned here, so expiry goes back in the packed result. The beacon read
+    ///      may need a staked entity on a strict ERC-7562 bundler.
     function validateUserOp(
         PackedUserOperation calldata userOp,
         bytes32 userOpHash,
@@ -225,16 +206,51 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
     // ---------------------------------------------------------------------------------------------
 
     /// @notice Replaces the P256 key that owns this account
-    /// @dev Reachable only through `execute` or `executeBatch` with this account as the target, so
-    ///      the current owner has to sign for it. Nothing outside this contract is told: a
-    ///      subclass holding its own record of the owner has to override this and keep that record
-    ///      in step.
+    /// @dev The current owner signs the call, and the new key must sign `rotationChallenge`, so
+    ///      an owner cannot rotate onto a key it does not control.
     /// @param newOwner X,Y co-ordinates of the P256 key taking over
+    /// @param newOwnerSignature ABI-encoded WebAuthn assertion by the new key over the challenge
     /// @return The owner key now in force
-    function transferOwnership(bytes32[2] memory newOwner) onlySelf public virtual returns (bytes32[2] memory) {
+    function transferOwnership(bytes32[2] memory newOwner, bytes calldata newOwnerSignature)
+        onlySelf
+        public
+        returns (bytes32[2] memory)
+    {
+        _transferOwnership(newOwner, newOwnerSignature);
+        return owner;
+    }
+
+    /// @notice Moves ownership to a new key once that key has proved it can sign
+    /// @dev The single rotation path, so any later recovery route gets the same check. A subclass
+    ///      with its own owner record overrides this to keep it in step.
+    /// @param newOwner X,Y co-ordinates of the P256 key taking over
+    /// @param newOwnerSignature ABI-encoded WebAuthn assertion by the new key over the challenge
+    function _transferOwnership(bytes32[2] memory newOwner, bytes calldata newOwnerSignature) internal virtual {
+        if(!_verifyWebAuthn(rotationChallenge(newOwner), newOwnerSignature, newOwner)) {
+            revert Errors.NewOwnerKeyCannotSign();
+        }
+
         owner = newOwner;
         emit AccountOwnershipTransferred(newOwner);
-        return owner;
+    }
+
+    /// @notice The challenge a new owner key signs to accept this account
+    /// @dev Binds chain, wallet and key, and its length differs from the other two precursors, so
+    ///      the proof cannot be reused anywhere else.
+    /// @param newOwner X,Y co-ordinates of the P256 key taking over
+    /// @return The raw challenge bytes the WebAuthn assertion must carry
+    function rotationChallenge(bytes32[2] memory newOwner) public view returns (bytes memory) {
+        bytes32 digest = keccak256(
+            abi.encodePacked(
+                EIP191_PREFIX,
+                ROTATION_PRECURSOR_LENGTH,
+                block.chainid,
+                address(this),
+                newOwner[0],
+                newOwner[1]
+            )
+        );
+        return abi.encodePacked(digest);
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -248,7 +264,7 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
     }
 
     /// @notice Tops up this account's gas deposit at the EntryPoint
-    /// @dev Open to anyone, since paying another account's gas costs the payer and nobody else.
+    /// @dev Open to anyone, since only the payer loses anything.
     function addDeposit() public payable {
         entryPoint.depositTo{value: msg.value}(address(this));
     }
@@ -266,8 +282,7 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
     // ---------------------------------------------------------------------------------------------
 
     /// @notice Reverts unless the caller is the EntryPoint or this account itself
-    /// @dev "Owner" in the name means `address(this)`, not the P256 key, which has no address to
-    ///      call from.
+    /// @dev "Owner" here means `address(this)`, since the P256 key has no address.
     function _requireFromEntryPointOrOwner() internal view {
         if(msg.sender != address(entryPoint) && msg.sender != address(this)) {
             revert Errors.OnlyEntryPointOrSelf();
@@ -285,10 +300,8 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
     ) internal {
         (bool success, bytes memory result) = target.call{value: value}(data);
         if (!success) {
-            // Assembly because Solidity has no way to revert with an existing bytes buffer. It
-            // returns the callee's own revert reason instead of a generic failure, which matters
-            // when the call ran inside a batch signed offchain. `result` is memory returned by
-            // `call`, so its first word is the length and the payload starts 32 bytes in.
+            // Solidity cannot revert with an existing bytes buffer. `result` is length-prefixed
+            // memory from `call`, so the payload starts 32 bytes in.
             assembly {
                 revert(add(result, 32), mload(result))
             }
@@ -300,10 +313,8 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
     // ---------------------------------------------------------------------------------------------
 
     /// @notice Verifies the signature carried by a user operation
-    /// @dev The challenge is the EIP-191 digest over version, validUntil and `userOpHash`. The
-    ///      user operation's own fields need no separate binding because the EntryPoint already
-    ///      folds them into `userOpHash`. A zero validUntil is refused outright, since the
-    ///      EntryPoint reads it as never-expires.
+    /// @dev The challenge is the EIP-191 digest over version, validUntil and `userOpHash`, which
+    ///      already covers the operation's fields and the chain.
     /// @param userOp The packed user operation
     /// @param userOpHash Hash the EntryPoint computed for it
     /// @return validationData Packed validAfter (0) and validUntil, or SIG_VALIDATION_FAILED for a
@@ -314,17 +325,15 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
     ) private view returns (uint256 validationData) {
         bytes calldata signature = userOp.signature;
         uint256 sigLength = signature.length;
-        // Not 0xffffffff. This is packed validationData, not a bytes4, and the EntryPoint reads
-        // its low 160 bits as an authorizer. 0xffffffff decodes as an aggregator address that
-        // does not exist, so the whole bundle reverts instead of this one operation failing.
+        // Fail without reverting, so only this operation fails and not the bundle. Not 0xffffffff:
+        // the EntryPoint reads the low 160 bits as an aggregator and would revert the bundle.
         if(sigLength <= SIGNATURE_HEADER_LENGTH + 32) return SIG_VALIDATION_FAILED;
 
         uint8 version = uint8(signature[0]);
         if(version == 1) {
             uint48 validUntil = uint48(bytes6(signature[1:SIGNATURE_HEADER_LENGTH]));
-            // Zero is "no expiry" to the EntryPoint and "already expired" to isValidSignature, and
-            // the two paths read the same six bytes. Refusing it here is what keeps one header
-            // from meaning two things.
+            // Zero means "no expiry" to the EntryPoint but "expired" to isValidSignature. Refusing
+            // it keeps one header from meaning two things.
             if(validUntil == 0) return SIG_VALIDATION_FAILED;
             bytes calldata webAuthnSignatureBytes = bytes(signature[SIGNATURE_HEADER_LENGTH:]);
 
@@ -336,12 +345,10 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
                     precursorBytes
                 )
             );
-            // WebAuthn.sol expects the challenge as bytes
             bytes memory challengeBytes = abi.encodePacked(challengeDigest);
 
             if(_validateSignature(challengeBytes, webAuthnSignatureBytes)) {
-                // TIMESTAMP is a banned opcode here, so validUntil goes back to the EntryPoint to
-                // enforce. validAfter is 0, and false means the signature itself checked out.
+                // TIMESTAMP is banned here, so the EntryPoint enforces validUntil
                 return _packValidationData(false, validUntil, 0);
             }
             else {
@@ -360,26 +367,36 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
         bytes memory challenge,
         bytes calldata webAuthnSignatureBytes
     ) private view returns (bool) {
-        // Decoded rather than abi.decode'd, because a malformed body has to be rejected here and
-        // not reverted on. This runs inside ERC-4337 validation, where a revert fails the whole
-        // bundle rather than the one operation, and behind isValidSignature, where it reaches the
-        // integrating contract as an error. A failed decode leaves the struct zeroed, which
-        // verifySignature returns false for.
+        return _verifyWebAuthn(challenge, webAuthnSignatureBytes, owner);
+    }
+
+    /// @notice Verifies a WebAuthn assertion against any P256 key
+    /// @param challenge Raw bytes that must appear, Base64Url encoded, in the assertion's challenge
+    /// @param webAuthnSignatureBytes ABI-encoded WebAuthn assertion
+    /// @param key X,Y co-ordinates of the key that must have signed
+    /// @return True when the assertion is valid for that key
+    function _verifyWebAuthn(
+        bytes memory challenge,
+        bytes calldata webAuthnSignatureBytes,
+        bytes32[2] memory key
+    ) private view returns (bool) {
+        // Not abi.decode, which reverts on malformed input. In validation a revert fails the whole
+        // bundle, and behind isValidSignature it reaches the caller as an error. A failed decode
+        // leaves the struct zeroed, which verifySignature rejects.
         WebAuthnSignature memory sig = WebAuthn.tryDecodeSignature(webAuthnSignatureBytes);
 
         return verifier.verifySignature({
             message: challenge,
             requireUserVerification: true,
             webAuthnSignature: sig,
-            x: uint256(owner[0]),
-            y: uint256(owner[1])
+            x: uint256(key[0]),
+            y: uint256(key[1])
         });
     }
 
     /// @notice Repays the EntryPoint for gas it fronted on this account's behalf
-    /// @dev Only ever called from `validateUserOp`, so `msg.sender` is the EntryPoint. The result
-    ///      is deliberately ignored: the EntryPoint checks the balance it ended up with, and
-    ///      reverting here would fail validation for a shortfall it is about to catch anyway.
+    /// @dev Only called from `validateUserOp`, so `msg.sender` is the EntryPoint. The result is
+    ///      ignored because the EntryPoint checks the balance it received itself.
     /// @param missingAccountFunds Amount the EntryPoint asked for, zero when the deposit covers it
     function _payPrefund(uint256 missingAccountFunds) private {
         if (missingAccountFunds != 0) {

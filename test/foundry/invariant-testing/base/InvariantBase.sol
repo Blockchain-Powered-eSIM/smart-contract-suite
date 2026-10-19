@@ -41,6 +41,8 @@ contract InvariantBase is Test {
     address internal constant VAULT = address(0x78731D3Ca6b7E34aC0F824c42a7cC18A495cabaB);
     address internal constant ATTACKER = address(0xbADc0DE000000000000000000000000000000001);
     uint64 internal constant DEFAULT_PRICE_CAP_USD_CENTS = 100_000;   // $1000
+    // The mainnet figure, so the campaign runs allowances down to zero and back
+    uint64 internal constant DEFAULT_ADMIN_ALLOWANCE_USD_CENTS = 10_000;   // $100
 
     /// @dev A stand-in for USDC, deployed rather than a fixed address because the campaign settles
     ///      real balances through it.
@@ -110,7 +112,8 @@ contract InvariantBase is Test {
                     address(deviceWalletFactory),
                     address(eSIMWalletFactory),
                     IEntryPoint(address(entryPoint)),
-                    DEFAULT_PRICE_CAP_USD_CENTS
+                    DEFAULT_PRICE_CAP_USD_CENTS,
+                    DEFAULT_ADMIN_ALLOWANCE_USD_CENTS
                 )
             )
         );

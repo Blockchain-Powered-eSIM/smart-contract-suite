@@ -17,14 +17,13 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import {DeviceWallet} from "../device-wallet/DeviceWallet.sol";
+import {ESIMWalletFactory} from "./ESIMWalletFactory.sol";
 import {PaymentAdapter, Asset} from "../payments/PaymentAdapter.sol";
 import {Registry} from "../Registry.sol";
 
 /// @notice One eSIM, its purchase history, and the funds that move through it while it buys data bundles
-/// @dev A beacon proxy deployed by `ESIMWalletFactory`, always owned by a device wallet. The owner
-///      is a contract rather than a key, so every call that moves ETH or ownership arrives through
-///      a device wallet `execute` and has already been signed for. The admin can charge this wallet
-///      for a data bundle but cannot raise the ceiling that limits what it may charge.
+/// @dev Beacon proxy owned by a device wallet, so every owner call has been signed via `execute`.
+///      The admin can charge for data bundles but cannot raise the ceiling on those charges.
 contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable {
     using Address for address;
     using SafeERC20 for IERC20;
@@ -38,18 +37,22 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     /// @notice Device wallet contract instance associated with this eSIM wallet
     DeviceWallet public deviceWallet;
 
-    /// @notice Array of all the data bundle purchase
+    /// @notice Every data bundle purchase recorded for this wallet
     DataBundleDetails[] public transactionHistory;
 
-    /// @notice Address of the owner (device wallet) that becomes the new owner
+    /// @notice Device wallet nominated to take this wallet over, or zero if none
     address public newRequestedOwner;
 
     /// @notice Most this wallet may be charged for one data bundle, in USD cents, or zero to follow
     ///         the registry
-    /// @dev Declared here so it shares a slot with `newRequestedOwner`. Solidity packs in
-    ///      declaration order, so moving this line costs that slot. A handover clears both, which
-    ///      is then one write instead of two. Zero means "follow the registry", not "no ceiling".
+    /// @dev Shares a slot with `newRequestedOwner`, so do not move this line. A handover clears
+    ///      both in one write.
     uint64 public priceCapUSDCents;
+
+    /// @notice What the eSIM wallet admin may still charge this wallet in total, in USD cents
+    /// @dev Starts at the registry default and resets to it on handover. Only admin charges spend
+    ///      it and only the owner sets it.
+    uint64 public adminAllowanceUSDCents;
 
     /// @notice Emitted when the eSIM wallet is deployed
     event ESIMWalletDeployed(
@@ -83,9 +86,8 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     /// @notice Emitted when the eSIM unique identifier is initialised
     event ESIMUniqueIdentifierInitialised(string _eSIMUniqueIdentifier);
 
-    /// @notice Emitted for every batch of history the lazy wallet registry copies in after deployment.
-    ///         `_totalEntries` is the transaction history length once the batch has landed, which is
-    ///         what tells a partial copy apart from a finished one.
+    /// @notice Emitted for each batch of history the lazy wallet registry copies in
+    /// @dev `_totalEntries` is the history length after the batch, so a partial copy can be told apart.
     event TransactionHistoryPopulated(DataBundleDetails[] _dataBundleDetails, uint256 _totalEntries);
 
     /// @notice Emitted when ETH moves out of this contract
@@ -100,9 +102,11 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     /// @notice Emitted when the owner sets this wallet's own price ceiling
     event PriceCapUSDCentsUpdated(uint64 _cap);
 
+    /// @notice Emitted whenever what the admin may still charge changes: set, spent or reset
+    event AdminAllowanceUSDCentsUpdated(uint64 _allowance);
+
     /// @notice Restricts a call to the device wallet that owns this eSIM wallet
-    /// @dev Reaching this means the owner signed for it, since a device wallet only calls out
-    ///      through `execute`.
+    /// @dev A device wallet only calls out through `execute`, so this means the owner signed.
     modifier onlyDeviceWallet() {
         if (msg.sender != address(deviceWallet)) revert Errors.OnlyDeviceWallet();
         _;
@@ -115,8 +119,7 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     }
 
     /// @notice Reverts unless the caller is the owning device wallet or the eSIM wallet admin
-    /// @dev A private function rather than the modifier body, so the check is emitted once instead
-    ///      of at every use site. Keep it next to the modifier that calls it.
+    /// @dev A function rather than the modifier body, so the check is compiled once, not per use.
     function _onlyDeviceWalletOrESIMWalletAdmin() private view {
         if(
             msg.sender != address(deviceWallet) &&
@@ -137,19 +140,18 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     // ---------------------------------------------------------------------------------------------
 
     /// @notice Disables initializers on the implementation contract
-    /// @dev `_disableInitializers` rather than an `initializer` modifier. The modifier leaves the
-    ///      version at 1, which a later `reinitializer(2)` would still accept on the implementation
-    ///      itself. This pins it at the maximum so no version can ever run there.
+    /// @dev Pins the version at max. An `initializer` modifier would leave it at 1, and a later
+    ///      `reinitializer(2)` could then still run on the implementation.
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
     }
 
     /// @notice Binds a freshly deployed eSIM wallet to its factory and its owning device wallet
-    /// @dev The eSIM identifier is not set here. It does not exist until the eSIM itself has been
-    ///      bought, so it arrives later through `setESIMUniqueIdentifier`.
+    /// @dev The eSIM identifier does not exist until the eSIM is bought, so it is set later through
+    ///      `setESIMUniqueIdentifier`.
     /// @param _eSIMWalletFactoryAddress eSIM wallet factory contract address
-    /// @param _deviceWalletAddress Device wallet contract address (the contract that deploys this eSIM wallet)
+    /// @param _deviceWalletAddress Device wallet that owns this eSIM wallet
     function initialize(
         address _eSIMWalletFactoryAddress,
         address _deviceWalletAddress
@@ -163,22 +165,24 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         __Ownable_init(_deviceWalletAddress);
         __ReentrancyGuard_init();
 
+        // Read through the factory, the caller here, which is always wired to the registry
+        uint64 allowance = ESIMWalletFactory(_eSIMWalletFactoryAddress).registry().defaultAdminAllowanceUSDCents();
+        adminAllowanceUSDCents = allowance;
+
         emit ESIMWalletDeployed(address(this), _deviceWalletAddress, _deviceWalletAddress);
+        emit AdminAllowanceUSDCentsUpdated(allowance);
     }
 
     // ---------------------------------------------------------------------------------------------
     // Identifier, price ceiling and history
     // ---------------------------------------------------------------------------------------------
 
-    /// @notice Since buying the eSIM (along with data bundle) happens before the identifier is generated,
-    ///         the identifier is to be set separately after the wallet is deployed and eSIM is created
-    /// @dev Set once, and only by the registry, which records the claim in the same call. The
-    ///      owning device wallet used to be the caller, which let an owner write a string the
-    ///      registry has no record of.
+    /// @notice Sets the eSIM identifier once the eSIM exists, which is after this wallet is deployed
+    /// @dev Set once, and only by the registry, which records the claim in the same call. Any
+    ///      other caller could write an identifier the registry has no record of.
     /// @param _eSIMUniqueIdentifier String that uniquely identifies eSIM wallet
     function setESIMUniqueIdentifier(string calldata _eSIMUniqueIdentifier) external onlyRegistry {
-        // Read the identifier itself only on the failing branch, so setting one for the first time
-        // pays for the length slot alone
+        // The full string is read only on the failing branch, so a first set reads one slot
         if(bytes(eSIMUniqueIdentifier).length != 0) revert Errors.ESIMIdentifierAlreadySet(eSIMUniqueIdentifier);
         if(bytes(_eSIMUniqueIdentifier).length == 0) revert Errors.EmptyESIMIdentifier();
 
@@ -188,37 +192,31 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     }
 
     /// @notice Sets the most this wallet may be charged for one data bundle
-    /// @dev Only the owning device wallet, which means the person holding its P256 key: reaching
-    ///      this needs a device wallet `execute`, and that needs a signature. The admin names the
-    ///      price on `buyDataBundle`, so it must not also be able to raise the ceiling on that
-    ///      price. Setting zero hands the wallet back to the registry's ceiling. A handover clears
-    ///      it, so an incoming owner starts on the registry ceiling.
-    ///
-    ///      The ceiling bounds one charge and not what the admin can charge in total. Nothing limits
-    ///      how many purchases it makes, so a wallet holding `canPullFunds` is an open allowance over
-    ///      the device wallet's balance in that asset rather than a capped one.
+    /// @dev Owner only: the admin names the price on a purchase, so it must not also set the
+    ///      ceiling. Zero follows the registry ceiling. A handover resets it to zero.
     /// @param _cap Maximum price in USD cents, or zero to follow the registry
     function setPriceCapUSDCents(uint64 _cap) external onlyDeviceWallet {
         priceCapUSDCents = _cap;
         emit PriceCapUSDCentsUpdated(_cap);
     }
 
+    /// @notice Sets what the eSIM wallet admin may still charge this wallet in total
+    /// @dev Owner only, since it limits the admin. Zero stops admin charges; the owner can still buy.
+    /// @param _allowance Total the admin may charge from now on, in USD cents
+    function setAdminAllowanceUSDCents(uint64 _allowance) external onlyDeviceWallet {
+        adminAllowanceUSDCents = _allowance;
+        emit AdminAllowanceUSDCentsUpdated(_allowance);
+    }
+
     /// @notice Appends pre-deployment purchase history, one batch at a time, on behalf of the lazy
     ///         wallet registry
-    /// @dev The registry carries the cursor that says how much of an eSIM's history has already been
-    ///      copied, so this function appends whatever it is handed and does not police repeats.
-    ///
-    ///      Not held to the price ceiling, unlike `recordSettledPurchase`. These entries are a
-    ///      record of what the user already paid before any of this existed, so there is nothing
-    ///      here for a ceiling to bound: the ceiling limits what the admin can charge, and no
-    ///      charge happens on this path. Refusing an entry priced above today's ceiling would only
-    ///      stop true history from being written.
-    /// @param _dataBundleDetails One batch of data bundle purchase details from before the wallet
-    ///        was deployed
+    /// @dev The registry tracks how much has been copied, so repeats are not checked here. Not held
+    ///      to the price ceiling: these are past payments, no charge happens, and refusing one
+    ///      would only drop true history.
+    /// @param _dataBundleDetails One batch of purchases from before the wallet was deployed
     /// @return True once the batch has been appended
     function populateHistory(DataBundleDetails[] calldata _dataBundleDetails) external onlyRegistry returns (bool) {
-        // Assigning the whole calldata array at once is not supported for arrays of structs, so
-        // each entry is pushed on its own. The batch lands after whatever the array already held.
+        // Copying a calldata struct array to storage in one assignment is not supported
         uint256 alreadyStored = transactionHistory.length;
         uint256 entries = _dataBundleDetails.length;
         for (uint256 i = 0; i < entries; ++i) {
@@ -235,35 +233,30 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     // ---------------------------------------------------------------------------------------------
 
     /// @notice Nominates a new device wallet to take this eSIM wallet over, in two steps
-    /// @dev Any outstanding request is overwritten rather than refused, so an owner who nominated
-    ///      the wrong address just calls this again. Nominating the current owner cancels the
-    ///      request and re-binds the wallet to its device wallet in the same call, with ETH access
-    ///      left off since the flag it had before the removal is not recorded anywhere.
+    /// @dev A pending request is overwritten, so a wrong nominee is fixed by calling again.
+    ///      Nominating the current owner cancels and re-binds, with fund access off since the old
+    ///      flag is not recorded. Only ETH is swept back; ERC-20s go to whoever accepts, so sweep
+    ///      them with `sendTokenToDeviceWallet` in the same `executeBatch`.
     /// @param _newOwner Address of the new device wallet to transfer ownership of this wallet
     function requestTransferOwnership(address _newOwner) external onlyDeviceWallet nonReentrant {
         Registry registry = deviceWallet.registry();
         if(!registry.isDeviceWalletValid(_newOwner)) revert Errors.NotADeviceWallet(_newOwner);
 
-        // If the owner wants to retain the ownership of the contract,
-        // they simply revoke the request by requesting a transfer to themselves
         if(_newOwner == owner()) {
             address revokedAddress = newRequestedOwner;
             newRequestedOwner = address(0);
             emit OwnershipTransferRevoked(owner(), revokedAddress);
 
-            // The request being cancelled took this wallet off its device wallet, if it was ever
-            // sent. A request revoked before that removal landed leaves the wallet already bound.
+            // Re-bind only if unbound, since addESIMWallet refuses a wallet already held
             if(!deviceWallet.isValidESIMWallet(address(this))) {
                 deviceWallet.addESIMWallet(address(this), false);
             }
             return;
         }
 
-        // Remove this eSIMWallet from the device wallet and send all ETH to device wallet.
-        // The transient window opens here rather than at acceptance, so a reader that sees the
-        // standby flag raised also sees the request that caused it. Guarded because
-        // removeESIMWallet refuses a wallet the device wallet no longer holds, which would
-        // otherwise make re-targeting an outstanding request revert instead of overwriting it.
+        // Unbind and sweep ETH now, not at acceptance, so the standby flag and the request appear
+        // together. Guarded because removeESIMWallet refuses an unbound wallet, which would make
+        // re-targeting a pending request revert.
         if(deviceWallet.isValidESIMWallet(address(this))) {
             deviceWallet.removeESIMWallet(address(this), true);
         }
@@ -274,9 +267,8 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     }
 
     /// @notice Takes this eSIM wallet on, callable only by the nominated device wallet
-    /// @dev The check compares the caller to `newRequestedOwner`, which both sides satisfy when
-    ///      they are zero. No transaction can arrive from the zero address, so this holds onchain,
-    ///      but any reasoning about this function has to exclude that caller explicitly.
+    /// @dev With no request pending this only passes for the zero address, which cannot send a
+    ///      transaction. Keep that in mind when reasoning about this check.
     function acceptOwnershipTransfer() external {
         address requestedOwner = newRequestedOwner;
         if(msg.sender != requestedOwner) revert Errors.OnlyRequestedOwner(requestedOwner);
@@ -288,14 +280,12 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     // ETH and data bundle payments
     // ---------------------------------------------------------------------------------------------
 
-    /// @notice Allow the owner device wallet to callback all the ETH from this eSIM wallet
-    /// @dev This function is generally called before the owner device wallet removes this eSIM wallet
-    /// @dev Deliberately not nonReentrant. removeESIMWallet calls this from inside a try/catch while
-    ///      requestTransferOwnership already holds this contract's guard, so guarding here would
-    ///      make the callback revert into that catch and strand the wallet's ETH with no error.
-    ///      It writes no state of its own, and only the owner can call it to move ETH to itself,
-    ///      so re-entering it gains nothing.
+    /// @notice Sends ETH from this eSIM wallet back to the owning device wallet
+    /// @dev Deliberately not nonReentrant. removeESIMWallet calls it in a try/catch while
+    ///      requestTransferOwnership holds the guard, so a guard here would strand the ETH silently.
+    ///      It writes no state and only pays the owner, so re-entering gains nothing.
     /// @param _amount Amount of ETH to be sent
+    /// @return The amount sent
     function sendETHToDeviceWallet(
         uint256 _amount
     ) external onlyDeviceWallet returns (uint256) {
@@ -307,13 +297,10 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     }
 
     /// @notice Pays the vault for one data bundle in USDC (or any other acceptable stablecoin/ERC20) and records the purchase
-    /// @dev The adapter works the amount out from the price, so there is never a second figure to
-    ///      take on trust. Any shortfall is pulled from the device wallet. What reaches the adapter
-    ///      is this wallet's real balance after the pull, not the nominal amount asked for, so a
-    ///      non-standard token that delivers less than requested (fee-on-transfer, deflationary)
-    ///      fails at `settle`'s funding check with a clear reason instead of an opaque transfer
-    ///      revert here. The protocol does not otherwise support such tokens: `settle` still needs
-    ///      the price in full.
+    /// @dev The adapter derives the amount from the price, so no caller figure is trusted. Any
+    ///      shortfall is pulled from the device wallet. Forwarding the real balance makes a
+    ///      fee-on-transfer token fail at `settle`'s funding check with a clear reason. Such tokens
+    ///      are still unsupported, since `settle` needs the full price.
     /// @param _dataBundleDetail Data bundle being bought. Its settlement field is overwritten here.
     /// @param _asset Symbol of the currency to pay in
     /// @param _maxAmountIn Most of that currency the buyer will spend, in its smallest unit
@@ -331,9 +318,10 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         if(_dataBundleDetail.id == bytes32(0)) revert Errors.EmptyDataBundleID();
         if(_dataBundleDetail.priceUSDCents == 0) revert Errors.ZeroDataBundlePrice();
         _requirePriceWithinCap(_dataBundleDetail.priceUSDCents, registry);
+        if(msg.sender != address(deviceWallet)) _spendAdminAllowance(_dataBundleDetail.priceUSDCents);
         registry.requireLazyHistoryCopied(address(this));
 
-        // The money moves through this contract, so this path can say the protocol saw it.
+        // The money moves through this contract, so the protocol saw this payment
         _dataBundleDetail.settlement = Settlement.DeviceWallet;
 
         registry.consumePaymentReference(_paymentReference);
@@ -355,24 +343,18 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         uint256 held = token.balanceOf(address(this));
         if(held < amountIn) {
             deviceWallet.pullToken(asset.token, amountIn - held);
-            // A fee-on-transfer asset delivers less than requested, so the shortfall pull can still
-            // leave this wallet short of amountIn. Re-read the real balance rather than assume the
-            // pull landed in full.
+            // A fee-on-transfer token can deliver less than asked, so re-read the balance
             held = token.balanceOf(address(this));
         }
 
-        // Forwards what this wallet actually holds, not the nominal amountIn: the same fee can bite
-        // again on the way to the adapter. settle() re-checks its own balance against the price and
-        // is what decides whether the purchase was funded.
+        // settle() checks its own balance against the price and decides if the purchase is funded
         uint256 toForward = held < amountIn ? held : amountIn;
 
-        // Funded first, then told to settle. That is what lets a swap be added there later
-        // without changing anything here.
+        // Fund first, then settle, so a swap can be added in the adapter without changes here
         token.safeTransfer(adapterAddress, toForward);
         (uint256 spent,) = adapter.settle(_asset, _dataBundleDetail.priceUSDCents, toForward, address(this));
 
-        // The adapter's figure, not what this wallet sent. The two match today, and will not once
-        // a swap can spend less than the ceiling it was funded to.
+        // The adapter's figure, since a future swap may spend less than it was funded with
         emit DataBundleBoughtWithToken(
             _dataBundleDetail.id,
             _dataBundleDetail.priceUSDCents,
@@ -386,8 +368,8 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     }
 
     /// @notice Sends an ERC-20 held here back to the owning device wallet
-    /// @dev The callback on `removeESIMWallet` moves ETH only, so without this a token balance
-    ///      would be stranded when the wallet changes hands.
+    /// @dev The `removeESIMWallet` callback moves ETH only, so tokens would otherwise pass to the
+    ///      next owner.
     /// @param _token ERC-20 to send back
     /// @param _amount Amount in that token's smallest unit
     /// @return The amount sent
@@ -408,12 +390,11 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     }
 
     /// @notice Appends a purchase paid for outside the protocol
-    /// @dev No money moves here. Nothing onchain saw this payment, so the ceiling is the only
-    ///      limit on what the admin can write into a user's history. Checked here and not on the
-    ///      registry because the wallet's own ceiling lives here.
+    /// @dev Nothing onchain saw this payment, so the ceiling is the only limit on what the admin
+    ///      can write into history. Checked here because the wallet's own ceiling lives here.
     /// @param _dataBundleDetail The purchase to record
     function recordSettledPurchase(DataBundleDetails calldata _dataBundleDetail) external onlyRegistry {
-        // The modifier has already checked the caller is the registry
+        // onlyRegistry makes this cast safe
         _requirePriceWithinCap(_dataBundleDetail.priceUSDCents, Registry(msg.sender));
 
         transactionHistory.push(_dataBundleDetail);
@@ -430,40 +411,37 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     // ---------------------------------------------------------------------------------------------
 
     /// @notice The inherited one-step transfer is closed
-    /// @dev Ownership moves through `requestTransferOwnership` and `acceptOwnershipTransfer`, which
-    ///      also keep `deviceWallet` in step with `owner()`. A one-step transfer would move only
-    ///      the latter.
+    /// @dev It would move `owner()` without `deviceWallet`. The two-step handover moves both.
     function transferOwnership(address) public pure override {
         revert Errors.UseAcceptOwnershipTransfer();
     }
 
     /// @notice An eSIM wallet always belongs to a device wallet, so ownership is never renounced
-    /// @dev Renouncing leaves owner() at zero while deviceWallet still points at the old device
-    ///      wallet. sendETHToDeviceWallet then reverts on its own zero-owner check and
-    ///      DeviceWallet._addESIMWallet can never accept this wallet again, so the ETH held here
-    ///      is unreachable for the rest of the wallet's life.
+    /// @dev A zero owner makes sendETHToDeviceWallet revert and _addESIMWallet refuse this wallet
+    ///      forever, so any ETH held here would be locked.
     function renounceOwnership() public pure override {
         revert Errors.OwnershipCannotBeRenounced();
     }
 
-    /// @notice Completes a handover, moving `deviceWallet`, `owner()` and the price ceiling together
-    /// @dev Clears the request before it writes anything, so a second acceptance finds nothing.
-    ///      The ceiling is the owner's own limit and only the owner can set it, so it goes with the
-    ///      owner rather than binding the incoming one to a figure it never chose.
+    /// @notice Completes a handover, moving `deviceWallet`, `owner()`, the price ceiling and the
+    ///         admin allowance together
+    /// @dev Clears the request first, so a second acceptance finds nothing. The ceiling and
+    ///      allowance were the old owner's choices, so the new owner starts on the defaults.
     function _secureTransferOwnership() internal {
         address newOwner = newRequestedOwner;
-        // Reset ownership transfer address
         newRequestedOwner = address(0);
         deviceWallet = DeviceWallet(payable(newOwner));
 
-        // Written only on a change, so a wallet that never set a ceiling emits nothing here
         if(priceCapUSDCents != 0) {
             priceCapUSDCents = 0;
             emit PriceCapUSDCentsUpdated(0);
         }
 
-        // Transfer ownership to the request address
-        // _transferOwnership emits OwnershipTransferred, so this function must not emit it again
+        uint64 allowance = ESIMWalletFactory(eSIMWalletFactory).registry().defaultAdminAllowanceUSDCents();
+        adminAllowanceUSDCents = allowance;
+        emit AdminAllowanceUSDCentsUpdated(allowance);
+
+        // Emits OwnershipTransferred, so do not emit it again here
         _transferOwnership(newOwner);
     }
 
@@ -490,9 +468,8 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
 
 
     /// @notice Rejects a price above whichever ceiling applies to this wallet
-    /// @dev The wallet's own ceiling wins when it has one. Zero here means "follow the registry",
-    ///      not "no ceiling": the registry default is guaranteed non-zero by `Registry.initialize`
-    ///      and `setDefaultPriceCapUSDCents`, so `cap` always resolves to a real ceiling.
+    /// @dev A zero wallet ceiling means "follow the registry", not "no ceiling". The registry
+    ///      default is kept non-zero by `Registry.initialize` and `setDefaultPriceCapUSDCents`.
     /// @param _priceUSDCents Price being charged, in USD cents
     /// @param _registry Registry holding the fallback ceiling
     function _requirePriceWithinCap(uint64 _priceUSDCents, Registry _registry) private view {
@@ -506,8 +483,21 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
         }
     }
 
+    /// @notice Takes an admin charge out of what the admin may still charge this wallet
+    /// @param _priceUSDCents Price being charged, in USD cents
+    function _spendAdminAllowance(uint64 _priceUSDCents) private {
+        uint64 remaining = adminAllowanceUSDCents;
+        if(_priceUSDCents > remaining) revert Errors.AdminAllowanceExceeded(_priceUSDCents, remaining);
+
+        unchecked {
+            // checked just above: the price is at most what remains
+            remaining -= _priceUSDCents;
+        }
+        adminAllowanceUSDCents = remaining;
+        emit AdminAllowanceUSDCentsUpdated(remaining);
+    }
+
     /// @notice The device wallet that owns this eSIM wallet
-    /// @dev Declared so subclasses and mocks have one place to override.
     /// @return The owning device wallet address
     function owner() public view override returns (address) {
         return OwnableUpgradeable.owner();

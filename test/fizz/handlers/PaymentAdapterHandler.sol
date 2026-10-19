@@ -122,6 +122,22 @@ abstract contract PaymentAdapterHandler is Properties {
         settlementERC20.transfer(adapter, amount);
     }
 
+    /// @notice The owner sends tokens left on the adapter back to the actor
+    /// @dev Pairs with `paymentAdapter_donateERC20`. The actor is tracked by GL-12, so a recovery
+    ///      that created or lost a token would show up there.
+    function paymentAdapter_recoverTokens(uint256 amount) public {
+        PaymentAdapter adapter = _activeAdapter();
+        uint256 balance = settlementERC20.balanceOf(address(adapter));
+        if (balance == 0) return;
+
+        amount = clampBetween(amount, 1, balance);
+
+        vm.prank(upgradeManager);
+        adapter.recoverTokens(settlementToken, actor, amount);
+
+        eq(settlementERC20.balanceOf(address(adapter)), balance - amount, "recovery moved the wrong amount");
+    }
+
     function paymentAdapter_secondary(uint8 selector, uint256 arg, uint8 decimals) public {
         selector = uint8(selector % 3);
         if (selector == 0) _paymentAdapter_registerAsset(arg, decimals);
@@ -144,6 +160,16 @@ abstract contract PaymentAdapterHandler is Properties {
 
         vm.prank(caller);
         adapter.settle(_symbol, _priceUSDCents, _amountIn, _refundTo);
+    }
+
+    /// @notice Anyone asks for tokens out of the adapter
+    function paymentAdapter_recoverTokens_unclamped(address caller, address _to, uint256 _amount) public {
+        PaymentAdapter adapter = _activeAdapter();
+
+        vm.prank(caller);
+        adapter.recoverTokens(settlementToken, _to, _amount);
+
+        if (caller != upgradeManager) ghosts.unauthorizedRecovery = true;
     }
 
     /// @notice Adds a currency under a symbol nothing has claimed

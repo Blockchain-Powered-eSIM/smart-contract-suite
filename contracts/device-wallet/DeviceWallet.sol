@@ -21,10 +21,8 @@ import {ESIMWallet} from "../esim-wallet/ESIMWallet.sol";
 import {P256Verifier} from "../P256Verifier.sol";
 
 /// @notice A user's device: an ERC-4337 account that owns the eSIM wallets bought for that device
-/// @dev A beacon proxy deployed by `DeviceWalletFactory`, owned by a P256 key the user holds. It
-///      funds its eSIM wallets, decides which of them may spend its money, and is the only party that can
-///      move one to another device. Its own owner key rotates through `transferOwnership`, which
-///      also tells the registry so the two records cannot drift apart.
+/// @dev Beacon proxy owned by the user's P256 key. Key rotation also updates the registry, so
+///      the two records cannot drift apart.
 contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 {
     using Address for address;
     using SafeERC20 for IERC20;
@@ -42,15 +40,14 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     mapping(address eSIMWalletAddress => bool isValid) public isValidESIMWallet;
 
     /// @notice Tracks if an associated eSIM wallet may pull this wallet's tokens
-    /// @dev A wallet trusted with the funds can already drain the owner, so a second flag per
-    ///      asset would cost another signature and limit nothing.
+    /// @dev One flag for all tokens: a wallet trusted with funds can drain them anyway, so
+    ///      per-token flags would cost signatures and limit nothing.
     mapping(address eSIMWalletAddress => bool isAllowedToPullFunds) public canPullFunds;
 
     /// @notice Emitted when owner updates an eSIM wallet's access to this wallet's money
     event FundsAccessUpdated(address indexed _eSIMWalletAddress, bool _hasAccessToFunds);
 
-    /// @notice Emitted when an ERC-20 leaves this contract
-    /// @dev mostly when an eSIM wallet pulls tokens to pay for a data bundle
+    /// @notice Emitted when an associated eSIM wallet pulls an ERC-20 from this wallet
     event TokenSent(address indexed _token, address indexed _eSIMWalletAddress, uint256 _amount);
 
     /// @notice Emitted when eSIM wallet is added to this Device Wallet
@@ -66,21 +63,15 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     event ETHCalledBack(uint256 _amount);
 
     /// @notice Reverts unless the caller is the registry, the device wallet factory, this wallet
-    ///         itself, or the eSIM wallet the registry still names this device wallet as holding
-    /// @dev Private rather than inline in the modifier, so the check is emitted once instead of at
-    ///      every use site. Keep each of these next to the modifier that calls it.
-    ///
-    ///      The eSIM wallet branch is checked against the registry's own association rather than
-    ///      the caller's own owner(), because a caller naming itself as `_eSIMWalletAddress`
-    ///      controls what its own owner() returns. The registry association can only reach this
-    ///      device wallet's address through a prior bindESIMWallet call, which already required
-    ///      real ownership at that time and is not something a caller can forge.
+    ///         itself, or a protocol eSIM wallet re-adding itself
+    /// @dev The self-add branch trusts the eSIM wallet's `owner()` only because the factory
+    ///      deployed it. The registry is not asked, since it lags behind a handover not yet bound.
     function _onlyRegistryOrDeviceWalletFactoryOrOwner(address _eSIMWalletAddress) private view {
         if(
             msg.sender != address(registry) &&
             msg.sender != address(registry.deviceWalletFactory()) &&
             msg.sender != address(this) &&
-            !(msg.sender == _eSIMWalletAddress && registry.isESIMWalletValid(_eSIMWalletAddress) == address(this))
+            !(msg.sender == _eSIMWalletAddress && eSIMWalletFactory.isESIMWalletDeployed(_eSIMWalletAddress))
         ) {
             revert Errors.OnlyRegistryOrDeviceWalletFactoryOrOwner();
         }
@@ -94,10 +85,8 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     }
 
     /// @notice Reverts unless the caller is this wallet itself or the eSIM wallet being removed
-    /// @dev An eSIM wallet may only name itself. Accepting any associated wallet let one of them
-    ///      unbind a sibling, strip its access, put it on standby and force its balance back to
-    ///      the device wallet. Association of the named wallet is still established by the caller,
-    ///      which requires isValidESIMWallet before doing anything.
+    /// @dev An eSIM wallet may only name itself, or it could unbind a sibling, put it on standby and
+    ///      force its ETH back. `removeESIMWallet` still checks the named wallet is associated.
     function _onlySelfOrESIMWalletBeingRemoved(address _eSIMWalletAddress) private view {
         if(
             msg.sender != address(this) &&
@@ -147,9 +136,8 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     ) Account4337(anEntryPoint, _verifier) {}
 
     /// @notice Wires the wallet to the registry and the factory, and sets its owner key
-    /// @dev Called as the beacon proxy's constructor argument, so it always runs in the same
-    ///      transaction as the deployment. `Account4337.initialize` is internal, and this is the
-    ///      only path to it.
+    /// @dev Runs from the beacon proxy's constructor, in the deployment transaction. It is the only
+    ///      path to the internal `Account4337.initialize`.
     /// @param _registry Registry contract this wallet reads the admin, vault and pause flag from
     /// @param _deviceWalletOwnerKey X,Y co-ordinates of the P256 key owning this wallet
     /// @param _deviceUniqueIdentifier Identifier the device is reached by
@@ -177,18 +165,8 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     // ---------------------------------------------------------------------------------------------
 
     /// @notice Deploys an eSIM wallet for this device and binds it
-    /// @dev The new wallet has no eSIM identifier yet. That arrives through
-    ///      `setESIMUniqueIdentifierForAnESIMWallet` once the eSIM itself has been created.
-    ///
-    ///      Access to this wallet's money is granted only afterwards, by the owner, with
-    ///      `toggleAccessToFunds`.
-    ///
-    ///      The admin gate here is a workflow convenience, not a security boundary against this
-    ///      wallet's own owner: `ESIMWalletFactory.deployESIMWallet` also accepts a call from any
-    ///      device wallet the registry knows, so the owner can reach the same outcome directly
-    ///      through `execute` with no admin involved. Closing that would need the deployment
-    ///      triggered by the admin rather than by this wallet, since nothing downstream of a device
-    ///      wallet's own call can tell one caller's signed intent from another's.
+    /// @dev Fund access is granted later by the owner with `toggleAccessToFunds`. The admin gate is
+    ///      a convenience, not a boundary: the owner can call the factory directly via `execute`.
     /// @param _hasAccessToFunds Must be false
     /// @param _salt CREATE2 salt for the new eSIM wallet
     /// @return eSIM wallet address
@@ -208,10 +186,8 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     // ---------------------------------------------------------------------------------------------
 
     /// @notice Allow an associated eSIM wallet to pull an ERC-20 (for data bundles)
-    /// @dev Refused while the protocol is paused, and refused for a wallet whose access the owner
-    ///      has revoked. It exists so the admin can charge this wallet without an owner signature
-    ///      in that transaction; an owner buying for themselves can batch the transfer and the
-    ///      purchase through `executeBatch` instead.
+    /// @dev Lets the admin charge this wallet without an owner signature. An owner buying for
+    ///      themselves can batch the transfer and purchase in `executeBatch` instead.
     /// @param _token ERC-20 being pulled
     /// @param _amount Amount in that token's smallest unit
     /// @return The amount pulled
@@ -237,25 +213,13 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     // ---------------------------------------------------------------------------------------------
 
     /// @inheritdoc Account4337
-    /// @dev The registry holds its own record of which key owns this wallet, and the deploy paths
-    ///      keep one key to one wallet. Rotating without telling it leaves the retired key named
-    ///      as the owner and leaves the key taking over unregistered, free for a second wallet to
-    ///      claim. `super` runs after the key check because it carries the `onlySelf` guard and
-    ///      because the registry call is an external one, so the local write has to land before it.
-    ///
-    ///      A key that cannot verify a signature bricks the wallet for good: this function is
-    ///      reachable only through `execute`, which needs a signature, so there is no rotating
-    ///      back and no reaching the balance. The deploy paths reject such a key and this path
-    ///      writes the same storage, so it has to reject it too.
-    function transferOwnership(
-        bytes32[2] memory newOwner
-    ) public override returns (bytes32[2] memory) {
+    /// @dev The registry keeps one key to one wallet, so it must follow every rotation. It is told
+    ///      after the local write because it reads the key back from this wallet.
+    function _transferOwnership(bytes32[2] memory newOwner, bytes calldata newOwnerSignature) internal override {
         _requireValidOwnerKey(newOwner);
 
-        bytes32[2] memory updatedOwner = super.transferOwnership(newOwner);
+        super._transferOwnership(newOwner, newOwnerSignature);
         registry.updateDeviceWalletOwnerKey(newOwner);
-
-        return updatedOwner;
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -275,7 +239,8 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         emit FundsAccessUpdated(_eSIMWalletAddress, _hasAccessToFunds);
     }
 
-    /// @notice Allow the device wallet factory or the wallet owner to add new eSIM wallet to this device wallet
+    /// @notice Binds an eSIM wallet; callable by the registry, the device wallet factory, this
+    ///         wallet, or a factory-deployed eSIM wallet adding itself
     /// @param _eSIMWalletAddress Address of the eSIM wallet to be added
     /// @param _hasAccessToFunds Must be false. Access is granted only through `toggleAccessToFunds`
     function addESIMWallet(
@@ -285,9 +250,9 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         _addESIMWallet(_eSIMWalletAddress, _hasAccessToFunds);
     }
 
-    /// @notice Allow the device wallet owner or the eSIM wallet to remove any eSIM wallet bound with this device wallet
+    /// @notice Unbinds an eSIM wallet; callable by this wallet or by that eSIM wallet itself
     /// @param _eSIMWalletAddress Address of the eSIM wallet to be removed
-    /// @param _callBackETH `true` if any remaining ETH needs to be called back from the ESIM wallet to this device wallet, `false` otherwise
+    /// @param _callBackETH Whether to pull the eSIM wallet's ETH back to this wallet
     function removeESIMWallet(
         address _eSIMWalletAddress,
         bool _callBackETH
@@ -297,19 +262,14 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         isValidESIMWallet[_eSIMWalletAddress] = false;
         canPullFunds[_eSIMWalletAddress] = false;
 
-        // Inform the registry that this eSIM wallet has been let go. Only the flag moves: the
-        // registry keeps naming this device wallet as the last one to hold it, which is what tells
-        // the protocol the wallet is still one of its own while the transfer is outstanding. The
-        // authority this device wallet had over it is withdrawn by the two writes above, not by
-        // anything in the registry.
+        // Only the standby flag moves. The registry keeps this device wallet as last holder, which
+        // marks the wallet as the protocol's own during transfer. Authority goes with the writes above.
         registry.toggleESIMWalletStandbyStatus(_eSIMWalletAddress, true);
 
         emit ESIMWalletRemoved(_eSIMWalletAddress, address(this), msg.sender);
 
-        // The callback runs last. All eSIM wallets share one upgradeable beacon, so the logic
-        // reached here is not fixed for the life of the protocol. By this point the wallet has
-        // already lost canPullFunds and its registry association, so a handler that re-enters
-        // cannot use the rights it is in the middle of losing.
+        // Callback last: eSIM wallet logic is upgradeable, so it may re-enter. By now the wallet
+        // has lost canPullFunds and isValidESIMWallet, so it cannot use those rights.
         if(_callBackETH) {
             try ESIMWallet(payable(_eSIMWalletAddress)).sendETHToDeviceWallet(_eSIMWalletAddress.balance) returns (uint256 _amount) {
                 emit ETHCalledBack(_amount);
@@ -321,12 +281,9 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     }
 
     /// @notice Binds an eSIM wallet to this device wallet and records it with the registry
-    /// @dev Refuses a wallet this device wallet does not already own, so binding cannot run ahead
-    ///      of the ownership handover.
-    ///
-    ///      A bind never carries access to this wallet's money. `toggleAccessToFunds` is `onlySelf` and the only writer
-    ///      of a `true`, so no bind can undo the owner's revocation. Asking for access here reverts
-    ///      rather than being downgraded in silence.
+    /// @dev Refuses a wallet not yet owned by this one, so binding cannot run ahead of a handover.
+    ///      Never grants fund access, so no bind can undo an owner's revocation. Asking for access
+    ///      reverts rather than being silently dropped.
     /// @param _eSIMWalletAddress Address of the eSIM wallet to bind
     /// @param _hasAccessToFunds Must be false
     function _addESIMWallet(
@@ -343,13 +300,10 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
         }
 
         isValidESIMWallet[_eSIMWalletAddress] = true;
-        // Already false on arrival, since `removeESIMWallet` zeroes it. Written anyway so the
-        // property is readable here.
+        // Already false via `removeESIMWallet`, written so the rule is visible here
         canPullFunds[_eSIMWalletAddress] = false;
 
-        // Inform the registry that this device wallet now holds the eSIM wallet. The call writes the
-        // association and, if a release was outstanding, lowers the transit marker. The two records
-        // are independent and this is the only call that touches both.
+        // Writes the association and clears any standby flag. The only call that touches both.
         registry.bindESIMWallet(_eSIMWalletAddress, address(this));
 
         emit ESIMWalletAdded(_eSIMWalletAddress, false, msg.sender);
@@ -360,10 +314,8 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     // ---------------------------------------------------------------------------------------------
 
     /// @notice Rejects a P256 public key that is not a point on the curve
-    /// @dev Same predicate the three deploy paths apply, repeated here because the factory holds
-    ///      its own copy privately and this contract is not in its inheritance chain. Sharing one
-    ///      copy would mean an external call on a path that must stay self-contained. The
-    ///      predicate also covers a key outside the field and the point at infinity.
+    /// @dev Duplicates the factory's private check, since sharing it would add an external call.
+    ///      Also rejects keys outside the field and the point at infinity.
     /// @param _deviceWalletOwnerKey X,Y co-ordinates of the P256 key to check
     function _requireValidOwnerKey(bytes32[2] memory _deviceWalletOwnerKey) private pure {
         if(
@@ -375,8 +327,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     }
 
     /// @notice Fetches the vault address that receives payment for data bundles
-    /// @dev Read through to the registry rather than cached, so a vault change reaches every
-    ///      wallet at once. The associated eSIM wallets call this before paying.
+    /// @dev Not cached, so a vault change in the registry reaches every wallet at once.
     /// @return The vault address
     function getVaultAddress() public view returns (address) {
         return registry.vault();

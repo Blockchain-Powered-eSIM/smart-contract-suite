@@ -4,6 +4,7 @@ pragma solidity 0.8.36;
 
 import {CampaignBase} from "test/foundry/invariant-testing/base/CampaignBase.sol";
 import {MockESIMWallet} from "test/utils/mocks/MockESIMWallet.sol";
+import {DeviceWallet} from "contracts/device-wallet/DeviceWallet.sol";
 
 /// @notice What the registry's two one-to-one mappings have to keep promising.
 /// @dev Both bind a device wallet to something the outside world names it by, an identifier and a
@@ -52,6 +53,34 @@ contract RegistryInvariantsTest is CampaignBase {
                 "An owner key reservation names a wallet that is not the one holding the key"
             );
         }
+    }
+
+    /// @notice The key the registry records for a wallet is the key the wallet actually answers to
+    /// @dev Read from the wallet, not from what a handler recorded. A handler only records keys it
+    ///      set through a rotation, so a write that reached the registry some other way would agree
+    ///      with the handler's copy and still name a key the wallet cannot sign with.
+    function invariant_registryKeyIsTheKeyTheWalletHolds() public view {
+        uint256 count = state.deviceWalletCount();
+        for (uint256 i = 0; i < count; ++i) {
+            address device = state.deviceWallets(i);
+            bytes32[2] memory recorded = registry.getDeviceWalletToOwner(device);
+
+            assertEq(
+                recorded[0],
+                DeviceWallet(payable(device)).owner(0),
+                "The registry names an X co-ordinate the wallet does not hold"
+            );
+            assertEq(
+                recorded[1],
+                DeviceWallet(payable(device)).owner(1),
+                "The registry names a Y co-ordinate the wallet does not hold"
+            );
+        }
+    }
+
+    /// @notice No wallet ever rotates onto a key that did not sign for it
+    function invariant_aRotationNeedsTheNewKeysProof() public view {
+        assertFalse(walletHandler.ghost_rotatedWithoutTheNewKey(), "A wallet rotated onto a key that never signed");
     }
 
     /// @notice A retired owner key never keeps its reservation

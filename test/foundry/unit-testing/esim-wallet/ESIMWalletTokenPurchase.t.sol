@@ -10,6 +10,7 @@ import {Asset} from "contracts/payments/PaymentAdapter.sol";
 
 import {DeviceWalletFixture} from "test/foundry/unit-testing/device-wallet/base/DeviceWalletFixture.sol";
 import {MockERC20} from "test/utils/mocks/tokens/MockERC20.sol";
+import {MockESIMWallet} from "test/utils/mocks/MockESIMWallet.sol";
 import {MockFeeOnTransferERC20} from "test/utils/mocks/tokens/MockFeeOnTransferERC20.sol";
 import {MockReenteringERC20} from "test/utils/mocks/tokens/MockReenteringERC20.sol";
 
@@ -442,5 +443,172 @@ contract ESIMWalletTokenPurchaseTest is DeviceWalletFixture {
         eSIMWallet1.sendTokenToDeviceWallet(address(other), 5 ether);
 
         assertEq(other.balanceOf(address(deviceWallet)), 5 ether, "The device wallet should have it");
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // What the admin may charge in total
+    // ---------------------------------------------------------------------------------------------
+
+    event AdminAllowanceUSDCentsUpdated(uint64 _allowance);
+
+    /// @notice Sets the allowance the way the owner would, through its device wallet
+    function _setAllowance(uint64 _allowance) internal {
+        vm.prank(address(deviceWallet));
+        eSIMWallet1.setAdminAllowanceUSDCents(_allowance);
+    }
+
+    function _adminBuys(uint64 _price) internal {
+        vm.prank(eSIMWalletAdmin);
+        eSIMWallet1.buyDataBundleWithToken(bundle("DB_TOKEN", _price), ASSET_USDC, settlementAmount(_price), nextRef());
+    }
+
+    function test_adminAllowance_startsAtTheRegistryDefault() public view {
+        assertEq(
+            eSIMWallet1.adminAllowanceUSDCents(),
+            registry.defaultAdminAllowanceUSDCents(),
+            "A new wallet must start on the registry default"
+        );
+    }
+
+    /// @notice Each admin charge comes off the allowance, and the new figure is announced
+    function test_buyDataBundleWithToken_adminChargeComesOffTheAllowance() public {
+        _setAllowance(10_000);
+
+        vm.expectEmit(true, true, true, true, address(eSIMWallet1));
+        emit AdminAllowanceUSDCentsUpdated(10_000 - PRICE_CENTS);
+        _adminBuys(PRICE_CENTS);
+
+        assertEq(eSIMWallet1.adminAllowanceUSDCents(), 10_000 - PRICE_CENTS, "The price must come off the allowance");
+    }
+
+    /// @notice A charge above what is left is refused, and nothing moves
+    function test_buyDataBundleWithToken_refusesAnAdminChargeAboveTheAllowance() public {
+        _setAllowance(PRICE_CENTS - 1);
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(abi.encodeWithSelector(Errors.AdminAllowanceExceeded.selector, PRICE_CENTS, PRICE_CENTS - 1));
+        eSIMWallet1.buyDataBundleWithToken(bundle("DB_TOKEN", PRICE_CENTS), ASSET_USDC, settlementAmount(PRICE_CENTS), nextRef());
+
+        assertEq(settlementERC20.balanceOf(vault), 0, "A refused charge must pay nothing");
+        assertEq(eSIMWallet1.adminAllowanceUSDCents(), PRICE_CENTS - 1, "A refused charge must spend nothing");
+    }
+
+    /// @notice The allowance can be spent to exactly zero, and then the admin is stopped
+    function test_buyDataBundleWithToken_stopsTheAdminOnceTheAllowanceIsSpent() public {
+        _setAllowance(PRICE_CENTS * 2);
+
+        _adminBuys(PRICE_CENTS);
+        _adminBuys(PRICE_CENTS);
+        assertEq(eSIMWallet1.adminAllowanceUSDCents(), 0, "Two charges must spend it exactly");
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(abi.encodeWithSelector(Errors.AdminAllowanceExceeded.selector, 1, 0));
+        eSIMWallet1.buyDataBundleWithToken(bundle("DB_TOKEN", 1), ASSET_USDC, settlementAmount(1), nextRef());
+
+        assertEq(settlementERC20.balanceOf(vault), settlementAmount(PRICE_CENTS) * 2, "Only the two charges reached the vault");
+    }
+
+    /// @notice This is the attack the allowance closes: repeated charges at the price cap
+    function test_buyDataBundleWithToken_capsRepeatedChargesAtTheCeiling() public {
+        _setAllowance(10_000);
+        uint64 charge = 5_000;
+
+        _adminBuys(charge);
+        _adminBuys(charge);
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(abi.encodeWithSelector(Errors.AdminAllowanceExceeded.selector, charge, 0));
+        eSIMWallet1.buyDataBundleWithToken(bundle("DB_TOKEN", charge), ASSET_USDC, settlementAmount(charge), nextRef());
+
+        assertEq(settlementERC20.balanceOf(vault), settlementAmount(10_000), "The admin took the allowance and no more");
+    }
+
+    /// @notice A purchase the owner signs for itself is not an admin charge
+    function test_buyDataBundleWithToken_ownerPurchaseLeavesTheAllowanceAlone() public {
+        _setAllowance(0);
+
+        vm.prank(address(deviceWallet));
+        eSIMWallet1.buyDataBundleWithToken(bundle("DB_TOKEN", PRICE_CENTS), ASSET_USDC, settlementAmount(PRICE_CENTS), nextRef());
+
+        assertEq(eSIMWallet1.adminAllowanceUSDCents(), 0, "The owner's own purchase must not touch it");
+        assertEq(settlementERC20.balanceOf(vault), settlementAmount(PRICE_CENTS), "The owner's purchase still settles");
+    }
+
+    /// @notice Zero stops admin charges entirely
+    function test_buyDataBundleWithToken_zeroAllowanceStopsEveryAdminCharge() public {
+        _setAllowance(0);
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(abi.encodeWithSelector(Errors.AdminAllowanceExceeded.selector, 1, 0));
+        eSIMWallet1.buyDataBundleWithToken(bundle("DB_TOKEN", 1), ASSET_USDC, settlementAmount(1), nextRef());
+    }
+
+    /// @notice The owner topping up is what lets the admin charge again
+    function test_setAdminAllowanceUSDCents_ownerResetLetsTheAdminChargeAgain() public {
+        _setAllowance(PRICE_CENTS);
+        _adminBuys(PRICE_CENTS);
+
+        vm.expectEmit(true, true, true, true, address(eSIMWallet1));
+        emit AdminAllowanceUSDCentsUpdated(PRICE_CENTS);
+        _setAllowance(PRICE_CENTS);
+
+        _adminBuys(PRICE_CENTS);
+        assertEq(eSIMWallet1.adminAllowanceUSDCents(), 0, "The reset allowance must be spent");
+    }
+
+    /// @notice The admin is the party this limits, so it cannot raise it
+    function test_setAdminAllowanceUSDCents_refusesTheAdmin() public {
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(Errors.OnlyDeviceWallet.selector);
+        eSIMWallet1.setAdminAllowanceUSDCents(type(uint64).max);
+    }
+
+    function test_setAdminAllowanceUSDCents_refusesAStranger() public {
+        vm.prank(user1);
+        vm.expectRevert(Errors.OnlyDeviceWallet.selector);
+        eSIMWallet1.setAdminAllowanceUSDCents(type(uint64).max);
+    }
+
+    /// @notice Another device wallet cannot set it either, only the owning one
+    function test_setAdminAllowanceUSDCents_refusesADeviceWalletThatDoesNotOwnIt() public {
+        vm.prank(address(deviceWallet2));
+        vm.expectRevert(Errors.OnlyDeviceWallet.selector);
+        eSIMWallet1.setAdminAllowanceUSDCents(type(uint64).max);
+    }
+
+    /// @notice A new owner starts on the registry default, not on what the old owner chose
+    function test_acceptOwnershipTransfer_resetsTheAllowanceToTheRegistryDefault() public {
+        _setAllowance(type(uint64).max);
+
+        vm.prank(upgradeManager);
+        registry.setDefaultAdminAllowanceUSDCents(7_777);
+
+        vm.prank(address(deviceWallet));
+        eSIMWallet1.requestTransferOwnership(address(deviceWallet2));
+
+        vm.expectEmit(true, true, true, true, address(eSIMWallet1));
+        emit AdminAllowanceUSDCentsUpdated(7_777);
+        vm.prank(address(deviceWallet2));
+        eSIMWallet1.acceptOwnershipTransfer();
+
+        assertEq(eSIMWallet1.adminAllowanceUSDCents(), 7_777, "The incoming owner must start on the default");
+    }
+
+    /// @notice Changing the default moves new wallets and leaves existing ones alone
+    function test_setDefaultAdminAllowanceUSDCents_onlyReachesNewWallets() public {
+        uint64 before = eSIMWallet1.adminAllowanceUSDCents();
+
+        vm.prank(upgradeManager);
+        registry.setDefaultAdminAllowanceUSDCents(1_234);
+
+        vm.prank(eSIMWalletAdmin);
+        address fresh = deviceWallet.deployESIMWallet(false, 777_777);
+
+        assertEq(eSIMWallet1.adminAllowanceUSDCents(), before, "An existing wallet must keep its allowance");
+        assertEq(
+            MockESIMWallet(payable(fresh)).adminAllowanceUSDCents(),
+            1_234,
+            "A wallet deployed after the change must start on the new default"
+        );
     }
 }

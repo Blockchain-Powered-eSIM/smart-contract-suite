@@ -35,6 +35,7 @@ abstract contract ScriptBase is Test {
 
     /// @notice Ceiling on one data bundle, in USD cents
     uint64 internal constant PRICE_CAP_CENTS = 100_000;
+    uint64 internal constant ADMIN_ALLOWANCE_CENTS = 10_000;
 
     /// @notice Decimals the stand-in settlement token reports
     /// @dev Six, matching USDC. `Configure` reads this off the token rather than assuming it, so a
@@ -110,6 +111,7 @@ abstract contract ScriptBase is Test {
         vm.setEnv("ESIM_WALLET_ADMIN", vm.toString(eSIMWalletAdmin));
         vm.setEnv("VAULT", vm.toString(vault));
         vm.setEnv("PRICE_CAP_USD_CENTS", vm.toString(uint256(PRICE_CAP_CENTS)));
+        vm.setEnv("ADMIN_ALLOWANCE_USD_CENTS", vm.toString(uint256(ADMIN_ALLOWANCE_CENTS)));
         vm.setEnv("SETTLEMENT_TOKEN", vm.toString(address(settlementToken)));
         vm.setEnv("TIMELOCK_PROPOSERS", vm.toString(proposer));
         vm.setEnv("TIMELOCK_CANCELLERS", vm.toString(canceller));

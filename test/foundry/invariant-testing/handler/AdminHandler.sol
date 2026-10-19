@@ -20,6 +20,9 @@ contract AdminHandler is HandlerBase {
     ///      call reverts on replay instead of on what is being tested.
     uint256 private _refNonce;
 
+    /// @notice Set when a deploy that forwards ETH went through while the protocol was paused
+    bool public ghost_deployedWhilePaused;
+
     constructor(HandlerConfig memory config) HandlerBase(config) {}
 
     /// @notice The admin deploys a batch of device wallets, each with one eSIM wallet
@@ -49,10 +52,13 @@ contract AdminHandler is HandlerBase {
             deposits[i] = perWallet;
         }
 
+        bool wasPaused = registry.paused();
+
         vm.prank(_currentAdmin());
         try deviceWalletFactory.deployDeviceWalletForUsers{value: deposit}(
             identifiers, ownerKeys, salts, deposits
         ) returns (Wallets[] memory deployed) {
+            if (wasPaused) ghost_deployedWhilePaused = true;
             for (uint256 i = 0; i < deployed.length; ++i) {
                 state.recordDeviceWallet(deployed[i].deviceWallet, identifiers[i], ownerKeys[i]);
                 state.recordESIMWallet(deployed[i].eSIMWallet, deployed[i].deviceWallet);
@@ -116,6 +122,55 @@ contract AdminHandler is HandlerBase {
             state.recordCall("deployESIMWalletForDevice");
         } catch {
             state.recordRevert("deployESIMWalletForDevice");
+        }
+    }
+
+    /// @notice The admin tries to give a spare wallet on a lazy device one of that device's
+    ///         identifiers still waiting for a lazy batch
+    /// @dev Random draws almost never line those three things up, so this sets the case up on
+    ///      purpose. The registry must refuse it every time, so it is left out of
+    ///      `HandlerDistribution`. If it ever lands, `invariant_aLazyESIMIdentifierGoesOnlyToItsLazyWallet`
+    ///      reports it.
+    /// @param deviceSeed Picks the lazy device
+    /// @param salt CREATE2 salt for the spare wallet
+    function assignReservedIdentifierOnLazyDevice(uint256 deviceSeed, uint256 salt) external counted {
+        uint256 lazyDevices = state.lazyDeviceIdentifierCount();
+        if (lazyDevices == 0) {
+            state.recordRevert("assignReservedOnLazyDevice");
+            return;
+        }
+        string memory deviceIdentifier = state.lazyDeviceIdentifiers(deviceSeed % lazyDevices);
+        address device = registry.uniqueIdentifierToDeviceWallet(deviceIdentifier);
+        if (device == address(0)) {
+            state.recordRevert("assignReservedOnLazyDevice");
+            return;
+        }
+
+        // The next identifier the lazy route has not deployed yet, if there is one
+        uint256 deployed = lazyWalletRegistry.eSIMWalletsDeployed(deviceIdentifier);
+        string memory waiting;
+        try lazyWalletRegistry.eSIMIdentifiersAssociatedWithDeviceIdentifier(deviceIdentifier, deployed) returns (
+            string memory identifier
+        ) {
+            waiting = identifier;
+        } catch {
+            state.recordRevert("assignReservedOnLazyDevice");
+            return;
+        }
+
+        vm.prank(_currentAdmin());
+        try DeviceWallet(payable(device)).deployESIMWallet(false, bound(salt, 5000, 6000)) returns (address spare) {
+            state.recordESIMWallet(spare, device);
+            state.clearETHAccessGrant(device, spare);
+
+            vm.prank(_currentAdmin());
+            try registry.assignESIMIdentifier(spare, waiting) returns (string memory) {
+                state.recordCall("assignReservedOnLazyDevice");
+            } catch {
+                state.recordRevert("assignReservedOnLazyDevice");
+            }
+        } catch {
+            state.recordRevert("assignReservedOnLazyDevice");
         }
     }
 
@@ -221,11 +276,13 @@ contract AdminHandler is HandlerBase {
         maxWallets = bound(maxWallets, 0, lazyWalletRegistry.MAX_ESIM_WALLETS_PER_CALL() + 5);
 
         bytes32[2] memory ownerKey = _ownerKey(uint256(keccak256(bytes(deviceIdentifier))));
+        bool wasPaused = registry.paused();
 
         vm.prank(_currentAdmin());
         try lazyWalletRegistry.deployLazyWalletAndSetESIMIdentifier{value: deposit}(
             ownerKey, deviceIdentifier, salt, deposit, maxWallets
         ) returns (address device, address[] memory wallets, uint256) {
+            if (wasPaused) ghost_deployedWhilePaused = true;
             state.recordDeviceWallet(device, deviceIdentifier, ownerKey);
             for (uint256 i = 0; i < wallets.length; ++i) {
                 state.recordESIMWallet(wallets[i], device);

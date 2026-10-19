@@ -14,6 +14,7 @@ import {ProtocolAdmin} from "../../contracts/admin/ProtocolAdmin.sol";
 // Interfaces
 import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 import {PackedUserOperation} from "@account-abstraction/contracts/interfaces/PackedUserOperation.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 // Libraries
 import {BeaconProxy} from "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
@@ -92,10 +93,11 @@ contract ForkRehearsal is Script {
         _loadDeployment();
 
         _checkHandoverIsComplete(config);
+        _checkStablecoinQuotes();
 
         address predicted = _checkCounterfactualAddress();
         _deployThroughEntryPoint(config, predicted);
-        _recordWallet(predicted);
+        _recordWallet(config, predicted);
         _runUserOperation(config, predicted);
 
         console.log("");
@@ -216,11 +218,11 @@ contract ForkRehearsal is Script {
     ///      registry needs to know about the wallet arrives here instead, and the factory
     ///      re-derives the address from the arguments so a caller cannot register a wallet it did
     ///      not deploy.
-    function _recordWallet(address wallet) private {
-        // Signed by the admin key, not the deployer. `postCreateAccount` is `onlyAdminOrRegistry`
-        // and the admin is read off the registry, so this is the one step in the rehearsal that
-        // proves the admin wiring rather than the owner wiring.
-        vm.startBroadcast(vm.envUint("ESIM_WALLET_ADMIN_PRIVATE_KEY"));
+    function _recordWallet(DeployConfig.Config memory config, address wallet) private {
+        // Sent as the admin, not the deployer. `postCreateAccount` is `onlyAdminOrRegistry` and the
+        // admin is read off the registry, so this step proves the admin wiring. Sent by address:
+        // the fork impersonates the admin, so a real admin address needs no key here.
+        vm.startBroadcast(config.eSIMWalletAdmin);
         deviceWalletFactory.postCreateAccount(wallet, DEVICE_ID, ownerKey, SALT);
         vm.stopBroadcast();
 
@@ -230,6 +232,20 @@ contract ForkRehearsal is Script {
         if(!registry.isDeviceWalletValid(wallet)) revert CheckFailed("Wallet is not registered valid");
 
         console.log("Wallet registered through postCreateAccount");
+    }
+
+    /// @notice Prices one dollar in each extra stablecoin, read off the real token's decimals
+    /// @dev Catches a decimals mismatch between the table and the token, which would over or under
+    ///      charge every purchase in that currency by a power of ten.
+    function _checkStablecoinQuotes() private view {
+        (bytes32[] memory symbols, address[] memory tokens) = DeployConfig.extraStablecoins();
+
+        for(uint256 i = 0; i < tokens.length; ++i) {
+            uint256 oneDollar = 10 ** IERC20Metadata(tokens[i]).decimals();
+            if(paymentAdapter.quote(symbols[i], 100) != oneDollar) revert CheckFailed("Stablecoin quote is off");
+        }
+
+        if(tokens.length != 0) console.log("Extra stablecoins quote one dollar at their own decimals");
     }
 
     /// @notice Sends one signed user operation through the deployed EntryPoint
