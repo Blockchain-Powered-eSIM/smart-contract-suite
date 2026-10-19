@@ -376,6 +376,20 @@ contract DeployScriptsTest is ScriptBase {
         );
     }
 
+    /// @dev Offchain callers read the address book, not the record, to find the contracts
+    function test_deploy_writesEveryCalledContractToTheAddressBook() public {
+        _deploy();
+
+        string memory book = vm.readFile(scratchAddressBook);
+        string memory entry = string.concat(".", _recordKey(), ".");
+        string[5] memory keys =
+            ["RegistryProxy", "LazyWalletRegistryProxy", "DeviceWalletFactoryProxy", "ESIMWalletFactoryProxy", "PaymentAdapterProxy"];
+
+        for(uint256 i = 0; i < keys.length; ++i) {
+            assertEq(vm.parseJsonAddress(book, string.concat(entry, keys[i])), _recordedAddress(keys[i]), keys[i]);
+        }
+    }
+
     function test_deploy_startsWithBothLaterStepsUnfinished() public {
         _deploy();
 

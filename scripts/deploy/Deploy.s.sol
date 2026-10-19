@@ -268,6 +268,7 @@ contract Deploy is Script {
         vm.serializeAddress("book", "ESIMWalletFactoryProxy", deployed.eSIMWalletFactory);
         vm.serializeAddress("book", "RegistryProxy", deployed.registry);
         vm.serializeAddress("book", "LazyWalletRegistryProxy", deployed.lazyWalletRegistry);
+        vm.serializeAddress("book", "PaymentAdapterProxy", deployed.paymentAdapter);
         vm.serializeAddress(
             "book",
             "DeviceWalletBeacon",
