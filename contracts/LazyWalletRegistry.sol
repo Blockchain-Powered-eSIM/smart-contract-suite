@@ -500,7 +500,7 @@ contract LazyWalletRegistry is Initializable, UUPSUpgradeable, Ownable2StepUpgra
         _moveESIMPurchaseHistory(_eSIMIdentifier, _oldDeviceIdentifier, _newDeviceIdentifier);
         _moveESIMIdentifierBetweenDeviceLists(_eSIMIdentifier, _oldDeviceIdentifier, _newDeviceIdentifier);
 
-        emit ESIMIdentifierSwitchedToNewDeviceIdentifier(_eSIMIdentifier, _oldDeviceIdentifier, currentDeviceIdentifier);
+        emit ESIMIdentifierSwitchedToNewDeviceIdentifier(_eSIMIdentifier, _oldDeviceIdentifier, _newDeviceIdentifier);
 
         return true;
     }
