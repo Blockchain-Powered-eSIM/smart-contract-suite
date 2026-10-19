@@ -45,6 +45,16 @@ library DeployConfig {
     ///      and `PaymentAdapter.settlementToken` has no setter.
     address internal constant BASE_USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
 
+    /// @notice USDT on Base, minted by Base's standard bridge against Ethereum USDT
+    /// @dev Verified with cast on 2026-10-19: USDT, 6 decimals, l1Token 0xdAC17F958D2ee523a2206206994597C13D831ec7,
+    ///      bridge 0x4200000000000000000000000000000000000010. Tether issues no native USDT on Base.
+    address internal constant BASE_USDT = 0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2;
+
+    /// @notice DAI on Base, minted by Base's standard bridge against Ethereum DAI
+    /// @dev Verified with cast on 2026-10-19: DAI, 18 decimals, remoteToken
+    ///      0x6B175474E89094C44Da98b954EedeAC495271d0F, bridge 0x4200000000000000000000000000000000000010.
+    address internal constant BASE_DAI = 0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb;
+
     /// @notice Delay every scheduled admin operation waits before it can be executed
     uint256 internal constant TIMELOCK_DELAY = 2 days;
 
@@ -172,6 +182,19 @@ library DeployConfig {
 
         _requireContracts("TIMELOCK_PROPOSERS", config.proposers);
         _requireContracts("TIMELOCK_GUARDIANS", config.guardians);
+    }
+
+    /// @notice Stablecoins accepted on this chain besides the settlement token
+    /// @dev Only Base mainnet has any. Testnets have no real USDT or DAI to point at.
+    /// @return symbols Symbol each token is registered under in the payment adapter
+    /// @return tokens Token address for each symbol
+    function extraStablecoins() internal view returns (bytes32[] memory symbols, address[] memory tokens) {
+        if(block.chainid != BASE_CHAIN_ID) return (symbols, tokens);
+
+        symbols = new bytes32[](2);
+        tokens = new address[](2);
+        (symbols[0], tokens[0]) = (bytes32("USDT"), BASE_USDT);
+        (symbols[1], tokens[1]) = (bytes32("DAI"), BASE_DAI);
     }
 
     /// @notice Reverts if the account holds any timelock role

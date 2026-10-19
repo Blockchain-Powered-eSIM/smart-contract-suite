@@ -557,12 +557,23 @@ contract DeployScriptsTest is ScriptBase {
         Configure configure = new Configure();
         vm.expectRevert(
             abi.encodeWithSelector(
-                Configure.SettlementTokenNotDeployed.selector,
+                Configure.TokenNotDeployed.selector,
                 SETTLEMENT_TOKEN_ADDRESS,
                 block.chainid
             )
         );
         configure.run();
+    }
+
+    /// @dev USDT and DAI are pinned to Base mainnet addresses, which hold nothing on other chains
+    function test_configure_registersNoExtraStablecoinsOffBase() public {
+        _deploy();
+        _configure();
+
+        (,, uint8 usdtDecimals,) = _adapter().assets(bytes32("USDT"));
+        (,, uint8 daiDecimals,) = _adapter().assets(bytes32("DAI"));
+        assertEq(usdtDecimals, 0, "USDT registered");
+        assertEq(daiDecimals, 0, "DAI registered");
     }
 
     function test_configure_revertsWhenTheSettlementTokenAnswersNothing() public {
@@ -573,7 +584,7 @@ contract DeployScriptsTest is ScriptBase {
         Configure configure = new Configure();
         vm.expectRevert(
             abi.encodeWithSelector(
-                Configure.SettlementTokenNotTokenLike.selector,
+                Configure.NotTokenLike.selector,
                 SETTLEMENT_TOKEN_ADDRESS
             )
         );

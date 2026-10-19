@@ -372,6 +372,26 @@ contract DeployConfigTest is ScriptBase {
         loader.validate(config);
     }
 
+    function test_extraStablecoins_namesUSDTAndDAIOnBase() public {
+        vm.chainId(DeployConfig.BASE_CHAIN_ID);
+        (bytes32[] memory symbols, address[] memory tokens) = DeployConfig.extraStablecoins();
+
+        assertEq(symbols.length, 2, "symbols");
+        assertEq(tokens.length, 2, "tokens");
+        assertEq(symbols[0], bytes32("USDT"), "USDT symbol");
+        assertEq(tokens[0], DeployConfig.BASE_USDT, "USDT token");
+        assertEq(symbols[1], bytes32("DAI"), "DAI symbol");
+        assertEq(tokens[1], DeployConfig.BASE_DAI, "DAI token");
+    }
+
+    function test_extraStablecoins_isEmptyOffBase() public {
+        vm.chainId(84532);
+        (bytes32[] memory symbols, address[] memory tokens) = DeployConfig.extraStablecoins();
+
+        assertEq(symbols.length, 0, "symbols");
+        assertEq(tokens.length, 0, "tokens");
+    }
+
     // ---------------------------------------------------------------------------------------------
     // The record key
     // ---------------------------------------------------------------------------------------------
