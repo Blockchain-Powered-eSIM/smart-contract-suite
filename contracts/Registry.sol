@@ -392,8 +392,9 @@ contract Registry is
     }
 
     /// @notice Points this registry at the payment adapter
-    /// @dev Owner and not admin. The adapter holds the spent payment references, so an admin that
-    ///      could swap it would get an empty set back and record every purchase a second time.
+    /// @dev Owner and not admin. The adapter decides which currencies are accepted and where the
+    ///      money goes, so an admin that could swap it could point purchases at a contract of its
+    ///      own. Spent payment references live on this registry, so they survive a swap.
     /// @param _paymentAdapter Address of the payment adapter
     function setPaymentAdapter(address _paymentAdapter) external onlyOwner {
         if(_paymentAdapter == address(0)) revert Errors.ZeroAddress("_paymentAdapter");

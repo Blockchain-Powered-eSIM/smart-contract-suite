@@ -26,13 +26,12 @@ struct Asset {
     address token;       // ERC-20 address, or zero for fiat and non-EVM assets
 }
 
-/// @notice Holds the accepted currencies, converts prices, moves tokens to the vault, and spends
-///         payment references
+/// @notice Holds the accepted currencies, converts prices and moves tokens to the vault
 /// @dev Prices cross contract boundaries in USD cents only, and this is the one place a cent
 ///      figure becomes a token amount, so a decimals mismatch cannot happen rather than having to
 ///      be checked for. There are no price feeds, so a currency not already in dollars has no
-///      conversion here. UUPS and not swappable: `usedReferences` is replay protection, and a
-///      fresh copy would re-open every reference already spent.
+///      conversion here. Spent payment references are kept on the registry, not here, so the
+///      registry can point at a new adapter without re-opening any of them.
 ///
 ///      Tokens pass through in one call and never rest here.
 contract PaymentAdapter is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, ReentrancyGuardUpgradeable {
@@ -49,7 +48,7 @@ contract PaymentAdapter is Initializable, UUPSUpgradeable, Ownable2StepUpgradeab
     ///      currency can never be priced at all. Well past the 18 any real token uses.
     uint8 private constant MAX_ASSET_DECIMALS = 36;
 
-    /// @notice Registry contract address, the only caller allowed to spend a payment reference
+    /// @notice Registry contract address, which this reads the vault and the eSIM wallet list from
     address public registry;
 
     /// @notice Currency the vault is meant to end up holding

@@ -73,6 +73,10 @@ library WebAuthn {
     ///      members pointing at the zero slot. `verifySignature` then returns false, because an
     ///      empty `clientDataJSON` cannot contain the index it is handed.
     ///
+    ///      One limit, inherited from solady: the length checks use wrapping arithmetic, so a
+    ///      crafted length near 2^256 can pass them and run the caller out of gas. That is a revert,
+    ///      never an accepted signature.
+    ///
     ///      Assembly, and a copy of solady's `WebAuthn.tryDecodeAuth` rather than a fresh
     ///      implementation: `WebAuthnAuth` and `WebAuthnSignature` have identical layouts, and
     ///      rewriting an audited ABI bounds check by hand only adds somewhere for a mistake to

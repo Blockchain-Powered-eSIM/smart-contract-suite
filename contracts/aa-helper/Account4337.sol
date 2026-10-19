@@ -210,9 +210,11 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
     }
 
     /// @inheritdoc IAccount
-    /// @dev Must stay within the ERC-4337 validation rules: no banned opcodes, no external calls
-    ///      to other contracts, no TIMESTAMP. Expiry is handed to the EntryPoint through the packed
-    ///      return value instead of being checked here.
+    /// @dev Must stay within the ERC-4337 validation rules: no banned opcodes and no TIMESTAMP.
+    ///      Expiry is handed to the EntryPoint through the packed return value instead of being
+    ///      checked here. It does call out: to `verifier`, which reads no storage, and through the
+    ///      beacon proxy to the beacon's implementation slot. A bundler enforcing ERC-7562 storage
+    ///      rules may need the account or factory staked to accept that beacon read.
     function validateUserOp(
         PackedUserOperation calldata userOp,
         bytes32 userOpHash,

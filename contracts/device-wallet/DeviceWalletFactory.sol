@@ -252,8 +252,8 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     }
 
     /// @notice Records a wallet the EntryPoint deployed through createAccount
-    /// @dev Not needed on the admin batch route, which writes the registry itself. Callable by the
-    ///      admin directly and by the registry on the lazy deployment path.
+    /// @dev Not needed on the admin batch route, which writes the registry itself. The admin calls
+    ///      this; the registry is also allowed to, though no path in the protocol does today.
     ///
     ///      The wallet was not deployed in this call, so nothing binds the arguments to it. The
     ///      re-derivation does: the key and the identifier are proxy constructor arguments, so an
@@ -302,11 +302,12 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     // ---------------------------------------------------------------------------------------------
 
     /// @notice Deploys a device wallet, returning the existing one if that address already holds it
-    /// @dev Called by the EntryPoint during a user operation, so it must not read or write any
-    ///      other contract's storage: that is barred by the ERC-4337 validation rules. The registry
-    ///      is therefore not consulted here and not written, and `postCreateAccount` records the
-    ///      wallet afterwards. Validation the registry would have done happens offchain, through
-    ///      `preCreateAccountValidation`.
+    /// @dev Called by the EntryPoint during a user operation, so the registry is not consulted
+    ///      here and not written: ERC-4337 validation bars an unstaked factory from that storage.
+    ///      `postCreateAccount` records the wallet afterwards, and the checks the registry would
+    ///      have made happen offchain through `preCreateAccountValidation`. This does read the
+    ///      factory's own storage and the beacon's, which a bundler enforcing ERC-7562 accepts only
+    ///      from a staked factory.
     ///
     ///      Returning an existing address rather than reverting is what makes
     ///      `entryPoint.getSenderAddress()` keep working once the account has been created.

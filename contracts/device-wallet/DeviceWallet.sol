@@ -303,7 +303,7 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
 
         // The callback runs last. All eSIM wallets share one upgradeable beacon, so the logic
         // reached here is not fixed for the life of the protocol. By this point the wallet has
-        // already lost canPullFunds and its registry association, so a handler that re-enters
+        // already lost canPullFunds and its place in isValidESIMWallet, so a handler that re-enters
         // cannot use the rights it is in the middle of losing.
         if(_callBackETH) {
             try ESIMWallet(payable(_eSIMWalletAddress)).sendETHToDeviceWallet(_eSIMWalletAddress.balance) returns (uint256 _amount) {

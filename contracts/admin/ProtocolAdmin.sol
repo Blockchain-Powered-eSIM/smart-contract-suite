@@ -10,10 +10,10 @@ import {IRegistryAdmin} from "../interfaces/IRegistryAdmin.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
 
-/// @notice Owner of the four upgradeable protocol contracts, with a delay on every change
-/// @dev Replaces the single externally owned account that owns `Registry`, `LazyWalletRegistry`,
-///      `DeviceWalletFactory` and `ESIMWalletFactory` today. Both wallet beacons sit under the two
-///      factories, so owning the factories reaches every device wallet and every eSIM wallet.
+/// @notice Owner of the five upgradeable protocol contracts, with a delay on every change
+/// @dev Owns `Registry`, `LazyWalletRegistry`, `DeviceWalletFactory`, `ESIMWalletFactory` and
+///      `PaymentAdapter` once `TransferOwnership.s.sol` has run. Both wallet beacons sit under the
+///      two factories, so owning the factories reaches every device wallet and every eSIM wallet.
 ///
 ///      Everything this contract can do to the protocol goes one way: a proposer schedules it, the
 ///      delay elapses, and anyone at all executes it. Execution is open on purpose. The
@@ -53,9 +53,9 @@ import {TimelockController} from "@openzeppelin/contracts/governance/TimelockCon
 ///      than documented. A guardian may not hold `CANCELLER_ROLE` itself, or it could revoke every
 ///      other canceller, become the only one, and cancel its own eviction. And it may not touch
 ///      `PROPOSER_ROLE`, because reaching zero proposers is unrecoverable: re-granting any role
-///      needs a scheduled operation, scheduling needs a proposer, and `Registry.unpause` is owner
-///      only, so a bricked admin plus a pause is a pause nobody can ever release. Reaching zero
-///      cancellers is fine by comparison. It costs the veto, and a proposer can schedule it back.
+///      needs a scheduled operation and scheduling needs a proposer, so no upgrade, vault change
+///      or role change could ever run again. Reaching zero cancellers is fine by comparison. It
+///      costs the veto, and a proposer can schedule it back.
 ///
 ///      Not upgradeable, deliberately. An upgradeable owner of upgradeable contracts moves the
 ///      trust to whoever can upgrade it, and there is no delay left to protect that step.
