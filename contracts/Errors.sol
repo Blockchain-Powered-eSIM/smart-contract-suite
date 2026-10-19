@@ -89,7 +89,7 @@ interface Errors {
     // ESIMWallet and DeviceWallet
     error FailedToTransfer();
     error InsufficientBalance(uint256 balance, uint256 amount);
-    error ZeroAmount();
+    error ZeroAmount(); // also PaymentAdapter
     // A currency with no token address, so nothing can be transferred in it
     error AssetNotTransferable(bytes32 asset);
 

@@ -33,6 +33,9 @@ contract PaymentHandler is HandlerBase {
     /// @notice Symbol the token path settles in
     bytes32 private constant SETTLEMENT_SYMBOL = bytes32("USDC");
 
+    /// @notice Where recovered tokens go, an address no other handler uses
+    address private constant RECOVERY_SINK = address(uint160(uint256(keccak256("payment handler recovery sink"))));
+
     PaymentAdapter internal immutable paymentAdapter;
     MockERC20 internal immutable settlementERC20;
 
@@ -59,6 +62,9 @@ contract PaymentHandler is HandlerBase {
 
     /// @notice Set when `quote` answered for a currency the table had already withdrawn
     bool public ghost_withdrawnCurrencyQuoted;
+
+    /// @notice Set when a recovery changed the vault's balance
+    bool public ghost_recoveryTouchedTheVault;
 
     constructor(
         HandlerConfig memory config,
@@ -227,6 +233,26 @@ contract PaymentHandler is HandlerBase {
             state.recordCall("updateAsset");
         } catch {
             state.recordRevert("updateAsset");
+        }
+    }
+
+    /// @notice Someone sends tokens to the adapter by mistake and the owner sends them back
+    /// @dev Both in one call, so the adapter is empty again between calls and the at-rest invariant
+    ///      still applies. Anything other than the stray amount moving is a recovery that reached
+    ///      purchase money.
+    /// @param amount How much is sent by mistake
+    function recoverTokens(uint128 amount) external counted {
+        uint256 stray = bound(uint256(amount), 1, type(uint128).max);
+        uint256 vaultBefore = settlementERC20.balanceOf(vault);
+
+        settlementERC20.mint(address(paymentAdapter), stray);
+
+        vm.prank(upgradeManager);
+        try paymentAdapter.recoverTokens(address(settlementERC20), RECOVERY_SINK, stray) {
+            if (settlementERC20.balanceOf(vault) != vaultBefore) ghost_recoveryTouchedTheVault = true;
+            state.recordCall("recoverTokens");
+        } catch {
+            state.recordRevert("recoverTokens");
         }
     }
 

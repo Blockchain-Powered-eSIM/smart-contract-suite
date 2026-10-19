@@ -85,6 +85,9 @@ stay O(n) in the population and never O(n squared).
 - [x] **GL-17 — an owner can always withdraw its own transfer request and keep the wallet.**
   Nominating itself clears the request and leaves the wallet held by its owner, including after an accept the new owner never bound and for a wallet that was never bound at all. SHOULD-HOLD: the self-add branch in `DeviceWallet` trusts a factory-deployed eSIM wallet's live `owner()` rather than the registry's association, which can lag behind a handover.
 
+- [x] **GL-18 — only the owner takes tokens out of the payment adapter.**
+  `recoverTokens` from any other caller never goes through, and an owner recovery moves exactly the amount asked to the address named, so GL-12 still balances. SHOULD-HOLD: `recoverTokens` is `onlyOwner`, and the owner is the timelock in production.
+
 ## Specific
 
 Asserted inside the handler that makes the call, where a before-and-after comparison is the point.

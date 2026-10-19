@@ -96,4 +96,11 @@ contract PaymentInvariantsTest is CampaignBase {
             assertFalse(quoted, "A withdrawn currency returned a price");
         }
     }
+
+    /// @notice Recovering tokens sent by mistake never moves money the vault was paid
+    /// @dev The vault side is also covered by `invariant_theVaultHoldsWhatWasSettled`; this names the
+    ///      recovery as the cause if it is the one that breaks it.
+    function invariant_aRecoveryNeverTouchesTheVault() public view {
+        assertFalse(paymentHandler.ghost_recoveryTouchedTheVault(), "A recovery changed the vault balance");
+    }
 }

@@ -202,4 +202,45 @@ contract TokenSettlementTest is FuzzBase {
         assertEq(settlementERC20.balanceOf(vault), needed, "Only the quote reaches the vault");
         assertEq(settlementERC20.balanceOf(address(fuzzDeviceWallet)), 0, "Only the quote was pulled");
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // Recovering tokens sent by mistake
+    // ---------------------------------------------------------------------------------------------
+
+    /// @notice Recovery moves exactly what was asked, and a purchase after it pays the vault the same
+    function testFuzz_recoverTokens_leavesPurchasesUntouched(
+        uint128 _stray,
+        uint128 _recovered,
+        uint64 _priceUSDCents
+    ) public {
+        uint256 stray = bound(uint256(_stray), 1, type(uint128).max);
+        uint256 recovered = bound(uint256(_recovered), 1, stray);
+        _priceUSDCents = uint64(bound(_priceUSDCents, 1, defaultPriceCapUSDCents));
+        address sender = makeAddr("mistakenSender");
+
+        settlementERC20.mint(address(paymentAdapter), stray);
+        vm.prank(upgradeManager);
+        paymentAdapter.recoverTokens(address(settlementERC20), sender, recovered);
+
+        assertEq(settlementERC20.balanceOf(sender), recovered, "Exactly the amount asked must move");
+        assertEq(settlementERC20.balanceOf(address(paymentAdapter)), stray - recovered, "The rest must stay");
+
+        uint256 needed = settlementAmount(_priceUSDCents);
+        fundSettlementToken(address(fuzzDeviceWallet), needed);
+        vm.prank(eSIMWalletAdmin);
+        fuzzESIMWallet.buyDataBundleWithToken(bundle("DB_FUZZ", _priceUSDCents), ASSET_USDC, needed, nextRef());
+
+        assertEq(settlementERC20.balanceOf(vault), needed, "The vault must get the price and no more");
+        assertEq(settlementERC20.balanceOf(address(paymentAdapter)), stray - recovered, "A purchase must not take the stray tokens");
+    }
+
+    /// @notice Nobody but the owner recovers anything, whoever they are
+    function testFuzz_recoverTokens_refusesEveryoneButTheOwner(address _caller) public {
+        vm.assume(_caller != upgradeManager);
+        settlementERC20.mint(address(paymentAdapter), 1e6);
+
+        vm.prank(_caller);
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", _caller));
+        paymentAdapter.recoverTokens(address(settlementERC20), _caller, 1e6);
+    }
 }

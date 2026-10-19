@@ -182,6 +182,20 @@ contract FoundryTester is Test, Handlers {
         assertTrue(registry.paused(), "the owner's pause must apply");
     }
 
+    /// @notice Tokens left on the adapter come back through the owner and nobody else
+    function test_smoke_onlyTheOwnerRecoversTokens() public {
+        paymentAdapter_donateERC20(5e6);
+        uint256 stray = settlementERC20.balanceOf(address(paymentAdapter));
+        assertGt(stray, 0, "the donation must land on the adapter");
+
+        _expectRefused(abi.encodeCall(this.paymentAdapter_recoverTokens_unclamped, (actor, actor, stray)));
+        assertTrue(property_noUnauthorizedCallSucceeded(), "GL-18");
+
+        paymentAdapter_recoverTokens(stray);
+        assertEq(settlementERC20.balanceOf(address(paymentAdapter)), 0, "the owner must recover it all");
+        assertTrue(property_settlementTokenIsConserved(), "GL-12");
+    }
+
     /// @notice Runs a handler that is expected to revert, and fails if it did not
     /// @dev Through an external self-call so the revert unwinds only the handler. A handler that
     ///      quietly returned instead of reverting would otherwise read as a pass.

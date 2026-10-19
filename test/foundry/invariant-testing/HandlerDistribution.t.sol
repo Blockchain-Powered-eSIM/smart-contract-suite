@@ -87,6 +87,7 @@ contract HandlerDistributionTest is CampaignBase {
             paymentHandler.recordSettledPurchase(round, 100, round + PAYMENT_REFERENCE_SEEDS, 0, false);
             paymentHandler.buyDataBundleWithToken(round, 100, 10e6, round + 2 * PAYMENT_REFERENCE_SEEDS);
             paymentHandler.quote(0, 100);
+            paymentHandler.recoverTokens(uint128(round + 1));
             // Withdrawn and put back inside the round, so the next round starts from the same
             // currency table this one did
             paymentHandler.updateAsset(1, false, true);
@@ -151,6 +152,7 @@ contract HandlerDistributionTest is CampaignBase {
         _assertExercised("buyDataBundleWithToken");
         _assertExercised("recordSettledPurchase");
         _assertExercised("quote");
+        _assertExercised("recoverTokens");
         _assertExercised("updateAsset");
         _assertExercised("pullToken");
         _assertExercised("removeESIMWallet");

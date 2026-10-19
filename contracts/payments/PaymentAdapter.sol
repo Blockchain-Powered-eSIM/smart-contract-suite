@@ -85,6 +85,9 @@ contract PaymentAdapter is Initializable, UUPSUpgradeable, Ownable2StepUpgradeab
         uint256 _refunded
     );
 
+    /// @notice Emitted when tokens sent here by mistake are returned
+    event TokensRecovered(address indexed _token, address indexed _to, uint256 _amount);
+
     /// @notice Restricts a call to the registry
     modifier onlyRegistry() {
         if(msg.sender != registry) revert Errors.OnlyRegistry();
@@ -241,6 +244,27 @@ contract PaymentAdapter is Initializable, UUPSUpgradeable, Ownable2StepUpgradeab
         usedReferences[_paymentReference] = true;
 
         emit PaymentReferenceConsumed(_paymentReference);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Recovery
+    // ---------------------------------------------------------------------------------------------
+
+    /// @notice Returns tokens sent to this contract by mistake
+    /// @dev Safe because `settle` is funded and spent in the same transaction, so nothing a purchase
+    ///      paid rests here between transactions. The owner is the timelock, so every recovery is
+    ///      public for the delay before it runs.
+    /// @param _token Token to send out
+    /// @param _to Address that receives it, normally whoever sent it here
+    /// @param _amount Amount in the token's smallest unit
+    function recoverTokens(address _token, address _to, uint256 _amount) external onlyOwner nonReentrant {
+        if(_token == address(0)) revert Errors.ZeroAddress("_token");
+        if(_to == address(0)) revert Errors.ZeroAddress("_to");
+        if(_amount == 0) revert Errors.ZeroAmount();
+
+        emit TokensRecovered(_token, _to, _amount);
+
+        IERC20(_token).safeTransfer(_to, _amount);
     }
 
     // ---------------------------------------------------------------------------------------------

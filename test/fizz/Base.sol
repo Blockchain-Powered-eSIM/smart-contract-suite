@@ -113,6 +113,8 @@ abstract contract Base is StringUtils, Clamp, Deployer, Math {
         bool cancelRefused;
         // Set when a key rotation went through on a proof signed by a key other than the new one
         bool rotatedWithoutTheNewKey;
+        // GL-18: set when anyone but the owner took tokens out of the adapter
+        bool unauthorizedRecovery;
     }
 
     /// @notice Order of the P256 curve, the range rotation private keys are drawn from
