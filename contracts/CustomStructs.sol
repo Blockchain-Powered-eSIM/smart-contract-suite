@@ -11,9 +11,8 @@ enum Settlement {
 }
 
 /// @notice Data Bundle related details stored in the eSIM wallet
-/// @dev Two slots: `id`, then `priceUSDCents` and `settlement` packed together. `id` is
-///      `bytes32` because the provider's ids fit in 32 bytes and a `string` would cost an extra
-///      slot on every entry. No timestamp field: the event log already has one.
+/// @dev Two slots. `id` is `bytes32` since provider ids fit and a `string` costs an extra slot per
+///      entry. No timestamp: the event log already has one.
 struct DataBundleDetails {
     bytes32 id;
     uint64 priceUSDCents;   // 123456 reads as $1234.56
