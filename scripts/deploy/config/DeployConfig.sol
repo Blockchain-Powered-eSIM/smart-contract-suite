@@ -41,19 +41,16 @@ library DeployConfig {
     uint256 internal constant BASE_CHAIN_ID = 8453;
 
     /// @notice Circle's native USDC on Base mainnet, the only settlement token accepted there
-    /// @dev Checked with cast on 2026-10-18: has code, symbol USDC, name USD Coin, 6 decimals.
-    ///      Pinned because bridged USDbC also answers `decimals()` with 6 and would pass every
-    ///      other check, and `PaymentAdapter.settlementToken` has no setter.
+    /// @dev Verified with cast on 2026-10-18. Pinned because bridged USDbC also has 6 decimals,
+    ///      and `PaymentAdapter.settlementToken` has no setter.
     address internal constant BASE_USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
 
     /// @notice Delay every scheduled admin operation waits before it can be executed
     uint256 internal constant TIMELOCK_DELAY = 2 days;
 
     /// @notice Shortest delay `updateDelay` can ever bring the timelock down to
-    /// @dev Immutable in the deployed contract. Without it one scheduled operation turns the
-    ///      timelock into a plain multisig and nothing after it ever waits again. A day rather than
-    ///      an hour: a single scheduled `updateDelay(0)` lowers every later operation to the floor,
-    ///      and an hour is too short for anyone to notice and cancel a hostile upgrade.
+    /// @dev Immutable, and one `updateDelay(0)` drops every later operation to it, so it must be long
+    ///      enough to notice and cancel a hostile upgrade. An hour was not.
     uint256 internal constant TIMELOCK_DELAY_FLOOR = 1 days;
 
     Vm private constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
@@ -113,8 +110,7 @@ library DeployConfig {
         config.eSIMWalletAdmin = vm.envAddress("ESIM_WALLET_ADMIN");
         config.vault = vm.envAddress("VAULT");
         config.priceCapUSDCents = uint64(vm.envUint("PRICE_CAP_USD_CENTS"));
-        // Required rather than defaulted: zero is a legal value that stops every admin charge, so
-        // a missing variable must not quietly become it
+        // Required: zero is legal and stops admin charges, so a missing value must not become it
         config.adminAllowanceUSDCents = uint64(vm.envUint("ADMIN_ALLOWANCE_USD_CENTS"));
         config.settlementToken = vm.envAddress("SETTLEMENT_TOKEN");
         config.entryPoint = IEntryPoint(ENTRY_POINT_V08);
@@ -159,9 +155,7 @@ library DeployConfig {
         _requireDisjoint(config.proposers, config.guardians);
         _requireDisjoint(config.cancellers, config.guardians);
 
-        // The deployer owns everything until the handover, and the admin key signs backend calls
-        // all day. Either one holding a timelock role undoes what the timelock is for: a hot key
-        // that can cancel can cancel its own eviction.
+        // A hot key in a timelock role defeats it: one that can cancel can cancel its own eviction
         _requireNotInRoles(config, config.deployer);
         _requireNotInRoles(config, config.eSIMWalletAdmin);
 
@@ -169,9 +163,8 @@ library DeployConfig {
     }
 
     /// @notice Checks that only matter where real money moves
-    /// @dev Testnet Safes have no code on mainnet, so a testnet value copied over would hand every
-    ///      contract to a timelock nobody can sign for. Requiring code catches that and a typo alike.
-    ///      Cancellers are left out on purpose: they are meant to be single keys.
+    /// @dev A testnet Safe has no code on mainnet; requiring code stops ownership going to a
+    ///      timelock nobody can sign for. Cancellers are single keys by design.
     function _validateBaseMainnet(Config memory config) private view {
         if(config.settlementToken != BASE_USDC) {
             revert WrongSettlementToken(BASE_USDC, config.settlementToken);

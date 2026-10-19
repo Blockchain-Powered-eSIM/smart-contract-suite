@@ -70,12 +70,8 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     /// @dev Private rather than inline in the modifier, so the check is emitted once instead of at
     ///      every use site. Keep each of these next to the modifier that calls it.
     ///
-    ///      The eSIM wallet branch asks the factory whether it deployed the caller. That is what
-    ///      makes the caller's own `owner()` trustworthy: an arbitrary contract could answer it
-    ///      with anything, a factory-deployed eSIM wallet cannot. `_addESIMWallet` then requires
-    ///      that owner to be this device wallet. The registry's association is not used, because
-    ///      it still names the previous device wallet after a handover that was accepted but not
-    ///      yet bound, and that blocked the new owner from cancelling an onward request.
+    ///      The self-add branch trusts the caller's `owner()` only because the factory deployed it.
+    ///      The registry's association is not used: it lags behind a handover not yet bound.
     function _onlyRegistryOrDeviceWalletFactoryOrOwner(address _eSIMWalletAddress) private view {
         if(
             msg.sender != address(registry) &&
@@ -238,14 +234,8 @@ contract DeviceWallet is Initializable, ReentrancyGuardUpgradeable, Account4337 
     // ---------------------------------------------------------------------------------------------
 
     /// @inheritdoc Account4337
-    /// @dev The registry holds its own record of which key owns this wallet, and the deploy paths
-    ///      keep one key to one wallet. Rotating without telling it leaves the retired key named
-    ///      as the owner and leaves the key taking over unregistered, free for a second wallet to
-    ///      claim. The registry is told after the local write, because it reads the key back from
-    ///      this wallet and refuses one the wallet does not hold.
-    ///
-    ///      An off-curve key is refused before the signature check, matching the deploy paths. It
-    ///      could never sign, so the proof would fail anyway, but the clearer error comes first.
+    /// @dev The registry keeps one key to one wallet, so it must follow every rotation. It is told
+    ///      after the local write because it reads the key back from this wallet.
     function _transferOwnership(bytes32[2] memory newOwner, bytes calldata newOwnerSignature) internal override {
         _requireValidOwnerKey(newOwner);
 

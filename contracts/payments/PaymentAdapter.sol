@@ -27,13 +27,8 @@ struct Asset {
 }
 
 /// @notice Holds the accepted currencies, converts prices and moves tokens to the vault
-/// @dev Prices cross contract boundaries in USD cents only, and this is the one place a cent
-///      figure becomes a token amount, so a decimals mismatch cannot happen rather than having to
-///      be checked for. There are no price feeds, so a currency not already in dollars has no
-///      conversion here. Spent payment references are kept on the registry, not here, so the
-///      registry can point at a new adapter without re-opening any of them.
-///
-///      Tokens pass through in one call and never rest here.
+/// @dev The one place a cent price becomes a token amount, so decimals cannot drift between
+///      callers. No price feeds, so only dollar currencies convert. Tokens never rest here.
 contract PaymentAdapter is Initializable, UUPSUpgradeable, Ownable2StepUpgradeable, ReentrancyGuardUpgradeable {
     using SafeERC20 for IERC20;
 

@@ -186,10 +186,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
 
     /// @notice To deploy multiple device wallets at once
     /// @dev Each entry deploys a device wallet, its first eSIM wallet and the registry records in
-    ///      one go. ETH left over once the batch has been funded is returned to the caller.
-    ///
-    ///      Refused while the protocol is paused, because it forwards ETH. The lazy deploy that
-    ///      reaches this through the registry is held by the same rule on its own side.
+    ///      one go. ETH left over is returned to the caller. Refused while paused, since it moves ETH.
     /// @param _deviceUniqueIdentifiers Array of unique device identifiers for each device wallet
     /// @param _deviceWalletOwnersKey Array of P256 public keys of owners of the respective device wallets
     /// @param _salts Array of CREATE2 salts, one per device wallet
@@ -252,8 +249,7 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     }
 
     /// @notice Records a wallet the EntryPoint deployed through createAccount
-    /// @dev Not needed on the admin batch route, which writes the registry itself. The admin calls
-    ///      this; the registry is also allowed to, though no path in the protocol does today.
+    /// @dev The admin calls this after `createAccount`. The batch route writes the registry itself.
     ///
     ///      The wallet was not deployed in this call, so nothing binds the arguments to it. The
     ///      re-derivation does: the key and the identifier are proxy constructor arguments, so an
@@ -302,12 +298,8 @@ contract DeviceWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgr
     // ---------------------------------------------------------------------------------------------
 
     /// @notice Deploys a device wallet, returning the existing one if that address already holds it
-    /// @dev Called by the EntryPoint during a user operation, so the registry is not consulted
-    ///      here and not written: ERC-4337 validation bars an unstaked factory from that storage.
-    ///      `postCreateAccount` records the wallet afterwards, and the checks the registry would
-    ///      have made happen offchain through `preCreateAccountValidation`. This does read the
-    ///      factory's own storage and the beacon's, which a bundler enforcing ERC-7562 accepts only
-    ///      from a staked factory.
+    /// @dev Runs inside ERC-4337 validation, so it leaves the registry alone and `postCreateAccount`
+    ///      records the wallet. Its own and the beacon's storage reads need a staked factory.
     ///
     ///      Returning an existing address rather than reverting is what makes
     ///      `entryPoint.getSenderAddress()` keep working once the account has been created.

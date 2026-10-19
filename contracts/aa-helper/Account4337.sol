@@ -43,8 +43,7 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
     ///      version (1) + validUntil (6) + chain id (32) + wallet (20) + message hash (32).
     string private constant ERC1271_PRECURSOR_LENGTH = "91";
 
-    /// @dev Byte length of the key rotation precursor:
-    ///      chain id (32) + wallet (20) + new key (64).
+    /// @dev Rotation precursor length: chain id (32) + wallet (20) + new key (64).
     string private constant ROTATION_PRECURSOR_LENGTH = "116";
 
     /// @dev The fixed header on every signature this account accepts.
@@ -210,11 +209,8 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
     }
 
     /// @inheritdoc IAccount
-    /// @dev Must stay within the ERC-4337 validation rules: no banned opcodes and no TIMESTAMP.
-    ///      Expiry is handed to the EntryPoint through the packed return value instead of being
-    ///      checked here. It does call out: to `verifier`, which reads no storage, and through the
-    ///      beacon proxy to the beacon's implementation slot. A bundler enforcing ERC-7562 storage
-    ///      rules may need the account or factory staked to accept that beacon read.
+    /// @dev No banned opcodes and no TIMESTAMP, so expiry goes back in the packed result. The
+    ///      beacon read it makes may need a staked entity on a strict ERC-7562 bundler.
     function validateUserOp(
         PackedUserOperation calldata userOp,
         bytes32 userOpHash,
@@ -234,9 +230,8 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
     /// @dev Reachable only through `execute` or `executeBatch` with this account as the target, so
     ///      the current owner has to sign for it.
     ///
-    ///      The new key has to sign too, over `rotationChallenge(newOwner)`. Without that an owner
-    ///      could rotate onto a stranger's public key: the wallet would be lost, and the stranger
-    ///      could no longer be registered with their own key.
+    ///      The new key must also sign `rotationChallenge(newOwner)`, so an owner cannot rotate onto
+    ///      a stranger's key.
     /// @param newOwner X,Y co-ordinates of the P256 key taking over
     /// @param newOwnerSignature ABI-encoded WebAuthn assertion by the new key over the challenge
     /// @return The owner key now in force
@@ -250,9 +245,8 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
     }
 
     /// @notice Moves ownership to a new key once that key has proved it can sign
-    /// @dev The one place rotation happens, so any later route to it, such as a recovery path that
-    ///      runs when the current key is lost, gets the same checks without repeating them. A
-    ///      subclass with its own record of the owner overrides this to keep that record in step.
+    /// @dev The only rotation path, so a future recovery route gets the same checks. A subclass
+    ///      with its own owner record overrides this to keep it in step.
     /// @param newOwner X,Y co-ordinates of the P256 key taking over
     /// @param newOwnerSignature ABI-encoded WebAuthn assertion by the new key over the challenge
     function _transferOwnership(bytes32[2] memory newOwner, bytes calldata newOwnerSignature) internal virtual {
@@ -265,9 +259,8 @@ contract Account4337 is IAccount, Initializable, TokenCallbackHandler, IERC1271 
     }
 
     /// @notice The challenge a new owner key signs to accept this account
-    /// @dev The EIP-191 digest over the chain id, this address and the new key, so a proof made for
-    ///      one wallet or chain is refused by every other. Its length differs from the user
-    ///      operation and ERC-1271 precursors, so the three can never be mistaken for each other.
+    /// @dev Binds the chain, this wallet and the key, and its length differs from the other two
+    ///      precursors, so no proof is reusable anywhere else.
     /// @param newOwner X,Y co-ordinates of the P256 key taking over
     /// @return The raw challenge bytes the WebAuthn assertion must carry
     function rotationChallenge(bytes32[2] memory newOwner) public view returns (bytes memory) {

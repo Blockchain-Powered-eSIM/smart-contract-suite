@@ -2,10 +2,8 @@
 pragma solidity 0.8.36;
 
 /// @notice Which contract, if any, saw the money for a data bundle move
-/// @dev `DeviceWallet` means the tokens really moved through the purchase path. It does not
-///      mean the bundle id or price match an order: on a purchase the owner signs, both are the
-///      owner's choice, so the backend matches them against its own records. The other two values
-///      are the admin's word, and the price cap is the only check on them.
+/// @dev `DeviceWallet` means the money moved through the purchase path, not that the price matches
+///      an order. The other two are the admin's word, bounded only by the price cap.
 enum Settlement {
     DeviceWallet,
     ExternalWallet,

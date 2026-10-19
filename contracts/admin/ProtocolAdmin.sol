@@ -15,50 +15,23 @@ import {TimelockController} from "@openzeppelin/contracts/governance/TimelockCon
 ///      `PaymentAdapter` once `TransferOwnership.s.sol` has run. Both wallet beacons sit under the
 ///      two factories, so owning the factories reaches every device wallet and every eSIM wallet.
 ///
-///      Everything this contract can do to the protocol goes one way: a proposer schedules it, the
-///      delay elapses, and anyone at all executes it. Execution is open on purpose. The
-///      announcement is what the delay buys, and once the wait is served there is no reason to make
-///      the protocol depend on one key still being available to press the button.
+///      Proposers schedule, the delay runs, then anyone may execute. The delay is the safeguard, so
+///      no single key has to stay available to press the button.
 ///
-///      A guardian does not get a general fast path. It can say exactly four things, and each is
-///      written here as its own function rather than as a payload, so no fifth sentence is
-///      expressible however the role is held:
+///      A guardian has exactly four powers, each its own function so nothing else is expressible:
+///      1. Raise a pause, which still works while the admin key is suspended.
+///      2. Release a pause, since an outage should not wait out the delay.
+///      3. Strip `CANCELLER_ROLE`. Without it a canceller can cancel its own eviction forever.
+///      4. Suspend the admin key.
+///      None grants anything, and restoring a canceller or admin waits, so taking power away wins.
 ///
-///      1. Raise a pause. The hot admin key can too, but not while it is suspended or being
-///         replaced, which is exactly when one may be needed.
-///      2. Release a pause. An upgrade that waits is reviewable; an outage that waits is an outage.
-///      3. Take `CANCELLER_ROLE` away from an account.
-///      4. Suspend the protocol's admin key.
+///      A guardian may not hold `CANCELLER_ROLE`, or it could become the only canceller. It may not
+///      touch `PROPOSER_ROLE`: with no proposers, nothing can ever be scheduled again.
 ///
-///      All four take something away or put back what a pause took, and none of them grants
-///      anything, which is what keeps the role away from user funds. A pause cannot move ETH,
-///      stripping a canceller cannot, and a suspended admin is an admin that has stopped being
-///      able to spend rather than one chosen by the guardian. Restoring a canceller or an admin is
-///      an owner action and waits, so the side taking power away always wins the race against the
-///      side handing it back. A guardian able to reinstate an admin would lose that, and a guardian
-///      able to appoint one would reach `ESIMWallet.buyDataBundleWithToken` and every wallet
-///      holding funds access through it.
+///      Known limit: a rogue guardian plus a rogue proposer can strip every canceller. Keep their
+///      Safes on disjoint signers and alert on `CancellerRevoked`.
 ///
-///      Known limit: a rogue guardian working with a rogue proposer can strip every canceller and
-///      let a scheduled operation run unvetoed. The strip power stays because it is what recovers
-///      from a compromised canceller or proposer. Keep the guardian and proposer Safes on disjoint
-///      signers, and alert on every `CancellerRevoked`.
-///
-///      The second one exists because without it a compromised canceller is permanent. Evicting any
-///      role holder means scheduling `revokeRole`, a scheduled operation can be cancelled by any
-///      canceller, and so a compromised canceller cancels its own eviction forever. Nothing else can
-///      break that loop, because the delay is what every other route waits on.
-///
-///      Two limits on that power carry the whole recovery argument, and both are enforced rather
-///      than documented. A guardian may not hold `CANCELLER_ROLE` itself, or it could revoke every
-///      other canceller, become the only one, and cancel its own eviction. And it may not touch
-///      `PROPOSER_ROLE`, because reaching zero proposers is unrecoverable: re-granting any role
-///      needs a scheduled operation and scheduling needs a proposer, so no upgrade, vault change
-///      or role change could ever run again. Reaching zero cancellers is fine by comparison. It
-///      costs the veto, and a proposer can schedule it back.
-///
-///      Not upgradeable, deliberately. An upgradeable owner of upgradeable contracts moves the
-///      trust to whoever can upgrade it, and there is no delay left to protect that step.
+///      Not upgradeable: an upgradeable owner would move the trust to whoever can upgrade it.
 contract ProtocolAdmin is TimelockController {
 
     /// @notice Raises and releases a pause, strips a canceller and suspends the admin, all without
@@ -239,9 +212,8 @@ contract ProtocolAdmin is TimelockController {
     // ---------------------------------------------------------------------------------------------
 
     /// @notice Raises a pause on a protocol contract immediately
-    /// @dev The selector is fixed in the interface, as with `unpauseInstantly`. The worst a rogue
-    ///      guardian reaches is a stopped protocol, which the hot admin key could already cause, and
-    ///      an honest guardian can release it again at once.
+    /// @dev A rogue guardian can only stop the protocol, which the admin key could already do, and
+    ///      it can be released at once.
     /// @param target Contract to pause
     function pauseInstantly(address target) external onlyRole(GUARDIAN_ROLE) {
         emit PauseRaised(target, _msgSender());
@@ -313,8 +285,8 @@ contract ProtocolAdmin is TimelockController {
     ///      The nominee still has to accept, so this cannot hand the role to an address that
     ///      cannot act, and the role stays dormant until it does.
     ///
-    ///      Nominating the incumbent is refused. The target reads that as withdrawing a
-    ///      nomination, which also lifts a suspension, the opposite of what this function says.
+    ///      The incumbent is refused: the registry would read it as a withdrawal and lift the
+    ///      suspension.
     /// @param target Contract whose admin is being replaced
     /// @param newAdmin Address nominated to take the role
     function disableAndNominate(address target, address newAdmin) external {

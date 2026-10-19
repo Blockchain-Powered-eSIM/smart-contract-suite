@@ -30,13 +30,8 @@ import {DeployConfig} from "./DeployConfig.sol";
 ///      of that override: a hand edited address is indistinguishable from a deployed one to every
 ///      reader of this file.
 ///
-///      A script run without `--broadcast` writes nothing. The record would otherwise describe
-///      contracts that were only simulated: the real deploy would then refuse to run, and the
-///      status flags would claim a handover that never happened.
-///
-///      With `--broadcast` the record is still written from the simulation, before any transaction
-///      lands. If a broadcast stops partway, rerun the script: every step checks the chain and
-///      skips what is already done, and `readAddress` refuses an address with no code.
+///      A run without `--broadcast` writes nothing, so a rehearsal cannot pose as a deployment. A
+///      broadcast that stops partway still leaves a full record: rerun it, every step skips what is done.
 library DeploymentRecord {
 
     /// @notice Flat name to address map, one entry per deployment, unless overridden
@@ -209,8 +204,7 @@ library DeploymentRecord {
     }
 
     /// @notice True for `forge script` without `--broadcast`, logging what was not written
-    /// @dev Only the dry run is singled out. Tests run in a different context and still write,
-    ///      which is how the script tests read back what a run recorded.
+    /// @dev Only the dry run skips. Tests still write, which is how they read results back.
     function _isDryRun(string memory what) private view returns (bool dryRun) {
         dryRun = vm.isContext(VmSafe.ForgeContext.ScriptDryRun);
         if(dryRun) console.log(string.concat("Dry run: ", what, " not written"));

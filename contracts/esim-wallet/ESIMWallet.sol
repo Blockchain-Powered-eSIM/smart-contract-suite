@@ -53,9 +53,8 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     uint64 public priceCapUSDCents;
 
     /// @notice What the eSIM wallet admin may still charge this wallet in total, in USD cents
-    /// @dev The price cap bounds one charge, this bounds all of them together. Starts at the
-    ///      registry default, goes down with every charge the admin makes, and only the owner can
-    ///      set it again. Purchases the owner signs for itself do not touch it.
+    /// @dev The price cap bounds one charge; this bounds them all. Admin charges spend it, only the
+    ///      owner sets it, and the owner's own purchases do not touch it.
     uint64 public adminAllowanceUSDCents;
 
     /// @notice Emitted when the eSIM wallet is deployed
@@ -218,8 +217,7 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     }
 
     /// @notice Sets what the eSIM wallet admin may still charge this wallet in total
-    /// @dev Only the owning device wallet, so only the person holding its P256 key. Zero stops
-    ///      admin charges altogether; the owner can still buy for itself.
+    /// @dev Owner only, since it limits the admin. Zero stops admin charges; the owner can still buy.
     /// @param _allowance Total the admin may charge from now on, in USD cents
     function setAdminAllowanceUSDCents(uint64 _allowance) external onlyDeviceWallet {
         adminAllowanceUSDCents = _allowance;
@@ -263,9 +261,8 @@ contract ESIMWallet is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrade
     ///      request and re-binds the wallet to its device wallet in the same call, with ETH access
     ///      left off since the flag it had before the removal is not recorded anywhere.
     ///
-    ///      Only ETH goes back to the outgoing owner. Any ERC-20 still here goes to whoever accepts,
-    ///      because this wallet cannot list the tokens it holds. Sweep each one with
-    ///      `sendTokenToDeviceWallet` in the same `executeBatch` as this call.
+    ///      Only ETH is swept back; ERC-20s go to whoever accepts. Sweep each with
+    ///      `sendTokenToDeviceWallet` in the same `executeBatch`.
     /// @param _newOwner Address of the new device wallet to transfer ownership of this wallet
     function requestTransferOwnership(address _newOwner) external onlyDeviceWallet nonReentrant {
         Registry registry = deviceWallet.registry();

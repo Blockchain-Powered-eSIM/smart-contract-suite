@@ -140,8 +140,7 @@ contract Configure is Script {
     }
 
     /// @notice Brings the admin allowance new eSIM wallets start with in line with the config
-    /// @dev `Registry.initialize` already set it on a fresh deployment. This covers a later change,
-    ///      and a registry upgraded from before the allowance existed, which reads zero.
+    /// @dev Covers a changed figure, and a registry upgraded from before the allowance existed.
     function _setAdminAllowance(address registryAddress, uint64 allowance) private {
         if(Registry(registryAddress).defaultAdminAllowanceUSDCents() == allowance) {
             console.log("Registry: admin allowance already set, skipping");

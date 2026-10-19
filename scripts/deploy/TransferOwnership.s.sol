@@ -89,9 +89,8 @@ contract TransferOwnership is Script {
     /// @dev Checked before broadcasting rather than per call, so a run that would hand over three
     ///      of four and revert on the fourth never sends the first transaction.
     /// @notice Refuses to hand anything to an address that is not this deployment's timelock
-    /// @dev The address comes from a file, and the file path can be overridden. Offering ownership
-    ///      to the wrong address, or to one with no code, gives all five contracts away for good.
-    ///      The floor and the self-administered role are the two facts this deployment set on it.
+    /// @dev The address comes from a file that can be overridden, and a wrong one gives all five
+    ///      contracts away. The floor and the self-admin role are what this deployment set on it.
     function _requireTheTimelock(address protocolAdmin) private view {
         if(protocolAdmin.code.length == 0) revert NotTheTimelock(protocolAdmin);
 
