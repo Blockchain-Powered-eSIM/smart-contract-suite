@@ -621,5 +621,113 @@
         "url": "https://sepolia.basescan.org/address/0xBFaA666a8074924588E96507c307b680ecCeB2c1#code"
       }
     }
+  },
+  "pending": {
+    "ProtocolAdminMigration": {
+      "build": {
+        "branch": "upgrade/sepolia-protocol-admin",
+        "commit": "e1b7de8cd16d43bcd9a10bdd13b392e5841e98fc",
+        "compiler": {
+          "bytecodeHash": "none",
+          "evmVersion": "osaka",
+          "optimizer": true,
+          "optimizerRuns": 10000000,
+          "solc": "0.8.36",
+          "viaIR": true
+        },
+        "dirty": false,
+        "storageLayoutHashes": {
+          "Account4337": "0x681ae11fe8b28d43f331d165b8ec0f468cf209f81c608d42af94cd759dd20e0d",
+          "DeviceWallet": "0xf438872fcff2af74557ae6938ab7deb622350d5ca9e8c33887ea6bc4f1546816",
+          "DeviceWalletFactory": "0x20ab4778cad28f268b1e26640af2ecc680229a0de6cf54b409af43184e8ff8f6",
+          "ESIMWallet": "0x5b01e5a49ba6b141de93065453846112d7c8358c9332b657f5599b0e9ed246b9",
+          "ESIMWalletFactory": "0xef9535c77903c202700c327016e8bcec5b1b2f9963c309fd75b9e3ca40be12b0",
+          "LazyWalletRegistry": "0xcf05e7e437ee2ab9ff37b2ea4b05a146a1d3b5e58f86c3f3668de2ba15b02519",
+          "P256Verifier": "0xa2d556665824f74973bf5cb8ae6e2fc2b622f25a244bf0f9992c9136d98a7cd6",
+          "PaymentAdapter": "0x8c3afe2ac675c7dcd85f32ad5f12309abf16199ba916850fddc64b731de3a6b6",
+          "ProtocolAdmin": "0x8c94e923c664cadbd287c5afdb1e2110972f30283a9c80d698ed06d716ebeece",
+          "Registry": "0xe7edb7d1069c35de4d147ab8206aa408d0c6c4e94bb01e270d79816da743cc78",
+          "RegistryHelper": "0x5388d6eccdeadeb2145b4e213ebba4799820284043ed1114cf3c8cda5a985a79"
+        },
+        "submodules": {
+          "lib/FreshCryptoLib": {
+            "atPin": true,
+            "commit": "76f3f135b7b27d2aa519f265b56bfc49a2573ab5"
+          },
+          "lib/account-abstraction": {
+            "atPin": true,
+            "commit": "4cbc06072cdc19fd60f285c5997f4f7f57a588de"
+          },
+          "lib/forge-std": {
+            "atPin": true,
+            "commit": "bf647bd6046f2f7da30d0c2bf435e5c76a780c1b"
+          },
+          "lib/openzeppelin-contracts-upgradeable": {
+            "atPin": true,
+            "commit": "e725abddf1e01cf05ace496e950fc8e243cc7cab"
+          },
+          "lib/openzeppelin-foundry-upgrades": {
+            "atPin": true,
+            "commit": "258e12e727bfe7f0ec30c51995d01ec88b82efc1"
+          },
+          "lib/p256-verifier": {
+            "atPin": true,
+            "commit": "607d3ec8377a3f59d65eca60d87dee8485d2ebcc"
+          },
+          "lib/solady": {
+            "atPin": true,
+            "commit": "acd959aa4bd04720d640bf4e6a5c71037510cc4b"
+          }
+        }
+      },
+      "defaultAdminAllowanceUSDCents": 10000,
+      "delay": 172800,
+      "executableAt": 1792585914,
+      "executed": false,
+      "implementations": {
+        "DeviceWalletFactoryProxy": "0x71a9998A8093730d79Ed00FAE6716177a6EFd01E",
+        "DeviceWalletImplementation": "0x2dc7d2997C5ddd1BD4446C4BEFacf706BDDeACcD",
+        "ESIMWalletFactoryProxy": "0x9c44C46D19d2Ac37aA522012DdAc76B8E8aa6920",
+        "ESIMWalletImplementation": "0x6B849c989D1Fd11e7BeCF76668dc2B09A075474C",
+        "LazyWalletRegistryProxy": "0x4E5A1E7AeB65D531b7863091586508716cdC0645",
+        "PaymentAdapterProxy": "0x1517f700Ed5cB4706ceb4B07B8480A3439c2aAa5",
+        "RegistryProxy": "0x42DF7e34FC6CDb1f6a29014Cf1564385E9a7cF49"
+      },
+      "newProtocolAdmin": "0xdBC411D2fEc7758B32885DbF0B4AE957c3b918Fe",
+      "oldProtocolAdmin": "0xdDeCC2C1345BC966337B5f4Fe57EC2D5bfad751A",
+      "operationId": "0x13c6618cb7c9a950d0ba9b528bf644217a84a53638c9cf8c7c274945efd88a61",
+      "payloads": [
+        "0x4f1ef28600000000000000000000000042df7e34fc6cdb1f6a29014cf1564385e9a7cf4900000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000000",
+        "0x4f1ef2860000000000000000000000004e5a1e7aeb65d531b7863091586508716cdc064500000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000000",
+        "0x4f1ef28600000000000000000000000071a9998a8093730d79ed00fae6716177a6efd01e00000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000000",
+        "0x4f1ef2860000000000000000000000009c44c46d19d2ac37aa522012ddac76b8e8aa692000000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000000",
+        "0x4f1ef2860000000000000000000000001517f700ed5cb4706ceb4b07b8480a3439c2aaa500000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000000",
+        "0x8c04250b0000000000000000000000000000000000000000000000000000000000002710",
+        "0xe7eb92510000000000000000000000002dc7d2997c5ddd1bd4446c4befacf706bddeaccd",
+        "0x166f8df40000000000000000000000006b849c989d1fd11e7becf76668dc2b09a075474c",
+        "0xf2fde38b000000000000000000000000dbc411d2fec7758b32885dbf0b4ae957c3b918fe",
+        "0xf2fde38b000000000000000000000000dbc411d2fec7758b32885dbf0b4ae957c3b918fe",
+        "0xf2fde38b000000000000000000000000dbc411d2fec7758b32885dbf0b4ae957c3b918fe",
+        "0xf2fde38b000000000000000000000000dbc411d2fec7758b32885dbf0b4ae957c3b918fe",
+        "0xf2fde38b000000000000000000000000dbc411d2fec7758b32885dbf0b4ae957c3b918fe"
+      ],
+      "salt": "0xc91158c972ae6e556ef5de6445397f0a51d4081da654e03ba4cfce164120050e",
+      "scheduledAt": 1792413114,
+      "targets": [
+        "0x916b6b554119c789EF3026EDeB0E1Ba741b42A49",
+        "0x5bE46Cf216186Bc2E3C220729331D6bE7d186e84",
+        "0x0BB3BA8D9233514a4aA6D72c243a2473f9cFf0bb",
+        "0x57da54e07705de17c713ec311ac193e83470D5a5",
+        "0xBFaA666a8074924588E96507c307b680ecCeB2c1",
+        "0x916b6b554119c789EF3026EDeB0E1Ba741b42A49",
+        "0x0BB3BA8D9233514a4aA6D72c243a2473f9cFf0bb",
+        "0x57da54e07705de17c713ec311ac193e83470D5a5",
+        "0x916b6b554119c789EF3026EDeB0E1Ba741b42A49",
+        "0x5bE46Cf216186Bc2E3C220729331D6bE7d186e84",
+        "0x0BB3BA8D9233514a4aA6D72c243a2473f9cFf0bb",
+        "0x57da54e07705de17c713ec311ac193e83470D5a5",
+        "0xBFaA666a8074924588E96507c307b680ecCeB2c1"
+      ]
+    }
   }
 }
