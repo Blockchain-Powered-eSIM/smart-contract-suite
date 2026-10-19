@@ -12,6 +12,7 @@ import {Errors} from "contracts/Errors.sol";
 import {PaymentAdapter, Asset} from "contracts/payments/PaymentAdapter.sol";
 
 import "test/utils/DeployerBase.sol";
+import {MockNoReturnERC20} from "test/utils/mocks/tokens/MockNoReturnERC20.sol";
 
 /// @notice Covers the currency table, the cent to token conversion, and the payment references.
 /// @dev The adapter that `DeployerBase` deploys already carries USDC, USD and ETH, so the tests
@@ -351,6 +352,102 @@ contract PaymentAdapterTest is DeployerBase {
         vm.prank(upgradeManager);
         vm.expectRevert(Errors.OnlyRegistry.selector);
         paymentAdapter.consumePaymentReference(paymentRef("owner-order"));
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Recovering tokens sent by mistake
+    // ---------------------------------------------------------------------------------------------
+
+    /// @notice The owner sends tokens sent here by mistake back to whoever sent them
+    function test_recoverTokens_sendsTheTokensBack() public {
+        address sender = makeAddr("mistakenSender");
+        settlementERC20.mint(address(paymentAdapter), 25e6);
+
+        vm.expectEmit(true, true, true, true, address(paymentAdapter));
+        emit PaymentAdapter.TokensRecovered(settlementToken, sender, 25e6);
+
+        vm.prank(upgradeManager);
+        paymentAdapter.recoverTokens(settlementToken, sender, 25e6);
+
+        assertEq(settlementERC20.balanceOf(sender), 25e6, "The sender should get the tokens back");
+        assertEq(settlementERC20.balanceOf(address(paymentAdapter)), 0, "Nothing should be left behind");
+    }
+
+    /// @notice Part of a balance can be recovered, the rest stays put
+    function test_recoverTokens_movesOnlyTheAmountAsked() public {
+        address sender = makeAddr("mistakenSender");
+        settlementERC20.mint(address(paymentAdapter), 25e6);
+
+        vm.prank(upgradeManager);
+        paymentAdapter.recoverTokens(settlementToken, sender, 10e6);
+
+        assertEq(settlementERC20.balanceOf(sender), 10e6, "Only the amount asked should move");
+        assertEq(settlementERC20.balanceOf(address(paymentAdapter)), 15e6, "The rest should stay");
+    }
+
+    /// @notice USDT returns nothing from `transfer`, which only SafeERC20 accepts
+    function test_recoverTokens_movesATokenThatReturnsNothing() public {
+        MockNoReturnERC20 token = new MockNoReturnERC20();
+        address sender = makeAddr("mistakenSender");
+        token.mint(address(paymentAdapter), 5e6);
+
+        vm.prank(upgradeManager);
+        paymentAdapter.recoverTokens(address(token), sender, 5e6);
+
+        assertEq(token.balanceOf(sender), 5e6, "The tokens should come back");
+    }
+
+    /// @notice The admin cannot take tokens out, since it is a hot key
+    function test_recoverTokens_rejectsTheAdmin() public {
+        settlementERC20.mint(address(paymentAdapter), 1e6);
+
+        vm.prank(eSIMWalletAdmin);
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", eSIMWalletAdmin));
+        paymentAdapter.recoverTokens(settlementToken, eSIMWalletAdmin, 1e6);
+    }
+
+    function test_recoverTokens_rejectsAnyoneButTheOwner() public {
+        address stranger = makeAddr("stranger");
+        settlementERC20.mint(address(paymentAdapter), 1e6);
+
+        vm.prank(stranger);
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", stranger));
+        paymentAdapter.recoverTokens(settlementToken, stranger, 1e6);
+    }
+
+    function test_recoverTokens_rejectsAZeroToken() public {
+        vm.prank(upgradeManager);
+        vm.expectRevert(abi.encodeWithSelector(Errors.ZeroAddress.selector, "_token"));
+        paymentAdapter.recoverTokens(address(0), makeAddr("to"), 1);
+    }
+
+    /// @notice Tokens sent to the zero address are burnt, not recovered
+    function test_recoverTokens_rejectsAZeroRecipient() public {
+        settlementERC20.mint(address(paymentAdapter), 1e6);
+
+        vm.prank(upgradeManager);
+        vm.expectRevert(abi.encodeWithSelector(Errors.ZeroAddress.selector, "_to"));
+        paymentAdapter.recoverTokens(settlementToken, address(0), 1e6);
+    }
+
+    function test_recoverTokens_rejectsAZeroAmount() public {
+        vm.prank(upgradeManager);
+        vm.expectRevert(Errors.ZeroAmount.selector);
+        paymentAdapter.recoverTokens(settlementToken, makeAddr("to"), 0);
+    }
+
+    /// @notice More than the adapter holds is refused by the token
+    function test_recoverTokens_rejectsMoreThanTheBalance() public {
+        address to = makeAddr("to");
+        settlementERC20.mint(address(paymentAdapter), 1e6);
+
+        vm.prank(upgradeManager);
+        vm.expectRevert(
+            abi.encodeWithSignature(
+                "ERC20InsufficientBalance(address,uint256,uint256)", address(paymentAdapter), 1e6, 2e6
+            )
+        );
+        paymentAdapter.recoverTokens(settlementToken, to, 2e6);
     }
 
     // ---------------------------------------------------------------------------------------------

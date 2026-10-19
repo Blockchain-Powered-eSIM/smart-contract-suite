@@ -39,6 +39,9 @@ contract TransferOwnership is Script {
     /// @notice The deployer does not own a contract it is supposed to hand over
     error NotOwner(address target, address owner, address deployer);
 
+    /// @notice The recorded timelock address is not the ProtocolAdmin this deployment created
+    error NotTheTimelock(address recorded);
+
     /// @notice Offers all five singletons to the timelock and has it accept them
     /// @dev Broadcasts as the deployer for the offers. The acceptance is permissionless but is
     ///      broadcast from the same key, since somebody has to pay for it.
@@ -48,6 +51,7 @@ contract TransferOwnership is Script {
         address protocolAdmin = DeploymentRecord.readRaw("admin.protocolAdmin");
         address[] memory targets = _targets();
 
+        _requireTheTimelock(protocolAdmin);
         _requireDeployerOwnsAll(targets, config.deployer);
 
         vm.startBroadcast(config.deployerPrivateKey);
@@ -84,6 +88,21 @@ contract TransferOwnership is Script {
     /// @notice Refuses to start unless the deployer still owns every target
     /// @dev Checked before broadcasting rather than per call, so a run that would hand over three
     ///      of four and revert on the fourth never sends the first transaction.
+    /// @notice Refuses to hand anything to an address that is not this deployment's timelock
+    /// @dev The address comes from a file that can be overridden, and a wrong one gives all five
+    ///      contracts away. The floor and the self-admin role are what this deployment set on it.
+    function _requireTheTimelock(address protocolAdmin) private view {
+        if(protocolAdmin.code.length == 0) revert NotTheTimelock(protocolAdmin);
+
+        ProtocolAdmin admin = ProtocolAdmin(payable(protocolAdmin));
+        try admin.minDelayFloor() returns (uint256 floor) {
+            if(floor != DeployConfig.TIMELOCK_DELAY_FLOOR) revert NotTheTimelock(protocolAdmin);
+        } catch {
+            revert NotTheTimelock(protocolAdmin);
+        }
+        if(!admin.hasRole(admin.DEFAULT_ADMIN_ROLE(), protocolAdmin)) revert NotTheTimelock(protocolAdmin);
+    }
+
     function _requireDeployerOwnsAll(address[] memory targets, address deployer) private view {
         for(uint256 i = 0; i < targets.length; ++i) {
             address owner = Ownable2StepUpgradeable(targets[i]).owner();

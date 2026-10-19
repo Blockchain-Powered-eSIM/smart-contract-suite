@@ -3,9 +3,7 @@
 pragma solidity 0.8.36;
 
 /// @notice Minimal view of the two-step ownership handover the protocol contracts use
-/// @dev Matches the part of OpenZeppelin's `Ownable2Step` an incoming owner needs. The offer is made
-///      by the current owner and completed by the nominee, so a contract taking ownership only ever
-///      calls these two.
+/// @dev The part of OpenZeppelin's `Ownable2Step` a contract taking ownership calls.
 interface IOwnable2Step {
     /// @notice Completes a handover the current owner already offered to the caller
     function acceptOwnership() external;

@@ -560,6 +560,80 @@ contract ESIMWalletTest is DeployerBase {
         deviceWallet.pullToken(settlementToken, 1);
     }
 
+    /// @notice A new owner that has not bound the wallet yet can still cancel an onward request
+    /// @dev The cancel re-adds the wallet to its owner. That used to be checked against the
+    ///      registry's association, which still names the previous device wallet at this point, so
+    ///      the cancel reverted and a mistaken nominee could take the wallet.
+    function test_requestTransferOwnership_newOwnerCanCancelAnOnwardRequestBeforeBinding() public {
+        test_requestTransferOwnership();
+        vm.prank(address(deviceWallet2));
+        eSIMWallet1.acceptOwnershipTransfer();
+        assertEq(registry.isESIMWalletValid(address(eSIMWallet1)), address(deviceWallet), "the association lags behind");
+
+        address mistakenNominee = _anotherDeviceWallet(2, 931);
+        vm.prank(address(deviceWallet2));
+        eSIMWallet1.requestTransferOwnership(mistakenNominee);
+
+        vm.prank(address(deviceWallet2));
+        eSIMWallet1.requestTransferOwnership(address(deviceWallet2));
+
+        assertEq(eSIMWallet1.newRequestedOwner(), address(0), "the onward request must be cancelled");
+        assertTrue(deviceWallet2.isValidESIMWallet(address(eSIMWallet1)), "the new owner must now hold the wallet");
+        assertEq(registry.isESIMWalletValid(address(eSIMWallet1)), address(deviceWallet2), "the association catches up");
+        assertFalse(registry.isESIMWalletOnStandby(address(eSIMWallet1)), "standby must be cleared");
+
+        vm.prank(mistakenNominee);
+        vm.expectRevert(abi.encodeWithSelector(Errors.OnlyRequestedOwner.selector, address(0)));
+        eSIMWallet1.acceptOwnershipTransfer();
+    }
+
+    /// @notice A wallet a device wallet deployed straight through the factory, and never bound,
+    ///         can also have its request cancelled
+    function test_requestTransferOwnership_cancelWorksForAWalletThatWasNeverBound() public {
+        deployWallets();
+        address otherDevice = _anotherDeviceWallet(1, 934);
+
+        vm.prank(address(deviceWallet));
+        address unbound = eSIMWalletFactory.deployESIMWallet(address(deviceWallet), 933);
+        assertEq(registry.isESIMWalletValid(unbound), address(0), "the wallet must start unbound");
+
+        vm.prank(address(deviceWallet));
+        MockESIMWallet(payable(unbound)).requestTransferOwnership(otherDevice);
+        vm.prank(address(deviceWallet));
+        MockESIMWallet(payable(unbound)).requestTransferOwnership(address(deviceWallet));
+
+        assertEq(MockESIMWallet(payable(unbound)).newRequestedOwner(), address(0), "the request must be cancelled");
+        assertTrue(deviceWallet.isValidESIMWallet(unbound), "the owner must now hold the wallet");
+        assertEq(registry.isESIMWalletValid(unbound), address(deviceWallet), "the wallet must now be bound");
+    }
+
+    /// @notice An address the factory did not deploy cannot add itself, whatever its `owner()` says
+    function test_addESIMWallet_refusesASelfAddFromAnAddressTheFactoryDidNotDeploy() public {
+        deployWallets();
+        address impostor = makeAddr("impostor");
+
+        vm.prank(impostor);
+        vm.expectRevert(Errors.OnlyRegistryOrDeviceWalletFactoryOrOwner.selector);
+        deviceWallet.addESIMWallet(impostor, false);
+    }
+
+    /// @notice A protocol eSIM wallet owned by another device wallet cannot add itself here
+    function test_addESIMWallet_refusesASelfAddFromAWalletOwnedElsewhere() public {
+        deployWallets();
+        address otherDevice = _anotherDeviceWallet(1, 936);
+
+        vm.prank(otherDevice);
+        address ownedElsewhere = eSIMWalletFactory.deployESIMWallet(otherDevice, 935);
+
+        vm.prank(ownedElsewhere);
+        vm.expectRevert(abi.encodeWithSelector(
+            Errors.ESIMWalletNotOwnedByThisDeviceWallet.selector,
+            ownedElsewhere,
+            otherDevice
+        ));
+        deviceWallet.addESIMWallet(ownedElsewhere, false);
+    }
+
     /// @notice A single ownership transfer emits exactly one OwnershipTransferred
     /// @dev Counts logs rather than using vm.expectEmit, which matches one occurrence and would
     ///      pass just as happily against a duplicate emission.

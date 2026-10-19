@@ -17,21 +17,24 @@ contract RegistryTest is DeployerBase {
     event VaultAddressUpdated(address indexed _updatedVaultAddress);
 
     /// @notice The admin trips the pause, so an operator watching the backend can act without
-    /// waiting on the upgrade key. Nobody else can, including the owner.
-    function test_pause_onlyTheAdminCanTripIt() public {
-        vm.prank(registry.owner());
-        vm.expectRevert(Errors.OnlyAdmin.selector);
-        registry.pause();
-
+    /// waiting on the upgrade key. Nobody else can except the owner.
+    function test_pause_onlyTheAdminOrTheOwnerCanTripIt() public {
         vm.prank(user1);
         vm.expectRevert(Errors.OnlyAdmin.selector);
         registry.pause();
 
-        assertEq(registry.paused(), false, "The rejected calls must leave the protocol running");
+        assertEq(registry.paused(), false, "The rejected call must leave the protocol running");
 
         vm.prank(registry.eSIMWalletAdmin());
         registry.pause();
         assertEq(registry.paused(), true, "The admin's call must have tripped the pause");
+    }
+
+    /// @notice The owner can trip it too, which is what still works while the admin is suspended
+    function test_pause_theOwnerCanTripIt() public {
+        vm.prank(registry.owner());
+        registry.pause();
+        assertEq(registry.paused(), true, "The owner's call must have tripped the pause");
     }
 
     /// @notice Release is the owner's, not the admin's. The admin key signs backend batches all
@@ -121,6 +124,51 @@ contract RegistryTest is DeployerBase {
         vm.prank(registry.owner());
         vm.expectRevert(Errors.ZeroDataBundlePriceCap.selector);
         registry.setDefaultPriceCapUSDCents(0);
+    }
+
+    event DefaultAdminAllowanceUSDCentsUpdated(uint64 _allowance);
+
+    /// @notice The default admin allowance is the owner's to set. The admin is the party it
+    /// limits, so an admin that could raise it would be limited by nothing.
+    function test_setDefaultAdminAllowanceUSDCents_rejectsTheAdmin() public {
+        address admin = registry.eSIMWalletAdmin();
+
+        vm.prank(admin);
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", admin));
+        registry.setDefaultAdminAllowanceUSDCents(type(uint64).max);
+
+        assertEq(
+            registry.defaultAdminAllowanceUSDCents(),
+            defaultAdminAllowanceUSDCents,
+            "The admin must not be able to change the default"
+        );
+    }
+
+    function test_setDefaultAdminAllowanceUSDCents_ownerSetsItAndItIsAnnounced() public {
+        vm.expectEmit(true, true, true, true, address(registry));
+        emit DefaultAdminAllowanceUSDCentsUpdated(10_000);
+
+        vm.prank(registry.owner());
+        registry.setDefaultAdminAllowanceUSDCents(10_000);
+
+        assertEq(registry.defaultAdminAllowanceUSDCents(), 10_000, "The owner must be able to set it");
+    }
+
+    /// @notice Zero is a legal default: new wallets take no admin charges until their owner says so
+    function test_setDefaultAdminAllowanceUSDCents_acceptsZero() public {
+        vm.prank(registry.owner());
+        registry.setDefaultAdminAllowanceUSDCents(0);
+
+        assertEq(registry.defaultAdminAllowanceUSDCents(), 0, "Zero must be accepted");
+    }
+
+    /// @notice `initialize` stores the default it was handed
+    function test_initialize_storesTheDefaultAdminAllowance() public view {
+        assertEq(
+            registry.defaultAdminAllowanceUSDCents(),
+            defaultAdminAllowanceUSDCents,
+            "The registry must hold the allowance it was initialised with"
+        );
     }
 
     /// @notice Moving the vault is the owner's, not the admin's. It is the destination of every

@@ -35,7 +35,8 @@ contract ImplementationLocksTest is Test {
             attacker,
             attacker,
             IEntryPoint(attacker),
-            100_000
+            100_000,
+            10_000
         );
 
         assertEq(implementation.owner(), address(0), "Implementation must have no owner");

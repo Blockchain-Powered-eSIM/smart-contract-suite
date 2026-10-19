@@ -146,7 +146,8 @@ contract Deploy is Script {
                     deployed.deviceWalletFactory,
                     deployed.eSIMWalletFactory,
                     config.entryPoint,
-                    config.priceCapUSDCents
+                    config.priceCapUSDCents,
+                    config.adminAllowanceUSDCents
                 )
             )
         );
@@ -267,6 +268,7 @@ contract Deploy is Script {
         vm.serializeAddress("book", "ESIMWalletFactoryProxy", deployed.eSIMWalletFactory);
         vm.serializeAddress("book", "RegistryProxy", deployed.registry);
         vm.serializeAddress("book", "LazyWalletRegistryProxy", deployed.lazyWalletRegistry);
+        vm.serializeAddress("book", "PaymentAdapterProxy", deployed.paymentAdapter);
         vm.serializeAddress(
             "book",
             "DeviceWalletBeacon",
@@ -319,6 +321,7 @@ contract Deploy is Script {
         vm.serializeAddress("params", "eSIMWalletAdmin", config.eSIMWalletAdmin);
         vm.serializeAddress("params", "vault", config.vault);
         vm.serializeUint("params", "priceCapUSDCents", config.priceCapUSDCents);
+        vm.serializeUint("params", "adminAllowanceUSDCents", config.adminAllowanceUSDCents);
         section = vm.serializeAddress("params", "settlementToken", config.settlementToken);
     }
 

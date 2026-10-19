@@ -2,16 +2,13 @@
 pragma solidity 0.8.36;
 
 /// @notice Every custom error the protocol reverts with, in one place
-/// @dev An interface rather than a library so each contract reaches them as `Errors.Name` without
-///      inheriting anything. Grouped by the contract that raises them; several are shared, and the
-///      comment above each group names who uses it.
+/// @dev An interface so each contract reaches them as `Errors.Name` without inheriting anything.
+///      Grouped by the contract that raises them; a trailing note marks one raised elsewhere.
 interface Errors {
-    // Any contract rejecting a zero address argument. The parameter name identifies which
-    // argument was zero, since a single function often checks several.
+    // Names the argument, since one function often checks several
     error ZeroAddress(string parameter);
 
-    // Every Ownable contract: Registry, LazyWalletRegistry, DeviceWalletFactory,
-    // ESIMWalletFactory and ESIMWallet
+    // Registry, LazyWalletRegistry, DeviceWalletFactory, ESIMWalletFactory, ESIMWallet and PaymentAdapter
     error OwnershipCannotBeRenounced();
 
     // Registry and ESIMWallet
@@ -25,6 +22,7 @@ interface Errors {
     error NotTheAssociatedDeviceWallet(address eSIMWallet, address associatedDeviceWallet);
     error AdminAlreadyDisabled();
     error AdminNotDisabled();
+    error OwnerKeyNotHeldByWallet(address deviceWallet);
 
     // Registry, DeviceWallet and ESIMWallet
     error ProtocolPaused();
@@ -33,7 +31,7 @@ interface Errors {
     error OnlyLazyWalletRegistry();
     error DeviceIdentifierAlreadyRegistered(string deviceIdentifier);
     error OwnerKeyAlreadyRegistered(bytes32 ownerKeyHash);
-    error SaltTooHigh(uint256 salt, uint256 count);
+    error SaltTooHigh(uint256 salt, uint256 count); // raised by LazyWalletRegistry
     error DeviceWalletAlreadyExists(string deviceIdentifier, address deviceWallet);
     error NotAProtocolESIMWallet(address eSIMWallet);
     error DeviceIdentifierReservedForLazyWallet(string deviceIdentifier);
@@ -73,11 +71,11 @@ interface Errors {
     error ImplementationUnchanged(address implementation);
 
     // DeviceWalletFactory
-    error OnlyAdmin();
+    error OnlyAdmin(); // raised by Registry
     error OnlyAdminOrRegistry();
-    error OnlyEntryPoint();
-    error InvalidDeviceWalletOwnerKey();
-    error VaultUnchanged(address vault);
+    error OnlyEntryPoint(); // raised by Account4337
+    error InvalidDeviceWalletOwnerKey(); // also DeviceWallet
+    error VaultUnchanged(address vault); // raised by Registry
     error EmptyBatch();
     error DeviceWalletInfoAlreadyAdded(address deviceWallet);
     error DeviceWalletMismatch(address deviceWallet, address derived);
@@ -85,12 +83,13 @@ interface Errors {
 
     // Account4337, and so DeviceWallet through it
     error OnlySelf();
+    error NewOwnerKeyCannotSign();
     error OnlyEntryPointOrSelf();
 
     // ESIMWallet and DeviceWallet
     error FailedToTransfer();
     error InsufficientBalance(uint256 balance, uint256 amount);
-    error ZeroAmount();
+    error ZeroAmount(); // also PaymentAdapter
     // A currency with no token address, so nothing can be transferred in it
     error AssetNotTransferable(bytes32 asset);
 
@@ -98,16 +97,17 @@ interface Errors {
     error OnlyRegistry();
     error OnlyDeviceWalletOrESIMWalletAdmin();
     error DataBundlePriceAboveCap(uint64 priceUSDCents, uint64 cap);
+    error AdminAllowanceExceeded(uint64 priceUSDCents, uint64 remaining);
     error ESIMIdentifierAlreadySet(string eSIMUniqueIdentifier);
     error EmptyDataBundleID();
     error ZeroDataBundlePrice();
     error ZeroDataBundlePriceCap();
-    error NotADeviceWallet(address account);
+    error NotADeviceWallet(address account); // also RegistryHelper
     error OnlyRequestedOwner(address newRequestedOwner);
     error UseAcceptOwnershipTransfer();
 
     // DeviceWallet
-    error UnknownESIMWallet(address eSIMWallet);
+    error UnknownESIMWallet(address eSIMWallet); // also RegistryHelper
     error FundsAccessRevoked(address eSIMWallet);
     error FundsAccessNotGrantableAtBind(address eSIMWallet);
     error ESIMWalletAlreadyAdded(address eSIMWallet);
@@ -121,14 +121,14 @@ interface Errors {
     // Registry, on the path for purchases paid for outside the protocol
     error PaymentAdapterNotSet();
     error PaymentAdapterUnchanged(address paymentAdapter);
-    // Only buyDataBundle may claim the protocol saw the money move
+    // Only ESIMWallet.buyDataBundleWithToken may claim the protocol saw the money move
     error SettlementNotAsserted();
     // Older history is still waiting to be copied, so a new entry would land out of order
     error HistoryNotFullyCopied(string eSIMIdentifier, uint256 outstanding);
 
     // PaymentAdapter
     error EmptyAssetSymbol();
-    error EmptyPaymentReference();
+    error EmptyPaymentReference(); // also Registry
     error AssetNotAllowed(bytes32 asset);
     error AssetAlreadyRegistered(bytes32 asset);
     error AssetNotRegistered(bytes32 asset);
@@ -138,7 +138,7 @@ interface Errors {
     error AssetDecimalsTooHigh(bytes32 asset, uint8 decimals);
     // No price feeds, so only a currency already in dollars can be converted from cents
     error AssetNeedsSwap(bytes32 asset);
-    error PaymentReferenceAlreadyUsed(bytes32 paymentReference);
+    error PaymentReferenceAlreadyUsed(bytes32 paymentReference); // also Registry
     // The price costs more of the currency than the buyer was willing to spend
     error SettlementAboveMax(uint256 required, uint256 maxAmountIn);
     // The caller has to send the tokens before calling settle, and sent less than it declared

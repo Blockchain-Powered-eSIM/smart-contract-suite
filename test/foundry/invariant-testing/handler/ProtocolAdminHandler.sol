@@ -51,8 +51,16 @@ contract ProtocolAdminHandler is Test {
     uint256 public executed;
     uint256 public cancelled;
     uint256 public unpaused;
+    uint256 public pausedByGuardian;
     uint256 public cancellersRevoked;
     uint256 public rejections;
+
+    /// @notice Set when a guardian's pause was refused, which would leave nobody able to pause
+    ///         while the hot key is suspended
+    bool public ghost_guardianPauseRefused;
+
+    /// @notice Set when a scheduled replacement named the suspended incumbent and lifted the suspension
+    bool public ghost_suspensionLiftedByNomination;
 
     constructor(
         ProtocolAdmin _admin,
@@ -126,13 +134,72 @@ contract ProtocolAdminHandler is Test {
         } catch {}
     }
 
-    /// @notice The hot key trips the pause, which is the only way one ever appears
+    /// @notice A guardian suspends the admin, then a scheduled replacement names the same admin
+    /// @dev The registry reads that nomination as a withdrawal, which lifts the suspension, so
+    ///      `disableAndNominate` has to refuse it. Whatever happens, the admin is restored through
+    ///      the owner's own scheduled `enableAdmin` at the end, so the rest of the campaign keeps a
+    ///      working hot key.
+    /// @param _salt Salt for the two scheduled operations
+    function nominateTheSuspendedIncumbent(bytes32 _salt) external {
+        address incumbent = registry.adminOfRecord();
+        if(registry.newRequestedAdmin() != address(0)) return;
+
+        if(!registry.adminDisabled()) {
+            vm.prank(guardian);
+            try admin.disableAdminInstantly(address(registry)) {} catch { return; }
+        }
+
+        bytes memory data = abi.encodeCall(admin.disableAndNominate, (address(registry), incumbent));
+        uint256 delay = admin.getMinDelay();
+        vm.prank(proposer);
+        try admin.schedule(address(admin), 0, data, bytes32(0), _salt, delay) {} catch { return; }
+        vm.warp(block.timestamp + delay);
+
+        try admin.execute(address(admin), 0, data, bytes32(0), _salt) {} catch {}
+        if(!registry.adminDisabled()) ghost_suspensionLiftedByNomination = true;
+
+        // Put the admin back through the path that is meant to do it
+        if(registry.adminDisabled()) {
+            bytes memory enable = abi.encodeCall(registry.enableAdmin, ());
+            bytes32 enableSalt = keccak256(abi.encode(_salt, "enable"));
+            vm.prank(proposer);
+            try admin.schedule(address(registry), 0, enable, bytes32(0), enableSalt, delay) {
+                vm.warp(block.timestamp + delay);
+                try admin.execute(address(registry), 0, enable, bytes32(0), enableSalt) {} catch {}
+            } catch {}
+        }
+    }
+
+    /// @notice The hot key trips the pause
     /// @dev Not a role on the admin contract at all. It is here because the guardian's release is
     ///      only reachable from a paused state, and a campaign that never paused would leave that
     ///      half of the role untested.
     function pauseProtocol() external {
         vm.prank(walletAdmin);
         try registry.pause() {} catch {}
+    }
+
+    /// @notice A guardian raises the pause without waiting, the route that works while the hot key
+    ///         is suspended
+    function pauseInstantly() external {
+        vm.prank(guardian);
+        try admin.pauseInstantly(address(registry)) {
+            ++pausedByGuardian;
+        } catch {
+            ghost_guardianPauseRefused = true;
+        }
+    }
+
+    /// @notice Nobody outside the guardian set may raise a pause through the admin contract
+    function rejectsAnUnauthorisedPause(address _caller) external {
+        if(_caller == guardian) return;
+
+        vm.prank(_caller);
+        try admin.pauseInstantly(address(registry)) {
+            revert("an account outside the guardian set raised a pause");
+        } catch {
+            ++rejections;
+        }
     }
 
     /// @notice A guardian releases the pause without waiting

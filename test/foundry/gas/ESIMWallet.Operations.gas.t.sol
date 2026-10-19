@@ -97,6 +97,27 @@ contract ESIMWalletOperationsGasTest is GasBase {
         vm.snapshotGasLastCall(NAMESPACE, "setPriceCapUSDCents: back to the registry ceiling");
     }
 
+    /// @notice The owner setting what the admin may still charge, and the admin spending from it
+    /// @dev The admin charge is measured on its own because it is the one path that also writes
+    ///      the allowance. The wallet already holds the price, so no pull is mixed in.
+    function test_adminAllowance() public {
+        _deploy();
+        uint256 needed = settlementAmount(TEST_PRICE_CENTS);
+
+        vm.prank(address(wallet));
+        eSIMWallet.setAdminAllowanceUSDCents(10_000);
+        vm.snapshotGasLastCall(NAMESPACE, "setAdminAllowanceUSDCents: set");
+
+        // A first purchase writes the vault a balance it did not have, so one runs unmeasured
+        fundSettlementToken(address(eSIMWallet), needed * 2);
+        vm.prank(eSIMWalletAdmin);
+        eSIMWallet.buyDataBundleWithToken(bundle("DB_ADM_0", TEST_PRICE_CENTS), ASSET_USDC, needed, paymentRef("gas-adm-0"));
+
+        vm.prank(eSIMWalletAdmin);
+        eSIMWallet.buyDataBundleWithToken(bundle("DB_ADM_1", TEST_PRICE_CENTS), ASSET_USDC, needed, paymentRef("gas-adm-1"));
+        vm.snapshotGasLastCall(NAMESPACE, "buyDataBundleWithToken: admin charge, wallet already holds the price");
+    }
+
     /// @notice The two halves of an eSIM wallet ownership transfer
     /// @dev Both ends have to be real device wallets. The request also unbinds the eSIM wallet from
     ///      its current device and sweeps its ETH back, so the first half carries more than the name

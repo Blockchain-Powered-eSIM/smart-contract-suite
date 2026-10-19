@@ -11,6 +11,16 @@ contract PaymentInvariantsTest is CampaignBase {
 
     bytes32[3] private symbols = [bytes32("USD"), bytes32("USDC"), bytes32("ETH")];
 
+    /// @notice Every admin charge comes off the wallet's allowance, and none goes past it
+    /// @dev Checked in the handler around each charge, since the allowance is also set by owners and
+    ///      reset on handovers, so no single total can be compared at the end of a run.
+    function invariant_adminChargesStayInsideTheAllowance() public view {
+        assertFalse(
+            paymentHandler.ghost_adminAllowanceBroken(),
+            "An admin charge passed the wallet's allowance or did not come off it"
+        );
+    }
+
     /// @notice One payment reference pays for one purchase on one wallet, whichever path spends it
     /// @dev A reference is one offchain payment. The backend retries the whole onchain step on any
     ///      failure, so a reference that could be spent a second time on the same wallet is a user
@@ -85,5 +95,12 @@ contract PaymentInvariantsTest is CampaignBase {
 
             assertFalse(quoted, "A withdrawn currency returned a price");
         }
+    }
+
+    /// @notice Recovering tokens sent by mistake never moves money the vault was paid
+    /// @dev The vault side is also covered by `invariant_theVaultHoldsWhatWasSettled`; this names the
+    ///      recovery as the cause if it is the one that breaks it.
+    function invariant_aRecoveryNeverTouchesTheVault() public view {
+        assertFalse(paymentHandler.ghost_recoveryTouchedTheVault(), "A recovery changed the vault balance");
     }
 }

@@ -4,6 +4,7 @@ pragma solidity >=0.6.2 <0.9.0;
 import {Test} from "forge-std/Test.sol";
 import {console} from "forge-std/console.sol";
 import {Handlers} from "./handlers/Handlers.sol";
+import {MockESIMWallet} from "test/utils/mocks/MockESIMWallet.sol";
 
 /// @notice Contract to be used for quick testing with Foundry
 contract FoundryTester is Test, Handlers {
@@ -75,6 +76,9 @@ contract FoundryTester is Test, Handlers {
         assertTrue(property_ownerKeysAreUniqueAndAgree(), "GL-07/08");
         assertTrue(property_identifiersAreClaimedOnce(), "GL-09/10");
         assertTrue(property_theCeilingAlwaysBinds(), "GL-11");
+        assertTrue(property_adminChargesStayInsideTheAllowance(), "GL-15");
+        assertTrue(property_aLazyESIMIdentifierGoesOnlyToItsLazyWallet(), "GL-16");
+        assertTrue(property_aTransferRequestCanAlwaysBeCancelled(), "GL-17");
         assertTrue(property_settlementTokenIsConserved(), "GL-12");
         assertTrue(property_onlyThePurchasePathClaimsSettlement(), "GL-13");
         assertTrue(property_noUnauthorizedCallSucceeded(), "unauthorized call");
@@ -96,8 +100,10 @@ contract FoundryTester is Test, Handlers {
         _expectRefused(abi.encodeCall(this.eSIMWalletFactory_deployESIMWallet_forStranger, (0, 1, 2)));
         _expectRefused(abi.encodeCall(this.eSIMWallet_buyDataBundleWithToken_unsettleableAsset, (0, 7, true)));
         _expectRefused(abi.encodeCall(this.eSIMWallet_buyDataBundleWithToken_unsettleableAsset, (0, 8, false)));
+        _expectRefused(abi.encodeCall(this.deviceWallet_secondary, (2, 0, 9_999_999))); // register an unused key without rotating
 
         assertTrue(property_noUnauthorizedCallSucceeded(), "a refused call went through");
+        assertTrue(property_ownerKeysAreUniqueAndAgree(), "GL-07/08");
         assertTrue(property_onlyThePurchasePathClaimsSettlement(), "GL-13");
         assertTrue(property_theCeilingAlwaysBinds(), "GL-11");
     }
@@ -113,8 +119,81 @@ contract FoundryTester is Test, Handlers {
         _expectRefused(
             abi.encodeCall(this.lazyWalletRegistry_deployLazyWalletAndSetESIMIdentifier_clamped, (2, 88, 1 ether, 5, false))
         );
+        _expectRefused(
+            abi.encodeCall(this.deviceWalletFactory_deployDeviceWalletForUsers_clamped, (61, 62, 1, 0.1 ether, false))
+        );
 
         assertTrue(property_noUnauthorizedCallSucceeded(), "a guarded path ran while paused");
+    }
+
+    /// @notice An owner setting the allowance to zero stops the admin, and only the admin
+    function test_smoke_aZeroAllowanceStopsOnlyTheAdmin() public {
+        eSIMWallet_secondary(2, 0, 0); // owner sets the allowance to zero
+
+        _expectRefused(abi.encodeCall(this.eSIMWallet_buyDataBundleWithToken_clamped, (0, 1, 100, 50, true)));
+        eSIMWallet_buyDataBundleWithToken_clamped(0, 1, 100, 51, false); // the owner still buys
+
+        assertTrue(property_adminChargesStayInsideTheAllowance(), "GL-15");
+    }
+
+    /// @notice A spare wallet on a lazy device cannot take an identifier still waiting for its batch
+    function test_smoke_aReservedIdentifierStaysWithTheLazyRoute() public {
+        lazyWalletRegistry_batchPopulateHistory_clamped(5, 10, 1, 100, false);
+        lazyWalletRegistry_batchPopulateHistory_clamped(5, 11, 1, 100, false);
+        lazyWalletRegistry_deployLazyWalletAndSetESIMIdentifier_clamped(5, 777, 0, 1, false); // first batch only
+
+        _expectRefused(abi.encodeCall(this.lazyWalletRegistry_assignReservedOnLazyDevice, (5, 0)));
+        assertTrue(property_aLazyESIMIdentifierGoesOnlyToItsLazyWallet(), "GL-16");
+    }
+
+    /// @notice A new owner that never bound the wallet can still withdraw an onward request
+    function test_smoke_aTransferRequestCanBeCancelledBeforeBinding() public {
+        require(deviceWallets.length >= 3, "the setup must deploy three device wallets");
+        address wallet = eSIMWallets[0];
+        address firstOwner = MockESIMWallet(payable(wallet)).owner();
+        address newOwner = deviceWallets[1] == firstOwner ? deviceWallets[2] : deviceWallets[1];
+        address mistaken = deviceWallets[0] == firstOwner ? deviceWallets[2] : deviceWallets[0];
+        if (mistaken == newOwner) mistaken = deviceWallets[2] == newOwner ? deviceWallets[1] : deviceWallets[2];
+
+        eSIMWallet_requestTransferOwnership(firstOwner, wallet, newOwner);
+        eSIMWallet_acceptOwnershipTransfer(newOwner, wallet);
+        eSIMWallet_requestTransferOwnership(newOwner, wallet, mistaken);
+
+        eSIMWallet_secondary(3, 0, 0); // the owner cancels
+        assertEq(MockESIMWallet(payable(wallet)).newRequestedOwner(), address(0), "the request must be withdrawn");
+        assertTrue(property_aTransferRequestCanAlwaysBeCancelled(), "GL-17");
+    }
+
+    /// @notice A rotation goes through on the new key's proof and is refused on anyone else's
+    function test_smoke_aRotationNeedsTheNewKeysProof() public {
+        deviceWallet_secondary(0, 0, 2); // an even seed signs with the new key itself
+        assertTrue(property_ownerKeysAreUniqueAndAgree(), "GL-07/08");
+
+        _expectRefused(abi.encodeCall(this.deviceWallet_secondary, (0, 0, 3))); // an odd seed signs with another key
+        assertTrue(property_noUnauthorizedCallSucceeded(), "a rotation went through without the new key");
+    }
+
+    /// @notice The owner can still pause while the admin key is suspended
+    function test_smoke_theOwnerCanPauseWhileTheAdminIsSuspended() public {
+        registry_secondary(5, 0); // suspend the admin
+        assertEq(registry.eSIMWalletAdmin(), address(0), "the admin must be suspended");
+
+        registry_secondary(10, 0); // the owner pauses
+        assertTrue(registry.paused(), "the owner's pause must apply");
+    }
+
+    /// @notice Tokens left on the adapter come back through the owner and nobody else
+    function test_smoke_onlyTheOwnerRecoversTokens() public {
+        paymentAdapter_donateERC20(5e6);
+        uint256 stray = settlementERC20.balanceOf(address(paymentAdapter));
+        assertGt(stray, 0, "the donation must land on the adapter");
+
+        _expectRefused(abi.encodeCall(this.paymentAdapter_recoverTokens_unclamped, (actor, actor, stray)));
+        assertTrue(property_noUnauthorizedCallSucceeded(), "GL-18");
+
+        paymentAdapter_recoverTokens(stray);
+        assertEq(settlementERC20.balanceOf(address(paymentAdapter)), 0, "the owner must recover it all");
+        assertTrue(property_settlementTokenIsConserved(), "GL-12");
     }
 
     /// @notice Runs a handler that is expected to revert, and fails if it did not
@@ -123,6 +202,18 @@ contract FoundryTester is Test, Handlers {
     function _expectRefused(bytes memory call) private {
         (bool ok,) = address(this).call(call);
         assertFalse(ok, "a call the protocol should have refused went through");
+
+        // A handler that starts a prank and then reverts never reaches its stopPrank, and the
+        // prank outlives the revert. Left running, it makes every later call here revert on
+        // "cannot override an ongoing prank" instead of on the guard it is meant to test. Pranks
+        // belong to a call depth, so it is cleared from the same depth the handler ran at.
+        (bool cleared,) = address(this).call(abi.encodeCall(this.clearLeftoverPrank, ()));
+        assertTrue(cleared, "clearing a leftover prank must not fail");
+    }
+
+    /// @notice Stops a prank a reverted handler left running at this call depth
+    function clearLeftoverPrank() external {
+        try vm.stopPrank() {} catch {}
     }
 
     /// @notice The config surface, which every other handler reads its permissions from

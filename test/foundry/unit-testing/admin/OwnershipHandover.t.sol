@@ -167,14 +167,15 @@ contract OwnershipHandoverTest is AdminBase {
         vm.expectRevert();
         registry.unpause();
 
-        vm.prank(address(protocolAdmin));
-        vm.expectRevert();
-        registry.pause();
-
         vm.prank(guardian);
         protocolAdmin.unpauseInstantly(address(registry));
 
         assertFalse(registry.paused());
+
+        // The timelock can pause too now, which is the route a guardian's pauseInstantly takes
+        vm.prank(guardian);
+        protocolAdmin.pauseInstantly(address(registry));
+        assertTrue(registry.paused(), "the guardian route must reach the pause");
     }
 
     /// @dev Scheduling a release rather than taking it instantly is legal and is the wrong thing to

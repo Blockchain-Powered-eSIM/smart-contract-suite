@@ -23,12 +23,7 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgrad
     Registry public registry;
 
     /// @notice Upgradeable beacon that points to the correct eSIM wallet logic contract
-    /// @dev Every eSIM wallet is a beacon proxy reading its implementation from here, so the
-    ///      implementation is replaced once rather than on each proxy:
-    ///
-    ///      eSIM wallet beacon proxy ─┐
-    ///      eSIM wallet beacon proxy ─┼─> beacon ─> eSIM wallet implementation
-    ///      eSIM wallet beacon proxy ─┘
+    /// @dev Every eSIM wallet proxy reads its implementation from here, so one change moves them all.
     UpgradeableBeacon public beacon;
 
     /// @notice Set to true if eSIM wallet address is deployed using the factory, false otherwise
@@ -57,14 +52,10 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgrad
     event AddedRegistry(address indexed registry);
 
     /// @notice Restricts a call to the registry, the device wallet factory or a known device wallet
-    /// @dev The first two deploy on behalf of a device wallet during setup. A device wallet reaching
-    ///      this directly is constrained further inside `deployESIMWallet`.
-    ///
-    ///      That third caller is what makes `DeviceWallet.deployESIMWallet`'s admin gate a workflow
-    ///      convenience rather than a boundary: an owner can sign an `execute` straight at this
-    ///      function and get the same wallet with no admin in the call. Deliberate, since a device
-    ///      wallet reaches every external function through `execute` and no check downstream of its
-    ///      call can tell which of its owner's intents produced it.
+    /// @dev A device wallet calling directly may only deploy for itself (checked in the function).
+    ///      This also means the admin gate on `DeviceWallet.deployESIMWallet` is not a boundary: an
+    ///      owner can `execute` straight here. Deliberate, since nothing here can tell which of the
+    ///      owner's signed calls led to this one.
     modifier onlyRegistryOrDeviceWalletFactoryOrDeviceWallet() {
         if(
             msg.sender != address(registry) &&
@@ -81,19 +72,16 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgrad
     // ---------------------------------------------------------------------------------------------
 
     /// @notice Disables initializers on the implementation contract
-    /// @dev Locks the implementation contract itself. Without this, anyone can call initialize
-    ///      directly on the implementation, own it, and make it deploy a beacon it controls. The
-    ///      proxy is unaffected either way, but an owned implementation is a trap for any later
-    ///      upgrade that adds an outward call.
+    /// @dev Otherwise anyone could initialize and own the implementation. The proxy is unaffected,
+    ///      but an owned implementation is a trap for a later upgrade that adds an outward call.
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
     }
 
     /// @notice Deploys the beacon and hands ownership of this factory to the upgrade manager
-    /// @dev The factory owns the beacon rather than the upgrade manager owning it directly, so the
-    ///      only way to move the implementation is `updateESIMWalletImplementation`, which is
-    ///      owner gated and emits an event.
+    /// @dev The factory owns the beacon, so the only way to move the implementation is the
+    ///      owner-gated `updateESIMWalletImplementation`, which emits an event.
     /// @param _eSIMWalletImplementation First eSIM wallet logic contract the beacon points at
     /// @param _upgradeManager Admin address responsible for upgrading contracts
     function initialize (
@@ -148,17 +136,14 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgrad
         address _deviceWalletAddress,
         uint256 _salt
     ) external onlyRegistryOrDeviceWalletFactoryOrDeviceWallet returns (address) {
-        // The registry and the device wallet factory deploy on behalf of a device wallet, so they
-        // name an arbitrary one. A device wallet calling directly may only name itself: otherwise
-        // it can create a wallet owned by another device wallet that never asked for it and that
-        // neither _addESIMWallet nor the registry records, and can take the CREATE2 address that
-        // owner would get for this salt, leaving its own deployment to fail without a reason.
+        // A device wallet may only deploy for itself. Otherwise it could give another device
+        // wallet an unrecorded eSIM wallet and take the CREATE2 address that wallet would get
+        // for this salt, making its real deployment fail.
         if(registry.isDeviceWalletValid(msg.sender) && _deviceWalletAddress != msg.sender) {
             revert Errors.OnlyDeployForSelf();
         }
 
-        // CREATE2 reverts with no data when something already sits at the address, which leaves
-        // the caller nothing to go on. The salt is its own input, so name it back.
+        // CREATE2 on a used address reverts with no data, so name the salt back instead
         address predicted = getCounterFactualAddress(_deviceWalletAddress, _salt);
         if(predicted.code.length > 0) revert Errors.SaltAlreadyUsed(_deviceWalletAddress, _salt);
 
@@ -207,8 +192,7 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgrad
     // ---------------------------------------------------------------------------------------------
 
     /// @notice Update the eSIM wallet implementation address in the beacon contract
-    /// @dev Moves every eSIM wallet in the protocol at once. Treat any change here as a
-    ///      protocol-wide upgrade, since no wallet can decline it.
+    /// @dev A protocol-wide upgrade: every eSIM wallet moves at once and none can decline.
     /// @param  _eSIMWalletImpl Address of the new eSIM wallet implementation contract
     /// @return The implementation now in force
     function updateESIMWalletImplementation(
@@ -225,9 +209,8 @@ contract ESIMWalletFactory is Initializable, UUPSUpgradeable, Ownable2StepUpgrad
     }
 
     /// @notice Ownership of this contract is never renounced
-    /// @dev The owner is the only caller _authorizeUpgrade accepts, and this contract owns the
-    ///      beacon, so it is also the only route to updateESIMWalletImplementation. Renouncing
-    ///      would freeze every eSIM wallet on its current logic permanently.
+    /// @dev The owner is the only one who can upgrade this factory or the beacon, so renouncing
+    ///      would freeze every eSIM wallet on its current logic.
     function renounceOwnership() public pure override {
         revert Errors.OwnershipCannotBeRenounced();
     }

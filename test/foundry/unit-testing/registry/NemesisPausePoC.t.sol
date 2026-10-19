@@ -4,13 +4,14 @@ pragma solidity 0.8.36;
 import {DeployerBase} from "test/utils/DeployerBase.sol";
 import {Errors} from "contracts/Errors.sol";
 
-/// @notice Shows that suspending the admin, or nominating a replacement, removes the pause lever
-/// @dev `pause()` is the only writer of `paused` and it is gated on `eSIMWalletAdmin()`, which
-///      answers zero in both states. No transaction can arrive from the zero address, so the
-///      emergency lever is uncallable by every account while either state holds.
+/// @notice Suspending the admin, or nominating a replacement, takes the pause lever from the admin
+///         key but not from the owner
+/// @dev `pause()` used to be gated on `eSIMWalletAdmin()` alone, which answers zero in both
+///      states, so nobody could pause at all while either held. The owner now has the lever too,
+///      which is the route `ProtocolAdmin.pauseInstantly` gives a guardian.
 contract NemesisPausePoC is DeployerBase {
 
-    function test_NM005_suspendingTheAdminRemovesThePauseLever() public {
+    function test_NM005_suspendingTheAdminLeavesTheOwnersPauseLever() public {
         // The admin can pause while it holds its powers.
         vm.prank(eSIMWalletAdmin);
         registry.pause();
@@ -32,12 +33,11 @@ contract NemesisPausePoC is DeployerBase {
         vm.expectRevert(Errors.OnlyAdmin.selector);
         registry.pause();
 
-        // So did everybody else. The owner has no route to it either.
+        // The owner keeps it, so the protocol can still be stopped during the incident
         vm.prank(upgradeManager);
-        vm.expectRevert(Errors.OnlyAdmin.selector);
         registry.pause();
 
-        assertFalse(registry.paused(), "the protocol cannot be paused by anyone");
+        assertTrue(registry.paused(), "the owner must still be able to pause");
     }
 
     function test_NM005_anOutstandingNominationAlsoRemovesIt() public {
@@ -67,18 +67,21 @@ contract NemesisPausePoC is DeployerBase {
         assertTrue(registry.paused(), "the lever is back only once the nominee accepts");
     }
 
-    function test_NM005_theProtocolStaysUnpausedWhileThePauseIsUnreachable() public {
-        // A regression pin on the accessor, not a demonstration of exposure. Both ETH paths carry
-        // their own `requireNotPaused` check, at ESIMWallet.sol:284 and DeviceWallet.sol:222, so
-        // there is nothing reachable here that a pause would not have stopped. What this holds in
-        // place is that suspending the admin leaves `paused` false with no account able to set it.
+    function test_NM005_theOwnerCanPauseMidRotation() public {
         vm.prank(upgradeManager);
-        registry.disableAdmin();
+        registry.requestAdminUpdate(makeAddr("incomingAdmin"));
 
         vm.prank(upgradeManager);
-        vm.expectRevert(Errors.OnlyAdmin.selector);
         registry.pause();
 
+        vm.expectRevert(Errors.ProtocolPaused.selector);
         registry.requireNotPaused();
+    }
+
+    /// @notice Nobody but the live admin and the owner can pause
+    function test_NM005_aStrangerStillCannotPause() public {
+        vm.prank(makeAddr("stranger"));
+        vm.expectRevert(Errors.OnlyAdmin.selector);
+        registry.pause();
     }
 }

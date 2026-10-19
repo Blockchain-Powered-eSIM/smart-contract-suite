@@ -64,6 +64,9 @@ contract DeployerBase is Test {
     address upgradeManager = address(0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2);
     address vault = address(0x78731D3Ca6b7E34aC0F824c42a7cC18A495cabaB);
     uint64 defaultPriceCapUSDCents = 100_000;   // $1000
+    // Far above anything a test charges, so tests about other things never run into it. The
+    // allowance tests set their own.
+    uint64 defaultAdminAllowanceUSDCents = 10_000_000_000;   // $100,000,000
 
     // A stand-in for USDC, deployed in setUp so the settlement path has real balances to move.
     MockERC20 settlementERC20;
@@ -129,7 +132,7 @@ contract DeployerBase is Test {
             address(registryImpl),
             abi.encodeCall(
                 registryImpl.initialize,
-                (eSIMWalletAdmin, vault, upgradeManager, address(deviceWalletFactory), address(eSIMWalletFactory), typeCastEntryPoint, defaultPriceCapUSDCents)
+                (eSIMWalletAdmin, vault, upgradeManager, address(deviceWalletFactory), address(eSIMWalletFactory), typeCastEntryPoint, defaultPriceCapUSDCents, defaultAdminAllowanceUSDCents)
             )
         );
         registry = MockRegistry(address(registryProxy));

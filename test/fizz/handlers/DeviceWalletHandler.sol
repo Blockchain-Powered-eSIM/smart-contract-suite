@@ -3,6 +3,7 @@ pragma solidity >=0.6.2 <0.9.0;
 
 import "../Base.sol";
 import {Properties} from "../Properties.sol";
+import {WebAuthnSigner} from "test/utils/WebAuthnSigner.sol";
 
 /// @notice Handles the interaction with DeviceWallet
 /// @dev Three different callers reach this contract and they are not interchangeable.
@@ -99,9 +100,10 @@ abstract contract DeviceWalletHandler is Properties {
     }
 
     function deviceWallet_secondary(uint8 selector, uint256 walletSeed, uint256 arg) public {
-        selector = uint8(selector % 2);
+        selector = uint8(selector % 3);
         if (selector == 0) _deviceWallet_transferOwnership(walletSeed, arg);
-        else _deviceWallet_pullTokenAsStranger(walletSeed, arg);
+        else if (selector == 1) _deviceWallet_pullTokenAsStranger(walletSeed, arg);
+        else _deviceWallet_registerKeyDirectly(walletSeed, arg);
     }
 
     // ―――――――――――――――――――――――― Unclamped ―――――――――――――――――――――――――
@@ -155,15 +157,37 @@ abstract contract DeviceWalletHandler is Properties {
         _prop_bindingGrantsNoAccess(deviceWallet, _eSIMWallet);
     }
 
-    /// @notice Rotates a device wallet's P256 key
-    /// @dev The key has to be on the curve or the wallet is bricked for good, and the deploy paths
-    ///      refuse an off-curve one, so this path has to as well.
+    /// @notice Rotates a device wallet's P256 key, with a real proof by the new key
+    /// @dev Half the draws sign with a different key, which the wallet must refuse. If one of those
+    ///      lands, the wallet answers to a key nobody signed for, and GL-07/08 keeps the registry
+    ///      and the wallet in agreement either way.
     function _deviceWallet_transferOwnership(uint256 walletSeed, uint256 keySeed) internal {
         address deviceWallet = _pickDeviceWallet(walletSeed);
         if (deviceWallet == address(0)) return;
 
+        uint256 privateKey = clampBetween(uint256(keccak256(abi.encode("fizz.rotationKey", keySeed))), 1, P256_ORDER - 1);
+        bytes32[2] memory newKey = WebAuthnSigner.publicKeyOf(privateKey);
+        uint256 signer = keySeed % 2 == 0 ? privateKey : (privateKey % (P256_ORDER - 2)) + 1;
+        bytes memory proof = WebAuthnSigner.signWith(signer, MockDeviceWallet(payable(deviceWallet)).rotationChallenge(newKey));
+
         vm.prank(deviceWallet);
-        MockDeviceWallet(payable(deviceWallet)).transferOwnership(_ownerKey(keySeed));
+        MockDeviceWallet(payable(deviceWallet)).transferOwnership(newKey, proof);
+
+        if (signer != privateKey) ghosts.rotatedWithoutTheNewKey = true;
+    }
+
+    /// @notice A device wallet telling the registry about a key without rotating to it
+    /// @dev An owner can sign an `execute` that calls the registry directly, so this is reachable.
+    ///      If it ever succeeds, the registry and the wallet name different keys, and
+    ///      `property_ownerKeysAreUniqueAndAgree` reports it.
+    function _deviceWallet_registerKeyDirectly(uint256 walletSeed, uint256 keySeed) internal {
+        address deviceWallet = _pickDeviceWallet(walletSeed);
+        if (deviceWallet == address(0)) return;
+        // Built before the prank: building it calls a precompile, which would use the prank up
+        bytes32[2] memory key = _ownerKey(keySeed);
+
+        vm.prank(deviceWallet);
+        registry.updateDeviceWalletOwnerKey(key);
     }
 
     /// @notice An eSIM wallet reaching for a device wallet that does not hold it

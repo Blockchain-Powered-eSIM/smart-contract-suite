@@ -76,6 +76,18 @@ stay O(n) in the population and never O(n squared).
   Every registered asset has decimals in `[2, 36]`, and a symbol once registered never returns to
   unregistered. SHOULD-HOLD: I-2, I-3, `_writeAsset` is the sole writer.
 
+- [x] **GL-15 — the admin never charges a wallet past what its owner allowed.**
+  Every admin purchase that goes through comes off `adminAllowanceUSDCents` by exactly its price, and none goes through for more than was left. A purchase the owner signs for itself leaves the allowance alone. SHOULD-HOLD: `_spendAdminAllowance` runs on every admin purchase and only the owner sets the figure. Checked at write time, like GL-11, because owners and handovers change the allowance between charges.
+
+- [x] **GL-16 — a lazy user's eSIM identifier goes only to the wallet the lazy route deployed for it.**
+  For every reachable lazy eSIM identifier that is still reserved and has a holder, the holder is `lazyDeployedESIMWallet` for it. SHOULD-HOLD: `Registry.assignESIMIdentifier` refuses any reserved identifier, and the lazy registry refuses to reserve one already claimed.
+
+- [x] **GL-17 — an owner can always withdraw its own transfer request and keep the wallet.**
+  Nominating itself clears the request and leaves the wallet held by its owner, including after an accept the new owner never bound and for a wallet that was never bound at all. SHOULD-HOLD: the self-add branch in `DeviceWallet` trusts a factory-deployed eSIM wallet's live `owner()` rather than the registry's association, which can lag behind a handover.
+
+- [x] **GL-18 — only the owner takes tokens out of the payment adapter.**
+  `recoverTokens` from any other caller never goes through, and an owner recovery moves exactly the amount asked to the address named, so GL-12 still balances. SHOULD-HOLD: `recoverTokens` is `onlyOwner`, and the owner is the timelock in production.
+
 ## Specific
 
 Asserted inside the handler that makes the call, where a before-and-after comparison is the point.

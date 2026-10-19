@@ -150,6 +150,72 @@ contract TokenAmountsTest is FuzzBase {
     }
 
     // ---------------------------------------------------------------------------------------------
+    // What the admin may charge in total
+    // ---------------------------------------------------------------------------------------------
+
+    /// @notice Over any run of admin charges, the total reaching the vault never passes the allowance
+    /// @dev Prices are drawn freely, so some charges are refused partway. What must hold is that
+    ///      what was charged plus what is left always equals what the owner allowed.
+    /// forge-config: default.fuzz.runs = 2000
+    function testFuzz_buyDataBundleWithToken_adminChargesNeverPassTheAllowance(
+        uint64 _allowance,
+        uint64[6] memory _prices
+    ) public {
+        uint64 allowance = uint64(bound(_allowance, 0, MAX_FUZZED_CENTS));
+
+        vm.startPrank(address(fuzzDeviceWallet));
+        fuzzESIMWallet.setPriceCapUSDCents(MAX_FUZZED_CENTS);
+        fuzzESIMWallet.setAdminAllowanceUSDCents(allowance);
+        vm.stopPrank();
+
+        uint256 charged;
+        uint256 paid;
+        for (uint256 i = 0; i < _prices.length; ++i) {
+            uint64 price = uint64(bound(_prices[i], 1, MAX_FUZZED_CENTS));
+            uint64 before = fuzzESIMWallet.adminAllowanceUSDCents();
+            fundSettlementToken(address(fuzzDeviceWallet), settlementAmount(price));
+
+            vm.prank(eSIMWalletAdmin);
+            try fuzzESIMWallet.buyDataBundleWithToken(
+                bundle("DB_FUZZ", price), ASSET_USDC, settlementAmount(price), nextRef()
+            ) {
+                assertLe(price, before, "A charge above what was left went through");
+                charged += price;
+                paid += settlementAmount(price);
+            } catch {
+                assertGt(price, before, "A charge within the allowance was refused");
+            }
+        }
+
+        assertLe(charged, allowance, "The admin charged more than the owner allowed");
+        assertEq(
+            charged + fuzzESIMWallet.adminAllowanceUSDCents(),
+            allowance,
+            "Charged plus left must equal what the owner allowed"
+        );
+        assertEq(settlementERC20.balanceOf(vault), paid, "The vault holds exactly what was charged");
+    }
+
+    /// @notice A purchase the owner signs never moves the allowance, whatever the price
+    /// forge-config: default.fuzz.runs = 2000
+    function testFuzz_buyDataBundleWithToken_ownerPurchasesNeverSpendTheAllowance(
+        uint64 _allowance,
+        uint64 _price
+    ) public {
+        uint64 allowance = uint64(bound(_allowance, 0, MAX_FUZZED_CENTS));
+        uint64 price = uint64(bound(_price, 1, defaultPriceCapUSDCents));
+
+        vm.prank(address(fuzzDeviceWallet));
+        fuzzESIMWallet.setAdminAllowanceUSDCents(allowance);
+        fundSettlementToken(address(fuzzDeviceWallet), settlementAmount(price));
+
+        vm.prank(address(fuzzDeviceWallet));
+        fuzzESIMWallet.buyDataBundleWithToken(bundle("DB_FUZZ", price), ASSET_USDC, settlementAmount(price), nextRef());
+
+        assertEq(fuzzESIMWallet.adminAllowanceUSDCents(), allowance, "The owner's purchase must not touch it");
+    }
+
+    // ---------------------------------------------------------------------------------------------
     // What a pull moves
     // ---------------------------------------------------------------------------------------------
 
@@ -182,6 +248,21 @@ contract TokenAmountsTest is FuzzBase {
     // ---------------------------------------------------------------------------------------------
     // Who gets access to the money
     // ---------------------------------------------------------------------------------------------
+
+    /// @notice No address the factory did not deploy can add itself to a device wallet
+    /// @dev The self-add branch trusts the caller's own `owner()` only because the factory vouches
+    ///      for the caller, so any other address has to be turned away before that is read.
+    /// forge-config: default.fuzz.runs = 2000
+    function testFuzz_addESIMWallet_refusesASelfAddTheFactoryCannotVouchFor(address _caller) public {
+        vm.assume(!eSIMWalletFactory.isESIMWalletDeployed(_caller));
+        vm.assume(
+            _caller != address(registry) && _caller != address(deviceWalletFactory) && _caller != address(fuzzDeviceWallet)
+        );
+
+        vm.prank(_caller);
+        vm.expectRevert(Errors.OnlyRegistryOrDeviceWalletFactoryOrOwner.selector);
+        fuzzDeviceWallet.addESIMWallet(_caller, false);
+    }
 
     /// @notice No caller binds a wallet with the right to spend, whoever they are
     /// @dev Access control runs first, so an unauthorised caller is turned away before the flag is

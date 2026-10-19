@@ -7,6 +7,7 @@ import {ESIMWallet} from "contracts/esim-wallet/ESIMWallet.sol";
 
 import {HandlerBase, HandlerConfig} from "test/foundry/invariant-testing/handler/HandlerBase.sol";
 import {MockERC20} from "test/utils/mocks/tokens/MockERC20.sol";
+import {WebAuthnSigner} from "test/utils/WebAuthnSigner.sol";
 
 /// @notice Everything a wallet does on its owner's behalf.
 /// @dev Every entry point here impersonates a wallet rather than a person. That is the whole
@@ -16,7 +17,40 @@ import {MockERC20} from "test/utils/mocks/tokens/MockERC20.sol";
 ///      would have reached.
 contract WalletHandler is HandlerBase {
 
+    /// @dev Order of the P256 curve, the range rotation private keys are drawn from
+    uint256 private constant P256_N = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551;
+
+    /// @notice Set when a rotation went through on a proof the new key did not sign
+    bool public ghost_rotatedWithoutTheNewKey;
+
+    /// @notice Set when the owner of an eSIM wallet with a request outstanding could not cancel it
+    bool public ghost_cancelRefused;
+
     constructor(HandlerConfig memory config) HandlerBase(config) {}
+
+    /// @notice The owner of an eSIM wallet withdraws an outstanding transfer request
+    /// @dev Cancelling has to work from every state a request can be in, including after an
+    ///      accept the new owner never bound. A refusal is recorded rather than asserted here,
+    ///      since a failed assertion inside a handler is a revert the runner discards.
+    /// @param eSIMIndex Where the scan for a wallet with a request outstanding starts
+    function cancelTransferRequest(uint256 eSIMIndex) external counted {
+        address wallet = _pickESIMWallet(eSIMIndex);
+        if (wallet == address(0) || ESIMWallet(payable(wallet)).newRequestedOwner() == address(0)) {
+            state.recordRevert("cancelTransferRequest");
+            return;
+        }
+        address currentOwner = ESIMWallet(payable(wallet)).owner();
+
+        vm.prank(currentOwner);
+        try ESIMWallet(payable(wallet)).requestTransferOwnership(currentOwner) {
+            if (!DeviceWallet(payable(currentOwner)).isValidESIMWallet(wallet)) ghost_cancelRefused = true;
+            state.setESIMOwner(wallet, registry.isESIMWalletValid(wallet));
+            state.recordCall("cancelTransferRequest");
+        } catch {
+            ghost_cancelRefused = true;
+            state.recordRevert("cancelTransferRequest");
+        }
+    }
 
     /// @notice A device wallet rotates the P256 key that owns it
     /// @dev Keys come from the same generator the deploy paths use, so a rotation onto a key
@@ -29,14 +63,66 @@ contract WalletHandler is HandlerBase {
             state.recordRevert("rotateOwnerKey");
             return;
         }
-        bytes32[2] memory newKey = _ownerKey(seed);
+        // Built from a private key rather than `_ownerKey`, because the new key has to sign
+        uint256 privateKey = bound(uint256(keccak256(abi.encode("rotationKey", seed))), 1, P256_N - 1);
+        bytes32[2] memory newKey = WebAuthnSigner.publicKeyOf(privateKey);
+        bytes memory proof = WebAuthnSigner.signWith(privateKey, DeviceWallet(payable(device)).rotationChallenge(newKey));
 
         vm.prank(device);
-        try DeviceWallet(payable(device)).transferOwnership(newKey) returns (bytes32[2] memory) {
+        try DeviceWallet(payable(device)).transferOwnership(newKey, proof) returns (bytes32[2] memory) {
             state.recordKey(device, newKey);
             state.recordCall("rotateOwnerKey");
         } catch {
             state.recordRevert("rotateOwnerKey");
+        }
+    }
+
+    /// @notice A device wallet tries to rotate onto a key with a proof signed by a different key
+    /// @dev The stranger's-key case. Expected to be refused every time, so it is left out of
+    ///      `HandlerDistribution`.
+    /// @param deviceIndex Which device wallet tries
+    /// @param seed Drives the key it names and the key that signs instead
+    function rotateWithAForeignProof(uint256 deviceIndex, uint256 seed) external counted {
+        address device = _pickDeviceWallet(deviceIndex);
+        if (device == address(0)) {
+            state.recordRevert("rotateWithAForeignProof");
+            return;
+        }
+        uint256 target = bound(uint256(keccak256(abi.encode("rotationKey", seed))), 1, P256_N - 1);
+        uint256 signer = target == P256_N - 1 ? 1 : target + 1;
+        bytes32[2] memory newKey = WebAuthnSigner.publicKeyOf(target);
+        bytes memory proof = WebAuthnSigner.signWith(signer, DeviceWallet(payable(device)).rotationChallenge(newKey));
+
+        vm.prank(device);
+        try DeviceWallet(payable(device)).transferOwnership(newKey, proof) returns (bytes32[2] memory) {
+            ghost_rotatedWithoutTheNewKey = true;
+            state.recordCall("rotateWithAForeignProof");
+        } catch {
+            state.recordRevert("rotateWithAForeignProof");
+        }
+    }
+
+    /// @notice A device wallet tells the registry about a key without rotating to it
+    /// @dev The owner can sign an `execute` that calls the registry directly. The registry must
+    ///      refuse any key the wallet does not hold, so this is expected to revert every time and is
+    ///      left out of `HandlerDistribution`. If one ever lands, the wallet keeps its old key and
+    ///      `invariant_registryKeyIsTheKeyTheWalletHolds` reports the split.
+    /// @param deviceIndex Which device wallet calls
+    /// @param seed Drives the key it names
+    function registerKeyWithoutRotating(uint256 deviceIndex, uint256 seed) external counted {
+        address device = _pickDeviceWallet(deviceIndex);
+        if (device == address(0)) {
+            state.recordRevert("registerKeyWithoutRotating");
+            return;
+        }
+        // Built before the prank: building it calls a precompile, which would use the prank up
+        bytes32[2] memory key = _ownerKey(seed);
+
+        vm.prank(device);
+        try registry.updateDeviceWalletOwnerKey(key) {
+            state.recordCall("registerKeyWithoutRotating");
+        } catch {
+            state.recordRevert("registerKeyWithoutRotating");
         }
     }
 
@@ -252,6 +338,27 @@ contract WalletHandler is HandlerBase {
             state.recordCall("pullToken");
         } catch {
             state.recordRevert("pullToken");
+        }
+    }
+
+    /// @notice The wallet owner sets what the admin may still charge this eSIM wallet in total
+    /// @dev Read off a ladder so zero and the maximum are both reached. Pranked as the live owner
+    ///      rather than the registry's association, which can lag behind a handover.
+    /// @param eSIMIndex Which eSIM wallet gets the allowance
+    /// @param seed Chooses the allowance
+    function setAdminAllowance(uint256 eSIMIndex, uint256 seed) external counted {
+        address wallet = _pickESIMWallet(eSIMIndex);
+        if (wallet == address(0)) {
+            state.recordRevert("setAdminAllowance");
+            return;
+        }
+        uint64[4] memory ladder = [uint64(0), 1, 10_000, type(uint64).max];
+
+        vm.prank(ESIMWallet(payable(wallet)).owner());
+        try ESIMWallet(payable(wallet)).setAdminAllowanceUSDCents(ladder[bound(seed, 0, 3)]) {
+            state.recordCall("setAdminAllowance");
+        } catch {
+            state.recordRevert("setAdminAllowance");
         }
     }
 
