@@ -30,7 +30,8 @@ library WebAuthn {
     ///      See https://www.w3.org/TR/webauthn-2/#flags.
     bytes1 private constant _AUTH_DATA_FLAGS_UV = 0x04;
 
-    /// @dev Secp256r1 curve order / 2 used as guard to prevent signature malleability issue.
+    /// @dev Half the secp256r1 curve order. Rejecting s above it stops (r, n - s) being a second
+    ///      valid signature.
     uint256 private constant _P256_N_DIV_2 = FCL_Elliptic_ZZ.n / 2;
 
     /// @dev The precompiled contract address to use for signature verification in the “secp256r1” elliptic curve.
@@ -61,26 +62,18 @@ library WebAuthn {
     ///
     /// @notice Decodes an encoded `WebAuthnSignature` without reverting on a malformed encoding.
     ///
-    /// @dev The decoder solc generates reverts when the bytes are not a well formed encoding, and a
-    ///      revert is not a rejection anywhere this is reached from. Inside ERC-4337 validation it
-    ///      fails the whole bundle rather than the one operation, and behind `isValidSignature` it
-    ///      reaches an integrating contract as an error rather than as an invalid signature.
-    ///      Everything below this point in this library was already written to return false instead
-    ///      of reverting; the decode one level above it was not, so anything too malformed to decode
-    ///      never reached the hardening.
+    /// @dev `abi.decode` reverts on bad input. Inside ERC-4337 validation that fails the whole
+    ///      bundle, and behind `isValidSignature` it reaches the caller as an error, not a rejection.
     ///
-    ///      An encoding failing any bound leaves `decoded` as solc allocated it, with both dynamic
-    ///      members pointing at the zero slot. `verifySignature` then returns false, because an
-    ///      empty `clientDataJSON` cannot contain the index it is handed.
+    ///      On a failed bound `decoded` stays as solc allocated it, both dynamic members empty, and
+    ///      `verifySignature` returns false since an empty `clientDataJSON` holds no valid index.
     ///
     ///      Inherited from solady: the length checks wrap, so a crafted length can run out of gas.
-    ///      That reverts; it never accepts a signature.
+    ///      That reverts, it never accepts a signature.
     ///
-    ///      Assembly, and a copy of solady's `WebAuthn.tryDecodeAuth` rather than a fresh
-    ///      implementation: `WebAuthnAuth` and `WebAuthnSignature` have identical layouts, and
-    ///      rewriting an audited ABI bounds check by hand only adds somewhere for a mistake to
-    ///      live. Memory-safe: every read is inside `encodedSignature`, and the only writes are to
-    ///      the six words solc already reserved for the return value.
+    ///      Copied from solady's `WebAuthn.tryDecodeAuth` (identical struct layout) rather than
+    ///      rewriting an ABI bounds check by hand. Memory-safe: every read is inside
+    ///      `encodedSignature`, and the only writes are to the six words solc reserved for `decoded`.
     ///
     /// @param encodedSignature `abi.encode` of a `WebAuthnSignature`, as supplied by the caller.
     ///
@@ -122,21 +115,16 @@ library WebAuthn {
     /// @notice Verifies a Webauthn Authentication Assertion as described
     /// in https://www.w3.org/TR/webauthn-2/#sctn-verifying-assertion.
     ///
-    /// @dev We do not verify all the steps as described in the specification, only ones relevant to our context.
-    ///      Please carefully read through this list before usage.
+    /// @dev Only the spec steps relevant here are checked. Read this list before using it.
     ///
-    ///      Specifically, we do verify the following:
-    ///         - Verify that authenticatorData (which comes from the authenticator, such as iCloud Keychain) indicates
-    ///           a well-formed assertion with the user present bit set. If `requireUV` is set, checks that the authenticator
-    ///           enforced user verification. User verification should be required if, and only if, options.userVerification
-    ///           is set to required in the request.
-    ///         - Verifies that the client JSON is of type "webauthn.get", i.e. the client was responding to a request to
-    ///           assert authentication.
-    ///         - Verifies that the client JSON contains the requested challenge.
-    ///         - Verifies that (r, s) constitute a valid signature over both the authenicatorData and client JSON, for public
-    ///            key (x, y).
+    ///      Verified:
+    ///         - authenticatorData has the user present bit set, and the user verified bit too when
+    ///           `requireUV` is set (require it only if options.userVerification was "required").
+    ///         - The client JSON has type "webauthn.get".
+    ///         - The client JSON carries the requested challenge.
+    ///         - (r, s) is a valid signature by (x, y) over authenticatorData and the client JSON.
     ///
-    ///      We make some assumptions about the particular use case of this verifier, so we do NOT verify the following:
+    ///      NOT verified:
     ///         - `clientDataJSON.origin`: trusted to the authenticator's own cross-origin policy.
     ///         - `clientDataJSON.topOrigin`: assumed absent, i.e. no cross-origin/iframe usage.
     ///         - `authenticatorData.rpIdHash`: trusted to the authenticator. Sign messages with an
@@ -169,10 +157,9 @@ library WebAuthn {
             return false;
         }
 
-        // Both indices come from the caller, so bound them before any arithmetic on them. Past the
-        // end of the JSON the addition below would overflow and panic, and this function must
-        // return false on a malformed signature rather than revert: it runs inside ERC-4337
-        // validation and behind isValidSignature, where a revert is not a rejection.
+        // Caller-supplied indices are bounded before any arithmetic, which could otherwise overflow
+        // and panic. This must return false, not revert: in ERC-4337 validation and behind
+        // isValidSignature a revert is not a rejection.
         uint256 clientDataJSONLength = bytes(webAuthnSignature.clientDataJSON).length;
         if (
             webAuthnSignature.typeIndex >= clientDataJSONLength ||
@@ -191,14 +178,11 @@ library WebAuthn {
         }
 
         // 12. Verify that the value of C.challenge equals the base64url encoding of options.challenge.
-        // The `challenge` argument to this function is the raw bytes.
-        // `webAuthnSignature.clientDataJSON` (after off-chain fix for Problem 1) contains:
-        // "challenge":"<base64url_encoded_raw_hash_bytes_no_padding>"
+        // `challenge` is raw bytes, and clientDataJSON holds "challenge":"<base64url, no padding>".
 
-        // challengeIndex must actually point at the challenge key. Without this the bytes are
-        // skipped blindly, so an index aimed at any other quoted field is accepted, and a signature
-        // made over a different challenge passes whenever that field happens to contain the
-        // expected base64url value before its closing quote. The origin is the obvious carrier.
+        // challengeIndex must point at the "challenge" key. Otherwise it could aim at another
+        // quoted field, such as the origin, holding the expected value, and a signature over a
+        // different challenge would pass.
         string memory challengeKey = webAuthnSignature.clientDataJSON.slice(
             webAuthnSignature.challengeIndex,
             webAuthnSignature.challengeIndex + _CHALLENGE_KEY_LENGTH
@@ -207,7 +191,6 @@ library WebAuthn {
             return false;
         }
 
-        // `challengeIndex` points to the opening quote of "challenge":
         uint256 challengeValueStartIndexInJson = webAuthnSignature.challengeIndex + _CHALLENGE_KEY_LENGTH; // Start of the Base64URL string
 
         if (challengeValueStartIndexInJson >= bytes(webAuthnSignature.clientDataJSON).length) {
@@ -233,8 +216,7 @@ library WebAuthn {
             challengeValueEndIndexInJson // Slice up to (but not including) the closing quote
         );
 
-        // Encode the raw `challenge` bytes using Solady's Base64URL (fileSafe=true, noPadding=true)
-        // This should match how simple-webauthn's isoBase64URL.fromBuffer() encodes.
+        // Base64url without padding, matching simple-webauthn's isoBase64URL.fromBuffer()
         string memory expectedChallengeValue = SoladyBase64.encode(challenge, true, true);
         if (keccak256(bytes(actualChallengeValue)) != keccak256(bytes(expectedChallengeValue))) {
             return false;
@@ -242,8 +224,7 @@ library WebAuthn {
 
         // Skip 13., 14., 15.
 
-        // The flags byte has to exist before it can be read. Indexing a shorter authenticatorData
-        // panics, which reverts validation instead of failing the signature.
+        // Indexing a shorter authenticatorData would panic instead of failing the signature
         if (webAuthnSignature.authenticatorData.length <= _AUTH_DATA_FLAGS_OFFSET) {
             return false;
         }
@@ -269,13 +250,10 @@ library WebAuthn {
         //     and hash.
         bytes32 messageHash = sha256(abi.encodePacked(webAuthnSignature.authenticatorData, clientDataJSONHash));
         bytes memory args = abi.encode(messageHash, webAuthnSignature.r, webAuthnSignature.s, x, y);
-        // try the RIP-7212 precompile address
+        // Try the RIP-7212 precompile. With no code there the call succeeds with empty output.
         (bool success, bytes memory ret) = _VERIFIER.staticcall(args);
-        // staticcall will not revert if address has no code
-        // check return length
-        // note that even if precompile exists, ret.length is 0 when verification returns false
-        // so an invalid signature will be checked twice: once by the precompile and once by FCL.
-        // Ideally this signature failure is simulated offchain and no one actually pay this gas.
+        // The precompile also returns nothing for an invalid signature, so that case is checked
+        // again by FCL. Simulating offchain first avoids paying for it.
         bool valid = ret.length > 0;
         if (success && valid) {
             return abi.decode(ret, (uint256)) == 1;
