@@ -22,19 +22,12 @@ import {Errors} from "./Errors.sol";
 // Types
 import {DataBundleDetails, Settlement} from "./CustomStructs.sol";
 
-/// @notice Single source of truth for who is who in the protocol, and the switchboard the wallets
-///         read on every guarded path
-/// @dev Holds the admin address, the vault, the pause flag and the price ceiling in one place.
-///      Device wallets and eSIM wallets are beacon proxies tracked by mappings with no enumerable
-///      list, so there is no way to write a value into each of them: one write here is how a change
-///      reaches all of them in the same transaction.
-///
-///      `IPausable` and `IRegistryAdmin` are declared so the compiler checks the signatures
-///      `ProtocolAdmin` calls through them. A guardian acts with no delay, so a drift between the
-///      two would only show as a revert during an incident. What each interface leaves out is
-///      deliberate: `pause()` is the hot admin key's lever while releasing it is the timelock's,
-///      and `enableAdmin()` is absent for the same reason in reverse, so nothing invites a fast
-///      path for handing a suspended key its powers back.
+/// @notice Holds the protocol's roles and switches: admin, vault, pause flag and price ceiling
+/// @dev Wallets are beacon proxies with no enumerable list, so one write here is the only way a
+///      change reaches all of them in the same transaction.
+///      `IPausable` and `IRegistryAdmin` let the compiler check what `ProtocolAdmin` calls, since a
+///      mismatch would only show as a revert mid-incident. `enableAdmin` is left out on purpose,
+///      so nothing invites a fast path for restoring a suspended key.
 contract Registry is
     Initializable,
     UUPSUpgradeable,
@@ -48,67 +41,46 @@ contract Registry is
     IEntryPoint public entryPoint;
 
     /// @notice Address holding the admin role, whether or not its powers are currently live
-    /// @dev The only copy in the protocol. `DeviceWalletFactory`, `DeviceWallet`, `ESIMWallet` and
-    ///      `LazyWalletRegistry` all read it from here, so rotating it below reaches every one of
-    ///      them in the same transaction. Holding it in more than one place is what previously let
-    ///      a rotation update some readers and leave the rest authorising the retired key.
-    ///
-    ///      Read `eSIMWalletAdmin()` rather than this to find out who may act: this is the address
-    ///      on the books, and it keeps naming a suspended admin so the suspension can be lifted
-    ///      without anyone having to remember who it was.
+    /// @dev The only copy, so a rotation reaches every reader at once and none keeps the old key.
+    ///      Use `eSIMWalletAdmin()` to ask who may act: this keeps naming a suspended admin so the
+    ///      suspension can be lifted without re-supplying the address.
     address public adminOfRecord;
 
     /// @notice Address of the vault that receives payments for the eSIM data bundles
     address public vault;
 
-    /// @dev Slot that used to hold a copy of the upgrade authority. It was written once in
-    ///      `initialize` and had no setter, so it kept naming the deploy-time address once
-    ///      ownership moved on. Kept so nothing below it shifts on the live proxies. Never read;
-    ///      `upgradeManager()` returns `owner()` instead.
-    ///
-    ///      Slither raises `unused-state` and `constable-states` here. Both are false: occupying
-    ///      the slot is the whole job, and either change takes it out of storage and moves every
-    ///      variable below it.
+    /// @dev Retired copy of the upgrade authority, never read (`upgradeManager()` returns `owner()`).
+    ///      Kept so the slots below do not shift on live proxies. Slither's `unused-state` and
+    ///      `constable-states` are false here: deleting it or making it constant moves every slot.
     address private _retiredUpgradeManager;
 
     /// @notice Address of the admin to be appointed
-    /// @dev Only the owner can request the transfer. The nominated address has to accept it, and
-    ///      this resets once they do. While it is set the incumbent has no powers, so a handover
-    ///      that is never accepted leaves the role dormant rather than shared.
+    /// @dev Set by the owner, cleared on acceptance. While set the incumbent has no powers, so an
+    ///      unaccepted handover leaves the role dormant rather than shared.
     address public newRequestedAdmin;
 
     /// @notice True while the protocol's guarded purchase and pull paths are stopped
-    /// @dev Held here for the same reason the admin address is: device wallets and eSIM wallets are
-    ///      beacon proxies tracked by a mapping with no enumerable list, so there is no way to
-    ///      write a flag into each of them. Both already read this contract on their guarded paths,
-    ///      so one write here reaches every wallet in the same transaction.
+    /// @dev Held here so one write reaches every wallet; they all read it on their guarded paths.
     bool public paused;
 
     /// @notice True while the admin's powers are suspended, leaving the address on the books
-    /// @dev Packs into the spare bytes beside `paused`, so it costs no slot of its own. Suspension
-    ///      is the lever against a compromised admin key: it is instant through a guardian, while
-    ///      lifting it is an owner action and therefore waits. A key that could restore itself as
-    ///      fast as it was suspended would leave the two sides trading transactions forever.
+    /// @dev Packs beside `paused`. Suspending is instant through a guardian but lifting it is an
+    ///      owner action that waits, so a compromised key cannot restore itself as fast.
     bool public adminDisabled;
 
     /// @notice Most an eSIM wallet may be charged for one data bundle, in USD cents, unless it sets
     ///         its own limit
-    /// @dev Held here because there is no way to list every wallet and write into each one, so one
-    ///      write here is how a change reaches all of them. Never zero: both setters reject it,
-    ///      because zero on a wallet means "follow the registry" and would mean nothing here.
+    /// @dev Never zero, both setters refuse it: zero on a wallet means "follow the registry", so it
+    ///      has no meaning here.
     uint64 public defaultPriceCapUSDCents;
 
-    /// @notice Contract holding the accepted currencies and the spent payment references
-    /// @dev A pointer and a setter, the same shape this registry already uses for the lazy wallet
-    ///      registry.
+    /// @notice Contract holding the accepted currencies
     address public paymentAdapter;
 
     /// @notice Payment references already spent, scoped per eSIM wallet
-    /// @dev Held here rather than on the payment adapter, so replay protection survives an adapter
-    ///      rotation through `setPaymentAdapter` instead of resetting with it. Keyed by
-    ///      `keccak256(abi.encode(eSIMWallet, paymentReference))` rather than by the reference
-    ///      alone, so one wallet spending a reference cannot burn it for an unrelated wallet's
-    ///      pending settlement.
+    /// @dev Held here so replay protection survives `setPaymentAdapter`. Keyed by
+    ///      `keccak256(abi.encode(eSIMWallet, paymentReference))` so one wallet spending a reference
+    ///      cannot burn it for another wallet's pending settlement.
     mapping(bytes32 scopedReference => bool used) public usedPaymentReferences;
 
     /// @notice What a new eSIM wallet lets the admin charge it in total, in USD cents
@@ -137,10 +109,7 @@ contract Registry is
     }
 
     /// @notice Restricts a call to the current eSIM wallet admin
-    /// @dev The hot key the backend signs with, not the owner. It can trip the pause but not
-    ///      release it, and cannot upgrade anything. Reads the accessor rather than the stored
-    ///      address, so a suspended admin is refused here for the same reason it is refused
-    ///      everywhere else.
+    /// @dev Reads the accessor, not `adminOfRecord`, so a suspended admin is refused here too.
     modifier onlyESIMWalletAdmin() {
         if(msg.sender != eSIMWalletAdmin()) revert Errors.OnlyAdmin();
         _;
@@ -151,9 +120,8 @@ contract Registry is
     // ---------------------------------------------------------------------------------------------
 
     /// @notice Disables initializers on the implementation contract
-    /// @dev Locks the implementation contract itself. Without this, anyone can call initialize
-    ///      directly on the implementation and own it. The proxy is unaffected either way, but an
-    ///      owned implementation is a trap for any later upgrade that adds an outward call.
+    /// @dev Otherwise anyone could initialize and own the implementation. The proxy is unaffected,
+    ///      but an owned implementation is a trap for a later upgrade that adds an outward call.
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -166,9 +134,8 @@ contract Registry is
     /// @param _deviceWalletFactory Factory that deploys device wallets
     /// @param _eSIMWalletFactory Factory that deploys eSIM wallets
     /// @param _entryPoint ERC-4337 EntryPoint singleton for this chain
-    /// @param _defaultPriceCapUSDCents Starting price ceiling in USD cents. Must be non-zero: a
-    ///        zero cap, here or on a wallet's own, reads as "no ceiling" in
-    ///        `ESIMWallet._requirePriceWithinCap`.
+    /// @param _defaultPriceCapUSDCents Starting price ceiling in USD cents. Non-zero, since zero
+    ///        reads as "no ceiling" in `ESIMWallet._requirePriceWithinCap`.
     /// @param _defaultAdminAllowanceUSDCents Total the admin may charge each new eSIM wallet, in USD cents
     function initialize(
         address _eSIMWalletAdmin,
@@ -184,10 +151,8 @@ contract Registry is
         if(_vault == address(0)) revert Errors.ZeroAddress("_vault");
         if(_upgradeManager == address(0)) revert Errors.ZeroAddress("_upgradeManager");
         if(address(_entryPoint) == address(0)) revert Errors.ZeroAddress("_entryPoint");
-        // Neither factory has a setter anywhere in the protocol, so a zero here is permanent.
-        // It would leave deployLazyWalletAndSetESIMIdentifier calling into address(0),
-        // onlyDeviceWalletFactory unable to match any sender, and the factory branch of
-        // ESIMWalletFactory's caller check dead, recoverable only by an upgrade.
+        // Neither factory has a setter, so a zero here breaks lazy deploys and the factory caller
+        // checks until an upgrade.
         if(_deviceWalletFactory == address(0)) revert Errors.ZeroAddress("_deviceWalletFactory");
         if(_eSIMWalletFactory == address(0)) revert Errors.ZeroAddress("_eSIMWalletFactory");
         if(_defaultPriceCapUSDCents == 0) revert Errors.ZeroDataBundlePriceCap();
@@ -220,19 +185,11 @@ contract Registry is
     // ---------------------------------------------------------------------------------------------
 
     /// @inheritdoc IRegistryAdmin
-    /// @dev Owner and not the admin, deliberately. An admin that had to nominate its own
-    ///      replacement could not be removed once its key was in someone else's hands, and the
-    ///      pause is the admin's own lever, so a compromised key could hold the protocol stopped
-    ///      for as long as it liked and no other key could end it.
-    ///
-    ///      Nominating strips the incumbent at once, through the accessor rather than through a
-    ///      write: a handover in flight leaves the role dormant until the nominee accepts, so the
-    ///      two never hold it at the same time. A rotation therefore has a gap in it, and the
-    ///      nomination and the acceptance belong close together.
-    ///
-    ///      Deliberately does not check for an existing request, so an unintended nomination is
-    ///      overridden by calling this again. Naming the incumbent withdraws the request and hands
-    ///      the powers back, which also lifts a suspension, so one call undoes either mistake.
+    /// @dev Owner, not admin: a compromised admin could never be replaced, and could hold the pause
+    ///      on with no other key able to end it.
+    ///      Nominating strips the incumbent at once (via `eSIMWalletAdmin()`), so the two never hold
+    ///      the role together; keep nomination and acceptance close. Calling again overrides a
+    ///      mistaken nomination, and naming the incumbent withdraws it and lifts a suspension.
     function requestAdminUpdate(address _newAdmin) external onlyOwner {
         if(_newAdmin == address(0)) revert Errors.ZeroAddress("_newAdmin");
 
@@ -249,16 +206,14 @@ contract Registry is
     }
 
     /// @notice Takes up the admin role, callable only by the nominated address
-    /// @dev Clears the suspension as well as the request. The suspension names a key, not the
-    ///      role, so a fresh key accepting is the end of the incident rather than something that
-    ///      has to be lifted separately afterwards.
+    /// @dev Clears the suspension too: it targets a key, not the role, so a fresh key accepting
+    ///      ends the incident.
     /// @return Address of the new admin
     function acceptAdminUpdate() external returns (address) {
         if(msg.sender != newRequestedAdmin) revert Errors.OnlyRequestedAdmin(newRequestedAdmin);
 
         adminOfRecord = msg.sender;
 
-        // Reset the requested admin to address(0) for further role transfer
         newRequestedAdmin = address(0);
         adminDisabled = false;
 
@@ -268,14 +223,9 @@ contract Registry is
     }
 
     /// @inheritdoc IRegistryAdmin
-    /// @dev Every gate in the protocol reads `eSIMWalletAdmin()`, which answers zero from here on,
-    ///      and no transaction can arrive from the zero address, so one write closes all of them
-    ///      in the same transaction. The address itself is kept so the suspension can be lifted
-    ///      without anyone having to supply it again.
-    ///
-    ///      Owner gated, which is what lets `ProtocolAdmin` offer a guardian an instant route to
-    ///      it. Refuses a repeat rather than passing quietly: a guardian doing this during an
-    ///      incident should not be left believing it acted when it did not.
+    /// @dev Every gate reads `eSIMWalletAdmin()`, which returns zero from here, so one write closes
+    ///      them all. Owner gated so `ProtocolAdmin` can give a guardian an instant route. A repeat
+    ///      reverts so a guardian mid-incident never believes it acted when it did not.
     function disableAdmin() external onlyOwner {
         if(adminDisabled) revert Errors.AdminAlreadyDisabled();
 
@@ -284,12 +234,9 @@ contract Registry is
     }
 
     /// @notice Hands a suspended admin its powers back
-    /// @dev Owner only, with no instant route for anyone. Suspending is instant and restoring
-    ///      waits, so a compromised key cannot undo its own suspension as fast as it is applied.
-    ///      Reversing that would recreate the deadlock the suspension exists to break.
-    ///
-    ///      Does nothing for an outstanding handover, which keeps the incumbent powerless on its
-    ///      own. Withdraw that with `requestAdminUpdate` naming the incumbent.
+    /// @dev Owner only with no instant route, so a compromised key cannot undo its suspension as
+    ///      fast as it is applied. An outstanding handover still keeps the incumbent powerless;
+    ///      withdraw it with `requestAdminUpdate` naming the incumbent.
     function enableAdmin() external onlyOwner {
         if(!adminDisabled) revert Errors.AdminNotDisabled();
 
@@ -298,9 +245,8 @@ contract Registry is
     }
 
     /// @notice Admin address every gated call in the protocol is checked against
-    /// @dev Zero while the admin is suspended or while a handover is outstanding, which is how
-    ///      both states close every gate at once: `msg.sender` is never zero, so no caller matches.
-    ///      `adminOfRecord` holds the address itself either way.
+    /// @dev Zero while suspended or while a handover is outstanding. `msg.sender` is never zero, so
+    ///      both states close every gate at once.
     /// @return The address that may act as admin right now, or zero if nobody may
     function eSIMWalletAdmin() public view returns (address) {
         if(adminDisabled || newRequestedAdmin != address(0)) return address(0);
@@ -313,14 +259,8 @@ contract Registry is
     // ---------------------------------------------------------------------------------------------
 
     /// @notice Points every data bundle payment at a different vault
-    /// @dev Owner and not admin, deliberately. This is the destination of every payment the protocol
-    ///      collects, so moving it is a fund-flow change and belongs behind the same delay as an
-    ///      upgrade rather than on the hot key that signs backend batches all day.
-    ///
-    ///      Device wallets read `vault` here on every purchase instead of caching it, so one write
-    ///      reaches all of them in the same transaction. This used to live on `DeviceWalletFactory`,
-    ///      which nothing on the payment path ever read, so rotating the vault there changed nothing
-    ///      and the real address could not be moved at all.
+    /// @dev Owner, not admin: every payment lands here, so moving it belongs behind the upgrade
+    ///      delay. Device wallets read `vault` on every purchase, so one write reaches all of them.
     /// @param _newVaultAddress Address that receives payments for the data bundles from now on
     /// @return The vault address now in force
     function updateVaultAddress(address _newVaultAddress) external onlyOwner returns (address) {
@@ -338,13 +278,10 @@ contract Registry is
     // ---------------------------------------------------------------------------------------------
 
     /// @notice Stops the token purchase and pull paths on every device wallet and eSIM wallet
-    /// @dev The admin trips this and the owner clears it. The admin key signs backend batches all
-    ///      day and is the one watching, so it needs to act without waiting; giving it the release
-    ///      as well would let a single hot key hold user funds indefinitely. Neither key can reach
-    ///      an owner's own `execute`, so a pause never stops someone spending their own ETH.
-    ///
-    ///      The owner can trip it too, so a guardian can still pause through ProtocolAdmin while
-    ///      the admin key is suspended.
+    /// @dev The admin trips it and the owner clears it: the hot key must act fast, but holding the
+    ///      release too would let one key freeze user funds indefinitely. The owner can also trip
+    ///      it, so a guardian can pause through `ProtocolAdmin` while the admin is suspended. A
+    ///      pause never reaches a wallet owner's own `execute`, so users can still spend their ETH.
     /// @inheritdoc IPausable
     function pause() external {
         if(msg.sender != eSIMWalletAdmin() && msg.sender != owner()) revert Errors.OnlyAdmin();
@@ -360,17 +297,15 @@ contract Registry is
     }
 
     /// @notice Reverts while the protocol is paused
-    /// @dev Device wallets and eSIM wallets call this rather than reading `paused` and reverting
-    ///      themselves, so the revert reason is the same wherever it comes from.
+    /// @dev Wallets call this instead of reading `paused`, so the revert reason is the same
+    ///      everywhere.
     function requireNotPaused() external view {
         if(paused) revert Errors.ProtocolPaused();
     }
 
     /// @notice Sets the price ceiling eSIM wallets fall back to when they hold none of their own
-    /// @dev Owner and not admin, deliberately. The admin is the party this ceiling constrains, so
-    ///      letting it raise its own limit would leave the ceiling meaningless. Zero is refused:
-    ///      it would read as "no ceiling" in `ESIMWallet._requirePriceWithinCap` for every wallet
-    ///      that has not set its own.
+    /// @dev Owner, not admin: the admin is the party this limits. Zero is refused because it reads
+    ///      as "no ceiling" in `ESIMWallet._requirePriceWithinCap` for wallets without their own.
     /// @param _cap Maximum price in USD cents, non-zero
     function setDefaultPriceCapUSDCents(uint64 _cap) external onlyOwner {
         if(_cap == 0) revert Errors.ZeroDataBundlePriceCap();
@@ -403,7 +338,7 @@ contract Registry is
     // Purchases paid for outside the protocol
     // ---------------------------------------------------------------------------------------------
 
-    /// @notice Spends a payment reference for an eSIM wallet paying with USDC (or any other acceptable stablecoin/ERC20)
+    /// @notice Spends a payment reference for an eSIM wallet paying with an accepted ERC-20
     /// @dev Scoped to `msg.sender`, so this and `recordSettledPurchase` cannot spend the same
     ///      reference once on each for the same wallet.
     /// @param _paymentReference Hash tying the purchase to the offchain order behind it
@@ -412,10 +347,9 @@ contract Registry is
     }
 
     /// @notice Records a data bundle paid for through an external wallet or a card
-    /// @dev No money moves here. Three things bound what the admin can state: the price ceiling,
-    ///      the payment reference being spendable once, and the settlement not being
-    ///      `DeviceWallet`. Written here and not by the adapter, because eSIM wallets accept
-    ///      history from this address alone.
+    /// @dev No money moves here. The admin's claim is bounded by the price cap, a once-only payment
+    ///      reference, and a settlement other than `DeviceWallet`. Written here, not by the adapter,
+    ///      because eSIM wallets accept history only from this address.
     /// @param _eSIMWallet Wallet the purchase belongs to
     /// @param _dataBundleDetail The purchase, priced in USD cents like everywhere else
     /// @param _asset Symbol of the currency the user paid in
@@ -461,11 +395,9 @@ contract Registry is
     }
 
     /// @notice Refuses a new entry while older history is still waiting to be copied in
-    /// @dev The new entry would land first and the older ones append after it, leaving the history
-    ///      out of order. The backend retries the whole onchain step on failure, so this cannot be
-    ///      left as an ordering rule for the caller to follow. External so a wallet can run the same
-    ///      check on its own paths that see the money move; `recordSettledPurchase` uses the
-    ///      private form since it already has this contract's own state in scope.
+    /// @dev Otherwise the new entry lands before the older ones and the history is out of order.
+    ///      Enforced here because the backend retries whole steps on failure. External so wallets
+    ///      can run it on their own paths that see the money move.
     /// @param _eSIMWallet Wallet being appended to
     function requireLazyHistoryCopied(address _eSIMWallet) external view {
         _requireLazyHistoryCopied(_eSIMWallet);
@@ -485,10 +417,7 @@ contract Registry is
     }
 
     /// @notice Spends a payment reference for one eSIM wallet, refusing one already spent by it
-    /// @dev Checked and written here rather than on the payment adapter, for the two reasons
-    ///      `usedPaymentReferences` documents: this survives an adapter rotation, and scoping by
-    ///      wallet means the reference space is not shared, so nothing here can be front-run to
-    ///      burn a reference an unrelated wallet's settlement is about to spend.
+    /// @dev Here rather than on the adapter, for the reasons on `usedPaymentReferences`.
     /// @param _eSIMWallet Wallet the reference is being spent for
     /// @param _paymentReference Hash tying this purchase to the offchain payment behind it
     function _consumePaymentReference(address _eSIMWallet, bytes32 _paymentReference) private {
@@ -514,8 +443,6 @@ contract Registry is
     // ---------------------------------------------------------------------------------------------
 
     /// @notice Records a device wallet the factory has just deployed
-    /// @dev Factory only. Writes the identifier, the address and the owner key together, so the
-    ///      three stay consistent with each other.
     /// @param _deviceWallet Address of the device wallet
     /// @param _deviceUniqueIdentifier String unique identifier associated with the device wallet
     /// @param _deviceWalletOwnerKey X,Y co-ordinates of the P256 key owning the wallet
@@ -528,13 +455,9 @@ contract Registry is
     }
 
     /// @notice Called by a device wallet when the P256 key that owns it is replaced
-    /// @dev Only the wallet itself can move its own bindings, so `msg.sender` is the subject
-    ///      rather than a parameter. Without this the registry keeps naming the retired key after
-    ///      a rotation, and the key taking over stays unregistered and can be claimed by a second
-    ///      wallet, which breaks the one key to one wallet rule the deploy paths enforce.
-    ///
-    ///      Must be the key the wallet holds, or a wallet could claim a stranger's key through
-    ///      `execute` and block them from ever registering.
+    /// @dev Without this the registry keeps the retired key and the new one could be claimed by a
+    ///      second wallet, breaking one key to one wallet. The key must be the one the wallet holds,
+    ///      or a wallet could claim a stranger's key through `execute` and block them registering.
     /// @param _newOwnerKey X,Y co-ordinates of the P256 key taking over
     function updateDeviceWalletOwnerKey(bytes32[2] memory _newOwnerKey) external onlyDeviceWallet {
         DeviceWallet wallet = DeviceWallet(payable(msg.sender));
@@ -546,13 +469,9 @@ contract Registry is
     }
 
     /// @notice Refuses a device identifier a fiat user's eSIMs are already waiting on
-    /// @dev The ordinary deployment route calls this. Taking such an identifier used to succeed and
-    ///      strand the lazy user: the history copy, the wallet deployment and the device switch all
-    ///      refuse an identifier that has a wallet.
-    ///
-    ///      Passes while `lazyWalletRegistry` is unset, the window between deploying this contract
-    ///      and wiring the two together. Nothing can be reserved before the contract holding
-    ///      reservations exists, so the window is empty rather than unguarded.
+    /// @dev Called by the ordinary deploy route. Taking such an identifier strands the lazy user:
+    ///      history copy, wallet deploy and device switch all refuse an identifier with a wallet.
+    ///      Passes while `lazyWalletRegistry` is unset, since nothing can be reserved before then.
     /// @param _deviceUniqueIdentifier Identifier the caller is about to take
     function requireDeviceIdentifierNotReserved(string calldata _deviceUniqueIdentifier) external view {
         if(lazyWalletRegistry == address(0)) return;
@@ -567,18 +486,10 @@ contract Registry is
     // ---------------------------------------------------------------------------------------------
 
     /// @notice Binds an eSIM wallet to the calling device wallet and settles any outstanding transfer
-    /// @dev The association is a registration: once the registry has named a device wallet for an
-    ///      eSIM wallet it always names one, and this is the only place it moves. Zero is refused
-    ///      for that reason, so releasing an eSIM wallet raises the standby flag through
-    ///      `toggleESIMWalletStandbyStatus` and leaves the association naming the last device
-    ///      wallet that held it.
-    ///
-    ///      Authorization reads `ESIMWallet.owner()` rather than the association above, because the
-    ///      association can still name a former device wallet after an ownership transfer has been
-    ///      accepted and never bound back through `addESIMWallet`.
-    ///
-    ///      Taking a wallet on is the one moment both facts change together, which is why the flag
-    ///      is cleared here rather than in a second call. Nothing else in this function reads it.
+    /// @dev The only writer of the association, which once set always names a device wallet, so
+    ///      zero is refused; a release raises standby via `toggleESIMWalletStandbyStatus` instead.
+    ///      Authorization reads `ESIMWallet.owner()` because the association can lag behind an
+    ///      accepted ownership transfer. Standby is cleared here since both facts change together.
     /// @param _eSIMWalletAddress Address of the eSIM wallet
     /// @param _deviceWalletAddress The device wallet taking it on, which must be the caller
     function bindESIMWallet(
@@ -587,9 +498,8 @@ contract Registry is
     ) external onlyDeviceWallet {
         if(_deviceWalletAddress == address(0)) revert Errors.ZeroAddress("_deviceWalletAddress");
 
-        // The two checks below ask the eSIM wallet about itself, and any contract can answer them
-        // with whatever a caller needs. The factory is the one party that can state this, and
-        // without it a device wallet registers an address of its choosing as protocol eSIM wallet.
+        // Any contract can fake the eSIM wallet's own answers below. Only the factory can vouch for
+        // it, so without this a device wallet could register any address as an eSIM wallet.
         if(!eSIMWalletFactory.isESIMWalletDeployed(_eSIMWalletAddress)) {
             revert Errors.NotAProtocolESIMWallet(_eSIMWalletAddress);
         }
@@ -598,13 +508,12 @@ contract Registry is
             revert Errors.NotTheESIMWalletOwnerOrItsDeviceWallet(_eSIMWalletAddress);
         }
 
-        // A device wallet can only bind an eSIM wallet to itself. Naming any other address is an
-        // attempt to move it without going through the ownership transfer.
+        // Naming any other address would move the wallet without an ownership transfer
         if(_deviceWalletAddress != msg.sender) {
             revert Errors.NotTheAssociatedDeviceWallet(_eSIMWalletAddress, _deviceWalletAddress);
         }
 
-        // Owner cannot change device wallet address in the middle of ownership transfer
+        // No rebinding while an ownership transfer is pending
         address pendingOwner = ESIMWallet(payable(_eSIMWalletAddress)).newRequestedOwner();
         if(pendingOwner != address(0)) {
             revert Errors.ESIMWalletOwnershipTransferPending(_eSIMWalletAddress, pendingOwner);
@@ -621,13 +530,9 @@ contract Registry is
     }
 
     /// @notice Binds an eSIM identifier to an eSIM wallet and writes it onto the wallet
-    /// @dev Admin only. Which identifier a wallet is owed is known offchain when the eSIM is
-    ///      bought, and no onchain check replaces that: a device wallet reaches every external
-    ///      function through `execute`, and any fact it could present about its own wallets is one
-    ///      it writes itself. The lazy route shares the same internal claim.
-    ///
-    ///      Reserved identifiers are refused even on their own device: the lazy route assigns them,
-    ///      and taking one here strands that lazy batch for good.
+    /// @dev Admin only: which identifier a wallet is owed is known offchain, and a device wallet
+    ///      could fake any onchain proof through `execute`. Reserved identifiers are refused even on
+    ///      their own device, because the lazy route assigns them and taking one strands that batch.
     /// @param _eSIMWalletAddress Wallet receiving the identifier
     /// @param _eSIMUniqueIdentifier Identifier being assigned
     /// @return The identifier now on the wallet
@@ -644,13 +549,9 @@ contract Registry is
     }
 
     /// @notice Marks an eSIM wallet as being moved from one device wallet to another, or cancels that
-    /// @dev Only the flag moves here. The association is a separate fact and keeps naming the device
-    ///      wallet that last held the eSIM wallet, so raising standby on a wallet this caller still
-    ///      holds is the ordinary case rather than a contradiction.
-    ///
-    ///      Authorization reads `ESIMWallet.owner()` rather than the association, for the same reason
-    ///      as `bindESIMWallet`: the association can still name a former device wallet after an
-    ///      accepted transfer that was never bound back.
+    /// @dev Only the flag moves; the association keeps naming the last device wallet, so raising
+    ///      standby on a wallet the caller still holds is normal. Authorization reads
+    ///      `ESIMWallet.owner()` for the same reason as `bindESIMWallet`.
     /// @param _eSIMWalletAddress Address of the eSIM wallet
     /// @param _isOnStandby True while a transfer is outstanding, false once it is settled or revoked
     function toggleESIMWalletStandbyStatus(
@@ -685,9 +586,7 @@ contract Registry is
     }
 
     /// @notice Ownership of this contract is never renounced
-    /// @dev The owner is the only caller _authorizeUpgrade accepts, and there is no other route to
-    ///      replace this implementation. Renouncing would freeze the contract on its current logic
-    ///      permanently.
+    /// @dev The owner is the only upgrade route, so renouncing would freeze this logic for good.
     function renounceOwnership() public pure override {
         revert Errors.OwnershipCannotBeRenounced();
     }
@@ -701,9 +600,8 @@ contract Registry is
     {}
 
     /// @notice Address (owned/controlled by eSIM wallet project) that can upgrade contracts
-    /// @dev Reads through to the owner rather than holding its own copy. `_authorizeUpgrade` is
-    ///      gated on `onlyOwner`, so the owner is the upgrade authority by definition and a second
-    ///      copy could only ever disagree with it.
+    /// @dev Reads through to the owner, which `_authorizeUpgrade` checks, since a separate copy
+    ///      could only disagree with it.
     /// @return The address that may upgrade this contract
     function upgradeManager() public view returns (address) {
         return owner();
