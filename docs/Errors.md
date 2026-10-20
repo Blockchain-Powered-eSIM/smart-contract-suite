@@ -4,9 +4,8 @@
 
 Every custom error the protocol reverts with, in one place
 
-_An interface rather than a library so each contract reaches them as `Errors.Name` without
-     inheriting anything. Grouped by the contract that raises them; several are shared, and the
-     comment above each group names who uses it._
+_An interface so each contract reaches them as `Errors.Name` without inheriting anything.
+     Grouped by the contract that raises them; a trailing note marks one raised elsewhere._
 
 ### ZeroAddress
 
@@ -66,6 +65,12 @@ error AdminAlreadyDisabled()
 
 ```solidity
 error AdminNotDisabled()
+```
+
+### OwnerKeyNotHeldByWallet
+
+```solidity
+error OwnerKeyNotHeldByWallet(address deviceWallet)
 ```
 
 ### ProtocolPaused
@@ -320,6 +325,12 @@ error DeviceWalletNotDeployed(address deviceWallet)
 error OnlySelf()
 ```
 
+### NewOwnerKeyCannotSign
+
+```solidity
+error NewOwnerKeyCannotSign()
+```
+
 ### OnlyEntryPointOrSelf
 
 ```solidity
@@ -366,6 +377,12 @@ error OnlyDeviceWalletOrESIMWalletAdmin()
 
 ```solidity
 error DataBundlePriceAboveCap(uint64 priceUSDCents, uint64 cap)
+```
+
+### AdminAllowanceExceeded
+
+```solidity
+error AdminAllowanceExceeded(uint64 priceUSDCents, uint64 remaining)
 ```
 
 ### ESIMIdentifierAlreadySet

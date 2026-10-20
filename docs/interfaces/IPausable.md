@@ -2,10 +2,17 @@
 
 ## IPausable
 
-Minimal view of the pause a guardian is allowed to release
+Minimal view of the pause a guardian is allowed to raise and release
 
-_Only `unpause()` is here. Raising a pause is the hot admin key's lever and releasing one is
-     the timelock's, so the two are deliberately not offered through the same interface._
+_Both, because a guardian does both without waiting, even while the admin key is suspended._
+
+### pause
+
+```solidity
+function pause() external
+```
+
+Stops the protocol's guarded purchase and pull paths
 
 ### unpause
 

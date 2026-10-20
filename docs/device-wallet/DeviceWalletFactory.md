@@ -4,10 +4,9 @@
 
 Deploys device wallets at deterministic addresses and owns the beacon they all point at
 
-_A UUPS singleton with two deployment routes. The admin batch route deploys a wallet, its
-     first eSIM wallet and the registry records together. The EntryPoint route, `createAccount`,
-     writes no external storage at all, so a wallet created that way is registered afterwards
-     through `postCreateAccount`. Both land on the same CREATE2 address for the same inputs._
+_The admin batch route deploys and registers in one go. `createAccount` runs inside ERC-4337
+     validation and writes no external storage, so `postCreateAccount` registers it afterwards.
+     Both routes give the same CREATE2 address for the same inputs._
 
 ### beacon
 
@@ -15,10 +14,9 @@ _A UUPS singleton with two deployment routes. The admin batch route deploys a wa
 contract UpgradeableBeacon beacon
 ```
 
-Upgradeable beacon that points to correct Device wallet implementation
+Beacon every device wallet proxy reads its implementation from
 
-_Every device wallet is a beacon proxy reading its implementation from here, so one
-     update moves all of them at once and none can decline it._
+_One update moves every wallet at once, and none can decline it._
 
 ### entryPoint
 
@@ -108,10 +106,9 @@ constructor() public
 
 Disables initializers on the implementation contract
 
-_Locks the implementation contract itself. Without this, anyone can call initialize
-     directly on the implementation, own it, and make it deploy a beacon it controls. The
-     proxy is unaffected either way, but an owned implementation is a trap for any later
-     upgrade that adds an outward call._
+_Otherwise anyone could initialize and own the implementation itself. The proxy is
+     unaffected, but an owned implementation is a trap for a later upgrade that adds an
+     outward call._
 
 ### initialize
 
@@ -121,9 +118,8 @@ function initialize(address _deviceWalletImplementation, address _upgradeManager
 
 Deploys the beacon and hands ownership of this factory to the upgrade manager
 
-_Neither the admin nor the vault is taken here. Both come from the registry, which is
-     added afterwards through addRegistryAddress, so admin functions stay closed until that
-     is done and every payment reads one address._
+_The admin and the vault are read from the registry, set later by addRegistryAddress,
+     so there is one source for each. Admin functions stay closed until then._
 
 #### Parameters
 
@@ -141,11 +137,10 @@ _Neither the admin nor the vault is taken here. Both come from the registry, whi
 function addRegistryAddress(address _registryContractAddress) external returns (address)
 ```
 
-Allow the owner to add the registry contract after it has been deployed
+Sets the registry, once, after it has been deployed
 
-_Write-once, and the owner rather than the admin, because the admin is read from the
-     registry and there is no admin to check against until this call lands. Matches
-     ESIMWalletFactory, which has always gated its own version on the owner._
+_Gated on the owner because the admin is read from the registry, so there is no admin
+     to check until this lands. Same as ESIMWalletFactory._
 
 #### Parameters
 
@@ -165,10 +160,9 @@ _Write-once, and the owner rather than the admin, because the admin is read from
 function updateDeviceWalletImplementation(address _newDeviceImpl) external returns (address)
 ```
 
-Function to update the device wallet implementation
+Points the beacon at a new device wallet implementation
 
-_Moves every device wallet in the protocol at once. Treat any change here as a
-     protocol-wide upgrade, since no wallet can decline it._
+_A protocol-wide upgrade: every device wallet moves at once and none can decline it._
 
 #### Parameters
 
@@ -188,25 +182,24 @@ _Moves every device wallet in the protocol at once. Treat any change here as a
 function deployDeviceWalletForUsers(string[] _deviceUniqueIdentifiers, bytes32[2][] _deviceWalletOwnersKey, uint256[] _salts, uint256[] _depositAmounts) external payable returns (struct Wallets[])
 ```
 
-To deploy multiple device wallets at once
+Deploys device wallets, each with its first eSIM wallet and registry records
 
-_Each entry deploys a device wallet, its first eSIM wallet and the registry records in
-     one go. ETH left over once the batch has been funded is returned to the caller._
+_Unspent ETH is returned to the caller. Refused while paused, since it moves ETH._
 
 #### Parameters
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| _deviceUniqueIdentifiers | string[] | Array of unique device identifiers for each device wallet |
-| _deviceWalletOwnersKey | bytes32[2][] | Array of P256 public keys of owners of the respective device wallets |
-| _salts | uint256[] | Array of CREATE2 salts, one per device wallet |
-| _depositAmounts | uint256[] | Array of all the ETH to be deposited into each of the device wallets |
+| _deviceUniqueIdentifiers | string[] | Device identifier per wallet |
+| _deviceWalletOwnersKey | bytes32[2][] | Owner P256 public key per wallet |
+| _salts | uint256[] | CREATE2 salt per wallet |
+| _depositAmounts | uint256[] | ETH to deposit per wallet |
 
 #### Return Values
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| [0] | struct Wallets[] | Array of deployed device wallet address |
+| [0] | struct Wallets[] | The deployed device and eSIM wallet addresses |
 
 ### postCreateAccount
 
@@ -216,12 +209,8 @@ function postCreateAccount(address _deviceWallet, string _deviceUniqueIdentifier
 
 Records a wallet the EntryPoint deployed through createAccount
 
-_Not needed on the admin batch route, which writes the registry itself. Callable by the
-     admin directly and by the registry on the lazy deployment path.
-
-     The wallet was not deployed in this call, so nothing binds the arguments to it. The
-     re-derivation does: the key and the identifier are proxy constructor arguments, so an
-     address matching the derivation and holding code was deployed here with exactly those._
+_The key and identifier are proxy constructor arguments, so an address that matches the
+     derivation and holds code was deployed by this factory with exactly those arguments._
 
 #### Parameters
 
@@ -240,14 +229,9 @@ function createAccount(string _deviceUniqueIdentifier, bytes32[2] _deviceWalletO
 
 Deploys a device wallet, returning the existing one if that address already holds it
 
-_Called by the EntryPoint during a user operation, so it must not read or write any
-     other contract's storage: that is barred by the ERC-4337 validation rules. The registry
-     is therefore not consulted here and not written, and `postCreateAccount` records the
-     wallet afterwards. Validation the registry would have done happens offchain, through
-     `preCreateAccountValidation`.
-
-     Returning an existing address rather than reverting is what makes
-     `entryPoint.getSenderAddress()` keep working once the account has been created._
+_Runs in ERC-4337 validation, so it leaves the registry to `postCreateAccount`. Reading
+     its own and the beacon's storage needs a staked factory. Returning an existing wallet
+     instead of reverting keeps `entryPoint.getSenderAddress()` working after creation._
 
 #### Parameters
 
@@ -271,9 +255,8 @@ function renounceOwnership() public pure
 
 Ownership of this contract is never renounced
 
-_The owner is the only caller _authorizeUpgrade accepts, and this contract owns the
-     beacon, so it is also the only route to updateDeviceWalletImplementation. Renouncing
-     would freeze every device wallet on its current logic permanently._
+_The owner alone upgrades this factory and the beacon, so renouncing would freeze every
+     device wallet on its current logic for good._
 
 ### _authorizeUpgrade
 
@@ -301,17 +284,17 @@ Deploys one device wallet, its first eSIM wallet and the binding between them
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| _deviceUniqueIdentifier | string | Unique device identifier for the device wallet |
-| _deviceWalletOwnerKey | bytes32[2] | User's P256 public key (owner of the device wallet and respective eSIM wallets) |
+| _deviceUniqueIdentifier | string | Identifier the device is reached by |
+| _deviceWalletOwnerKey | bytes32[2] | Owner P256 public key of the device and eSIM wallets |
 | _salt | uint256 | CREATE2 salt for both wallets |
-| _depositAmount | uint256 | Amount of ETH to be deposited into the device wallet |
+| _depositAmount | uint256 | ETH to deposit into the device wallet |
 
 #### Return Values
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| [0] | struct Wallets | Deployed device wallet address |
-| [1] | uint256 | ETH actually forwarded to the wallet, zero if an existing wallet was returned |
+| [0] | struct Wallets | The device and eSIM wallet addresses |
+| [1] | uint256 | ETH actually forwarded, zero if an already registered wallet was returned |
 
 ### _createAccountForUser
 
@@ -321,9 +304,8 @@ function _createAccountForUser(string _deviceUniqueIdentifier, bytes32[2] _devic
 
 Deploys a device wallet and writes its registry records, or adopts one that already exists
 
-_Returns the ETH actually forwarded to the wallet, which is zero whenever an existing
-     wallet is returned instead of a new one being deployed. Callers holding a budget must
-     decrement by this value, not by the requested deposit._
+_Callers holding a budget must charge `spentETH`, not the requested deposit. It is zero
+     for an already registered wallet, and the full deposit for a new or adopted one._
 
 #### Parameters
 
@@ -349,10 +331,8 @@ function eSIMWalletAdmin() public view returns (address)
 
 Admin address of the eSIM wallet project
 
-_Held by the registry, which is where it is rotated, so this contract cannot fall
-     behind the rest of the protocol after a rotation. Answers address(0) before the
-     registry is wired up, which no caller can match, so admin functions stay closed until
-     then rather than reverting on a call into address(0)._
+_Read from the registry so a rotation there applies here too. Returns address(0), which
+     no caller matches, until the registry is set, rather than calling into address(0)._
 
 #### Return Values
 
@@ -366,22 +346,22 @@ _Held by the registry, which is where it is rotated, so this contract cannot fal
 function preCreateAccountValidation(string _deviceUniqueIdentifier, bytes32[2] _deviceWalletOwnerKey) public view returns (address wallet)
 ```
 
-Checks that all the input params needed for deploying a fresh device wallet are valid
+Checks the inputs for a fresh device wallet against the registry
 
-_This is needed when deploying the device wallet via the EntryPoint using userops_
+_For use before `createAccount`, which cannot read the registry itself_
 
 #### Parameters
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| _deviceUniqueIdentifier | string | Unique device identifier for the device wallet |
-| _deviceWalletOwnerKey | bytes32[2] | User's P256 public key (owner of the device wallet and respective eSIM wallets) |
+| _deviceUniqueIdentifier | string | Identifier the device is reached by |
+| _deviceWalletOwnerKey | bytes32[2] | Owner P256 public key of the device and eSIM wallets |
 
 #### Return Values
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| wallet | address | address(0) if valid. device wallet address for any existing wallet |
+| wallet | address | address(0) if both are free, else the wallet already holding one of them |
 
 ### getCounterFactualAddress
 
@@ -391,8 +371,8 @@ function getCounterFactualAddress(bytes32[2] _deviceWalletOwnerKey, string _devi
 
 The address createAccount would deploy to for these inputs
 
-_The owner key and the device identifier are part of the proxy's constructor arguments,
-     so they are folded into the address alongside the salt. Changing any of them moves it._
+_The key and identifier are proxy constructor arguments, so changing either, or the
+     salt, moves the address._
 
 #### Parameters
 

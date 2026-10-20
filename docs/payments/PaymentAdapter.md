@@ -4,9 +4,8 @@
 
 One currency the protocol will price a data bundle in
 
-_23 bytes, so it fits one slot with nine to spare. New fields have to stay inside those
-     nine bytes: a second slot moves every entry in the mapping, and a live table cannot be
-     moved._
+_23 bytes, one slot. New fields must fit the nine spare bytes: a second slot would change
+     the layout of every entry already stored behind the proxy._
 
 ```solidity
 struct Asset {
@@ -19,16 +18,10 @@ struct Asset {
 
 ## PaymentAdapter
 
-Holds the accepted currencies, converts prices, moves tokens to the vault, and spends
-        payment references
+Holds the accepted currencies, converts prices and moves tokens to the vault
 
-_Prices cross contract boundaries in USD cents only, and this is the one place a cent
-     figure becomes a token amount, so a decimals mismatch cannot happen rather than having to
-     be checked for. There are no price feeds, so a currency not already in dollars has no
-     conversion here. UUPS and not swappable: `usedReferences` is replay protection, and a
-     fresh copy would re-open every reference already spent.
-
-     Tokens pass through in one call and never rest here._
+_The one place a cent price becomes a token amount, so decimals cannot drift between
+     callers. No price feeds, so only dollar currencies convert._
 
 ### registry
 
@@ -36,7 +29,7 @@ _Prices cross contract boundaries in USD cents only, and this is the one place a
 address registry
 ```
 
-Registry contract address, the only caller allowed to spend a payment reference
+Registry contract address, which this reads the vault and the eSIM wallet list from
 
 ### settlementToken
 
@@ -46,8 +39,7 @@ address settlementToken
 
 Currency the vault is meant to end up holding
 
-_Nothing reads it yet. Set at initialisation anyway, so adding the swap path later needs
-     no migration transaction on every chain._
+_Not read yet. Set now so a later swap path needs no migration on every chain._
 
 ### assets
 
@@ -65,12 +57,9 @@ mapping(bytes32 => bool) usedReferences
 
 Payment references already spent, protocol-wide
 
-_Retired: `Registry.usedPaymentReferences` is now the live replay-protection store, kept
-     there instead of here so it survives `setPaymentAdapter` rotating this contract out, and
-     scoped per wallet there so one wallet cannot burn a reference for another. Left declared
-     at this slot, unread and unwritten by the live purchase paths, because
-     `StorageLayout.t.sol` pins it here behind the proxy and removing it would shift every
-     variable below._
+_Retired. Replay protection lives in `Registry.usedPaymentReferences`, which survives an
+     adapter rotation and is scoped per wallet. Kept at this slot (pinned by
+     `StorageLayout.t.sol`) because removing it would shift every variable below._
 
 ### PaymentAdapterInitialized
 
@@ -86,7 +75,7 @@ Emitted when this contract is wired up
 event AssetUpdated(bytes32 _symbol, bool _allowed, bool _isDollarUnit, uint8 _decimals, address _token)
 ```
 
-Emitted when a currency enters the vocabulary or its entry changes
+Emitted when a currency is added or its entry changes
 
 ### PaymentReferenceConsumed
 
@@ -104,8 +93,16 @@ event PaymentSettled(bytes32 _symbol, address _eSIMWallet, address _vault, uint6
 
 Emitted when a data bundle is paid for in tokens through this contract
 
-_One address for an indexer to watch instead of every eSIM wallet. The vault is
-     recorded because it can be rotated, and reconciliation needs the one that was paid._
+_One address to watch instead of every eSIM wallet. The vault is logged because it can
+     be rotated, and reconciliation needs the one that was paid._
+
+### TokensRecovered
+
+```solidity
+event TokensRecovered(address _token, address _to, uint256 _amount)
+```
+
+Emitted when tokens sent here by mistake are returned
 
 ### onlyRegistry
 
@@ -123,8 +120,7 @@ modifier onlyProtocolESIMWallet()
 
 Restricts a call to an eSIM wallet the registry has a record of
 
-_Read from the registry on every call rather than held here, so a wallet the registry
-     has let go cannot keep paying through this contract._
+_Read from the registry each call, so a wallet it has dropped cannot keep paying here._
 
 ### constructor
 
@@ -133,8 +129,6 @@ constructor() public
 ```
 
 Disables initializers on the implementation contract
-
-_Locks the implementation contract itself, so nobody can initialise and own it directly._
 
 ### initialize
 
@@ -160,8 +154,8 @@ function registerAsset(bytes32 _symbol, struct Asset _asset) external
 
 Adds a currency the protocol will accept or record a payment in
 
-_Owner and not admin. The admin names the price on every purchase, so letting it add
-     currencies too would let it invent a token address to be paid into._
+_Owner, not admin: the admin names the price on its purchases, so it must not also be
+     able to invent a token address to be paid into._
 
 #### Parameters
 
@@ -178,8 +172,7 @@ function updateAsset(bytes32 _symbol, struct Asset _asset) external
 
 Changes an existing currency entry, including withdrawing it
 
-_Separate from `registerAsset` so a typo in a new symbol cannot silently overwrite a
-     currency already in use. Set `allowed` to false to withdraw one._
+_Separate from `registerAsset` so a typo in a new symbol cannot overwrite a live one._
 
 #### Parameters
 
@@ -196,9 +189,7 @@ function quote(bytes32 _symbol, uint64 _priceUSDCents) external view returns (ui
 
 Turns a price in USD cents into an amount of one currency's smallest unit
 
-_The only place in the protocol that does this, so there is never a second figure to
-     check this one against. A currency not already in dollars needs a rate, and there are
-     no price feeds here, so it reverts instead of guessing._
+_A non-dollar currency would need a rate, and there are no price feeds, so it reverts._
 
 #### Parameters
 
@@ -221,8 +212,7 @@ function resolveAsset(bytes32 _symbol) external view returns (struct Asset)
 
 Reads back a currency entry, reverting if it is not allowed
 
-_Callers read the token address and decimals from here rather than passing them in, so
-     they stay the same across every record._
+_Callers read token and decimals here rather than pass them, so every record agrees._
 
 #### Parameters
 
@@ -244,22 +234,12 @@ function settle(bytes32 _symbol, uint64 _priceUSDCents, uint256 _amountIn, addre
 
 Pays the vault for one data bundle out of tokens the caller has already sent here
 
-_The caller funds this contract and calls settle in the same transaction, which leaves
-     the tokens here for a swap to be added later without changing this signature.
-
-     `_amountIn` is the caller's word for what it sent, checked only against the balance, so
-     a caller naming more than it sent would carry off a token somebody left here by
-     mistake. What stops that is the caller: the one path into here passes `quote`, and an
-     eSIM wallet has no way to call this with a figure of its own choosing. Keep it that way.
-
+_Funded first, then called, so a swap can be added later without changing the signature.
+     `_amountIn` is checked only against the balance, so overstating it would sweep tokens
+     left here by mistake. Only safe because the one caller passes at most `quote`. Keep it so.
      A fee-on-transfer token delivers less than declared and fails the funding check.
-
-     `spent` is recomputed here from `_symbol` and `_priceUSDCents` rather than taken from
-     the caller's own `quote()` call, so the two agree only because nothing mutates
-     `assets[_symbol]` between the two calls in the same transaction today. Nothing
-     structurally enforces that: a swap path or any other step that can change an asset's
-     entry mid-transaction would need `settle` to check a value the caller's own `quote()`
-     call committed to, not one recomputed fresh here._
+     `spent` is recomputed, matching the caller's `quote` only because nothing changes
+     `assets` in between. A swap path that can must check the caller's quoted value instead._
 
 #### Parameters
 
@@ -275,7 +255,7 @@ _The caller funds this contract and calls settle in the same transaction, which 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
 | spent | uint256 | Amount that reached the vault |
-| refunded | uint256 | What `_amountIn` came to over the price, sent back to `_refundTo` |
+| refunded | uint256 | `_amountIn` over the price, sent back to `_refundTo` |
 
 ### consumePaymentReference
 
@@ -283,18 +263,35 @@ _The caller funds this contract and calls settle in the same transaction, which 
 function consumePaymentReference(bytes32 _paymentReference) external
 ```
 
-Spends a payment reference against this adapter's own record, refusing one already
-        spent through it
+Spends a payment reference against this adapter's own record, refusing a repeat
 
-_Retired from the registry's live purchase paths; see `usedReferences`. Left callable so
-     an adapter instance's own record still means what it says, but nothing in the protocol
-     calls this any more._
+_Retired, see `usedReferences`. Nothing in the protocol calls it any more._
 
 #### Parameters
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
 | _paymentReference | bytes32 | Hash tying this purchase to the offchain payment behind it |
+
+### recoverTokens
+
+```solidity
+function recoverTokens(address _token, address _to, uint256 _amount) external
+```
+
+Returns tokens sent to this contract by mistake
+
+_Safe because `settle` is funded and spent in the same transaction, so nothing a purchase
+     paid rests here between transactions. The owner is the timelock, so every recovery is
+     public for the delay before it runs._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| _token | address | Token to send out |
+| _to | address | Address that receives it, normally whoever sent it here |
+| _amount | uint256 | Amount in the token's smallest unit |
 
 ### renounceOwnership
 
@@ -304,8 +301,7 @@ function renounceOwnership() public pure
 
 Ownership of this contract is never renounced
 
-_The owner is the only caller `_authorizeUpgrade` accepts and the only one that can
-     change the list of currencies. Renouncing would freeze both for good._
+_Only the owner can upgrade or change currencies, so renouncing would freeze both._
 
 ### _authorizeUpgrade
 
@@ -329,7 +325,7 @@ function upgradeManager() public view returns (address)
 
 Address that can upgrade this contract
 
-_Reads through to the owner rather than holding a second copy that could disagree._
+_Reads the owner rather than a second copy that could disagree._
 
 #### Return Values
 

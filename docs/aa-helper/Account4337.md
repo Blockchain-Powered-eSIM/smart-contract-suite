@@ -4,11 +4,8 @@
 
 ERC-4337 account owned by a P256 key rather than by an address
 
-_The owner never sends a transaction itself. It signs a WebAuthn assertion, and either
-        the EntryPoint or this account calling into itself turns that into a call. Two entry
-        points read signatures, `validateUserOp` for user operations and `isValidSignature` for
-        ERC-1271, and each hashes a different precursor, so a signature made for one is not
-        accepted by the other._
+_`validateUserOp` and `isValidSignature` each hash a different precursor, so a signature
+        made for one is never accepted by the other._
 
 ### entryPoint
 
@@ -18,8 +15,7 @@ contract IEntryPoint entryPoint
 
 The ERC-4337 EntryPoint singleton this account answers to
 
-_Immutable to keep validation cheap, which means moving to a new EntryPoint version
-        is a new implementation rather than a setter call._
+_Immutable to keep validation cheap, so a new EntryPoint needs a new implementation._
 
 ### verifier
 
@@ -37,11 +33,9 @@ bytes32[2] owner
 
 X and Y co-ordinates of the P256 key that owns this account
 
-_DeviceWallet inherits this contract, and base storage comes first, so its own
-     variables begin immediately after this one. A state variable added here moves all of
-     them on wallets that are already deployed, which then read back as zero. Anything
-     this contract needs later belongs in its own ERC-7201 namespace, not in a slot
-     following `owner`._
+_DeviceWallet's storage starts right after this slot. A new state variable here would
+     shift it on deployed wallets, which then read zeros. Put new state in an ERC-7201
+     namespace instead._
 
 ### Account4337Initialized
 
@@ -67,8 +61,7 @@ modifier onlySelf()
 
 Restricts a call to the account itself
 
-_The only way to satisfy this from outside is `execute` or `executeBatch` targeting this
-     address, which the owner key has to have signed for._
+_Reached from outside only by an owner-signed `execute` or `executeBatch` to this address_
 
 ### onlyEntryPoint
 
@@ -101,10 +94,8 @@ function initialize(bytes32[2] anOwner) internal virtual
 
 Sets the owner key on a freshly deployed account
 
-_Internal on purpose. A public setup function guarded only by `initializer` names no
-     caller, so a proxy created without its init call in the same transaction could be
-     claimed by anyone with an owner key of their choosing and none of the protocol wiring.
-     Internal keeps the subclass path working and leaves no other way in._
+_Internal so a proxy deployed without its init call cannot be claimed by anyone with a
+     key of their choosing. Only a subclass initializer can reach it._
 
 #### Parameters
 
@@ -120,8 +111,6 @@ function _initialize(bytes32[2] anOwner) internal virtual
 
 Writes the owner key without the initializer guard
 
-_Split out so a subclass can reuse the write from its own initializer._
-
 #### Parameters
 
 | Name | Type | Description |
@@ -136,8 +125,8 @@ function execute(struct Call call) external
 
 Makes one call from this account
 
-_Callable by the EntryPoint or by this account. There is no path here for the P256 key
-     directly: it holds no address, so it reaches this only by signing a user operation._
+_Callable by the EntryPoint or this account. The P256 key has no address, so it reaches
+     this only through a signed user operation._
 
 #### Parameters
 
@@ -153,8 +142,7 @@ function executeBatch(struct Call[] calls) external
 
 Makes a sequence of calls from this account, reverting all of them if one fails
 
-_Same callers as `execute`. Each entry carries its own value, so a batch that moves no
-     ETH simply leaves every value at zero._
+_Same callers as `execute`_
 
 #### Parameters
 
@@ -170,10 +158,8 @@ function isValidSignature(bytes32 _messageHash, bytes _signature) external view 
 
 Validates a signature over an arbitrary message, per ERC-1271
 
-_The challenge inside `clientDataJSON` is not `_messageHash`. It is the EIP-191 digest
-     over version, validUntil, chain id, this address and `_messageHash`, so an offchain
-     signer needs all five. Signature layout is version (1 byte) then validUntil (6 bytes)
-     then the ABI-encoded WebAuthn assertion._
+_The signed challenge is not `_messageHash` but the EIP-191 digest over version,
+     validUntil, chain id, this address and `_messageHash`, so a signer needs all five._
 
 #### Parameters
 
@@ -200,9 +186,8 @@ signature failure should be reported by returning SIG_VALIDATION_FAILED (1).
 This allows making a "simulation call" without a valid signature
 Other failures (e.g. nonce mismatch, or invalid signature format) should still revert to signal failure.
 
-_Must stay within the ERC-4337 validation rules: no banned opcodes, no external calls
-     to other contracts, no TIMESTAMP. Expiry is handed to the EntryPoint through the packed
-     return value instead of being checked here._
+_TIMESTAMP is banned here, so expiry goes back in the packed result. The beacon read
+     may need a staked entity on a strict ERC-7562 bundler._
 
 #### Parameters
 
@@ -221,15 +206,55 @@ _Must stay within the ERC-4337 validation rules: no banned opcodes, no external 
 ### transferOwnership
 
 ```solidity
-function transferOwnership(bytes32[2] newOwner) public virtual returns (bytes32[2])
+function transferOwnership(bytes32[2] newOwner, bytes newOwnerSignature) public returns (bytes32[2])
 ```
 
 Replaces the P256 key that owns this account
 
-_Reachable only through `execute` or `executeBatch` with this account as the target, so
-     the current owner has to sign for it. Nothing outside this contract is told: a
-     subclass holding its own record of the owner has to override this and keep that record
-     in step._
+_The current owner signs the call, and the new key must sign `rotationChallenge`, so
+     an owner cannot rotate onto a key it does not control._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| newOwner | bytes32[2] | X,Y co-ordinates of the P256 key taking over |
+| newOwnerSignature | bytes | ABI-encoded WebAuthn assertion by the new key over the challenge |
+
+#### Return Values
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| [0] | bytes32[2] | The owner key now in force |
+
+### _transferOwnership
+
+```solidity
+function _transferOwnership(bytes32[2] newOwner, bytes newOwnerSignature) internal virtual
+```
+
+Moves ownership to a new key once that key has proved it can sign
+
+_The single rotation path, so any later recovery route gets the same check. A subclass
+     with its own owner record overrides this to keep it in step._
+
+#### Parameters
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| newOwner | bytes32[2] | X,Y co-ordinates of the P256 key taking over |
+| newOwnerSignature | bytes | ABI-encoded WebAuthn assertion by the new key over the challenge |
+
+### rotationChallenge
+
+```solidity
+function rotationChallenge(bytes32[2] newOwner) public view returns (bytes)
+```
+
+The challenge a new owner key signs to accept this account
+
+_Binds chain, wallet and key, and its length differs from the other two precursors, so
+     the proof cannot be reused anywhere else._
 
 #### Parameters
 
@@ -241,7 +266,7 @@ _Reachable only through `execute` or `executeBatch` with this account as the tar
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| [0] | bytes32[2] | The owner key now in force |
+| [0] | bytes | The raw challenge bytes the WebAuthn assertion must carry |
 
 ### getDeposit
 
@@ -265,7 +290,7 @@ function addDeposit() public payable
 
 Tops up this account's gas deposit at the EntryPoint
 
-_Open to anyone, since paying another account's gas costs the payer and nobody else._
+_Open to anyone, since only the payer loses anything._
 
 ### withdrawDepositTo
 
@@ -290,8 +315,7 @@ function _requireFromEntryPointOrOwner() internal view
 
 Reverts unless the caller is the EntryPoint or this account itself
 
-_"Owner" in the name means `address(this)`, not the P256 key, which has no address to
-     call from._
+_"Owner" here means `address(this)`, since the P256 key has no address._
 
 ### _call
 
