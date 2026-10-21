@@ -187,7 +187,6 @@ aderyn .
 - [eSIM Wallet](./docs/esim-wallet/ESIMWallet.md)
 - [Payment Adapter](./docs/payments/PaymentAdapter.md)
 - [Account4337](./docs/aa-helper/Account4337.md)
-- [Upgradeable Beacon](./docs/UpgradableBeacon.md)
 - [Custom Structs](./docs/CustomStructs.md)
 - [Errors](./docs/Errors.md)
 - [Ownable Two-Step Interface](./docs/interfaces/IOwnable2Step.md)

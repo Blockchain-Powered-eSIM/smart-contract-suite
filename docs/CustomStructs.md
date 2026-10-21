@@ -4,8 +4,8 @@
 
 Which contract, if any, saw the money for a data bundle move
 
-_Only `DeviceWallet` can be proven onchain. The other two are the admin's word, so the
-     price cap is the only check on them._
+`DeviceWallet` means the money moved through the purchase path, not that the price matches
+     an order. The other two are the admin's word, bounded only by the price cap.
 
 ```solidity
 enum Settlement {
@@ -19,9 +19,8 @@ enum Settlement {
 
 Data Bundle related details stored in the eSIM wallet
 
-_Two slots: `id`, then `priceUSDCents` and `settlement` packed together. `id` is
-     `bytes32` because the provider's ids fit in 32 bytes and a `string` would cost an extra
-     slot on every entry. No timestamp field: the event log already has one._
+Two slots. `id` is `bytes32` since provider ids fit and a `string` costs an extra slot per
+     entry. No timestamp: the event log already has one.
 
 ```solidity
 struct DataBundleDetails {
@@ -46,8 +45,8 @@ struct Wallets {
 
 One WebAuthn assertion, as the authenticator produced it
 
-_Decoded from calldata by `WebAuthn.tryDecodeSignature`, which zeroes the whole struct on a
-     malformed body rather than reverting. A zeroed struct fails verification._
+Decoded from calldata by `WebAuthn.tryDecodeSignature`, which zeroes the whole struct on a
+     malformed body rather than reverting. A zeroed struct fails verification.
 
 ```solidity
 struct WebAuthnSignature {

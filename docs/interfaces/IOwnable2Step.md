@@ -4,9 +4,7 @@
 
 Minimal view of the two-step ownership handover the protocol contracts use
 
-_Matches the part of OpenZeppelin's `Ownable2Step` an incoming owner needs. The offer is made
-     by the current owner and completed by the nominee, so a contract taking ownership only ever
-     calls these two._
+The part of OpenZeppelin's `Ownable2Step` a contract taking ownership calls.
 
 ### acceptOwnership
 

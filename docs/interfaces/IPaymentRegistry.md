@@ -4,8 +4,8 @@
 
 The two things the payment adapter asks the registry on a settlement
 
-_An interface rather than an import of `Registry`, which already imports the adapter. It
-     also keeps the adapter's view of the registry down to what it reads._
+An interface rather than an import of `Registry`, which already imports the adapter. It
+     also keeps the adapter's view of the registry down to what it reads.
 
 ### vault
 
