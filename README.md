@@ -37,7 +37,7 @@ A backend server generates the device and eSIM identifiers and writes them into 
 
 ## Deployments
 
-Both deployments bind EntryPoint v0.8. Base mainnet was deployed from commit [`a14470c`](https://github.com/Blockchain-Powered-eSIM/smart-contract-suite/tree/a14470cc9c98c6d6dcaa5cec33f779e765b07808). Base Sepolia was deployed from commit [`3397b6a`](https://github.com/Blockchain-Powered-eSIM/smart-contract-suite/tree/3397b6a268e43aa41ccf4ba3d82603a8efcccd5f), then upgraded through its timelock to the build at [`e1b7de8`](https://github.com/Blockchain-Powered-eSIM/smart-contract-suite/tree/e1b7de8cd16d43bcd9a10bdd13b392e5841e98fc). That upgrade gave every proxy and both beacons a new implementation and moved ownership to a new `ProtocolAdmin`, replacing [`0xdDeCC2C1345BC966337B5f4Fe57EC2D5bfad751A`](https://sepolia.basescan.org/address/0xdDeCC2C1345BC966337B5f4Fe57EC2D5bfad751A). The proxy and beacon addresses did not change.
+Both use EntryPoint v0.8. Base mainnet is deployed from commit [`a14470c`](https://github.com/Blockchain-Powered-eSIM/smart-contract-suite/tree/a14470cc9c98c6d6dcaa5cec33f779e765b07808), Base Sepolia from [`e1b7de8`](https://github.com/Blockchain-Powered-eSIM/smart-contract-suite/tree/e1b7de8cd16d43bcd9a10bdd13b392e5841e98fc).
 
 | Contract | Base mainnet | Base Sepolia |
 |---|---|---|
