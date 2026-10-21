@@ -1,0 +1,66 @@
+---
+title: Kokio user journey, contract calls (Base, EntryPoint v0.8)
+---
+sequenceDiagram
+    autonumber
+    actor User
+    participant App as Kokio app + kokio-sdk
+    participant BFF as Kokio BFF (admin key)
+    participant Bundler as Pimlico bundler + paymaster
+    participant EP as EntryPoint v0.8
+    participant DWF as DeviceWalletFactory
+    participant DW as DeviceWallet
+    participant Reg as Registry
+    participant EW as ESIMWallet
+    participant PA as PaymentAdapter
+    participant Vault as Vault Safe
+
+    rect rgb(240, 245, 255)
+    Note over User,Reg: Onboarding
+    User->>App: Create passkey (P256 key stays in the secure enclave)
+    App->>App: getSmartWallet (counterfactual address)
+    alt Backend deploys
+        BFF->>DWF: createAccount(deviceId, ownerKey, salt)
+        DWF->>DW: deploy BeaconProxy at the CREATE2 address
+    else First user operation deploys
+        App->>Bundler: sponsored user operation with initCode
+        Bundler->>EP: handleOps
+        EP->>DWF: createAccount (through SenderCreator)
+    end
+    BFF->>DWF: postCreateAccount(wallet, deviceId, ownerKey, salt)
+    DWF->>Reg: register device wallet and owner key
+    end
+
+    rect rgb(240, 250, 242)
+    Note over User,EW: eSIM wallet
+    BFF->>DW: deployESIMWallet(salt)
+    DW->>EW: ESIMWalletFactory deploys it, owned by DW
+    Note right of EW: starts with the registry's default<br/>admin allowance (USD 25)
+    Note over App,EW: or the user does it: deployAndBindESIMWallet in one user operation
+    end
+
+    rect rgb(255, 250, 235)
+    Note over User,Vault: Purchase from the device wallet
+    App->>BFF: create order (device wallet rail)
+    BFF->>App: ordered calls to sign (SDK buyDataBundleWithTransfer)
+    User->>App: approve with Face ID (passkey signs the user operation)
+    App->>Bundler: sponsored user operation
+    Bundler->>EP: handleOps
+    EP->>DW: validateUserOp (P256Verifier checks the passkey), then executeBatch
+    DW->>EW: token.transfer(amount still needed)
+    DW->>EW: buyDataBundleWithToken(bundle, asset, maxAmountIn, paymentReference)
+    EW->>Reg: requireNotPaused, price cap, consume payment reference
+    EW->>PA: quote(asset, priceUSDCents), transfer tokens, settle
+    PA->>Vault: spent tokens
+    PA-->>EW: refund any excess
+    EW-->>BFF: DataBundleBoughtWithToken event (Alchemy webhook)
+    BFF->>BFF: verify payment, provision the eSIM
+    BFF->>Reg: assignESIMIdentifier(eSIMWallet, eSIMId)
+    Reg->>EW: setESIMUniqueIdentifier
+    end
+
+    rect rgb(248, 240, 252)
+    Note over BFF,EW: Paid outside the protocol (card, coupon, external wallet)
+    BFF->>Reg: recordSettledPurchase(eSIMWallet, bundle, asset, amount, paymentReference)
+    Reg->>EW: add to purchase history (no tokens move)
+    end

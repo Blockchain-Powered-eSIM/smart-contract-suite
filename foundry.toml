@@ -85,4 +85,8 @@ test = 'test/fizz'
 # which is what holds the byte-for-byte agreement with hardhat.
 bytecode_hash = 'ipfs'
 
+# Resolved from .env, so `--rpc-url base` never puts the private URL on the command line
+[rpc_endpoints]
+base = "${BASE_RPC_URL}"
+
 # See more config options https://book.getfoundry.sh/reference/config.html

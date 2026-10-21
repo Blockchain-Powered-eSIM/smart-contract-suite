@@ -1,6 +1,6 @@
 # eSIM Wallet Smart Contract Suite
 
-![](./resources/KokioSCWithBG.png)
+![How Kokio works](./resources/diagrams/overview/01-how-kokio-works.png)
 
 Onchain wallets for eSIM data plans. A phone gets one smart wallet controlled by a passkey, and
 every eSIM on that phone gets its own wallet that buys data bundles and keeps the record of what it bought.
@@ -10,28 +10,67 @@ device's secure enclave, so no seed phrase appears anywhere in the flow.
 
 ## Architecture
 
-Two proxy layers, and most of the risk sits in them. Four UUPS singletons hold protocol state and
+![Architecture](./resources/diagrams/developers/01-architecture.png)
+
+Two proxy layers, and most of the risk sits in them. Five UUPS singletons hold protocol state and
 upgrade one at a time. Every wallet is a beacon proxy, so one beacon call moves every wallet of that kind at once. There is no per-wallet opt-out, which makes any beacon change a protocol-wide upgrade.
 
 | Contract | What it does | Pattern |
 |---|---|---|
-| `Registry` | Central record of every device and eSIM wallet. Also holds the protocol admin, the vault, the pause switch and the data bundle price ceiling | UUPS proxy |
+| `Registry` | Central record of every device and eSIM wallet. Also holds the protocol admin, the vault, the pause switch, the data bundle price ceiling and the default admin allowance | UUPS proxy |
 | `RegistryHelper` | The registry's storage and lazy deployment half | Inherited by `Registry` |
 | `LazyWalletRegistry` | Holds data bundle history for users paying in fiat, keyed by device and eSIM identifier strings, until they ask for a wallet | UUPS proxy |
 | `DeviceWalletFactory` | Deploys device wallets at deterministic CREATE2 addresses and owns their beacon | UUPS proxy |
 | `DeviceWallet` | One per phone. Holds ETH and tokens, owns the eSIM wallets on that device, verifies the passkey | Beacon proxy |
 | `ESIMWalletFactory` | Deploys eSIM wallets and owns their beacon | UUPS proxy |
-| `ESIMWallet` | One per eSIM. Buys data bundles, keeps purchase history, pulls tokens from its device wallet | Beacon proxy |
+| `ESIMWallet` | One per eSIM. Buys data bundles, keeps purchase history, pulls tokens from its device wallet, and limits what the admin key may charge it (the admin allowance) | Beacon proxy |
 | `PaymentAdapter` | The currencies the protocol accepts, the one conversion from USD cents into a token amount, and the payment references each spendable once. Moves tokens to the vault | UUPS proxy |
 | `Account4337` | The ERC-4337 `IAccount` and `IERC1271` base that `DeviceWallet` builds on | Inherited by `DeviceWallet` |
 | `WebAuthn` | Verifies WebAuthn authentication assertions. Tries the RIP-7212 precompile first and falls back to FreshCryptoLib | Library |
 | `P256Verifier` | One immutable address for accounts to verify through, wrapping the WebAuthn library | Plain contract |
-| `ProtocolAdmin` | Timelock meant to own the five singletons. Adds a delay floor that `updateDelay` cannot go under, and a guardian role with exactly two powers | Plain contract |
+| `ProtocolAdmin` | Timelock that owns the five singletons. Adds a delay floor that `updateDelay` cannot go under, and a guardian role with four instant powers: pause, unpause, suspend the admin key, and strip a canceller | Plain contract |
 | `Errors` | Every custom error in the suite | Library |
 | `CustomStructs` | Structs shared across contracts | Types |
 | `interfaces/` | `IPausable`, `IOwnable2Step` and `IRegistryAdmin` for the calls `ProtocolAdmin` makes back into the protocol; `IPaymentRegistry` for what `PaymentAdapter` reads from the registry | Interfaces |
 
 A backend server generates the device and eSIM identifiers and writes them into the wallets. That is what ties an onchain wallet to a provisioned eSIM.
+
+## Deployments
+
+Both use EntryPoint v0.8. Base mainnet is deployed from commit [`a14470c`](https://github.com/Blockchain-Powered-eSIM/smart-contract-suite/tree/a14470cc9c98c6d6dcaa5cec33f779e765b07808), Base Sepolia from [`e1b7de8`](https://github.com/Blockchain-Powered-eSIM/smart-contract-suite/tree/e1b7de8cd16d43bcd9a10bdd13b392e5841e98fc).
+
+| Contract | Base mainnet | Base Sepolia |
+|---|---|---|
+| `RegistryProxy` | [`0x76fB7F8C97457A5a6dF19a7041a66a7f1b3c910c`](https://basescan.org/address/0x76fB7F8C97457A5a6dF19a7041a66a7f1b3c910c) | [`0x916b6b554119c789EF3026EDeB0E1Ba741b42A49`](https://sepolia.basescan.org/address/0x916b6b554119c789EF3026EDeB0E1Ba741b42A49) |
+| `LazyWalletRegistryProxy` | [`0x2046aE906FB940Ad99147f233711Bb6711A2Ab0C`](https://basescan.org/address/0x2046aE906FB940Ad99147f233711Bb6711A2Ab0C) | [`0x5bE46Cf216186Bc2E3C220729331D6bE7d186e84`](https://sepolia.basescan.org/address/0x5bE46Cf216186Bc2E3C220729331D6bE7d186e84) |
+| `DeviceWalletFactoryProxy` | [`0xAC6B6A9F905e2593d587D244cEee6a0886952a6D`](https://basescan.org/address/0xAC6B6A9F905e2593d587D244cEee6a0886952a6D) | [`0x0BB3BA8D9233514a4aA6D72c243a2473f9cFf0bb`](https://sepolia.basescan.org/address/0x0BB3BA8D9233514a4aA6D72c243a2473f9cFf0bb) |
+| `ESIMWalletFactoryProxy` | [`0xC88723826B9070ea89d9040387DE4C22A490EdB6`](https://basescan.org/address/0xC88723826B9070ea89d9040387DE4C22A490EdB6) | [`0x57da54e07705de17c713ec311ac193e83470D5a5`](https://sepolia.basescan.org/address/0x57da54e07705de17c713ec311ac193e83470D5a5) |
+| `PaymentAdapterProxy` | [`0xbb80B10BECB997b02a4BA4068C145Ef18129943d`](https://basescan.org/address/0xbb80B10BECB997b02a4BA4068C145Ef18129943d) | [`0xBFaA666a8074924588E96507c307b680ecCeB2c1`](https://sepolia.basescan.org/address/0xBFaA666a8074924588E96507c307b680ecCeB2c1) |
+| `DeviceWalletImpl` | [`0xA32738E9Bdd5ddea70cb487AAf445aba04f00322`](https://basescan.org/address/0xA32738E9Bdd5ddea70cb487AAf445aba04f00322) | [`0x2dc7d2997C5ddd1BD4446C4BEFacf706BDDeACcD`](https://sepolia.basescan.org/address/0x2dc7d2997C5ddd1BD4446C4BEFacf706BDDeACcD) |
+| `ESIMWalletImpl` | [`0xE6226A0D758E58518a1b279B00d5483e4B0D97Db`](https://basescan.org/address/0xE6226A0D758E58518a1b279B00d5483e4B0D97Db) | [`0x6B849c989D1Fd11e7BeCF76668dc2B09A075474C`](https://sepolia.basescan.org/address/0x6B849c989D1Fd11e7BeCF76668dc2B09A075474C) |
+| `DeviceWalletBeacon` | [`0x3c3B431C0e3289DDEAc1F20Eb49e11bE5a0daFcA`](https://basescan.org/address/0x3c3B431C0e3289DDEAc1F20Eb49e11bE5a0daFcA) | [`0x81Ac8133Ab32151460898D402E2f0dd0c6FfA30f`](https://sepolia.basescan.org/address/0x81Ac8133Ab32151460898D402E2f0dd0c6FfA30f) |
+| `ESIMWalletBeacon` | [`0x7C5F070927032BEfEda6f375da2ad97C3eaf2bd9`](https://basescan.org/address/0x7C5F070927032BEfEda6f375da2ad97C3eaf2bd9) | [`0xc2C09990cA54c3B0A88C9F51d540f9cf78F4D424`](https://sepolia.basescan.org/address/0xc2C09990cA54c3B0A88C9F51d540f9cf78F4D424) |
+| `P256Verifier` | [`0x4E2C5B9B88184464162d581D6BF36615f0040fE6`](https://basescan.org/address/0x4E2C5B9B88184464162d581D6BF36615f0040fE6) | [`0x6FA3E7E145476Dc4682734Fd845019A3872b4821`](https://sepolia.basescan.org/address/0x6FA3E7E145476Dc4682734Fd845019A3872b4821) |
+| `ProtocolAdmin` | [`0x0E664e956aAD2599D17dE2381cc22687a066778B`](https://basescan.org/address/0x0E664e956aAD2599D17dE2381cc22687a066778B) | [`0xdBC411D2fEc7758B32885DbF0B4AE957c3b918Fe`](https://sepolia.basescan.org/address/0xdBC411D2fEc7758B32885DbF0B4AE957c3b918Fe) |
+| `EntryPoint` | [`0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108`](https://basescan.org/address/0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108) | [`0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108`](https://sepolia.basescan.org/address/0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108) |
+
+[deployments/address.json](./deployments/address.json) lists addresses only. Build provenance, every transaction, gas, constructor arguments and verification status are in [deployments/base-8453-entrypoint-v8.json](./deployments/base-8453-entrypoint-v8.json) and [deployments/base-sepolia-84532-entrypoint-v8.json](./deployments/base-sepolia-84532-entrypoint-v8.json). The Base Sepolia file also records the upgrade operation and its payloads.
+
+## User flow
+
+![User journey](./resources/diagrams/developers/02-user-journey.png)
+
+1. **Install the app and register a passkey.** The P256 key lives in the device's secure enclave and never leaves it. The SDK works out the device wallet's address before anything is deployed.
+2. **Deploy the device wallet.** The backend calls `DeviceWalletFactory.createAccount`, or the user's first sponsored user operation does it through the EntryPoint. The backend then registers the wallet and its owner key with `postCreateAccount`.
+3. **Deploy an eSIM wallet.** The backend calls `deployESIMWallet` on the device wallet, or the user does it in one user operation with `deployAndBindESIMWallet`. A new eSIM wallet starts with the registry's default admin allowance.
+4. **Buy a data bundle.** Three ways, all ending in the eSIM wallet's purchase history:
+   - From the device wallet: the user signs one user operation that tops up the eSIM wallet and calls `buyDataBundleWithToken`. The payment adapter prices the bundle in USDC, USDT or DAI and sends the exact amount to the vault.
+   - Paid outside the protocol (card, coupon, external wallet): the backend records the purchase with `recordSettledPurchase`. No tokens move.
+   - Paid before the user has a wallet: the backend keeps the history in the lazy wallet registry, then deploys the wallets and copies the history in when the user installs the app.
+
+   Paying in ETH is not currently supported. The adapter works the amount out from the price, and nothing onchain prices ETH, so it comes back when the adapter can swap into the settlement token.
+5. **Provision the eSIM.** The backend gets the eSIM from the provider and writes its identifier into the eSIM wallet with `Registry.assignESIMIdentifier`.
+6. **Use the device wallet.** It holds ETH and ERC-20 tokens and can be used as an ordinary wallet. Funds can be withdrawn at any time.
 
 ## Quickstart
 
@@ -134,48 +173,7 @@ slither . --filter-paths "test/,script/,lib/,node_modules/"
 aderyn .
 ```
 
-**Trust model, as it stands.** On the v0.8 Base Sepolia deployment, `ProtocolAdmin` owns all five
-UUPS proxies, `PaymentAdapter` included, and both factories that own the beacons. Every owner gated
-call now waits out a two day delay, proposing is 2-of-3 or a cold key, and a 3-of-3 guardian
-executes. The older deployments are not on that footing: one EOA still owns everything on the v0.7
-Base Sepolia and OP Sepolia deployments, so a single key compromise reaches every wallet there in one
-transaction. Admin transactions go into the public mempool on all three, with no private relay in
-front of them.
-
-The v0.7 Base Sepolia and OP Sepolia deployments predate `PaymentAdapter`, so neither carries it or
-the fifth singleton it adds.
-
-## Deployments
-
-Testnet only. The v0.8 column is the current deployment, from commit [`3397b6a`](https://github.com/Blockchain-Powered-eSIM/smart-contract-suite/tree/3397b6a268e43aa41ccf4ba3d82603a8efcccd5f),
-the first to carry `PaymentAdapter`. The two older columns bind the v0.7 EntryPoint and were built
-from an earlier commit. They were redeployed rather than upgraded, because the EntryPoint address is
-immutable in the wallets.
-
-| Contract | Base Sepolia (EP v0.8) | Base Sepolia (EP v0.7) | OP Sepolia |
-|---|---|---|---|
-| `RegistryProxy` | [`0x916b6b554119c789EF3026EDeB0E1Ba741b42A49`](https://sepolia.basescan.org/address/0x916b6b554119c789EF3026EDeB0E1Ba741b42A49) | `0xCa447f5C75C57f6C59027304A5Fb5A09F0E005c9` | `0x96dA9cE92D2C09f7b3ADE01260608e9079f16d12` |
-| `LazyWalletRegistryProxy` | [`0x5bE46Cf216186Bc2E3C220729331D6bE7d186e84`](https://sepolia.basescan.org/address/0x5bE46Cf216186Bc2E3C220729331D6bE7d186e84) | `0x8a1E53b903efcc6b252CE4bD3b255202318505Ef` | `0x3F14D060074B174B0784056bDe5e0f8970D25ff1` |
-| `DeviceWalletFactoryProxy` | [`0x0BB3BA8D9233514a4aA6D72c243a2473f9cFf0bb`](https://sepolia.basescan.org/address/0x0BB3BA8D9233514a4aA6D72c243a2473f9cFf0bb) | `0xB4473979ff8cE4e09161B08f74EEb66BD7718076` | `0x243cCdE6a56b0Ba740E067f39896772748E20fFD` |
-| `ESIMWalletFactoryProxy` | [`0x57da54e07705de17c713ec311ac193e83470D5a5`](https://sepolia.basescan.org/address/0x57da54e07705de17c713ec311ac193e83470D5a5) | `0x63005d8214533fC7209678Aa39F7b9b0b51a7bcB` | `0x8444bF9C39F01e4B092e42DC11695C61f8B93957` |
-| `PaymentAdapterProxy` | [`0xBFaA666a8074924588E96507c307b680ecCeB2c1`](https://sepolia.basescan.org/address/0xBFaA666a8074924588E96507c307b680ecCeB2c1) | not deployed | not deployed |
-| `DeviceWalletImpl` | [`0x572BF04F9Ed9b0213C127EFC0215477fa3D5CffB`](https://sepolia.basescan.org/address/0x572BF04F9Ed9b0213C127EFC0215477fa3D5CffB) | `0xde0dC03eF67317D4702e1d6Ef3f8cE246517e84e` | `0x22FCFa80868dc9F423873F9332817eDAe4483974` |
-| `ESIMWalletImpl` | [`0x06b8F9986fD15034364Fa8d98A9E959613400B07`](https://sepolia.basescan.org/address/0x06b8F9986fD15034364Fa8d98A9E959613400B07) | `0x59A78Cbb73e94a3fD6ada0136C89AE658BA16Dd9` | `0xf86FE9253b6ea9454abda657f47aE508B00c15C1` |
-| `DeviceWalletBeacon` | [`0x81Ac8133Ab32151460898D402E2f0dd0c6FfA30f`](https://sepolia.basescan.org/address/0x81Ac8133Ab32151460898D402E2f0dd0c6FfA30f) | not recorded | not recorded |
-| `ESIMWalletBeacon` | [`0xc2C09990cA54c3B0A88C9F51d540f9cf78F4D424`](https://sepolia.basescan.org/address/0xc2C09990cA54c3B0A88C9F51d540f9cf78F4D424) | not recorded | not recorded |
-| `P256Verifier` | [`0x6FA3E7E145476Dc4682734Fd845019A3872b4821`](https://sepolia.basescan.org/address/0x6FA3E7E145476Dc4682734Fd845019A3872b4821) | `0xF04f3b3935aD461D17d4a8a78E7ea21d4a61AEb1` | `0x3c15a78046838481788613A9F111F972B562623C` |
-| `ProtocolAdmin` | [`0xdDeCC2C1345BC966337B5f4Fe57EC2D5bfad751A`](https://sepolia.basescan.org/address/0xdDeCC2C1345BC966337B5f4Fe57EC2D5bfad751A) | not deployed | not deployed |
-| `EntryPoint` | [`0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108`](https://sepolia.basescan.org/address/0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108) | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` |
-
-The full list, including the Ethereum Sepolia deployment, is in
-[deployments/address.json](./deployments/address.json). That file is addresses only. What the v0.8
-deploy captured beyond them, build provenance, every transaction, gas, constructor arguments and
-verification status, is in
-[deployments/base-sepolia-84532-entrypoint-v8.json](./deployments/base-sepolia-84532-entrypoint-v8.json).
-
-The two chains are not symmetric in one way that file does not record. The owner EOA carries an
-EIP-7702 delegation on Base Sepolia and none on OP Sepolia, so the same address is a smart account
-on one chain and a plain EOA on the other.
+**Trust model, as it stands.** On both Base mainnet and Base Sepolia, `ProtocolAdmin` owns all five UUPS proxies, `PaymentAdapter` included, and both factories that own the beacons. Every owner gated call waits out a two day delay. On Base Sepolia, proposing is 2-of-3 or a cold key, and a 3-of-3 guardian executes. Admin transactions go into the public mempool, with no private relay in front of them.
 
 ## Specifications
 
@@ -198,20 +196,3 @@ on one chain and a plain EOA on the other.
 - [Payment Registry Interface](./docs/interfaces/IPaymentRegistry.md)
 - [P256 Verifier](./docs/P256Verifier.md)
 - [WebAuthn](./docs/WebAuthn.md)
-
-## User flow
-
-1. **Install the app and register a passkey.** The P256 key lives in the device's secure enclave and
-   never leaves it.
-2. **Deploy the wallets.** For a new device, the app asks the registry for a device wallet and one
-   eSIM wallet, linked at deployment.
-3. **Pick and buy a data bundle.** Paying in crypto deploys both wallets immediately, in an ERC-20
-   the payment adapter has been given a price for. Paying in fiat records the purchase in the lazy
-   wallet registry, and the wallets are deployed later if the user asks for them.
-
-   Paying in ETH is not currently supported. The adapter works the amount out from the price, and
-   nothing onchain prices ETH, so it comes back when the adapter can swap into the settlement token.
-4. **Provision the eSIM.** The server generates the eSIM identifier, writes it into the eSIM wallet
-   through the device wallet, and returns a QR code for activation.
-5. **Use the device wallet.** It holds ETH and ERC-20 tokens and can be used as an ordinary wallet.
-   Funds can be withdrawn at any time.
