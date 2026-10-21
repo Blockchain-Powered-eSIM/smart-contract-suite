@@ -35,6 +35,43 @@ upgrade one at a time. Every wallet is a beacon proxy, so one beacon call moves 
 
 A backend server generates the device and eSIM identifiers and writes them into the wallets. That is what ties an onchain wallet to a provisioned eSIM.
 
+## Deployments
+
+Both deployments bind EntryPoint v0.8. Base mainnet was deployed from commit [`a14470c`](https://github.com/Blockchain-Powered-eSIM/smart-contract-suite/tree/a14470cc9c98c6d6dcaa5cec33f779e765b07808). Base Sepolia was deployed from commit [`3397b6a`](https://github.com/Blockchain-Powered-eSIM/smart-contract-suite/tree/3397b6a268e43aa41ccf4ba3d82603a8efcccd5f), then upgraded through its timelock to the build at [`e1b7de8`](https://github.com/Blockchain-Powered-eSIM/smart-contract-suite/tree/e1b7de8cd16d43bcd9a10bdd13b392e5841e98fc). That upgrade gave every proxy and both beacons a new implementation and moved ownership to a new `ProtocolAdmin`, replacing [`0xdDeCC2C1345BC966337B5f4Fe57EC2D5bfad751A`](https://sepolia.basescan.org/address/0xdDeCC2C1345BC966337B5f4Fe57EC2D5bfad751A). The proxy and beacon addresses did not change.
+
+| Contract | Base mainnet | Base Sepolia |
+|---|---|---|
+| `RegistryProxy` | [`0x76fB7F8C97457A5a6dF19a7041a66a7f1b3c910c`](https://basescan.org/address/0x76fB7F8C97457A5a6dF19a7041a66a7f1b3c910c) | [`0x916b6b554119c789EF3026EDeB0E1Ba741b42A49`](https://sepolia.basescan.org/address/0x916b6b554119c789EF3026EDeB0E1Ba741b42A49) |
+| `LazyWalletRegistryProxy` | [`0x2046aE906FB940Ad99147f233711Bb6711A2Ab0C`](https://basescan.org/address/0x2046aE906FB940Ad99147f233711Bb6711A2Ab0C) | [`0x5bE46Cf216186Bc2E3C220729331D6bE7d186e84`](https://sepolia.basescan.org/address/0x5bE46Cf216186Bc2E3C220729331D6bE7d186e84) |
+| `DeviceWalletFactoryProxy` | [`0xAC6B6A9F905e2593d587D244cEee6a0886952a6D`](https://basescan.org/address/0xAC6B6A9F905e2593d587D244cEee6a0886952a6D) | [`0x0BB3BA8D9233514a4aA6D72c243a2473f9cFf0bb`](https://sepolia.basescan.org/address/0x0BB3BA8D9233514a4aA6D72c243a2473f9cFf0bb) |
+| `ESIMWalletFactoryProxy` | [`0xC88723826B9070ea89d9040387DE4C22A490EdB6`](https://basescan.org/address/0xC88723826B9070ea89d9040387DE4C22A490EdB6) | [`0x57da54e07705de17c713ec311ac193e83470D5a5`](https://sepolia.basescan.org/address/0x57da54e07705de17c713ec311ac193e83470D5a5) |
+| `PaymentAdapterProxy` | [`0xbb80B10BECB997b02a4BA4068C145Ef18129943d`](https://basescan.org/address/0xbb80B10BECB997b02a4BA4068C145Ef18129943d) | [`0xBFaA666a8074924588E96507c307b680ecCeB2c1`](https://sepolia.basescan.org/address/0xBFaA666a8074924588E96507c307b680ecCeB2c1) |
+| `DeviceWalletImpl` | [`0xA32738E9Bdd5ddea70cb487AAf445aba04f00322`](https://basescan.org/address/0xA32738E9Bdd5ddea70cb487AAf445aba04f00322) | [`0x2dc7d2997C5ddd1BD4446C4BEFacf706BDDeACcD`](https://sepolia.basescan.org/address/0x2dc7d2997C5ddd1BD4446C4BEFacf706BDDeACcD) |
+| `ESIMWalletImpl` | [`0xE6226A0D758E58518a1b279B00d5483e4B0D97Db`](https://basescan.org/address/0xE6226A0D758E58518a1b279B00d5483e4B0D97Db) | [`0x6B849c989D1Fd11e7BeCF76668dc2B09A075474C`](https://sepolia.basescan.org/address/0x6B849c989D1Fd11e7BeCF76668dc2B09A075474C) |
+| `DeviceWalletBeacon` | [`0x3c3B431C0e3289DDEAc1F20Eb49e11bE5a0daFcA`](https://basescan.org/address/0x3c3B431C0e3289DDEAc1F20Eb49e11bE5a0daFcA) | [`0x81Ac8133Ab32151460898D402E2f0dd0c6FfA30f`](https://sepolia.basescan.org/address/0x81Ac8133Ab32151460898D402E2f0dd0c6FfA30f) |
+| `ESIMWalletBeacon` | [`0x7C5F070927032BEfEda6f375da2ad97C3eaf2bd9`](https://basescan.org/address/0x7C5F070927032BEfEda6f375da2ad97C3eaf2bd9) | [`0xc2C09990cA54c3B0A88C9F51d540f9cf78F4D424`](https://sepolia.basescan.org/address/0xc2C09990cA54c3B0A88C9F51d540f9cf78F4D424) |
+| `P256Verifier` | [`0x4E2C5B9B88184464162d581D6BF36615f0040fE6`](https://basescan.org/address/0x4E2C5B9B88184464162d581D6BF36615f0040fE6) | [`0x6FA3E7E145476Dc4682734Fd845019A3872b4821`](https://sepolia.basescan.org/address/0x6FA3E7E145476Dc4682734Fd845019A3872b4821) |
+| `ProtocolAdmin` | [`0x0E664e956aAD2599D17dE2381cc22687a066778B`](https://basescan.org/address/0x0E664e956aAD2599D17dE2381cc22687a066778B) | [`0xdBC411D2fEc7758B32885DbF0B4AE957c3b918Fe`](https://sepolia.basescan.org/address/0xdBC411D2fEc7758B32885DbF0B4AE957c3b918Fe) |
+| `EntryPoint` | [`0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108`](https://basescan.org/address/0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108) | [`0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108`](https://sepolia.basescan.org/address/0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108) |
+
+[deployments/address.json](./deployments/address.json) lists addresses only. Build provenance, every transaction, gas, constructor arguments and verification status are in [deployments/base-8453-entrypoint-v8.json](./deployments/base-8453-entrypoint-v8.json) and [deployments/base-sepolia-84532-entrypoint-v8.json](./deployments/base-sepolia-84532-entrypoint-v8.json). The Base Sepolia file also records the upgrade operation and its payloads.
+
+## User flow
+
+![User journey](./resources/diagrams/developers/02-user-journey.png)
+
+1. **Install the app and register a passkey.** The P256 key lives in the device's secure enclave and never leaves it. The SDK works out the device wallet's address before anything is deployed.
+2. **Deploy the device wallet.** The backend calls `DeviceWalletFactory.createAccount`, or the user's first sponsored user operation does it through the EntryPoint. The backend then registers the wallet and its owner key with `postCreateAccount`.
+3. **Deploy an eSIM wallet.** The backend calls `deployESIMWallet` on the device wallet, or the user does it in one user operation with `deployAndBindESIMWallet`. A new eSIM wallet starts with the registry's default admin allowance.
+4. **Buy a data bundle.** Three ways, all ending in the eSIM wallet's purchase history:
+   - From the device wallet: the user signs one user operation that tops up the eSIM wallet and calls `buyDataBundleWithToken`. The payment adapter prices the bundle in USDC, USDT or DAI and sends the exact amount to the vault.
+   - Paid outside the protocol (card, coupon, external wallet): the backend records the purchase with `recordSettledPurchase`. No tokens move.
+   - Paid before the user has a wallet: the backend keeps the history in the lazy wallet registry, then deploys the wallets and copies the history in when the user installs the app.
+
+   Paying in ETH is not currently supported. The adapter works the amount out from the price, and nothing onchain prices ETH, so it comes back when the adapter can swap into the settlement token.
+5. **Provision the eSIM.** The backend gets the eSIM from the provider and writes its identifier into the eSIM wallet with `Registry.assignESIMIdentifier`.
+6. **Use the device wallet.** It holds ETH and ERC-20 tokens and can be used as an ordinary wallet. Funds can be withdrawn at any time.
+
 ## Quickstart
 
 Foundry 1.7.1, solc 0.8.36, `evm_version = "osaka"`.
@@ -138,27 +175,6 @@ aderyn .
 
 **Trust model, as it stands.** On both Base mainnet and Base Sepolia, `ProtocolAdmin` owns all five UUPS proxies, `PaymentAdapter` included, and both factories that own the beacons. Every owner gated call waits out a two day delay. On Base Sepolia, proposing is 2-of-3 or a cold key, and a 3-of-3 guardian executes. Admin transactions go into the public mempool, with no private relay in front of them.
 
-## Deployments
-
-Both deployments bind EntryPoint v0.8. Base mainnet was deployed from commit [`a14470c`](https://github.com/Blockchain-Powered-eSIM/smart-contract-suite/tree/a14470cc9c98c6d6dcaa5cec33f779e765b07808). Base Sepolia was deployed from commit [`3397b6a`](https://github.com/Blockchain-Powered-eSIM/smart-contract-suite/tree/3397b6a268e43aa41ccf4ba3d82603a8efcccd5f), then upgraded through its timelock to the build at [`e1b7de8`](https://github.com/Blockchain-Powered-eSIM/smart-contract-suite/tree/e1b7de8cd16d43bcd9a10bdd13b392e5841e98fc). That upgrade gave every proxy and both beacons a new implementation and moved ownership to a new `ProtocolAdmin`, replacing [`0xdDeCC2C1345BC966337B5f4Fe57EC2D5bfad751A`](https://sepolia.basescan.org/address/0xdDeCC2C1345BC966337B5f4Fe57EC2D5bfad751A). The proxy and beacon addresses did not change.
-
-| Contract | Base mainnet | Base Sepolia |
-|---|---|---|
-| `RegistryProxy` | [`0x76fB7F8C97457A5a6dF19a7041a66a7f1b3c910c`](https://basescan.org/address/0x76fB7F8C97457A5a6dF19a7041a66a7f1b3c910c) | [`0x916b6b554119c789EF3026EDeB0E1Ba741b42A49`](https://sepolia.basescan.org/address/0x916b6b554119c789EF3026EDeB0E1Ba741b42A49) |
-| `LazyWalletRegistryProxy` | [`0x2046aE906FB940Ad99147f233711Bb6711A2Ab0C`](https://basescan.org/address/0x2046aE906FB940Ad99147f233711Bb6711A2Ab0C) | [`0x5bE46Cf216186Bc2E3C220729331D6bE7d186e84`](https://sepolia.basescan.org/address/0x5bE46Cf216186Bc2E3C220729331D6bE7d186e84) |
-| `DeviceWalletFactoryProxy` | [`0xAC6B6A9F905e2593d587D244cEee6a0886952a6D`](https://basescan.org/address/0xAC6B6A9F905e2593d587D244cEee6a0886952a6D) | [`0x0BB3BA8D9233514a4aA6D72c243a2473f9cFf0bb`](https://sepolia.basescan.org/address/0x0BB3BA8D9233514a4aA6D72c243a2473f9cFf0bb) |
-| `ESIMWalletFactoryProxy` | [`0xC88723826B9070ea89d9040387DE4C22A490EdB6`](https://basescan.org/address/0xC88723826B9070ea89d9040387DE4C22A490EdB6) | [`0x57da54e07705de17c713ec311ac193e83470D5a5`](https://sepolia.basescan.org/address/0x57da54e07705de17c713ec311ac193e83470D5a5) |
-| `PaymentAdapterProxy` | [`0xbb80B10BECB997b02a4BA4068C145Ef18129943d`](https://basescan.org/address/0xbb80B10BECB997b02a4BA4068C145Ef18129943d) | [`0xBFaA666a8074924588E96507c307b680ecCeB2c1`](https://sepolia.basescan.org/address/0xBFaA666a8074924588E96507c307b680ecCeB2c1) |
-| `DeviceWalletImpl` | [`0xA32738E9Bdd5ddea70cb487AAf445aba04f00322`](https://basescan.org/address/0xA32738E9Bdd5ddea70cb487AAf445aba04f00322) | [`0x2dc7d2997C5ddd1BD4446C4BEFacf706BDDeACcD`](https://sepolia.basescan.org/address/0x2dc7d2997C5ddd1BD4446C4BEFacf706BDDeACcD) |
-| `ESIMWalletImpl` | [`0xE6226A0D758E58518a1b279B00d5483e4B0D97Db`](https://basescan.org/address/0xE6226A0D758E58518a1b279B00d5483e4B0D97Db) | [`0x6B849c989D1Fd11e7BeCF76668dc2B09A075474C`](https://sepolia.basescan.org/address/0x6B849c989D1Fd11e7BeCF76668dc2B09A075474C) |
-| `DeviceWalletBeacon` | [`0x3c3B431C0e3289DDEAc1F20Eb49e11bE5a0daFcA`](https://basescan.org/address/0x3c3B431C0e3289DDEAc1F20Eb49e11bE5a0daFcA) | [`0x81Ac8133Ab32151460898D402E2f0dd0c6FfA30f`](https://sepolia.basescan.org/address/0x81Ac8133Ab32151460898D402E2f0dd0c6FfA30f) |
-| `ESIMWalletBeacon` | [`0x7C5F070927032BEfEda6f375da2ad97C3eaf2bd9`](https://basescan.org/address/0x7C5F070927032BEfEda6f375da2ad97C3eaf2bd9) | [`0xc2C09990cA54c3B0A88C9F51d540f9cf78F4D424`](https://sepolia.basescan.org/address/0xc2C09990cA54c3B0A88C9F51d540f9cf78F4D424) |
-| `P256Verifier` | [`0x4E2C5B9B88184464162d581D6BF36615f0040fE6`](https://basescan.org/address/0x4E2C5B9B88184464162d581D6BF36615f0040fE6) | [`0x6FA3E7E145476Dc4682734Fd845019A3872b4821`](https://sepolia.basescan.org/address/0x6FA3E7E145476Dc4682734Fd845019A3872b4821) |
-| `ProtocolAdmin` | [`0x0E664e956aAD2599D17dE2381cc22687a066778B`](https://basescan.org/address/0x0E664e956aAD2599D17dE2381cc22687a066778B) | [`0xdBC411D2fEc7758B32885DbF0B4AE957c3b918Fe`](https://sepolia.basescan.org/address/0xdBC411D2fEc7758B32885DbF0B4AE957c3b918Fe) |
-| `EntryPoint` | [`0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108`](https://basescan.org/address/0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108) | [`0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108`](https://sepolia.basescan.org/address/0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108) |
-
-[deployments/address.json](./deployments/address.json) lists addresses only. Build provenance, every transaction, gas, constructor arguments and verification status are in [deployments/base-8453-entrypoint-v8.json](./deployments/base-8453-entrypoint-v8.json) and [deployments/base-sepolia-84532-entrypoint-v8.json](./deployments/base-sepolia-84532-entrypoint-v8.json). The Base Sepolia file also records the upgrade operation and its payloads.
-
 ## Specifications
 
 - [Registry](./docs/Registry.md)
@@ -180,19 +196,3 @@ Both deployments bind EntryPoint v0.8. Base mainnet was deployed from commit [`a
 - [Payment Registry Interface](./docs/interfaces/IPaymentRegistry.md)
 - [P256 Verifier](./docs/P256Verifier.md)
 - [WebAuthn](./docs/WebAuthn.md)
-
-## User flow
-
-![User journey](./resources/diagrams/developers/02-user-journey.png)
-
-1. **Install the app and register a passkey.** The P256 key lives in the device's secure enclave and never leaves it. The SDK works out the device wallet's address before anything is deployed.
-2. **Deploy the device wallet.** The backend calls `DeviceWalletFactory.createAccount`, or the user's first sponsored user operation does it through the EntryPoint. The backend then registers the wallet and its owner key with `postCreateAccount`.
-3. **Deploy an eSIM wallet.** The backend calls `deployESIMWallet` on the device wallet, or the user does it in one user operation with `deployAndBindESIMWallet`. A new eSIM wallet starts with the registry's default admin allowance.
-4. **Buy a data bundle.** Three ways, all ending in the eSIM wallet's purchase history:
-   - From the device wallet: the user signs one user operation that tops up the eSIM wallet and calls `buyDataBundleWithToken`. The payment adapter prices the bundle in USDC, USDT or DAI and sends the exact amount to the vault.
-   - Paid outside the protocol (card, coupon, external wallet): the backend records the purchase with `recordSettledPurchase`. No tokens move.
-   - Paid before the user has a wallet: the backend keeps the history in the lazy wallet registry, then deploys the wallets and copies the history in when the user installs the app.
-
-   Paying in ETH is not currently supported. The adapter works the amount out from the price, and nothing onchain prices ETH, so it comes back when the adapter can swap into the settlement token.
-5. **Provision the eSIM.** The backend gets the eSIM from the provider and writes its identifier into the eSIM wallet with `Registry.assignESIMIdentifier`.
-6. **Use the device wallet.** It holds ETH and ERC-20 tokens and can be used as an ordinary wallet. Funds can be withdrawn at any time.
