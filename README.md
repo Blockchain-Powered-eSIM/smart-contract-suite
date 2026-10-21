@@ -1,6 +1,6 @@
 # eSIM Wallet Smart Contract Suite
 
-![](./resources/KokioSCWithBG.png)
+![How Kokio works](./resources/diagrams/overview/01-how-kokio-works.png)
 
 Onchain wallets for eSIM data plans. A phone gets one smart wallet controlled by a passkey, and
 every eSIM on that phone gets its own wallet that buys data bundles and keeps the record of what it bought.
@@ -10,23 +10,25 @@ device's secure enclave, so no seed phrase appears anywhere in the flow.
 
 ## Architecture
 
-Two proxy layers, and most of the risk sits in them. Four UUPS singletons hold protocol state and
+![Architecture](./resources/diagrams/developers/01-architecture.png)
+
+Two proxy layers, and most of the risk sits in them. Five UUPS singletons hold protocol state and
 upgrade one at a time. Every wallet is a beacon proxy, so one beacon call moves every wallet of that kind at once. There is no per-wallet opt-out, which makes any beacon change a protocol-wide upgrade.
 
 | Contract | What it does | Pattern |
 |---|---|---|
-| `Registry` | Central record of every device and eSIM wallet. Also holds the protocol admin, the vault, the pause switch and the data bundle price ceiling | UUPS proxy |
+| `Registry` | Central record of every device and eSIM wallet. Also holds the protocol admin, the vault, the pause switch, the data bundle price ceiling and the default admin allowance | UUPS proxy |
 | `RegistryHelper` | The registry's storage and lazy deployment half | Inherited by `Registry` |
 | `LazyWalletRegistry` | Holds data bundle history for users paying in fiat, keyed by device and eSIM identifier strings, until they ask for a wallet | UUPS proxy |
 | `DeviceWalletFactory` | Deploys device wallets at deterministic CREATE2 addresses and owns their beacon | UUPS proxy |
 | `DeviceWallet` | One per phone. Holds ETH and tokens, owns the eSIM wallets on that device, verifies the passkey | Beacon proxy |
 | `ESIMWalletFactory` | Deploys eSIM wallets and owns their beacon | UUPS proxy |
-| `ESIMWallet` | One per eSIM. Buys data bundles, keeps purchase history, pulls tokens from its device wallet | Beacon proxy |
+| `ESIMWallet` | One per eSIM. Buys data bundles, keeps purchase history, pulls tokens from its device wallet, and limits what the admin key may charge it (the admin allowance) | Beacon proxy |
 | `PaymentAdapter` | The currencies the protocol accepts, the one conversion from USD cents into a token amount, and the payment references each spendable once. Moves tokens to the vault | UUPS proxy |
 | `Account4337` | The ERC-4337 `IAccount` and `IERC1271` base that `DeviceWallet` builds on | Inherited by `DeviceWallet` |
 | `WebAuthn` | Verifies WebAuthn authentication assertions. Tries the RIP-7212 precompile first and falls back to FreshCryptoLib | Library |
 | `P256Verifier` | One immutable address for accounts to verify through, wrapping the WebAuthn library | Plain contract |
-| `ProtocolAdmin` | Timelock meant to own the five singletons. Adds a delay floor that `updateDelay` cannot go under, and a guardian role with exactly two powers | Plain contract |
+| `ProtocolAdmin` | Timelock that owns the five singletons. Adds a delay floor that `updateDelay` cannot go under, and a guardian role with four instant powers: pause, unpause, suspend the admin key, and strip a canceller | Plain contract |
 | `Errors` | Every custom error in the suite | Library |
 | `CustomStructs` | Structs shared across contracts | Types |
 | `interfaces/` | `IPausable`, `IOwnable2Step` and `IRegistryAdmin` for the calls `ProtocolAdmin` makes back into the protocol; `IPaymentRegistry` for what `PaymentAdapter` reads from the registry | Interfaces |
@@ -201,17 +203,16 @@ on one chain and a plain EOA on the other.
 
 ## User flow
 
-1. **Install the app and register a passkey.** The P256 key lives in the device's secure enclave and
-   never leaves it.
-2. **Deploy the wallets.** For a new device, the app asks the registry for a device wallet and one
-   eSIM wallet, linked at deployment.
-3. **Pick and buy a data bundle.** Paying in crypto deploys both wallets immediately, in an ERC-20
-   the payment adapter has been given a price for. Paying in fiat records the purchase in the lazy
-   wallet registry, and the wallets are deployed later if the user asks for them.
+![User journey](./resources/diagrams/developers/02-user-journey.png)
 
-   Paying in ETH is not currently supported. The adapter works the amount out from the price, and
-   nothing onchain prices ETH, so it comes back when the adapter can swap into the settlement token.
-4. **Provision the eSIM.** The server generates the eSIM identifier, writes it into the eSIM wallet
-   through the device wallet, and returns a QR code for activation.
-5. **Use the device wallet.** It holds ETH and ERC-20 tokens and can be used as an ordinary wallet.
-   Funds can be withdrawn at any time.
+1. **Install the app and register a passkey.** The P256 key lives in the device's secure enclave and never leaves it. The SDK works out the device wallet's address before anything is deployed.
+2. **Deploy the device wallet.** The backend calls `DeviceWalletFactory.createAccount`, or the user's first sponsored user operation does it through the EntryPoint. The backend then registers the wallet and its owner key with `postCreateAccount`.
+3. **Deploy an eSIM wallet.** The backend calls `deployESIMWallet` on the device wallet, or the user does it in one user operation with `deployAndBindESIMWallet`. A new eSIM wallet starts with the registry's default admin allowance.
+4. **Buy a data bundle.** Three ways, all ending in the eSIM wallet's purchase history:
+   - From the device wallet: the user signs one user operation that tops up the eSIM wallet and calls `buyDataBundleWithToken`. The payment adapter prices the bundle in USDC, USDT or DAI and sends the exact amount to the vault.
+   - Paid outside the protocol (card, coupon, external wallet): the backend records the purchase with `recordSettledPurchase`. No tokens move.
+   - Paid before the user has a wallet: the backend keeps the history in the lazy wallet registry, then deploys the wallets and copies the history in when the user installs the app.
+
+   Paying in ETH is not currently supported. The adapter works the amount out from the price, and nothing onchain prices ETH, so it comes back when the adapter can swap into the settlement token.
+5. **Provision the eSIM.** The backend gets the eSIM from the provider and writes its identifier into the eSIM wallet with `Registry.assignESIMIdentifier`.
+6. **Use the device wallet.** It holds ETH and ERC-20 tokens and can be used as an ordinary wallet. Funds can be withdrawn at any time.
