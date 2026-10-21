@@ -5,12 +5,13 @@
       "0xA71daa87b7C653843b177Ef296B8a7aB90DebE1A"
     ],
     "initialDelay": 172800,
-    "minDelayFloor": 3600,
+    "minDelayFloor": 86400,
     "proposers": [
       "0x97a2103118064820180fb3acbCBedDe6E4D9fCb9",
       "0xC85Da397D15827d4F15c9D380AdA4e4Abe99227e"
     ],
-    "protocolAdmin": "0xdDeCC2C1345BC966337B5f4Fe57EC2D5bfad751A"
+    "protocolAdmin": "0xdBC411D2fEc7758B32885DbF0B4AE957c3b918Fe",
+    "previousProtocolAdmin": "0xdDeCC2C1345BC966337B5f4Fe57EC2D5bfad751A"
   },
   "build": {
     "branch": "record/payment-adapter",
@@ -81,26 +82,26 @@
       "address": "0x0BB3BA8D9233514a4aA6D72c243a2473f9cFf0bb",
       "beacon": "0x81Ac8133Ab32151460898D402E2f0dd0c6FfA30f",
       "codehash": "0x382e8868194975b927c150c9c56765629a715255a014f27386fcb461295ae9bb",
-      "implementation": "0x2b34f39e739D8606580DE1F0cF260A3a19CE0D8E"
+      "implementation": "0x71a9998A8093730d79Ed00FAE6716177a6EFd01E"
     },
     "DeviceWalletImplementation": {
-      "address": "0x572BF04F9Ed9b0213C127EFC0215477fa3D5CffB",
-      "codehash": "0x400b2a7a6f6e6620d82e4c37e299a7d1cfd5c558a40aa0fb8a301358b77854fa"
+      "address": "0x2dc7d2997C5ddd1BD4446C4BEFacf706BDDeACcD",
+      "codehash": "0xde3f97a5eece67fddea51e8b2288c90a895671513d797bea5fd6d2af29318c5d"
     },
     "ESIMWalletFactoryProxy": {
       "address": "0x57da54e07705de17c713ec311ac193e83470D5a5",
       "beacon": "0xc2C09990cA54c3B0A88C9F51d540f9cf78F4D424",
       "codehash": "0x382e8868194975b927c150c9c56765629a715255a014f27386fcb461295ae9bb",
-      "implementation": "0xc1b87aC654BEF15498693A9Cf6a6809A3b44315b"
+      "implementation": "0x9c44C46D19d2Ac37aA522012DdAc76B8E8aa6920"
     },
     "ESIMWalletImplementation": {
-      "address": "0x06b8F9986fD15034364Fa8d98A9E959613400B07",
-      "codehash": "0x351a1d5bf02a6885a9fca0502fea04661d0f2566cf4cd22abf1ff7516dee3a87"
+      "address": "0x6B849c989D1Fd11e7BeCF76668dc2B09A075474C",
+      "codehash": "0xed616632dc9fe2cf8323b332e1a209c1812438fc865f4f3e31bb20fa3296488c"
     },
     "LazyWalletRegistryProxy": {
       "address": "0x5bE46Cf216186Bc2E3C220729331D6bE7d186e84",
       "codehash": "0x382e8868194975b927c150c9c56765629a715255a014f27386fcb461295ae9bb",
-      "implementation": "0x334a233E9913AFAdef59abAC52B57160aFEEaE3C"
+      "implementation": "0x4E5A1E7AeB65D531b7863091586508716cdC0645"
     },
     "P256Verifier": {
       "address": "0x6FA3E7E145476Dc4682734Fd845019A3872b4821",
@@ -109,16 +110,16 @@
     "PaymentAdapterProxy": {
       "address": "0xBFaA666a8074924588E96507c307b680ecCeB2c1",
       "codehash": "0x382e8868194975b927c150c9c56765629a715255a014f27386fcb461295ae9bb",
-      "implementation": "0x87EFa8638bF16910FF8F6a94105E329F331aA594"
+      "implementation": "0x1517f700Ed5cB4706ceb4B07B8480A3439c2aAa5"
     },
     "ProtocolAdmin": {
-      "address": "0xdDeCC2C1345BC966337B5f4Fe57EC2D5bfad751A",
-      "codehash": "0x9435a5f636a7fd53c25c7ce4ac145a0b3d361efa5cdd6b0c1fbf1b1420b6c241"
+      "address": "0xdBC411D2fEc7758B32885DbF0B4AE957c3b918Fe",
+      "codehash": "0x081964c0e31ae01a7316424a95daaa0288ce53d6df475ccafae51705b3751c05"
     },
     "RegistryProxy": {
       "address": "0x916b6b554119c789EF3026EDeB0E1Ba741b42A49",
       "codehash": "0x382e8868194975b927c150c9c56765629a715255a014f27386fcb461295ae9bb",
-      "implementation": "0x3aefD65516A72Eb78f2bCEBbaf78c994eeedF71e"
+      "implementation": "0x42DF7e34FC6CDb1f6a29014Cf1564385E9a7cF49"
     }
   },
   "external": {
@@ -683,7 +684,7 @@
       "defaultAdminAllowanceUSDCents": 10000,
       "delay": 172800,
       "executableAt": 1792585914,
-      "executed": false,
+      "executed": true,
       "implementations": {
         "DeviceWalletFactoryProxy": "0x71a9998A8093730d79Ed00FAE6716177a6EFd01E",
         "DeviceWalletImplementation": "0x2dc7d2997C5ddd1BD4446C4BEFacf706BDDeACcD",
