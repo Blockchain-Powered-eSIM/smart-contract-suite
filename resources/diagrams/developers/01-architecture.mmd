@@ -1,0 +1,68 @@
+---
+title: Kokio smart contract suite, architecture (Base, EntryPoint v0.8)
+---
+flowchart TB
+    %% Declaration order sets the layout. This order draws no line across another line, box
+    %% or label, so check for crossings before reordering anything.
+
+    subgraph gov["Governance"]
+        direction TB
+        proposer["Proposer Safe 2-of-3"]
+        guardian["Guardian Safe 2-of-3"]
+        timelock["ProtocolAdmin<br/>timelock, 2 day delay"]
+    end
+
+    subgraph offchain["Offchain"]
+        direction TB
+        bff["Kokio BFF<br/>eSIM wallet admin key"]
+        app["Kokio app + kokio-sdk<br/>passkey in secure enclave"]
+        pimlico["Pimlico<br/>bundler + paymaster"]
+    end
+
+    subgraph protocol["Protocol (UUPS proxies)"]
+        direction TB
+        lazy["LazyWalletRegistry<br/>history before a wallet exists"]
+        registry["Registry<br/>wallets, owner keys, eSIM ids<br/>pause, price cap, vault"]
+        dwf["DeviceWalletFactory<br/>+ DeviceWallet beacon"]
+        ewf["ESIMWalletFactory<br/>+ ESIMWallet beacon"]
+        adapter["PaymentAdapter<br/>USD, USDC, USDT, DAI<br/>quote + settle"]
+    end
+
+    entrypoint["EntryPoint v0.8<br/>(shared ERC-4337 contract)"]
+    verifier["P256Verifier<br/>RIP-7212 precompile,<br/>FreshCryptoLib fallback"]
+
+    dw["DeviceWallet (beacon proxy)<br/>one per phone, ERC-4337 account<br/>holds ETH, USDC, USDT, DAI"]
+    ew["ESIMWallet (beacon proxy)<br/>one per eSIM, purchase history<br/>admin allowance"]
+    vault["Vault Safe 2-of-3"]
+
+    proposer -- "schedule" --> timelock
+    guardian -- "instant pause / unpause" --> timelock
+    timelock -- "owns all five" --> protocol
+    bff -- "batchPopulateHistory,<br/>deploy lazy wallet" --> lazy
+    bff -- "assignESIMIdentifier,<br/>recordSettledPurchase" --> registry
+    bff -- "createAccount,<br/>postCreateAccount" --> dwf
+    bff -- "deployESIMWallet" --> dw
+    app -- "signed user operation" --> pimlico
+    pimlico -- "handleOps" --> entrypoint
+    %% The first-op deploy through the factory sits in this label: as its own line it crosses
+    %% the BFF's. 02-user-journey shows that route step by step.
+    entrypoint -- "validateUserOp, execute<br/>(first op deploys it<br/>through the factory)" --> dw
+    verifier -. "checks every passkey signature" .-> dw
+    lazy --> registry
+    dwf -- "deploys (CREATE2),<br/>beacon upgrades all" --> dw
+    ewf -- "deploys when the DeviceWallet asks,<br/>beacon upgrades all" --> ew
+    dw -- "owns" --> ew
+    registry -- "set eSIM id,<br/>record purchase" --> ew
+    ew -- "fund + settle" --> adapter
+    adapter -- "spent tokens" --> vault
+
+    classDef actor fill:#fde7c8,stroke:#9a6a1f,color:#2b1d07
+    classDef core fill:#dfe8ff,stroke:#3d5aa8,color:#0f1e45
+    classDef wallet fill:#e3f5e6,stroke:#2f7a3d,color:#0e2a14
+    classDef gov fill:#f3e1f7,stroke:#7a3d8c,color:#2c0f33
+    classDef money fill:#fff6cf,stroke:#9a8420,color:#2e2805
+    class app,bff,pimlico actor
+    class entrypoint,verifier,registry,lazy,dwf,ewf,adapter core
+    class dw,ew wallet
+    class proposer,guardian,timelock gov
+    class vault money
