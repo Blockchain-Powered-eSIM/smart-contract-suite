@@ -4,7 +4,7 @@
 
 Minimal view of the two-step ownership handover the protocol contracts use
 
-_The part of OpenZeppelin's `Ownable2Step` a contract taking ownership calls._
+The part of OpenZeppelin's `Ownable2Step` a contract taking ownership calls.
 
 ### acceptOwnership
 

@@ -4,8 +4,8 @@
 
 One eSIM, its purchase history, and the funds that move through it while it buys data bundles
 
-_Beacon proxy owned by a device wallet, so every owner call has been signed via `execute`.
-     The admin can charge for data bundles but cannot raise the ceiling on those charges._
+Beacon proxy owned by a device wallet, so every owner call has been signed via `execute`.
+     The admin can charge for data bundles but cannot raise the ceiling on those charges.
 
 ### eSIMWalletFactory
 
@@ -56,8 +56,8 @@ uint64 priceCapUSDCents
 Most this wallet may be charged for one data bundle, in USD cents, or zero to follow
         the registry
 
-_Shares a slot with `newRequestedOwner`, so do not move this line. A handover clears
-     both in one write._
+Shares a slot with `newRequestedOwner`, so do not move this line. A handover clears
+     both in one write.
 
 ### adminAllowanceUSDCents
 
@@ -67,8 +67,8 @@ uint64 adminAllowanceUSDCents
 
 What the eSIM wallet admin may still charge this wallet in total, in USD cents
 
-_Starts at the registry default and resets to it on handover. Only admin charges spend
-     it and only the owner sets it._
+Starts at the registry default and resets to it on handover. Only admin charges spend
+     it and only the owner sets it.
 
 ### ESIMWalletDeployed
 
@@ -86,7 +86,7 @@ event DataBundleBoughtWithToken(bytes32 _dataBundleID, uint64 _priceUSDCents, by
 
 Emitted when a data bundle is paid for in USDC (or any other acceptable stablecoin/ERC20)
 
-_The adapter emits the settlement. This one is for an indexer watching one wallet._
+The adapter emits the settlement. This one is for an indexer watching one wallet.
 
 ### TokenSentToDeviceWallet
 
@@ -104,7 +104,7 @@ event DataBundleSettlementRecorded(bytes32 _dataBundleID, uint64 _priceUSDCents,
 
 Emitted when a purchase paid for outside the protocol is recorded here
 
-_The registry emits the full record. This one is for an indexer watching one wallet._
+The registry emits the full record. This one is for an indexer watching one wallet.
 
 ### ESIMUniqueIdentifierInitialised
 
@@ -122,7 +122,7 @@ event TransactionHistoryPopulated(struct DataBundleDetails[] _dataBundleDetails,
 
 Emitted for each batch of history the lazy wallet registry copies in
 
-_`_totalEntries` is the history length after the batch, so a partial copy can be told apart._
+`_totalEntries` is the history length after the batch, so a partial copy can be told apart.
 
 ### ETHSent
 
@@ -172,7 +172,7 @@ modifier onlyDeviceWallet()
 
 Restricts a call to the device wallet that owns this eSIM wallet
 
-_A device wallet only calls out through `execute`, so this means the owner signed._
+A device wallet only calls out through `execute`, so this means the owner signed.
 
 ### onlyRegistry
 
@@ -198,8 +198,8 @@ constructor() public
 
 Disables initializers on the implementation contract
 
-_Pins the version at max. An `initializer` modifier would leave it at 1, and a later
-     `reinitializer(2)` could then still run on the implementation._
+Pins the version at max. An `initializer` modifier would leave it at 1, and a later
+     `reinitializer(2)` could then still run on the implementation.
 
 ### initialize
 
@@ -209,8 +209,8 @@ function initialize(address _eSIMWalletFactoryAddress, address _deviceWalletAddr
 
 Binds a freshly deployed eSIM wallet to its factory and its owning device wallet
 
-_The eSIM identifier does not exist until the eSIM is bought, so it is set later through
-     `setESIMUniqueIdentifier`._
+The eSIM identifier does not exist until the eSIM is bought, so it is set later through
+     `setESIMUniqueIdentifier`.
 
 #### Parameters
 
@@ -227,8 +227,8 @@ function setESIMUniqueIdentifier(string _eSIMUniqueIdentifier) external
 
 Sets the eSIM identifier once the eSIM exists, which is after this wallet is deployed
 
-_Set once, and only by the registry, which records the claim in the same call. Any
-     other caller could write an identifier the registry has no record of._
+Set once, and only by the registry, which records the claim in the same call. Any
+     other caller could write an identifier the registry has no record of.
 
 #### Parameters
 
@@ -244,8 +244,8 @@ function setPriceCapUSDCents(uint64 _cap) external
 
 Sets the most this wallet may be charged for one data bundle
 
-_Owner only: the admin names the price on a purchase, so it must not also set the
-     ceiling. Zero follows the registry ceiling. A handover resets it to zero._
+Owner only: the admin names the price on a purchase, so it must not also set the
+     ceiling. Zero follows the registry ceiling. A handover resets it to zero.
 
 #### Parameters
 
@@ -261,7 +261,7 @@ function setAdminAllowanceUSDCents(uint64 _allowance) external
 
 Sets what the eSIM wallet admin may still charge this wallet in total
 
-_Owner only, since it limits the admin. Zero stops admin charges; the owner can still buy._
+Owner only, since it limits the admin. Zero stops admin charges; the owner can still buy.
 
 #### Parameters
 
@@ -278,9 +278,9 @@ function populateHistory(struct DataBundleDetails[] _dataBundleDetails) external
 Appends pre-deployment purchase history, one batch at a time, on behalf of the lazy
         wallet registry
 
-_The registry tracks how much has been copied, so repeats are not checked here. Not held
+The registry tracks how much has been copied, so repeats are not checked here. Not held
      to the price ceiling: these are past payments, no charge happens, and refusing one
-     would only drop true history._
+     would only drop true history.
 
 #### Parameters
 
@@ -302,10 +302,10 @@ function requestTransferOwnership(address _newOwner) external
 
 Nominates a new device wallet to take this eSIM wallet over, in two steps
 
-_A pending request is overwritten, so a wrong nominee is fixed by calling again.
+A pending request is overwritten, so a wrong nominee is fixed by calling again.
      Nominating the current owner cancels and re-binds, with fund access off since the old
      flag is not recorded. Only ETH is swept back; ERC-20s go to whoever accepts, so sweep
-     them with `sendTokenToDeviceWallet` in the same `executeBatch`._
+     them with `sendTokenToDeviceWallet` in the same `executeBatch`.
 
 #### Parameters
 
@@ -321,8 +321,8 @@ function acceptOwnershipTransfer() external
 
 Takes this eSIM wallet on, callable only by the nominated device wallet
 
-_With no request pending this only passes for the zero address, which cannot send a
-     transaction. Keep that in mind when reasoning about this check._
+With no request pending this only passes for the zero address, which cannot send a
+     transaction. Keep that in mind when reasoning about this check.
 
 ### sendETHToDeviceWallet
 
@@ -332,9 +332,9 @@ function sendETHToDeviceWallet(uint256 _amount) external returns (uint256)
 
 Sends ETH from this eSIM wallet back to the owning device wallet
 
-_Deliberately not nonReentrant. removeESIMWallet calls it in a try/catch while
+Deliberately not nonReentrant. removeESIMWallet calls it in a try/catch while
      requestTransferOwnership holds the guard, so a guard here would strand the ETH silently.
-     It writes no state and only pays the owner, so re-entering gains nothing._
+     It writes no state and only pays the owner, so re-entering gains nothing.
 
 #### Parameters
 
@@ -356,10 +356,10 @@ function buyDataBundleWithToken(struct DataBundleDetails _dataBundleDetail, byte
 
 Pays the vault for one data bundle in USDC (or any other acceptable stablecoin/ERC20) and records the purchase
 
-_The adapter derives the amount from the price, so no caller figure is trusted. Any
+The adapter derives the amount from the price, so no caller figure is trusted. Any
      shortfall is pulled from the device wallet. Forwarding the real balance makes a
      fee-on-transfer token fail at `settle`'s funding check with a clear reason. Such tokens
-     are still unsupported, since `settle` needs the full price._
+     are still unsupported, since `settle` needs the full price.
 
 #### Parameters
 
@@ -384,8 +384,8 @@ function sendTokenToDeviceWallet(address _token, uint256 _amount) external retur
 
 Sends an ERC-20 held here back to the owning device wallet
 
-_The `removeESIMWallet` callback moves ETH only, so tokens would otherwise pass to the
-     next owner._
+The `removeESIMWallet` callback moves ETH only, so tokens would otherwise pass to the
+     next owner.
 
 #### Parameters
 
@@ -408,8 +408,8 @@ function recordSettledPurchase(struct DataBundleDetails _dataBundleDetail) exter
 
 Appends a purchase paid for outside the protocol
 
-_Nothing onchain saw this payment, so the ceiling is the only limit on what the admin
-     can write into history. Checked here because the wallet's own ceiling lives here._
+Nothing onchain saw this payment, so the ceiling is the only limit on what the admin
+     can write into history. Checked here because the wallet's own ceiling lives here.
 
 #### Parameters
 
@@ -425,7 +425,7 @@ function transferOwnership(address) public pure
 
 The inherited one-step transfer is closed
 
-_It would move `owner()` without `deviceWallet`. The two-step handover moves both._
+It would move `owner()` without `deviceWallet`. The two-step handover moves both.
 
 ### renounceOwnership
 
@@ -435,8 +435,8 @@ function renounceOwnership() public pure
 
 An eSIM wallet always belongs to a device wallet, so ownership is never renounced
 
-_A zero owner makes sendETHToDeviceWallet revert and _addESIMWallet refuse this wallet
-     forever, so any ETH held here would be locked._
+A zero owner makes sendETHToDeviceWallet revert and _addESIMWallet refuse this wallet
+     forever, so any ETH held here would be locked.
 
 ### _secureTransferOwnership
 
@@ -447,8 +447,8 @@ function _secureTransferOwnership() internal
 Completes a handover, moving `deviceWallet`, `owner()`, the price ceiling and the
         admin allowance together
 
-_Clears the request first, so a second acceptance finds nothing. The ceiling and
-     allowance were the old owner's choices, so the new owner starts on the defaults._
+Clears the request first, so a second acceptance finds nothing. The ceiling and
+     allowance were the old owner's choices, so the new owner starts on the defaults.
 
 ### _transferETH
 
@@ -458,8 +458,8 @@ function _transferETH(address _recipient, uint256 _amount) internal virtual
 
 Sends ETH out of this contract, reverting if the call fails
 
-_A zero amount is a no-op rather than a revert, so callers that may have nothing to send
-     do not need their own guard._
+A zero amount is a no-op rather than a revert, so callers that may have nothing to send
+     do not need their own guard.
 
 #### Parameters
 

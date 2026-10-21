@@ -4,7 +4,7 @@
 
 Owner of the five upgradeable protocol contracts, with a delay on every change
 
-_Owns `Registry`, `LazyWalletRegistry`, `DeviceWalletFactory`, `ESIMWalletFactory` and
+Owns `Registry`, `LazyWalletRegistry`, `DeviceWalletFactory`, `ESIMWalletFactory` and
      `PaymentAdapter` once `TransferOwnership.s.sol` has run, and through the factories both
      wallet beacons.
 
@@ -24,7 +24,7 @@ _Owns `Registry`, `LazyWalletRegistry`, `DeviceWalletFactory`, `ESIMWalletFactor
      Known limit: a rogue guardian plus a rogue proposer can strip every canceller. Keep their
      Safes on disjoint signers and alert on `CancellerRevoked`.
 
-     Not upgradeable: an upgradeable owner would move the trust to whoever can upgrade it._
+     Not upgradeable: an upgradeable owner would move the trust to whoever can upgrade it.
 
 ### GUARDIAN_ROLE
 
@@ -35,8 +35,8 @@ bytes32 GUARDIAN_ROLE
 Raises and releases a pause, strips a canceller and suspends the admin, all without
         waiting for the delay
 
-_Always paired with `EXECUTOR_ROLE`, so it still works if open execution is closed.
-     Never paired with `CANCELLER_ROLE`, which would make a guardian impossible to evict._
+Always paired with `EXECUTOR_ROLE`, so it still works if open execution is closed.
+     Never paired with `CANCELLER_ROLE`, which would make a guardian impossible to evict.
 
 ### minDelayFloor
 
@@ -46,8 +46,8 @@ uint256 minDelayFloor
 
 Shortest delay this contract will ever accept, whatever `updateDelay` was given
 
-_`updateDelay` accepts zero, so without a floor one scheduled call would remove the
-     delay for good. Applied through `getMinDelay`, which `schedule` checks against._
+`updateDelay` accepts zero, so without a floor one scheduled call would remove the
+     delay for good. Applied through `getMinDelay`, which `schedule` checks against.
 
 ### PauseRaised
 
@@ -169,7 +169,7 @@ constructor(uint256 _initialDelay, uint256 _minDelayFloor, address[] _proposers,
 
 Sets up the timelock's roles and delay bounds
 
-_No admin account: this contract holds its own `DEFAULT_ADMIN_ROLE`, so every role
+No admin account: this contract holds its own `DEFAULT_ADMIN_ROLE`, so every role
      change is scheduled and waited out. Rotating signers never touches the protocol contracts.
 
      Proposers also get `CANCELLER_ROLE` from the base. `_cancellers` is for veto-only keys,
@@ -178,7 +178,7 @@ _No admin account: this contract holds its own `DEFAULT_ADMIN_ROLE`, so every ro
      `EXECUTOR_ROLE` on the zero address opens execution to everyone.
 
      Empty `_cancellers` is fine, as proposers already cancel. Empty `_guardians` is not:
-     adding one would wait out the delay, and nothing could evict a compromised canceller._
+     adding one would wait out the delay, and nothing could evict a compromised canceller.
 
 #### Parameters
 
@@ -196,9 +196,9 @@ _No admin account: this contract holds its own `DEFAULT_ADMIN_ROLE`, so every ro
 function getMinDelay() public view virtual returns (uint256)
 ```
 
-_Never below the floor, whatever `updateDelay` stored. `schedule` reads this, so the
+Never below the floor, whatever `updateDelay` stored. `schedule` reads this, so the
      floor binds without intercepting the setter. Offchain readers should call this rather
-     than follow `MinDelayChange`, which reports the stored value._
+     than follow `MinDelayChange`, which reports the stored value.
 
 ### grantRole
 
@@ -206,7 +206,7 @@ _Never below the floor, whatever `updateDelay` stored. `schedule` reads this, so
 function grantRole(bytes32 role, address account) public virtual
 ```
 
-_Enforces the constructor's guardian overlap rules on later grants, so one proposer
+Enforces the constructor's guardian overlap rules on later grants, so one proposer
      cannot schedule the pairing that makes a guardian impossible to evict.
 
      Authority is checked first, as in the base, so an unauthorized caller still gets
@@ -216,7 +216,7 @@ _Enforces the constructor's guardian overlap rules on later grants, so one propo
      and pairing those roles later is a fair call for a scheduled operation.
 
      A new guardian gets `EXECUTOR_ROLE` too, as in the constructor. `revokeRole` cannot
-     tell that grant apart, so evicting a guardian means revoking both in one batch._
+     tell that grant apart, so evicting a guardian means revoking both in one batch.
 
 ### pauseInstantly
 
@@ -226,8 +226,8 @@ function pauseInstantly(address target) external
 
 Raises a pause on a protocol contract immediately
 
-_A rogue guardian can only stop the protocol, which the admin key could already do, and
-     it can be released at once._
+A rogue guardian can only stop the protocol, which the admin key could already do, and
+     it can be released at once.
 
 #### Parameters
 
@@ -243,8 +243,8 @@ function unpauseInstantly(address target) external
 
 Releases a pause on a protocol contract immediately
 
-_The selector is fixed, so this cannot call anything else on the target. The worst a
-     rogue guardian can do is unpause something, which can be paused again._
+The selector is fixed, so this cannot call anything else on the target. The worst a
+     rogue guardian can do is unpause something, which can be paused again.
 
 #### Parameters
 
@@ -260,11 +260,11 @@ function revokeCancellersInstantly(address[] accounts) external
 
 Takes the cancel power away from accounts immediately
 
-_Only `CANCELLER_ROLE`, and restoring it is scheduled. A batch because one signer set
+Only `CANCELLER_ROLE`, and restoring it is scheduled. A batch because one signer set
      often holds the role on several keys, and one transaction beats the operation it races.
 
      All or nothing. An account without the role reverts, so a guardian never wrongly
-     believes a veto is gone._
+     believes a veto is gone.
 
 #### Parameters
 
@@ -280,11 +280,11 @@ function disableAdminInstantly(address target) external
 
 Suspends a protocol contract's admin key immediately
 
-_Against a compromised admin key, which holds `Registry.pause` and could re-pause after
+Against a compromised admin key, which holds `Registry.pause` and could re-pause after
      every release for the whole delay. Suspending it makes `unpauseInstantly` stick.
 
      Grants nothing. Only the owner, after the delay, can reinstate or replace the key, so
-     the worst a rogue guardian can cause is a stopped backend that the owner ends._
+     the worst a rogue guardian can cause is a stopped backend that the owner ends.
 
 #### Parameters
 
@@ -300,13 +300,13 @@ function disableAndNominate(address target, address newAdmin) external
 
 Suspends the current admin and nominates its replacement in one operation
 
-_Scheduled like anything else, not a fast path. A pending nomination already suspends
+Scheduled like anything else, not a fast path. A pending nomination already suspends
      the incumbent, and naming that effect lets a reviewer read the intent off the operation.
 
      The nominee must still accept, so the role cannot go to an address that cannot act.
 
      The incumbent is refused: the registry would read it as a withdrawal and lift the
-     suspension._
+     suspension.
 
 #### Parameters
 
@@ -323,7 +323,7 @@ function acceptOwnershipBatch(address[] targets) external
 
 Completes the handover of every contract that has offered this one its ownership
 
-_Permissionless because the current owner's offer is the decision. Scheduling it would
+Permissionless because the current owner's offer is the decision. Scheduling it would
      make even the deployment wait out the delay.
 
      Events go before each call so they keep order with the target's own, and a failed
@@ -331,7 +331,7 @@ _Permissionless because the current owner's offer is the decision. Scheduling it
 
      Any contract can fake `pendingOwner()` and `acceptOwnership()`, so `OwnershipAccepted`
      is only a claim. Filter it against the expected targets. A fake costs nothing more: this
-     contract holds no funds, and a target cannot gain a role by being called._
+     contract holds no funds, and a target cannot gain a role by being called.
 
 #### Parameters
 

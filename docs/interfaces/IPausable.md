@@ -4,7 +4,7 @@
 
 Minimal view of the pause a guardian is allowed to raise and release
 
-_Both, because a guardian does both without waiting, even while the admin key is suspended._
+Both, because a guardian does both without waiting, even while the admin key is suspended.
 
 ### pause
 

@@ -4,10 +4,10 @@
 
 Thin contract wrapper around the WebAuthn verification library
 
-_Adapted from Daimo's DaimoVerifier:
+Adapted from Daimo's DaimoVerifier:
      https://github.com/daimo-eth/daimo/blob/master/packages/contract/src/DaimoVerifier.sol
      A contract so accounts verify through one immutable address rather than compiling the
-     library into every implementation._
+     library into every implementation.
 
 ### verifySignature
 

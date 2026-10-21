@@ -4,8 +4,8 @@
 
 ERC-4337 account owned by a P256 key rather than by an address
 
-_`validateUserOp` and `isValidSignature` each hash a different precursor, so a signature
-        made for one is never accepted by the other._
+`validateUserOp` and `isValidSignature` each hash a different precursor, so a signature
+        made for one is never accepted by the other.
 
 ### entryPoint
 
@@ -15,7 +15,7 @@ contract IEntryPoint entryPoint
 
 The ERC-4337 EntryPoint singleton this account answers to
 
-_Immutable to keep validation cheap, so a new EntryPoint needs a new implementation._
+Immutable to keep validation cheap, so a new EntryPoint needs a new implementation.
 
 ### verifier
 
@@ -33,9 +33,9 @@ bytes32[2] owner
 
 X and Y co-ordinates of the P256 key that owns this account
 
-_DeviceWallet's storage starts right after this slot. A new state variable here would
+DeviceWallet's storage starts right after this slot. A new state variable here would
      shift it on deployed wallets, which then read zeros. Put new state in an ERC-7201
-     namespace instead._
+     namespace instead.
 
 ### Account4337Initialized
 
@@ -61,7 +61,7 @@ modifier onlySelf()
 
 Restricts a call to the account itself
 
-_Reached from outside only by an owner-signed `execute` or `executeBatch` to this address_
+Reached from outside only by an owner-signed `execute` or `executeBatch` to this address
 
 ### onlyEntryPoint
 
@@ -94,8 +94,8 @@ function initialize(bytes32[2] anOwner) internal virtual
 
 Sets the owner key on a freshly deployed account
 
-_Internal so a proxy deployed without its init call cannot be claimed by anyone with a
-     key of their choosing. Only a subclass initializer can reach it._
+Internal so a proxy deployed without its init call cannot be claimed by anyone with a
+     key of their choosing. Only a subclass initializer can reach it.
 
 #### Parameters
 
@@ -125,8 +125,8 @@ function execute(struct Call call) external
 
 Makes one call from this account
 
-_Callable by the EntryPoint or this account. The P256 key has no address, so it reaches
-     this only through a signed user operation._
+Callable by the EntryPoint or this account. The P256 key has no address, so it reaches
+     this only through a signed user operation.
 
 #### Parameters
 
@@ -142,7 +142,7 @@ function executeBatch(struct Call[] calls) external
 
 Makes a sequence of calls from this account, reverting all of them if one fails
 
-_Same callers as `execute`_
+Same callers as `execute`
 
 #### Parameters
 
@@ -158,8 +158,8 @@ function isValidSignature(bytes32 _messageHash, bytes _signature) external view 
 
 Validates a signature over an arbitrary message, per ERC-1271
 
-_The signed challenge is not `_messageHash` but the EIP-191 digest over version,
-     validUntil, chain id, this address and `_messageHash`, so a signer needs all five._
+The signed challenge is not `_messageHash` but the EIP-191 digest over version,
+     validUntil, chain id, this address and `_messageHash`, so a signer needs all five.
 
 #### Parameters
 
@@ -186,8 +186,8 @@ signature failure should be reported by returning SIG_VALIDATION_FAILED (1).
 This allows making a "simulation call" without a valid signature
 Other failures (e.g. nonce mismatch, or invalid signature format) should still revert to signal failure.
 
-_TIMESTAMP is banned here, so expiry goes back in the packed result. The beacon read
-     may need a staked entity on a strict ERC-7562 bundler._
+TIMESTAMP is banned here, so expiry goes back in the packed result. The beacon read
+     may need a staked entity on a strict ERC-7562 bundler.
 
 #### Parameters
 
@@ -211,8 +211,8 @@ function transferOwnership(bytes32[2] newOwner, bytes newOwnerSignature) public 
 
 Replaces the P256 key that owns this account
 
-_The current owner signs the call, and the new key must sign `rotationChallenge`, so
-     an owner cannot rotate onto a key it does not control._
+The current owner signs the call, and the new key must sign `rotationChallenge`, so
+     an owner cannot rotate onto a key it does not control.
 
 #### Parameters
 
@@ -235,8 +235,8 @@ function _transferOwnership(bytes32[2] newOwner, bytes newOwnerSignature) intern
 
 Moves ownership to a new key once that key has proved it can sign
 
-_The single rotation path, so any later recovery route gets the same check. A subclass
-     with its own owner record overrides this to keep it in step._
+The single rotation path, so any later recovery route gets the same check. A subclass
+     with its own owner record overrides this to keep it in step.
 
 #### Parameters
 
@@ -253,8 +253,8 @@ function rotationChallenge(bytes32[2] newOwner) public view returns (bytes)
 
 The challenge a new owner key signs to accept this account
 
-_Binds chain, wallet and key, and its length differs from the other two precursors, so
-     the proof cannot be reused anywhere else._
+Binds chain, wallet and key, and its length differs from the other two precursors, so
+     the proof cannot be reused anywhere else.
 
 #### Parameters
 
@@ -290,7 +290,7 @@ function addDeposit() public payable
 
 Tops up this account's gas deposit at the EntryPoint
 
-_Open to anyone, since only the payer loses anything._
+Open to anyone, since only the payer loses anything.
 
 ### withdrawDepositTo
 
@@ -315,7 +315,7 @@ function _requireFromEntryPointOrOwner() internal view
 
 Reverts unless the caller is the EntryPoint or this account itself
 
-_"Owner" here means `address(this)`, since the P256 key has no address._
+"Owner" here means `address(this)`, since the P256 key has no address.
 
 ### _call
 

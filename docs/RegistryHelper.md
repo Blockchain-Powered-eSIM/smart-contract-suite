@@ -4,8 +4,8 @@
 
 Storage and the lazy deployment paths that `Registry` inherits
 
-_Of the external functions here, the deploy and history ones are callable only by the lazy
-     wallet registry; the rest are public reads._
+Of the external functions here, the deploy and history ones are callable only by the lazy
+     wallet registry; the rest are public reads.
 
 ### lazyWalletRegistry
 
@@ -55,7 +55,7 @@ mapping(bytes32 => address) registeredP256Keys
 
 Device wallet registered under each owner key hash, `keccak256(abi.encode(X, Y))`
 
-_Keeps one P256 key to one device wallet._
+Keeps one P256 key to one device wallet.
 
 ### isDeviceWalletValid
 
@@ -73,8 +73,8 @@ mapping(address => address) isESIMWalletValid
 
 Device wallet each protocol eSIM wallet is bound to, zero if not a protocol wallet
 
-_Non-zero for the wallet's whole life; mid-transfer it names the last device wallet, never
-     zero for "released". `bindESIMWallet`, the only writer, checks the factory deployed it._
+Non-zero for the wallet's whole life; mid-transfer it names the last device wallet, never
+     zero for "released". `bindESIMWallet`, the only writer, checks the factory deployed it.
 
 ### isESIMWalletOnStandby
 
@@ -85,9 +85,9 @@ mapping(address => bool) isESIMWalletOnStandby
 True while an eSIM wallet sits between device wallets, released by one and not yet
         taken on by another
 
-_A marker for offchain readers, not a gate. Gating spend on it would brick a wallet its
+A marker for offchain readers, not a gate. Gating spend on it would brick a wallet its
      device wallet just removed, since `removeESIMWallet` raises it whether or not a transfer
-     follows. Use `isESIMWalletValid` to ask whether a wallet belongs to the protocol._
+     follows. Use `isESIMWalletValid` to ask whether a wallet belongs to the protocol.
 
 ### claimedESIMIdentifiers
 
@@ -97,8 +97,8 @@ mapping(bytes32 => address) claimedESIMIdentifiers
 
 The eSIM wallet holding each eSIM identifier, protocol-wide
 
-_Stops two wallets, one per deploy route, taking the same identifier. Written once and
-     never cleared, even on ownership transfer, since the eSIM belongs to the wallet._
+Stops two wallets, one per deploy route, taking the same identifier. Written once and
+     never cleared, even on ownership transfer, since the eSIM belongs to the wallet.
 
 ### LazyWalletDeployed
 
@@ -132,7 +132,7 @@ event ESIMIdentifierClaimed(bytes32 _hashOfESIMIdentifier, string _eSIMUniqueIde
 
 Emitted the first and only time an eSIM identifier is bound to an eSIM wallet
 
-_The string is also carried unindexed, since an indexed string keeps only its hash._
+The string is also carried unindexed, since an indexed string keeps only its hash.
 
 ### UpdatedDeviceWalletAssociatedWithESIMWallet
 
@@ -166,7 +166,7 @@ event AdminUpdateRequested(address eSIMWalletAdmin, address _newAdmin)
 
 Emitted when the owner nominates a new address for the admin role
 
-_The role goes dormant here: the incumbent is powerless until the nominee accepts._
+The role goes dormant here: the incumbent is powerless until the nominee accepts.
 
 ### AdminUpdated
 
@@ -264,8 +264,8 @@ event DataBundleSettled(address _eSIMWallet, bytes32 _dataBundleID, uint64 _pric
 
 Emitted for a purchase paid for outside the protocol
 
-_On the registry so an indexer follows one address. `_tokenAmount` is unchecked: it and
-     the price both come from the admin._
+On the registry so an indexer follows one address. `_tokenAmount` is unchecked: it and
+     the price both come from the admin.
 
 ### ESIMWalletSetOnStandby
 
@@ -291,9 +291,9 @@ function deployLazyWallet(bytes32[2] _deviceWalletOwnerKey, string _deviceUnique
 
 Allow LazyWalletRegistry to deploy a device wallet and its first eSIM wallets
 
-_History is copied later via `populateLazyHistory`, so gas here does not grow with both
+History is copied later via `populateLazyHistory`, so gas here does not grow with both
      eSIM count and history size. Later batches go through `deployMoreLazyESIMWallets`. The
-     lazy wallet registry reserves the whole salt range first, so no salt bound is needed._
+     lazy wallet registry reserves the whole salt range first, so no salt bound is needed.
 
 #### Parameters
 
@@ -320,9 +320,9 @@ function deployMoreLazyESIMWallets(address _deviceWallet, string _deviceUniqueId
 
 Deploys the next batch of eSIM wallets for a device the lazy registry already set up
 
-_Separate from `deployLazyWallet`, whose key, salt and deposit belong to the one-time
+Separate from `deployLazyWallet`, whose key, salt and deposit belong to the one-time
      device deploy (the key may have rotated since). The salt continues from earlier batches,
-     since a repeat would land CREATE2 on an address that already holds a wallet._
+     since a repeat would land CREATE2 on an address that already holds a wallet.
 
 #### Parameters
 
@@ -349,8 +349,8 @@ function populateLazyHistory(address _eSIMWallet, struct DataBundleDetails[] _da
 Forwards one batch of pre-deployment purchase history to an eSIM wallet on behalf of
         the lazy wallet registry
 
-_Routed through here because eSIM wallets accept history from this contract only. The
-     lazy wallet registry decides which entries each batch carries._
+Routed through here because eSIM wallets accept history from this contract only. The
+     lazy wallet registry decides which entries each batch carries.
 
 #### Parameters
 
@@ -367,8 +367,8 @@ function _deployLazyESIMWallet(address _deviceWallet, string _deviceUniqueIdenti
 
 Deploys one eSIM wallet, binds it to the device wallet and sets its eSIM identifier
 
-_Shared by every batch so they cannot drift apart. The identifier is known up front on
-     this route, so setting it here saves the admin a transaction per wallet._
+Shared by every batch so they cannot drift apart. The identifier is known up front on
+     this route, so setting it here saves the admin a transaction per wallet.
 
 #### Parameters
 
@@ -393,9 +393,9 @@ function _assignESIMIdentifier(address _eSIMWalletAddress, string _eSIMUniqueIde
 
 Records an eSIM identifier against a wallet and writes it onto the wallet
 
-_Internal so a device wallet cannot claim through `execute` a string someone else bought;
+Internal so a device wallet cannot claim through `execute` a string someone else bought;
      `Registry.assignESIMIdentifier` is the admin's way in. Claims before writing the wallet,
-     whose slot is set once, so a failed claim never strands an identifier there._
+     whose slot is set once, so a failed claim never strands an identifier there.
 
 #### Parameters
 
@@ -418,8 +418,8 @@ function _claimESIMIdentifier(string _eSIMUniqueIdentifier, address _eSIMWalletA
 
 Records the wallet holding an eSIM identifier, refusing a second holder
 
-_A reservation is compared against the device wallet's own identifier rather than
-     refused outright, since the lazy route claims against its own reservation._
+A reservation is compared against the device wallet's own identifier rather than
+     refused outright, since the lazy route claims against its own reservation.
 
 #### Parameters
 
@@ -437,7 +437,7 @@ function _updateDeviceWalletInfo(address _deviceWallet, string _deviceUniqueIden
 
 Records a device wallet against its identifier and its owner key
 
-_Writes all four mappings together, so a wallet is either fully recorded or not recorded._
+Writes all four mappings together, so a wallet is either fully recorded or not recorded.
 
 #### Parameters
 
@@ -455,8 +455,8 @@ function _updateDeviceWalletOwnerKey(address _deviceWallet, bytes32[2] _newOwner
 
 Moves a device wallet's registry bindings from its current owner key to a new one
 
-_The old key comes from storage, not the caller, so a wallet cannot free someone else's
-     key. Clearing it before the check lets a wallet rotate onto the key it already holds._
+The old key comes from storage, not the caller, so a wallet cannot free someone else's
+     key. Clearing it before the check lets a wallet rotate onto the key it already holds.
 
 #### Parameters
 
@@ -473,7 +473,7 @@ function isDeviceIdentifierAlreadyUsed(string _deviceUniqueIdentifier) public vi
 
 Whether a device identifier already has a wallet recorded against it
 
-_Covers both deploy routes, so each can refuse an identifier the other already used._
+Covers both deploy routes, so each can refuse an identifier the other already used.
 
 #### Parameters
 

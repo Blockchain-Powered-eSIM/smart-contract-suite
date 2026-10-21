@@ -4,9 +4,9 @@
 
 Deploys device wallets at deterministic addresses and owns the beacon they all point at
 
-_The admin batch route deploys and registers in one go. `createAccount` runs inside ERC-4337
+The admin batch route deploys and registers in one go. `createAccount` runs inside ERC-4337
      validation and writes no external storage, so `postCreateAccount` registers it afterwards.
-     Both routes give the same CREATE2 address for the same inputs._
+     Both routes give the same CREATE2 address for the same inputs.
 
 ### beacon
 
@@ -16,7 +16,7 @@ contract UpgradeableBeacon beacon
 
 Beacon every device wallet proxy reads its implementation from
 
-_One update moves every wallet at once, and none can decline it._
+One update moves every wallet at once, and none can decline it.
 
 ### entryPoint
 
@@ -106,9 +106,9 @@ constructor() public
 
 Disables initializers on the implementation contract
 
-_Otherwise anyone could initialize and own the implementation itself. The proxy is
+Otherwise anyone could initialize and own the implementation itself. The proxy is
      unaffected, but an owned implementation is a trap for a later upgrade that adds an
-     outward call._
+     outward call.
 
 ### initialize
 
@@ -118,8 +118,8 @@ function initialize(address _deviceWalletImplementation, address _upgradeManager
 
 Deploys the beacon and hands ownership of this factory to the upgrade manager
 
-_The admin and the vault are read from the registry, set later by addRegistryAddress,
-     so there is one source for each. Admin functions stay closed until then._
+The admin and the vault are read from the registry, set later by addRegistryAddress,
+     so there is one source for each. Admin functions stay closed until then.
 
 #### Parameters
 
@@ -139,8 +139,8 @@ function addRegistryAddress(address _registryContractAddress) external returns (
 
 Sets the registry, once, after it has been deployed
 
-_Gated on the owner because the admin is read from the registry, so there is no admin
-     to check until this lands. Same as ESIMWalletFactory._
+Gated on the owner because the admin is read from the registry, so there is no admin
+     to check until this lands. Same as ESIMWalletFactory.
 
 #### Parameters
 
@@ -162,7 +162,7 @@ function updateDeviceWalletImplementation(address _newDeviceImpl) external retur
 
 Points the beacon at a new device wallet implementation
 
-_A protocol-wide upgrade: every device wallet moves at once and none can decline it._
+A protocol-wide upgrade: every device wallet moves at once and none can decline it.
 
 #### Parameters
 
@@ -184,7 +184,7 @@ function deployDeviceWalletForUsers(string[] _deviceUniqueIdentifiers, bytes32[2
 
 Deploys device wallets, each with its first eSIM wallet and registry records
 
-_Unspent ETH is returned to the caller. Refused while paused, since it moves ETH._
+Unspent ETH is returned to the caller. Refused while paused, since it moves ETH.
 
 #### Parameters
 
@@ -209,8 +209,8 @@ function postCreateAccount(address _deviceWallet, string _deviceUniqueIdentifier
 
 Records a wallet the EntryPoint deployed through createAccount
 
-_The key and identifier are proxy constructor arguments, so an address that matches the
-     derivation and holds code was deployed by this factory with exactly those arguments._
+The key and identifier are proxy constructor arguments, so an address that matches the
+     derivation and holds code was deployed by this factory with exactly those arguments.
 
 #### Parameters
 
@@ -229,9 +229,9 @@ function createAccount(string _deviceUniqueIdentifier, bytes32[2] _deviceWalletO
 
 Deploys a device wallet, returning the existing one if that address already holds it
 
-_Runs in ERC-4337 validation, so it leaves the registry to `postCreateAccount`. Reading
+Runs in ERC-4337 validation, so it leaves the registry to `postCreateAccount`. Reading
      its own and the beacon's storage needs a staked factory. Returning an existing wallet
-     instead of reverting keeps `entryPoint.getSenderAddress()` working after creation._
+     instead of reverting keeps `entryPoint.getSenderAddress()` working after creation.
 
 #### Parameters
 
@@ -255,8 +255,8 @@ function renounceOwnership() public pure
 
 Ownership of this contract is never renounced
 
-_The owner alone upgrades this factory and the beacon, so renouncing would freeze every
-     device wallet on its current logic for good._
+The owner alone upgrades this factory and the beacon, so renouncing would freeze every
+     device wallet on its current logic for good.
 
 ### _authorizeUpgrade
 
@@ -304,8 +304,8 @@ function _createAccountForUser(string _deviceUniqueIdentifier, bytes32[2] _devic
 
 Deploys a device wallet and writes its registry records, or adopts one that already exists
 
-_Callers holding a budget must charge `spentETH`, not the requested deposit. It is zero
-     for an already registered wallet, and the full deposit for a new or adopted one._
+Callers holding a budget must charge `spentETH`, not the requested deposit. It is zero
+     for an already registered wallet, and the full deposit for a new or adopted one.
 
 #### Parameters
 
@@ -331,8 +331,8 @@ function eSIMWalletAdmin() public view returns (address)
 
 Admin address of the eSIM wallet project
 
-_Read from the registry so a rotation there applies here too. Returns address(0), which
-     no caller matches, until the registry is set, rather than calling into address(0)._
+Read from the registry so a rotation there applies here too. Returns address(0), which
+     no caller matches, until the registry is set, rather than calling into address(0).
 
 #### Return Values
 
@@ -348,7 +348,7 @@ function preCreateAccountValidation(string _deviceUniqueIdentifier, bytes32[2] _
 
 Checks the inputs for a fresh device wallet against the registry
 
-_For use before `createAccount`, which cannot read the registry itself_
+For use before `createAccount`, which cannot read the registry itself
 
 #### Parameters
 
@@ -371,8 +371,8 @@ function getCounterFactualAddress(bytes32[2] _deviceWalletOwnerKey, string _devi
 
 The address createAccount would deploy to for these inputs
 
-_The key and identifier are proxy constructor arguments, so changing either, or the
-     salt, moves the address._
+The key and identifier are proxy constructor arguments, so changing either, or the
+     salt, moves the address.
 
 #### Parameters
 

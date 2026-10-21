@@ -4,8 +4,8 @@
 
 Deploys eSIM wallets and owns the beacon they all point at
 
-_A UUPS singleton. It owns an `UpgradeableBeacon`, so one call here moves every eSIM wallet
-     in the protocol onto new logic at once. There is no per-wallet opt-out._
+A UUPS singleton. It owns an `UpgradeableBeacon`, so one call here moves every eSIM wallet
+     in the protocol onto new logic at once. There is no per-wallet opt-out.
 
 ### registry
 
@@ -23,7 +23,7 @@ contract UpgradeableBeacon beacon
 
 Upgradeable beacon that points to the correct eSIM wallet logic contract
 
-_Every eSIM wallet proxy reads its implementation from here, so one change moves them all._
+Every eSIM wallet proxy reads its implementation from here, so one change moves them all.
 
 ### isESIMWalletDeployed
 
@@ -73,10 +73,10 @@ modifier onlyRegistryOrDeviceWalletFactoryOrDeviceWallet()
 
 Restricts a call to the registry, the device wallet factory or a known device wallet
 
-_A device wallet calling directly may only deploy for itself (checked in the function).
+A device wallet calling directly may only deploy for itself (checked in the function).
      This also means the admin gate on `DeviceWallet.deployESIMWallet` is not a boundary: an
      owner can `execute` straight here. Deliberate, since nothing here can tell which of the
-     owner's signed calls led to this one._
+     owner's signed calls led to this one.
 
 ### constructor
 
@@ -86,8 +86,8 @@ constructor() public
 
 Disables initializers on the implementation contract
 
-_Otherwise anyone could initialize and own the implementation. The proxy is unaffected,
-     but an owned implementation is a trap for a later upgrade that adds an outward call._
+Otherwise anyone could initialize and own the implementation. The proxy is unaffected,
+     but an owned implementation is a trap for a later upgrade that adds an outward call.
 
 ### initialize
 
@@ -97,8 +97,8 @@ function initialize(address _eSIMWalletImplementation, address _upgradeManager) 
 
 Deploys the beacon and hands ownership of this factory to the upgrade manager
 
-_The factory owns the beacon, so the only way to move the implementation is the
-     owner-gated `updateESIMWalletImplementation`, which emits an event._
+The factory owns the beacon, so the only way to move the implementation is the
+     owner-gated `updateESIMWalletImplementation`, which emits an event.
 
 #### Parameters
 
@@ -115,8 +115,8 @@ function addRegistryAddress(address _registryContractAddress) external returns (
 
 Points the factory at the registry, which is deployed after it
 
-_Write-once. Every caller check in this contract reads the registry, so allowing it to
-     move would let a later owner redirect all of them at once._
+Write-once. Every caller check in this contract reads the registry, so allowing it to
+     move would let a later owner redirect all of them at once.
 
 #### Parameters
 
@@ -159,7 +159,7 @@ function getCounterFactualAddress(address _deviceWalletAddress, uint256 _salt) p
 
 The address deployESIMWallet would land on for these inputs
 
-_Lets a caller probe a salt for occupancy before spending a deployment on it._
+Lets a caller probe a salt for occupancy before spending a deployment on it.
 
 #### Parameters
 
@@ -182,7 +182,7 @@ function updateESIMWalletImplementation(address _eSIMWalletImpl) external return
 
 Update the eSIM wallet implementation address in the beacon contract
 
-_A protocol-wide upgrade: every eSIM wallet moves at once and none can decline._
+A protocol-wide upgrade: every eSIM wallet moves at once and none can decline.
 
 #### Parameters
 
@@ -204,8 +204,8 @@ function renounceOwnership() public pure
 
 Ownership of this contract is never renounced
 
-_The owner is the only one who can upgrade this factory or the beacon, so renouncing
-     would freeze every eSIM wallet on its current logic._
+The owner is the only one who can upgrade this factory or the beacon, so renouncing
+     would freeze every eSIM wallet on its current logic.
 
 ### _authorizeUpgrade
 

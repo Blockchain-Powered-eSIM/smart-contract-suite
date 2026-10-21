@@ -5,8 +5,8 @@
 Holds what a fiat user bought before they had a wallet, then deploys the wallets and
         copies the record onto them
 
-_Keyed by string identifiers, since a lazy user has no address yet. Deployment and history
-     copy keep their cursors in storage, so a dropped transaction is retried by repeating it._
+Keyed by string identifiers, since a lazy user has no address yet. Deployment and history
+     copy keep their cursors in storage, so a dropped transaction is retried by repeating it.
 
 ### MAX_HISTORY_ENTRIES_PER_CALL
 
@@ -16,9 +16,9 @@ uint256 MAX_HISTORY_ENTRIES_PER_CALL
 
 Most purchase history entries `setHistoryForLazyWallet` will copy in one call
 
-_About 50,000 gas per entry, so a full batch is ~2,500,000: sized to keep a failed batch
+About 50,000 gas per entry, so a full batch is ~2,500,000: sized to keep a failed batch
      cheap to retry, not for the block limit. Refused rather than clamped, so a caller never
-     believes it wrote more than it did._
+     believes it wrote more than it did.
 
 ### MAX_ESIM_WALLETS_PER_CALL
 
@@ -28,9 +28,9 @@ uint256 MAX_ESIM_WALLETS_PER_CALL
 
 Most eSIM wallets a single call will deploy for one device
 
-_About 500,000 gas per wallet, so a full batch is ~10,000,000. Sized for retry cost, since
+About 500,000 gas per wallet, so a full batch is ~10,000,000. Sized for retry cost, since
      a batch that runs out of gas is paid for and lost, and to leave room for
-     `forge coverage --ir-minimum`, which adds about a fifth. Refused rather than clamped._
+     `forge coverage --ir-minimum`, which adds about a fifth. Refused rather than clamped.
 
 ### registry
 
@@ -56,7 +56,7 @@ mapping(string => string) eSIMIdentifierToDeviceIdentifier
 
 Mapping from eSIM unique identifier to device unique identifier
 
-_A device can have many eSIMs, but an eSIM has only one device._
+A device can have many eSIMs, but an eSIM has only one device.
 
 ### eSIMIdentifiersAssociatedWithDeviceIdentifier
 
@@ -74,8 +74,8 @@ mapping(string => uint256) historyEntriesCopied
 
 How many of an eSIM's stored purchase entries have already reached its wallet
 
-_The wallet appends whatever it is handed, so this alone stops a repeat call writing
-     entries twice. Read here rather than taken from the caller, so two calls in flight are safe._
+The wallet appends whatever it is handed, so this alone stops a repeat call writing
+     entries twice. Read here rather than taken from the caller, so two calls in flight are safe.
 
 ### lazyDeployedESIMWallet
 
@@ -85,9 +85,9 @@ mapping(string => address) lazyDeployedESIMWallet
 
 The eSIM wallet this contract deployed for an eSIM identifier
 
-_Without this, a wallet deployed through the ordinary route could claim a lazy user's
+Without this, a wallet deployed through the ordinary route could claim a lazy user's
      eSIM identifier and receive their history. Written from the deployment's returned
-     addresses and not touched by ownership transfers, so the copy follows the wallet._
+     addresses and not touched by ownership transfers, so the copy follows the wallet.
 
 ### eSIMWalletsDeployed
 
@@ -97,9 +97,9 @@ mapping(string => uint256) eSIMWalletsDeployed
 
 How many of a device's eSIM wallets this contract has already deployed
 
-_Non-zero means this contract set the device up, since the first batch deploys at least
+Non-zero means this contract set the device up, since the first batch deploys at least
      one. Asking the registry instead would also accept a device wallet from the ordinary
-     route under the same identifier, and hand it the lazy user's wallets._
+     route under the same identifier, and hand it the lazy user's wallets.
 
 ### lazyDeploymentSalt
 
@@ -109,8 +109,8 @@ mapping(string => uint256) lazyDeploymentSalt
 
 Salt the device's first deployment batch started from
 
-_Later batches continue from this rather than restart on an address already in use.
-     Stored, because a caller passing a different salt would silently give different addresses._
+Later batches continue from this rather than restart on an address already in use.
+     Stored, because a caller passing a different salt would silently give different addresses.
 
 ### DataUpdatedForDevice
 
@@ -136,8 +136,8 @@ event LazyWalletDeployed(bytes32[2] _deviceOwnerPublicKey, address deviceWallet,
 
 Emitted when the Lazy wallet is deployed
 
-_String arrays are left unindexed on purpose: an indexed dynamic type stores only its
-     hash, which no consumer can use._
+String arrays are left unindexed on purpose: an indexed dynamic type stores only its
+     hash, which no consumer can use.
 
 ### LazyESIMWalletsDeployed
 
@@ -148,7 +148,7 @@ event LazyESIMWalletsDeployed(string _deviceUniqueIdentifier, address _deviceWal
 Emitted for every batch of eSIM wallets deployed for a device, including the first.
         `_remaining` of zero means the device is fully deployed.
 
-_`LazyWalletDeployed` carries only the first batch, so follow this for the whole set._
+`LazyWalletDeployed` carries only the first batch, so follow this for the whole set.
 
 ### LazyHistoryCopied
 
@@ -215,7 +215,7 @@ modifier onlyESIMWalletAdmin()
 
 Restricts a call to the eSIM wallet admin
 
-_Read from the registry each call, so a rotation there takes effect at once._
+Read from the registry each call, so a rotation there takes effect at once.
 
 ### constructor
 
@@ -225,8 +225,8 @@ constructor() public
 
 Disables initializers on the implementation contract
 
-_Otherwise anyone could initialise and own the implementation, a trap for any later
-     upgrade that adds an outward call._
+Otherwise anyone could initialise and own the implementation, a trap for any later
+     upgrade that adds an outward call.
 
 ### initialize
 
@@ -251,8 +251,8 @@ function batchPopulateHistory(string[] _deviceUniqueIdentifiers, string[][] _eSI
 
 Records devices, their eSIMs and the data bundles bought for them
 
-_Refused for a device that already has a wallet, which freezes its eSIM list and history
-     while a deployment walks them._
+Refused for a device that already has a wallet, which freezes its eSIM list and history
+     while a deployment walks them.
 
 #### Parameters
 
@@ -270,12 +270,12 @@ function deployLazyWalletAndSetESIMIdentifier(bytes32[2] _deviceOwnerPublicKey, 
 
 Deploys a device wallet and the first batch of its eSIM wallets, setting their identifiers
 
-_The rest go through `deployMoreESIMWalletsForLazyDevice`: one transaction for every
+The rest go through `deployMoreESIMWalletsForLazyDevice`: one transaction for every
      wallet stopped fitting in a block past about forty. The device wallet is usable at once,
      so a dropped later batch does not leave the user with nothing. Switching an eSIM is
      refused meanwhile, since the switch refuses any device that has a wallet.
      Pause-checked because it moves ETH. Its two siblings move none and run through a pause
-     on purpose, so a half deployed device can still be finished._
+     on purpose, so a half deployed device can still be finished.
 
 #### Parameters
 
@@ -303,9 +303,9 @@ function deployMoreESIMWalletsForLazyDevice(string _deviceUniqueIdentifier, uint
 
 Deploys the next batch of eSIM wallets for a device already set up by the lazy route
 
-_Call until it reverts `AllESIMWalletsDeployed`, which means done, not failed.
+Call until it reverts `AllESIMWalletsDeployed`, which means done, not failed.
      No pause check: it moves no ETH, and `_populateHistory` refuses a device with a wallet,
-     so the list it walks cannot grow under a running deployment._
+     so the list it walks cannot grow under a running deployment.
 
 #### Parameters
 
@@ -329,9 +329,9 @@ function setHistoryForLazyWallet(string _eSIMIdentifier, uint256 _maxEntries) ex
 
 Copies the next batch of an eSIM's stored purchase history into its deployed wallet
 
-_Kept out of the deployment so neither grows with the other. Call until it reverts
+Kept out of the deployment so neither grows with the other. Call until it reverts
      `HistoryAlreadyCopied`, which means done, not failed. No pause check: it moves no ETH,
-     and `_populateHistory` froze these entries once the device had a wallet._
+     and `_populateHistory` froze these entries once the device had a wallet.
 
 #### Parameters
 
@@ -355,7 +355,7 @@ function switchESIMIdentifierToNewDeviceIdentifier(string _eSIMIdentifier, strin
 
 Moves a fiat user's eSIM to a new device, before either device has a wallet
 
-_After deployment the eSIM moves through ESIMWallet's ownership transfer instead._
+After deployment the eSIM moves through ESIMWallet's ownership transfer instead.
 
 #### Parameters
 
@@ -379,7 +379,7 @@ function renounceOwnership() public pure
 
 Ownership of this contract is never renounced
 
-_Only the owner can upgrade, so renouncing would freeze this logic for good._
+Only the owner can upgrade, so renouncing would freeze this logic for good.
 
 ### _authorizeUpgrade
 
@@ -403,8 +403,8 @@ function _populateHistory(string _deviceUniqueIdentifier, string[] _eSIMUniqueId
 
 Records one device's eSIM identifiers and the purchases made against them
 
-_`_eSIMUniqueIdentifiers` may repeat an identifier, since one eSIM can have several
-     purchases. An identifier already bound to a different device is refused._
+`_eSIMUniqueIdentifiers` may repeat an identifier, since one eSIM can have several
+     purchases. An identifier already bound to a different device is refused.
 
 #### Parameters
 
@@ -422,7 +422,7 @@ function _moveESIMPurchaseHistory(string _eSIMIdentifier, string _oldDeviceIdent
 
 Moves what an eSIM bought to the device taking it over
 
-_A switch also needs `_moveESIMIdentifierBetweenDeviceLists` for the list membership._
+A switch also needs `_moveESIMIdentifierBetweenDeviceLists` for the list membership.
 
 #### Parameters
 
@@ -440,8 +440,8 @@ function _moveESIMIdentifierBetweenDeviceLists(string _eSIMIdentifier, string _o
 
 Moves an eSIM identifier between the two devices' lists
 
-_This list is what a deployment walks. Removal is swap-and-pop, so the old device's list
-     loses its order._
+This list is what a deployment walks. Removal is swap-and-pop, so the old device's list
+     loses its order.
 
 #### Parameters
 
@@ -459,7 +459,7 @@ function upgradeManager() public view returns (address)
 
 Address (owned/controlled by eSIM wallet project) that can upgrade contracts
 
-_Reads the owner, who alone can upgrade, rather than a copy that could disagree._
+Reads the owner, who alone can upgrade, rather than a copy that could disagree.
 
 #### Return Values
 
@@ -475,8 +475,8 @@ function outstandingHistoryEntries(string _eSIMIdentifier) external view returns
 
 How many history entries are still waiting to be copied into this eSIM's wallet
 
-_The public getter on `deviceIdentifierToESIMDetails` cannot return a length.
-     Zero for an eSIM this contract never handled._
+The public getter on `deviceIdentifierToESIMDetails` cannot return a length.
+     Zero for an eSIM this contract never handled.
 
 #### Parameters
 
@@ -498,8 +498,8 @@ function isDeviceIdentifierReserved(string _deviceUniqueIdentifier) public view 
 
 Whether a device identifier has purchases recorded against it here
 
-_Checked by the ordinary route, since a wallet under a reserved identifier strands its
-     eSIMs. Stays true after lazy deployment, harmless as the registry refuses a second claim._
+Checked by the ordinary route, since a wallet under a reserved identifier strands its
+     eSIMs. Stays true after lazy deployment, harmless as the registry refuses a second claim.
 
 #### Parameters
 

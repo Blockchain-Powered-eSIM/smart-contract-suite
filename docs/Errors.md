@@ -4,8 +4,8 @@
 
 Every custom error the protocol reverts with, in one place
 
-_An interface so each contract reaches them as `Errors.Name` without inheriting anything.
-     Grouped by the contract that raises them; a trailing note marks one raised elsewhere._
+An interface so each contract reaches them as `Errors.Name` without inheriting anything.
+     Grouped by the contract that raises them; a trailing note marks one raised elsewhere.
 
 ### ZeroAddress
 

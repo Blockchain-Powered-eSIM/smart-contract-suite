@@ -124,6 +124,8 @@ module.exports = {
     pages: 'files',
     exclude: [],
     theme: 'markdown',
+    // Prints @dev as plain text; the theme's italics break on multi-line @dev
+    templates: 'docgen-templates',
     collapseNewlines: true,
     pageExtension: '.md',
   }

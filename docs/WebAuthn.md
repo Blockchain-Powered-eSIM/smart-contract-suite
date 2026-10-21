@@ -5,8 +5,8 @@
 A library for verifying WebAuthn Authentication Assertions, built off the work
         of Daimo.
 
-_Attempts to use the RIP-7212 precompile for signature verification.
-     If precompile verification fails, it falls back to FreshCryptoLib._
+Attempts to use the RIP-7212 precompile for signature verification.
+     If precompile verification fails, it falls back to FreshCryptoLib.
 
 ### tryDecodeSignature
 
@@ -16,7 +16,7 @@ function tryDecodeSignature(bytes encodedSignature) internal pure returns (struc
 
 Decodes an encoded `WebAuthnSignature` without reverting on a malformed encoding.
 
-_`abi.decode` reverts on bad input. Inside ERC-4337 validation that fails the whole
+`abi.decode` reverts on bad input. Inside ERC-4337 validation that fails the whole
      bundle, and behind `isValidSignature` it reaches the caller as an error, not a rejection.
 
      On a failed bound `decoded` stays as solc allocated it, both dynamic members empty, and
@@ -27,7 +27,7 @@ _`abi.decode` reverts on bad input. Inside ERC-4337 validation that fails the wh
 
      Copied from solady's `WebAuthn.tryDecodeAuth` (identical struct layout) rather than
      rewriting an ABI bounds check by hand. Memory-safe: every read is inside
-     `encodedSignature`, and the only writes are to the six words solc reserved for `decoded`._
+     `encodedSignature`, and the only writes are to the six words solc reserved for `decoded`.
 
 #### Parameters
 
@@ -50,7 +50,7 @@ function verifySignature(bytes challenge, bool requireUV, struct WebAuthnSignatu
 Verifies a Webauthn Authentication Assertion as described
 in https://www.w3.org/TR/webauthn-2/#sctn-verifying-assertion.
 
-_Only the spec steps relevant here are checked. Read this list before using it.
+Only the spec steps relevant here are checked. Read this list before using it.
 
      Verified:
         - authenticatorData has the user present bit set, and the user verified bit too when
@@ -67,7 +67,7 @@ _Only the spec steps relevant here are checked. Read this list before using it.
         - Credential backup state: assumed unused in Relying Party policy.
         - Client extension outputs: assumed unused.
         - The signature counter: assumed unused for risk scoring.
-        - The attestation object: assumed absent from the response._
+        - The attestation object: assumed absent from the response.
 
 #### Parameters
 

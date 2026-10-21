@@ -4,8 +4,8 @@
 
 A user's device: an ERC-4337 account that owns the eSIM wallets bought for that device
 
-_Beacon proxy owned by the user's P256 key. Key rotation also updates the registry, so
-     the two records cannot drift apart._
+Beacon proxy owned by the user's P256 key. Key rotation also updates the registry, so
+     the two records cannot drift apart.
 
 ### registry
 
@@ -47,8 +47,8 @@ mapping(address => bool) canPullFunds
 
 Tracks if an associated eSIM wallet may pull this wallet's tokens
 
-_One flag for all tokens: a wallet trusted with funds can drain them anyway, so
-     per-token flags would cost signatures and limit nothing._
+One flag for all tokens: a wallet trusted with funds can drain them anyway, so
+     per-token flags would cost signatures and limit nothing.
 
 ### FundsAccessUpdated
 
@@ -131,7 +131,7 @@ modifier onlyESIMWalletAdmin()
 
 Restricts a call to the eSIM wallet admin
 
-_Read from the registry on every call, so a rotation there takes effect immediately._
+Read from the registry on every call, so a rotation there takes effect immediately.
 
 ### constructor
 
@@ -156,8 +156,8 @@ function init(address _registry, bytes32[2] _deviceWalletOwnerKey, string _devic
 
 Wires the wallet to the registry and the factory, and sets its owner key
 
-_Runs from the beacon proxy's constructor, in the deployment transaction. It is the only
-     path to the internal `Account4337.initialize`._
+Runs from the beacon proxy's constructor, in the deployment transaction. It is the only
+     path to the internal `Account4337.initialize`.
 
 #### Parameters
 
@@ -176,8 +176,8 @@ function deployESIMWallet(bool _hasAccessToFunds, uint256 _salt) external return
 
 Deploys an eSIM wallet for this device and binds it
 
-_Fund access is granted later by the owner with `toggleAccessToFunds`. The admin gate is
-     a convenience, not a boundary: the owner can call the factory directly via `execute`._
+Fund access is granted later by the owner with `toggleAccessToFunds`. The admin gate is
+     a convenience, not a boundary: the owner can call the factory directly via `execute`.
 
 #### Parameters
 
@@ -200,8 +200,8 @@ function pullToken(address _token, uint256 _amount) external returns (uint256)
 
 Allow an associated eSIM wallet to pull an ERC-20 (for data bundles)
 
-_Lets the admin charge this wallet without an owner signature. An owner buying for
-     themselves can batch the transfer and purchase in `executeBatch` instead._
+Lets the admin charge this wallet without an owner signature. An owner buying for
+     themselves can batch the transfer and purchase in `executeBatch` instead.
 
 #### Parameters
 
@@ -224,8 +224,8 @@ function _transferOwnership(bytes32[2] newOwner, bytes newOwnerSignature) intern
 
 Moves ownership to a new key once that key has proved it can sign
 
-_The registry keeps one key to one wallet, so it must follow every rotation. It is told
-     after the local write because it reads the key back from this wallet._
+The registry keeps one key to one wallet, so it must follow every rotation. It is told
+     after the local write because it reads the key back from this wallet.
 
 #### Parameters
 
@@ -242,8 +242,8 @@ function toggleAccessToFunds(address _eSIMWalletAddress, bool _hasAccessToFunds)
 
 Allow owner to revoke or give an associated eSIM wallet access to this wallet's money
 
-_The only way that access is ever granted. Binding a wallet never carries it, so a
-     revocation stands until the owner signs a grant._
+The only way that access is ever granted. Binding a wallet never carries it, so a
+     revocation stands until the owner signs a grant.
 
 #### Parameters
 
@@ -291,9 +291,9 @@ function _addESIMWallet(address _eSIMWalletAddress, bool _hasAccessToFunds) inte
 
 Binds an eSIM wallet to this device wallet and records it with the registry
 
-_Refuses a wallet not yet owned by this one, so binding cannot run ahead of a handover.
+Refuses a wallet not yet owned by this one, so binding cannot run ahead of a handover.
      Never grants fund access, so no bind can undo an owner's revocation. Asking for access
-     reverts rather than being silently dropped._
+     reverts rather than being silently dropped.
 
 #### Parameters
 
@@ -310,7 +310,7 @@ function getVaultAddress() public view returns (address)
 
 Fetches the vault address that receives payment for data bundles
 
-_Not cached, so a vault change in the registry reaches every wallet at once._
+Not cached, so a vault change in the registry reaches every wallet at once.
 
 #### Return Values
 

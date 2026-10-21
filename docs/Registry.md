@@ -4,11 +4,11 @@
 
 Holds the protocol's roles and switches: admin, vault, pause flag and price ceiling
 
-_Wallets are beacon proxies with no enumerable list, so one write here is the only way a
+Wallets are beacon proxies with no enumerable list, so one write here is the only way a
      change reaches all of them in the same transaction.
      `IPausable` and `IRegistryAdmin` let the compiler check what `ProtocolAdmin` calls, since a
      mismatch would only show as a revert mid-incident. `enableAdmin` is left out on purpose,
-     so nothing invites a fast path for restoring a suspended key._
+     so nothing invites a fast path for restoring a suspended key.
 
 ### entryPoint
 
@@ -26,9 +26,9 @@ address adminOfRecord
 
 Address holding the admin role, whether or not its powers are currently live
 
-_The only copy, so a rotation reaches every reader at once and none keeps the old key.
+The only copy, so a rotation reaches every reader at once and none keeps the old key.
      Use `eSIMWalletAdmin()` to ask who may act: this keeps naming a suspended admin so the
-     suspension can be lifted without re-supplying the address._
+     suspension can be lifted without re-supplying the address.
 
 ### vault
 
@@ -46,8 +46,8 @@ address newRequestedAdmin
 
 Address of the admin to be appointed
 
-_Set by the owner, cleared on acceptance. While set the incumbent has no powers, so an
-     unaccepted handover leaves the role dormant rather than shared._
+Set by the owner, cleared on acceptance. While set the incumbent has no powers, so an
+     unaccepted handover leaves the role dormant rather than shared.
 
 ### paused
 
@@ -57,7 +57,7 @@ bool paused
 
 True while the protocol's guarded purchase and pull paths are stopped
 
-_Held here so one write reaches every wallet; they all read it on their guarded paths._
+Held here so one write reaches every wallet; they all read it on their guarded paths.
 
 ### adminDisabled
 
@@ -67,8 +67,8 @@ bool adminDisabled
 
 True while the admin's powers are suspended, leaving the address on the books
 
-_Packs beside `paused`. Suspending is instant through a guardian but lifting it is an
-     owner action that waits, so a compromised key cannot restore itself as fast._
+Packs beside `paused`. Suspending is instant through a guardian but lifting it is an
+     owner action that waits, so a compromised key cannot restore itself as fast.
 
 ### defaultPriceCapUSDCents
 
@@ -79,8 +79,8 @@ uint64 defaultPriceCapUSDCents
 Most an eSIM wallet may be charged for one data bundle, in USD cents, unless it sets
         its own limit
 
-_Never zero, both setters refuse it: zero on a wallet means "follow the registry", so it
-     has no meaning here._
+Never zero, both setters refuse it: zero on a wallet means "follow the registry", so it
+     has no meaning here.
 
 ### paymentAdapter
 
@@ -98,9 +98,9 @@ mapping(bytes32 => bool) usedPaymentReferences
 
 Payment references already spent, scoped per eSIM wallet
 
-_Held here so replay protection survives `setPaymentAdapter`. Keyed by
+Held here so replay protection survives `setPaymentAdapter`. Keyed by
      `keccak256(abi.encode(eSIMWallet, paymentReference))` so one wallet spending a reference
-     cannot burn it for another wallet's pending settlement._
+     cannot burn it for another wallet's pending settlement.
 
 ### defaultAdminAllowanceUSDCents
 
@@ -110,8 +110,8 @@ uint64 defaultAdminAllowanceUSDCents
 
 What a new eSIM wallet lets the admin charge it in total, in USD cents
 
-_Copied into each wallet at deploy and handover, so a change here never moves an existing
-     wallet. Zero means new wallets take no admin charges._
+Copied into each wallet at deploy and handover, so a change here never moves an existing
+     wallet. Zero means new wallets take no admin charges.
 
 ### onlyESIMWallet
 
@@ -145,7 +145,7 @@ modifier onlyESIMWalletAdmin()
 
 Restricts a call to the current eSIM wallet admin
 
-_Reads the accessor, not `adminOfRecord`, so a suspended admin is refused here too._
+Reads the accessor, not `adminOfRecord`, so a suspended admin is refused here too.
 
 ### constructor
 
@@ -155,8 +155,8 @@ constructor() public
 
 Disables initializers on the implementation contract
 
-_Otherwise anyone could initialize and own the implementation. The proxy is unaffected,
-     but an owned implementation is a trap for a later upgrade that adds an outward call._
+Otherwise anyone could initialize and own the implementation. The proxy is unaffected,
+     but an owned implementation is a trap for a later upgrade that adds an outward call.
 
 ### initialize
 
@@ -187,11 +187,11 @@ function requestAdminUpdate(address _newAdmin) external
 
 Nominates a new admin, which strips the incumbent until the nominee accepts
 
-_Owner, not admin: a compromised admin could never be replaced, and could hold the pause
+Owner, not admin: a compromised admin could never be replaced, and could hold the pause
      on with no other key able to end it.
      Nominating strips the incumbent at once (via `eSIMWalletAdmin()`), so the two never hold
      the role together; keep nomination and acceptance close. Calling again overrides a
-     mistaken nomination, and naming the incumbent withdraws it and lifts a suspension._
+     mistaken nomination, and naming the incumbent withdraws it and lifts a suspension.
 
 #### Parameters
 
@@ -207,8 +207,8 @@ function acceptAdminUpdate() external returns (address)
 
 Takes up the admin role, callable only by the nominated address
 
-_Clears the suspension too: it targets a key, not the role, so a fresh key accepting
-     ends the incident._
+Clears the suspension too: it targets a key, not the role, so a fresh key accepting
+     ends the incident.
 
 #### Return Values
 
@@ -224,9 +224,9 @@ function disableAdmin() external
 
 Suspends the admin's powers protocol-wide, leaving its address on the books
 
-_Every gate reads `eSIMWalletAdmin()`, which returns zero from here, so one write closes
+Every gate reads `eSIMWalletAdmin()`, which returns zero from here, so one write closes
      them all. Owner gated so `ProtocolAdmin` can give a guardian an instant route. A repeat
-     reverts so a guardian mid-incident never believes it acted when it did not._
+     reverts so a guardian mid-incident never believes it acted when it did not.
 
 ### enableAdmin
 
@@ -236,9 +236,9 @@ function enableAdmin() external
 
 Hands a suspended admin its powers back
 
-_Owner only with no instant route, so a compromised key cannot undo its suspension as
+Owner only with no instant route, so a compromised key cannot undo its suspension as
      fast as it is applied. An outstanding handover still keeps the incumbent powerless;
-     withdraw it with `requestAdminUpdate` naming the incumbent._
+     withdraw it with `requestAdminUpdate` naming the incumbent.
 
 ### eSIMWalletAdmin
 
@@ -248,8 +248,8 @@ function eSIMWalletAdmin() public view returns (address)
 
 Admin address every gated call in the protocol is checked against
 
-_Zero while suspended or while a handover is outstanding. `msg.sender` is never zero, so
-     both states close every gate at once._
+Zero while suspended or while a handover is outstanding. `msg.sender` is never zero, so
+     both states close every gate at once.
 
 #### Return Values
 
@@ -265,8 +265,8 @@ function updateVaultAddress(address _newVaultAddress) external returns (address)
 
 Points every data bundle payment at a different vault
 
-_Owner, not admin: every payment lands here, so moving it belongs behind the upgrade
-     delay. Device wallets read `vault` on every purchase, so one write reaches all of them._
+Owner, not admin: every payment lands here, so moving it belongs behind the upgrade
+     delay. Device wallets read `vault` on every purchase, so one write reaches all of them.
 
 #### Parameters
 
@@ -288,10 +288,10 @@ function pause() external
 
 Stops the token purchase and pull paths on every device wallet and eSIM wallet
 
-_The admin trips it and the owner clears it: the hot key must act fast, but holding the
+The admin trips it and the owner clears it: the hot key must act fast, but holding the
      release too would let one key freeze user funds indefinitely. The owner can also trip
      it, so a guardian can pause through `ProtocolAdmin` while the admin is suspended. A
-     pause never reaches a wallet owner's own `execute`, so users can still spend their ETH._
+     pause never reaches a wallet owner's own `execute`, so users can still spend their ETH.
 
 ### unpause
 
@@ -301,7 +301,7 @@ function unpause() external
 
 Clears the pause
 
-_Owner only, see `pause`_
+Owner only, see `pause`
 
 ### requireNotPaused
 
@@ -311,8 +311,8 @@ function requireNotPaused() external view
 
 Reverts while the protocol is paused
 
-_Wallets call this instead of reading `paused`, so the revert reason is the same
-     everywhere._
+Wallets call this instead of reading `paused`, so the revert reason is the same
+     everywhere.
 
 ### setDefaultPriceCapUSDCents
 
@@ -322,8 +322,8 @@ function setDefaultPriceCapUSDCents(uint64 _cap) external
 
 Sets the price ceiling eSIM wallets fall back to when they hold none of their own
 
-_Owner, not admin: the admin is the party this limits. Zero is refused because it reads
-     as "no ceiling" in `ESIMWallet._requirePriceWithinCap` for wallets without their own._
+Owner, not admin: the admin is the party this limits. Zero is refused because it reads
+     as "no ceiling" in `ESIMWallet._requirePriceWithinCap` for wallets without their own.
 
 #### Parameters
 
@@ -339,7 +339,7 @@ function setDefaultAdminAllowanceUSDCents(uint64 _allowance) external
 
 Sets the admin allowance new eSIM wallets start with
 
-_Owner, not admin: the admin is the party this limits. Existing wallets keep theirs._
+Owner, not admin: the admin is the party this limits. Existing wallets keep theirs.
 
 #### Parameters
 
@@ -355,8 +355,8 @@ function setPaymentAdapter(address _paymentAdapter) external
 
 Points this registry at the payment adapter
 
-_Owner, not admin: the adapter decides where money goes. Spent payment references live
-     on this registry, so they survive a swap._
+Owner, not admin: the adapter decides where money goes. Spent payment references live
+     on this registry, so they survive a swap.
 
 #### Parameters
 
@@ -372,8 +372,8 @@ function consumePaymentReference(bytes32 _paymentReference) external
 
 Spends a payment reference for an eSIM wallet paying with an accepted ERC-20
 
-_Scoped to `msg.sender`, so this and `recordSettledPurchase` cannot spend the same
-     reference once on each for the same wallet._
+Scoped to `msg.sender`, so this and `recordSettledPurchase` cannot spend the same
+     reference once on each for the same wallet.
 
 #### Parameters
 
@@ -389,9 +389,9 @@ function recordSettledPurchase(address _eSIMWallet, struct DataBundleDetails _da
 
 Records a data bundle paid for through an external wallet or a card
 
-_No money moves here. The admin's claim is bounded by the price cap, a once-only payment
+No money moves here. The admin's claim is bounded by the price cap, a once-only payment
      reference, and a settlement other than `DeviceWallet`. Written here, not by the adapter,
-     because eSIM wallets accept history only from this address._
+     because eSIM wallets accept history only from this address.
 
 #### Parameters
 
@@ -411,9 +411,9 @@ function requireLazyHistoryCopied(address _eSIMWallet) external view
 
 Refuses a new entry while older history is still waiting to be copied in
 
-_Otherwise the new entry lands before the older ones and the history is out of order.
+Otherwise the new entry lands before the older ones and the history is out of order.
      Enforced here because the backend retries whole steps on failure. External so wallets
-     can run it on their own paths that see the money move._
+     can run it on their own paths that see the money move.
 
 #### Parameters
 
@@ -445,9 +445,9 @@ function updateDeviceWalletOwnerKey(bytes32[2] _newOwnerKey) external
 
 Called by a device wallet when the P256 key that owns it is replaced
 
-_Without this the registry keeps the retired key and the new one could be claimed by a
+Without this the registry keeps the retired key and the new one could be claimed by a
      second wallet, breaking one key to one wallet. The key must be the one the wallet holds,
-     or a wallet could claim a stranger's key through `execute` and block them registering._
+     or a wallet could claim a stranger's key through `execute` and block them registering.
 
 #### Parameters
 
@@ -463,9 +463,9 @@ function requireDeviceIdentifierNotReserved(string _deviceUniqueIdentifier) exte
 
 Refuses a device identifier a fiat user's eSIMs are already waiting on
 
-_Called by the ordinary deploy route. Taking such an identifier strands the lazy user:
+Called by the ordinary deploy route. Taking such an identifier strands the lazy user:
      history copy, wallet deploy and device switch all refuse an identifier with a wallet.
-     Passes while `lazyWalletRegistry` is unset, since nothing can be reserved before then._
+     Passes while `lazyWalletRegistry` is unset, since nothing can be reserved before then.
 
 #### Parameters
 
@@ -481,10 +481,10 @@ function bindESIMWallet(address _eSIMWalletAddress, address _deviceWalletAddress
 
 Binds an eSIM wallet to the calling device wallet and settles any outstanding transfer
 
-_The only writer of the association, which once set always names a device wallet, so
+The only writer of the association, which once set always names a device wallet, so
      zero is refused; a release raises standby via `toggleESIMWalletStandbyStatus` instead.
      Authorization reads `ESIMWallet.owner()` because the association can lag behind an
-     accepted ownership transfer. Standby is cleared here since both facts change together._
+     accepted ownership transfer. Standby is cleared here since both facts change together.
 
 #### Parameters
 
@@ -501,9 +501,9 @@ function assignESIMIdentifier(address _eSIMWalletAddress, string _eSIMUniqueIden
 
 Binds an eSIM identifier to an eSIM wallet and writes it onto the wallet
 
-_Admin only: which identifier a wallet is owed is known offchain, and a device wallet
+Admin only: which identifier a wallet is owed is known offchain, and a device wallet
      could fake any onchain proof through `execute`. Reserved identifiers are refused even on
-     their own device, because the lazy route assigns them and taking one strands that batch._
+     their own device, because the lazy route assigns them and taking one strands that batch.
 
 #### Parameters
 
@@ -526,9 +526,9 @@ function toggleESIMWalletStandbyStatus(address _eSIMWalletAddress, bool _isOnSta
 
 Marks an eSIM wallet as being moved from one device wallet to another, or cancels that
 
-_Only the flag moves; the association keeps naming the last device wallet, so raising
+Only the flag moves; the association keeps naming the last device wallet, so raising
      standby on a wallet the caller still holds is normal. Authorization reads
-     `ESIMWallet.owner()` for the same reason as `bindESIMWallet`._
+     `ESIMWallet.owner()` for the same reason as `bindESIMWallet`.
 
 #### Parameters
 
@@ -565,7 +565,7 @@ function renounceOwnership() public pure
 
 Ownership of this contract is never renounced
 
-_The owner is the only upgrade route, so renouncing would freeze this logic for good._
+The owner is the only upgrade route, so renouncing would freeze this logic for good.
 
 ### _authorizeUpgrade
 
@@ -589,8 +589,8 @@ function upgradeManager() public view returns (address)
 
 Address (owned/controlled by eSIM wallet project) that can upgrade contracts
 
-_Reads through to the owner, which `_authorizeUpgrade` checks, since a separate copy
-     could only disagree with it._
+Reads through to the owner, which `_authorizeUpgrade` checks, since a separate copy
+     could only disagree with it.
 
 #### Return Values
 

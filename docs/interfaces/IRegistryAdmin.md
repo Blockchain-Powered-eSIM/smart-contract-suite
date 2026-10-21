@@ -4,9 +4,9 @@
 
 Minimal view of the admin role the protocol owner controls
 
-_Holds only what `ProtocolAdmin` calls. `enableAdmin` is left out (the owner reaches it as a
+Holds only what `ProtocolAdmin` calls. `enableAdmin` is left out (the owner reaches it as a
      scheduled payload) so no instant restore is added by accident: suspending is instant and
-     restoring waits, which stops a compromised key undoing its own suspension._
+     restoring waits, which stops a compromised key undoing its own suspension.
 
 ### disableAdmin
 
