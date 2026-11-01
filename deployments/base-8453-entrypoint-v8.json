@@ -680,5 +680,21 @@
         "url": "https://basescan.org/address/0xbb80B10BECB997b02a4BA4068C145Ef18129943d#code"
       }
     }
+  },
+  "pending": {
+    "RegistryDefaultAdminAllowance": {
+      "delay": 172800,
+      "executed": true,
+      "operationId": "0xf1e6f1761ba4ef45b8ff942fcbc366d83127ea51b170c736677eef4551bb2493",
+      "payload": "0x8c04250b0000000000000000000000000000000000000000000000000000000000000000",
+      "preparedAt": 1793345679,
+      "proposerSafe": "0xB77aE88f714a4F851ace7D2bc3cDA4AD53d12C3a",
+      "safeTxHash": "0xeec4dea5a05f5ea057eb65ffd8089b0309bc50733e76558d0e3db4865554fd29",
+      "scheduleTx": "0xefca545af3ea88e2f0f5717ff7a9b35fc7d6c4052ff2263ac4e5625ae275c57f",
+      "scheduledAtBlock": 53280176,
+      "executableAt": 1793522499,
+      "salt": "0xe44039ae17658eec6c00cdb3e042ded47a700612591fa83fa5082d708d729be9",
+      "target": "0x76fB7F8C97457A5a6dF19a7041a66a7f1b3c910c"
+    }
   }
 }

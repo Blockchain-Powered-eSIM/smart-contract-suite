@@ -5,7 +5,7 @@ sequenceDiagram
     autonumber
     actor User
     participant App as Kokio app + kokio-sdk
-    participant BFF as Kokio BFF (admin key)
+    participant BFF as Kokio backend (BFF, admin key)
     participant Bundler as Pimlico bundler + paymaster
     participant EP as EntryPoint v0.8
     participant DWF as DeviceWalletFactory
@@ -35,7 +35,7 @@ sequenceDiagram
     Note over User,EW: eSIM wallet
     BFF->>DW: deployESIMWallet(salt)
     DW->>EW: ESIMWalletFactory deploys it, owned by DW
-    Note right of EW: starts with the registry's default<br/>admin allowance (USD 25)
+    Note right of EW: starts with the registry's default<br/>admin allowance (zero on Base mainnet)
     Note over App,EW: or the user does it: deployAndBindESIMWallet in one user operation
     end
 

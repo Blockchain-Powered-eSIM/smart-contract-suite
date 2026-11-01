@@ -1,0 +1,62 @@
+---
+title: Kokio governance, who can change what and how fast
+---
+flowchart TB
+    subgraph roles["Role holders"]
+        direction LR
+        proposer["Proposer Safe 2-of-3<br/>schedule + cancel"]
+        canceller["Canceller<br/>cancel only"]
+        guardian["Guardian Safe 2-of-3<br/>different signers"]
+        anyone["Anyone<br/>execute once ready"]
+    end
+
+    subgraph timelock["ProtocolAdmin (timelock)"]
+        direction TB
+        queue["Scheduled operation<br/>public for 2 days<br/>delay can never drop below 1 day"]
+        instant["Guardian powers, no delay<br/>pauseInstantly / unpauseInstantly<br/>disableAdminInstantly<br/>revokeCancellersInstantly"]
+    end
+
+    subgraph owned["Owned by ProtocolAdmin"]
+        direction TB
+        singletons["Registry, LazyWalletRegistry,<br/>DeviceWalletFactory, ESIMWalletFactory,<br/>PaymentAdapter (UUPS proxies)"]
+        beacons["DeviceWallet + ESIMWallet beacons<br/>(owned by the factories)"]
+        wallets["Every device and eSIM wallet<br/>(beacon proxies)"]
+    end
+
+    ownerActions["Owner actions<br/>upgrades, price cap, default admin allowance,<br/>vault, payment adapter, currencies,<br/>recoverTokens, replace the admin key, unpause"]
+
+    subgraph backend["Kokio backend (BFF) admin key"]
+        direction TB
+        adminCan["Hot key, holds no timelock role<br/>Can: register wallets, deploy eSIM wallets,<br/>assign eSIM ids, record purchases, pause"]
+        adminLimits["Spends a wallet's tokens only on data bundles,<br/>within the admin allowance the user sets<br/>(zero by default, so nothing until then)<br/>and the price cap (USD 250 per bundle)<br/>Cannot: upgrade, unpause,<br/>change protocol settings"]
+    end
+
+    subgraph user["User (passkey)"]
+        direction TB
+        userCan["Owns the device wallet and its eSIM wallets<br/>sets own price cap and admin allowance"]
+        rotation["Key rotation needs a signature<br/>from the new passkey too"]
+    end
+
+    proposer -- "schedule" --> queue
+    proposer -- "cancel" --> queue
+    canceller -- "cancel" --> queue
+    anyone -- "execute after the delay" --> queue
+    queue --> ownerActions
+    ownerActions --> singletons
+    singletons -- "factory upgrade call" --> beacons
+    beacons -. "one call moves every wallet" .-> wallets
+    guardian --> instant
+    instant -- "pause / unpause, suspend the admin key" --> singletons
+    adminCan --> singletons
+    userCan --> wallets
+
+    classDef gov fill:#f3e1f7,stroke:#7a3d8c,color:#2c0f33
+    classDef core fill:#dfe8ff,stroke:#3d5aa8,color:#0f1e45
+    classDef wallet fill:#e3f5e6,stroke:#2f7a3d,color:#0e2a14
+    classDef actor fill:#fde7c8,stroke:#9a6a1f,color:#2b1d07
+    classDef warn fill:#ffe9e6,stroke:#b2453a,color:#3a0f0b
+    class proposer,canceller,guardian,anyone,queue,instant gov
+    class singletons,beacons,ownerActions core
+    class wallets,userCan,rotation wallet
+    class adminCan actor
+    class adminLimits warn
